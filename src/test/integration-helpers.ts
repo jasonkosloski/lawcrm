@@ -129,6 +129,8 @@ export const TABLES_IN_DELETE_ORDER = [
   "activity_logs",
   "automations",
   // Per-user notifications reference user + matter; drop before users.
+  "notification_preferences",
+  "notification_matter_mutes",
   "notifications",
   // Per-user saved searches reference users; drop before users.
   "saved_searches",

@@ -74,6 +74,10 @@ model User {
   /// surface a picker on /settings/profile and infer a sensible
   /// default from the browser at invite time.
   timeZone                  String                   @default("America/Denver")
+  /// Local calendar day (UTC-midnight date-only, ADR-012) the last
+  /// notification email digest went out. The delivery worker sends at
+  /// most one digest per user per local day.
+  notificationDigestSentOn  DateTime?                @db.Date
   /// Default visibility for calendar events this user creates.
   /// `default` (the default-default — privacy first) applies
   /// the resolver's standard rules: only creator + attendees +
@@ -98,46 +102,48 @@ model User {
   recordsRequestFollowUps   RecordsRequestFollowUp[] @relation("RecordsRequestFollowUpUser")
 
   // Relationships
-  matterAssignments     MatterTeamMember[]
-  leadAssignments       LeadTeamMember[]
-  timeEntries           TimeEntry[]
-  tasks                 Task[]               @relation("TaskOwner")
-  activityLogs          ActivityLog[]
-  notes                 Note[]
-  deadlines             Deadline[]           @relation("DeadlineOwner")
-  emailAccounts         EmailAccount[]
-  messengerAccounts     MessengerAccount[]
-  approvals             SettlementApproval[]
-  flaggedMoments        FlaggedMoment[]
-  matterPins            UserMatterPin[]
-  noteReads             NoteRead[]
-  noteReactions         NoteReaction[]
-  notifications         Notification[]
-  timerSession          TimerSession?
-  documentTemplates     DocumentTemplate[]
-  savedSearches         SavedSearch[]
+  matterAssignments       MatterTeamMember[]
+  leadAssignments         LeadTeamMember[]
+  timeEntries             TimeEntry[]
+  tasks                   Task[]                   @relation("TaskOwner")
+  activityLogs            ActivityLog[]
+  notes                   Note[]
+  deadlines               Deadline[]               @relation("DeadlineOwner")
+  emailAccounts           EmailAccount[]
+  messengerAccounts       MessengerAccount[]
+  approvals               SettlementApproval[]
+  flaggedMoments          FlaggedMoment[]
+  matterPins              UserMatterPin[]
+  notificationPreferences NotificationPreference[]
+  notificationMatterMutes NotificationMatterMute[]
+  noteReads               NoteRead[]
+  noteReactions           NoteReaction[]
+  notifications           Notification[]
+  timerSession            TimerSession?
+  documentTemplates       DocumentTemplate[]
+  savedSearches           SavedSearch[]
   /// Calendar events the user is an attendee on. Created via the
   /// event detail modal's attendee picker (or any future API
   /// that links a user to an event).
-  calendarAttendances   CalendarAttendee[]   @relation("CalendarAttendeeUser")
+  calendarAttendances     CalendarAttendee[]       @relation("CalendarAttendeeUser")
   /// Calendar events the user created. Used for audit; once
   /// permission-based visibility lands this is the "you can
   /// always see your own" branch. SetNull on user delete keeps
   /// the historical event row intact.
-  createdCalendarEvents CalendarEvent[]      @relation("UserCreatedEvents")
+  createdCalendarEvents   CalendarEvent[]          @relation("UserCreatedEvents")
   /// The firm this user belongs to. SetNull on delete — losing the
   /// firm row shouldn't blow away the user; the user is unusable
   /// until reassigned but their historical activity stays intact.
-  firm                  Firm?                @relation(fields: [firmId], references: [id], onDelete: SetNull)
+  firm                    Firm?                    @relation(fields: [firmId], references: [id], onDelete: SetNull)
   /// Permission roles — many-to-many via the UserRole join. Empty
   /// for a brand-new user until at least the firm's "default" role
   /// is auto-assigned by the invite path. Membership in the "Admin"
   /// system role is what grants admin powers.
-  userRoles             UserRole[]
+  userRoles               UserRole[]
   /// Reverse of UserRole.assignedBy — every assignment this user
   /// has performed. Useful for auditing role grants once that
   /// surfaces in the UI.
-  roleAssignments       UserRole[]           @relation("UserRoleAssignedBy")
+  roleAssignments         UserRole[]               @relation("UserRoleAssignedBy")
 
   @@index([firmId])
   @@map("users")
@@ -495,14 +501,15 @@ model Matter {
   tasks                   Task[]
   notes                   Note[]
   emailThreads            EmailThread[]
-  messengerThreadDefaults MessengerThread[]    @relation("MessengerThreadDefaultMatter")
-  messengerItems          MessengerItem[]      @relation("MessengerItemMatter")
+  messengerThreadDefaults MessengerThread[]        @relation("MessengerThreadDefaultMatter")
+  messengerItems          MessengerItem[]          @relation("MessengerItemMatter")
   activityLogs            ActivityLog[]
   calendarEvents          CalendarEvent[]
   trustTransactions       TrustTransaction[]
   settlements             Settlement[]
   pins                    UserMatterPin[]
   notifications           Notification[]
+  notificationMutes       NotificationMatterMute[]
   timerSessions           TimerSession[]
   documentFolders         DocumentFolder[]
   portalAccess            PortalMatterAccess[]
@@ -552,6 +559,37 @@ model UserMatterPin {
   @@index([userId])
   @@index([matterId])
   @@map("user_matter_pins")
+}
+
+/// Per-user email mode for one notification category
+/// (src/lib/notification-categories.ts). No row = "instant".
+/// emailMode: off | instant | digest ("deadlines" never off).
+model NotificationPreference {
+  id        String   @id @default(cuid())
+  userId    String
+  category  String
+  emailMode String
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@map("notification_preferences")
+}
+
+/// Per-user email mute for one matter. Suppresses notification emails
+/// about the matter except deadline reminders; the bell is unaffected.
+model NotificationMatterMute {
+  userId    String
+  matterId  String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+
+  @@id([userId, matterId])
+  @@index([matterId])
+  @@map("notification_matter_mutes")
 }
 
 /// Join table linking team members to matters with their role on the case.
@@ -2192,32 +2230,40 @@ model AutoApply {
 /// no fan-out tables, no email/SMS/push delivery — those land later
 /// behind the same writer helper.
 model Notification {
-  id        String    @id @default(cuid())
+  id            String    @id @default(cuid())
   /// Who sees this notification. Notifications are strictly
   /// per-recipient — fan-out is the writer's job.
-  userId    String
+  userId        String
   /// Trigger kind. UI maps to icon + tone via NOTIFICATION_TYPE_META.
   /// task_assigned | task_due_soon | deadline_approaching |
   /// deadline_overdue | settlement_step_approved |
   /// settlement_step_rejected | invoice_payment_recorded |
-  /// note_mentioned | matter_assigned | generic
-  type      String
+  /// note_mentioned | matter_assigned | portal_upload |
+  /// portal_message | generic
+  type          String
   /// Short, headline-style copy ("Discovery cutoff in 7 days").
   /// Renders as the primary line in the bell dropdown row.
-  title     String
+  title         String
   /// Optional secondary line — context, matter name, who did it.
-  body      String?
+  body          String?
   /// Where clicking the row navigates to. Null = no navigation
   /// (the notification is purely a heads-up).
-  link      String?
+  link          String?
   /// Optional matter scope so the bell can filter / group when we
   /// add per-matter notification preferences later. Today the bell
   /// shows the global stream regardless.
-  matterId  String?
+  matterId      String?
   /// Set when the user marks this row read (or "mark all read"
   /// flips every open row to readAt = now).
-  readAt    DateTime?
-  createdAt DateTime  @default(now())
+  readAt        DateTime?
+  createdAt     DateTime  @default(now())
+  /// Email outbox state: pending | sent | skipped | failed. The
+  /// delivery worker (src/lib/notification-email.ts) drains pending
+  /// rows; rows from before email delivery were backfilled skipped.
+  emailState    String    @default("pending")
+  /// Failed send attempts; the row turns "failed" at 3.
+  emailAttempts Int       @default(0)
+  emailedAt     DateTime?
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   matter Matter? @relation(fields: [matterId], references: [id], onDelete: SetNull)
@@ -2226,6 +2272,7 @@ model Notification {
   /// dropdown, full feed scrolled in a hypothetical /notifications page.
   @@index([userId, readAt, createdAt])
   @@index([userId, createdAt])
+  @@index([emailState, createdAt])
   @@map("notifications")
 }
 
