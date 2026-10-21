@@ -1,13 +1,13 @@
 # Client portal
 
-Clients follow their case, exchange documents, message the matter team and view invoices. Delivered as five sub-projects; **0 (foundation)**, **1 (case status)** and **2 (documents)** are built.
+Clients follow their case, exchange documents, message the matter team and view invoices. Delivered as five sub-projects; **0 (foundation)**, **1 (case status)**, **2 (documents)** and **3 (messages)** are built.
 
 | # | Sub-project | State |
 |---|---|---|
 | 0 | Foundation: client identity, sign-in, per-matter access, host isolation, staff invite/revoke, empty shell | Shipped (off until the firm switch is on) |
-| 1 | Case status (staff-written updates, shared calendar events) | Shipped (off until the firm switch is on) |
-| 2 | Documents (shared downloads, client uploads, document requests) | Shipped (off until the firm switch is on) |
-| 3 | Messages (two-way, per matter) | Not started |
+| 1 | Case status (staff-written updates, shared calendar events): [client-portal-status](client-portal-status.md) | Shipped (off until the firm switch is on) |
+| 2 | Documents (shared downloads, client uploads, document requests): [client-portal-documents](client-portal-documents.md) | Shipped (off until the firm switch is on) |
+| 3 | Messages (two-way, per matter) | Shipped (off until the firm switch is on) |
 | 4 | Invoices and trust (view first; online payment later) | Not started |
 
 Why identity is separate from staff auth: [ADR-051](../decisions/051-client-portal-identity-is-separate-from-staff-auth.md).
@@ -50,34 +50,34 @@ Why identity is separate from staff auth: [ADR-051](../decisions/051-client-port
 ### Client UI
 Visual rules: [UI_PATTERNS, Client portal](../UI_PATTERNS.md#client-portal). Letterhead header (firm name/logo, sign-out) and a footer with the firm's public contact details. `/` greets the contact and lists invited matters, open first, closed under their own heading, each with an Open/Closed chip. `/matters/[id]` shows the matter, status, updates and documents.
 
-## Case status (sub-project 1)
+## Messages (sub-project 3)
 
-### Data and visibility rule
-Client-facing status lives only in two portal tables, so isolation is checkable (migration `20261021130000_portal_case_status`, expand-only; grants the four keys below to every role holding `matters.edit`).
-- `PortalStatusUpdate`: `stageLabel` (max 60), `body` (plain text, max 4,000), `postedById`, `postedAt`, `editedAt`, `emailedAt`. Newest `postedAt` is the current status. A timeline, not a mapping from the internal matter stage.
-- `PortalSharedEvent`: unique `eventId`, `matterId` snapshot, `clientTitle` (max 200), `clientNote` (max 2,000), `sharedById`. Only calendar events on a matter can be shared (not leads, not deadlines). Visible only while `event.matterId` equals the snapshot, so re-filing hides it on both matters. Time and location are read live from the event (reschedules and Google syncs flow through); the internal title and description are never selected for portal reads.
-- Nothing is shown automatically; text renders as plain text with line breaks.
+### Data
+Migration `20261021140000_portal_messages` (expand-only; grants the two keys below to every role holding `matters.edit`).
+- `PortalThread`: one per matter (unique `matterId`), `lastMessageAt`, `lastFromClient`. Created on the first message; Cascade with the matter.
+- `PortalMessage`: plain-text `body` (max 5,000), `authorKind` (`client` / `staff`) with `authorIdentityId` or `authorUserId`. Messages are permanent: no edit or delete.
+- `PortalReadState`: per-reader read marker (`lastReadAt`), one row per staff user or client identity per thread (unique on thread + user and thread + identity). Markers only move forward and the sender's marker advances with the send. `lastEmailedAt` is the client email throttle bookkeeping for that identity.
+- The thread is shared by every live client of the matter (co-clients see each other's messages, labelled by name; staff are labelled "(your legal team)").
 
-### Read gate
-`getPortalMatterStatus(identityId, matterId)` in `src/lib/portal/status.ts` returns `{ updates, upcoming, past }` with explicit fields only; `latestStageLabels` feeds the portal home rows. `portalMatterWhere` only checks revocation, so the reader checks portal-on and identity-not-disabled itself; anything else returns empty. Archived matters stay readable. "Upcoming" means the event ends today or later in America/Denver (all-day events compare as UTC-midnight dates, ADR-012).
+### Client side
+- Write path: `recordPortalMessage` in `src/lib/portal/message-store.ts`; client actions in `src/app/actions/portal-messages-client.ts` (`sendPortalMessage`, `markPortalMessagesRead`); reader `getPortalMessages` / `unreadPortalMessageMatters` in `src/lib/portal/messages.ts` (explicit fields only).
+- Gate: live access (portal on, identity enabled, access not revoked) on the matter. Closed (archived) matters are read-only: the client can read but not send, unlike documents. Rate limit: 30 messages per identity per matter per rolling hour (a count before the insert).
+- UI: `messages-section.tsx`, `message-composer.tsx`, `mark-read.tsx` on the portal matter page; home rows flag matters with unread firm messages.
 
 ### Staff side
-- Keys `portal.add_updates`, `portal.edit_updates`, `portal.delete_updates`, `portal.share_events`; every action also calls `assertMatterAccess`. Actions in `src/app/actions/portal-status.ts` (`postStatusUpdate`, `editStatusUpdate`, `deleteStatusUpdate`, `shareEventWithClient`, `updateEventShare`, `stopSharingEvent`), Zod-validated, logged, revalidated. Reads in `src/lib/queries/portal-status.ts`.
-- "Client status" card on the matter Overview (`portal.view`): latest update, earlier updates, post/edit/delete per key. Post dialog prefills the previous stage label and has an "Email the client" checkbox (default on). The usual "no portal access yet" hint shows when no live access row exists.
-- Event detail modal and the matter Events tab: "Share with client" / "Edit share" / "Stop sharing" (`portal.share_events`), a "Shared" badge, client title prefilled from the event title.
+- Keys `portal.view_messages` and `portal.send_messages` (plus `assertMatterAccess` on every action). Actions in `src/app/actions/portal-messages.ts` (`sendStaffPortalMessage`, `markStaffPortalThreadRead`; mark-read is a no-op when nothing is unread). Reads in `src/lib/queries/portal-messages.ts`.
+- "Portal" channel on the matter Communication tab (`src/components/communication/portal-conversation.tsx`), paged, marks the thread read.
+- "Client portal" list in the firm-wide Communication area (`portal-thread-list.tsx`): threads with at least one message on matters the viewer can access (`matterAccessWhere`), client-last threads first, snippet and per-viewer unread count from one query.
 
-### Client UI
-Matter page above documents: "Where things stand" (stage chip, note, updated date), earlier updates, "Coming up" (client title, time, location, note), collapsed Past. Home rows show the latest stage label beside the Open/Closed chip.
+### Notifications and email
+- Client message: one `portal_message` notification per burst, sent to active matter team members who hold `portal.view_messages` and can access the matter, skipped for anyone who already has an unread `portal_message` notification on that matter. Links to the Portal channel. A notification failure never fails the send.
+- Staff message: emails each live portal client (`portalMessageEmail`, link to portal home, never the message text) at most once per 15 minutes per identity, using `lastEmailedAt`. Skipped while the portal is off. A send failure keeps the message and returns a warning.
 
-### Email
-Posting with the box ticked and the portal on sends `statusUpdateEmail` through `emailLivePortalUsers` (link to portal home, never the update text) and sets `emailedAt` if any send succeeded; a failure still posts and returns a warning. Editing never re-sends. Sharing an event sends nothing.
-
-### Open risks and deferred items (status)
-- Portal time zone is America/Denver (clients have no zone), so "upcoming" and displayed times suit a Denver firm only.
-- Sharing an event sends no email; no reminders for shared events.
-- Re-sharing keeps the original `sharedById`.
-- A share stays live if the event is later made private (the explicit share wins). Sharing requires the sharer to see the event's details; private or "Busy" events read as not found.
-- Deadlines and matter dates cannot be shared; no rich text, attachments or read receipts.
+### Open risks and deferred items (messages)
+- No attachments (documents are a separate flow); no rich text, edit, delete or read receipts to the other side.
+- Portal time zone is America/Denver (message times display in Denver for every client).
+- The thread is created before the message transaction (idempotent, so a racing first send is safe), so a failed first insert can leave an empty thread; the list hides threads with no messages.
+- The rate limit and the email throttle are check-then-write, so a parallel burst can slightly exceed them.
 
 ## Publishing rule (binding on sub-projects 1-4)
 
@@ -91,7 +91,7 @@ Steps marked **(you)** need the user; the rest is code that is already shipped.
 1. **(you)** Provision Resend (Vercel Marketplace); set `RESEND_API_KEY` and `EMAIL_FROM`; set up SPF/DKIM first or invites land in spam.
 2. **(you)** Add `portal.<domain>` to the Vercel project and DNS.
 3. **(you)** Set `PORTAL_HOST` for the **Production** environment only (uploads return 503 without it; a preview with it set would hand Blob a callback to the production portal).
-4. **(you)** Ensure the four portal migrations are applied (the third, `20261019183859_portal_documents`, grants the document keys; the fourth, `20261021130000_portal_case_status`, the status keys; prod builds auto-apply migrations per ADR-058) (see [DEPLOY_BACKFILLS](../DEPLOY_BACKFILLS.md); mind the `DIRECT_DATABASE_URL` gotcha there).
+4. **(you)** Ensure the five portal migrations are applied (the third, `20261019183859_portal_documents`, grants the document keys; the fourth, `20261021130000_portal_case_status`, the status keys; the fifth, `20261021140000_portal_messages`, the message keys; prod builds auto-apply migrations per ADR-058) (see [DEPLOY_BACKFILLS](../DEPLOY_BACKFILLS.md); mind the `DIRECT_DATABASE_URL` gotcha there).
 5. **(you)** Turn on Settings, Firm, "Client portal enabled".
 6. `src/lib/env-check.ts` reports missing `PORTAL_HOST` / `RESEND_API_KEY` / `EMAIL_FROM` at startup as degraded (logged, not blocking).
 
@@ -102,48 +102,5 @@ Steps marked **(you)** need the user; the rest is code that is already shipped.
 - **`/public` assets 404 on the portal host** (the proxy rewrites everything into `/portal`); fix in the proxy before a sub-project needs a static asset.
 - **`auth()` on the portal host returns a session without `user.id`** (signed-out shape by design).
 - **Timing difference on link requests**: latency can hint at who has portal access. Throttle only; consider queueing the send.
-- **Documents gaps**: see the end of the Documents section.
+- **Documents gaps**: see [client-portal-documents](client-portal-documents.md).
 - **Smaller gaps**: the invite P2002 catch maps any unique violation to the email copy; the walled-actor check runs outside the invite transaction (narrow race); invite refusals can reveal identity facts from hidden matters; `disablePortalIdentity` has no UI.
-
-## Documents (sub-project 2)
-
-### Visibility rule
-One module decides what a client sees: `src/lib/portal/document-visibility.ts` (pure, client-safe: `sharedFolderIds`, `isEffectivelyShared`, `shareReason`) and `document-visibility.server.ts` (DB queries and `canPortalDownload`). Nothing else re-derives it; staff badges, portal lists and the download route all call it.
-- **Three-state file share** (`Document.clientShare`): null follows the folder, `shared` is visible regardless, `hidden` wins even inside a shared folder. **Folders** have `clientShared`, inherited by the whole subtree. Protected system folders cannot be shared (they can be unshared). Archived documents are never client-visible, so the staff "Shared" badge, move warnings and share emails ignore them too.
-- Audience is matter-wide. Matters only, not leads.
-- Client uploads are listed separately ("Your uploads") and ignore `hidden`. The list is matter-wide, so it includes co-clients' uploads, each with the uploader's email.
-
-### Client uploads
-Uploads are **ordinary matter documents** ([ADR-052](../decisions/052-portal-uploads-are-matter-documents.md)) in the protected "From client" folder (`PORTAL_UPLOADS_FOLDER_NAME`, a folder kind in `folder-kinds.ts`), with `portalUploaderId`, `portalBatchId`, optional `documentRequestId` and `clientNote` (the "What is this?" note, max 500).
-- **Allowlist** (`src/lib/portal/upload-policy.ts`): only the last extension counts, content type is derived from it (declared MIME ignored), size caps match staff. Production uploads go client-direct to Blob; dev posts to `/api/documents/upload/local` (the proxy matcher skips `/api/documents/upload` on every host, so it would reach the staff route).
-- **Blob token step** (`portal-blob-upload.ts`) pins content type and size from the allowlist and checks identity, access, portal-on and the daily cap. **Completion identity comes only from the signed token payload** (the webhook has no cookie). The callback targets `https://$PORTAL_HOST/api/documents/upload/blob`; the token step refuses (503) when `PORTAL_HOST` is unset. The staff completion handler refuses portal-shaped payloads.
-- **Completion** (`record-upload.ts`, shared by webhook and dev route) re-checks everything (access can be revoked mid-upload) and deletes the stored file if refused. Writes run under a per-matter advisory lock (`portal_uploads:<matterId>`), serializing the "From client" folder creation, the first file of a batch (one staff notification per batch) and request linking.
-- **Daily cap**: 100 uploads per identity per rolling 24 hours, checked at token time only (a parallel burst can slightly exceed it).
-
-### Document requests
-`DocumentRequest` (title, instructions, optional date-only due date, `returnNote`). Status: `open` -> `submitted` (a client upload against it) -> `complete` (staff accept) or `cancelled`. **Send back** is `open` plus a `returnNote`, not a separate status. A batch answers one request: later files of a batch link to the request the batch's first file submitted. Late files from a batch started before a send-back land unlinked (still in "From client"). Staff actions: `src/app/actions/portal-documents.ts`. Deleting a request keeps the files. Creating one is allowed while the portal is off (no email).
-
-### Download
-`portal/api/documents/[id]/download` is gated by `canPortalDownload` alone (live access, portal on, document not archived, and effectively shared or uploaded by a live-access client of that matter). `Matter.isArchived` is not checked: clients keep downloading, and can still upload, on closed matters. Everything else is a bare 404. Always `Content-Disposition: attachment`, never cached; blob keys 302 to a short-lived signed URL.
-
-### Notifications and email
-- Clients: `documentRequestEmail` on request creation and `documentsSharedEmail` when shares are turned on, sent to live portal users of the matter (`emailLivePortalUsers`); links go to portal home. Skipped while the portal is off.
-- Staff: one `portal_upload` notification per upload batch, to the matter team, linking to the documents tab.
-
-### Staff UI
-- Documents browser: file kebab "Share with client" / "Stop sharing" (per file), folder kebab "Share folder with client" / "Stop sharing folder". The share UI needs both `portal.view` (row state) and `portal.share_documents` (actions); the migration grants them together. The "Shared" badge tooltip names the folder when inherited.
-- The move dialog warns when a move changes client visibility (`visibilityChangeForMove` for files; the read-only `previewFolderMoveVisibility` action for folders). Advisory only.
-- "Client requests" card on the matter Overview beside the Portal card, behind `portal.view` (reads in `src/lib/queries/document-requests.ts`). "No one has portal access on this matter yet." shows near the share controls and the card when no live access row exists.
-- Portal matter page: requests, "Shared with you", "Your uploads", and the uploader.
-
-### Open risks and deferred items (documents)
-- No virus scanning: allowlist plus attachment-only download instead.
-- No bulk share: the browser has no multi-select; share a folder instead.
-- Dev multipart upload on `portal.localhost` goes through the proxy, which truncates bodies past 10 MB (`proxyClientMaxBodySize`); the uploader refuses larger local batches. Production uses client-direct blob.
-- "Overdue" uses America/Denver (the firm has no zone field).
-- Client uploads stay downloadable by co-clients of the matter even if staff move or unshare them (they are matter documents, ADR-052).
-- The blob path reloads the list 1.5 s after a batch, so a slow webhook can lag it.
-- No due-date reminder emails.
-- A blob whose completion webhook never arrives is never cleaned up (as on the staff path).
-- "Copy to..." into a shared folder makes the copy client-visible with no warning.
-- Deleting the only file of a submitted request leaves it `submitted`; staff send it back or cancel it.
