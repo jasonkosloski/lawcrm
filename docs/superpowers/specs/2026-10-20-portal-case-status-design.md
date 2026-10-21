@@ -71,7 +71,7 @@ Messages (sub-project 3, separate spec), sharing deadlines or matter dates, remi
 ## Testing
 - Reader integration tests: live access sees updates/events; revoked access, portal off and disabled identity get nothing; an event re-filed to another matter is hidden on both matters; a lead event can't be shared; result never contains the internal event title or description.
 - Action tests per key (denied without it), matter-access denial on a walled matter, validation limits, email sent vs. skipped (portal off / unticked), `emailedAt` set, edit doesn't re-email, activity rows.
-- Migration grant test following the existing permission-grant pattern.
+- Migration verified by `npm run check:migrations` (the repo has no grant-test pattern; prior grant migrations are untested SQL).
 - Render tests for the portal section (with and without data) and the staff dialogs.
 
 ## Docs on ship
