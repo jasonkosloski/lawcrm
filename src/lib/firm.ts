@@ -42,15 +42,6 @@ export type FirmProfile = {
   matterNameTemplate?: string;
 };
 
-/** The current user's firm, read fresh from the database. Throws via
- *  `redirect("/login")` when the user isn't signed in (delegated to
- *  getCurrentUserId). Throws a plain Error when a signed-in user has
- *  no firm — that's a data integrity bug, not a normal flow.
- *
- *  Uncached on purpose: the action that edits the firm profile
- *  (updateFirmAction) must read the pre-edit row without seeding the
- *  request-level cache that the re-rendered page reads afterwards.
- *  Everything else should call the cached `getCurrentFirm`. */
 const FIRM_PROFILE_SELECT = {
   id: true,
   name: true,
@@ -87,32 +78,20 @@ export async function loadFirmProfileForUser(
   });
 }
 
+/** The current user's firm, read fresh from the database. Throws via
+ *  `redirect("/login")` when the user isn't signed in (delegated to
+ *  getCurrentUserId). Throws a plain Error when a signed-in user has
+ *  no firm — that's a data integrity bug, not a normal flow.
+ *
+ *  Uncached on purpose: the action that edits the firm profile
+ *  (updateFirmAction) must read the pre-edit row without seeding the
+ *  request-level cache that the re-rendered page reads afterwards.
+ *  Everything else should call the cached `getCurrentFirm`. */
 export async function loadCurrentFirm(): Promise<FirmProfile> {
   const userId = await getCurrentUserId();
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: {
-      firm: {
-        select: {
-          id: true,
-          name: true,
-          shortName: true,
-          ein: true,
-          website: true,
-          phone: true,
-          email: true,
-          addressLine1: true,
-          addressLine2: true,
-          city: true,
-          state: true,
-          zip: true,
-          country: true,
-          establishedAt: true,
-          logoUrl: true,
-          matterNameTemplate: true,
-        },
-      },
-    },
+    select: { firm: { select: FIRM_PROFILE_SELECT } },
   });
   if (!user?.firm) {
     // A signed-in user with no firm shouldn't happen — the seed

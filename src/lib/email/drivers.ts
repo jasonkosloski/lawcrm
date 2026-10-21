@@ -14,6 +14,8 @@ export type OutgoingEmail = {
   replyTo?: string;
   fromName?: string;
   attachments?: EmailAttachment[];
+  /** Forwarded as Resend's Idempotency-Key so a retried request can't double-send. */
+  idempotencyKey?: string;
 };
 
 export type EmailResult =
@@ -56,6 +58,7 @@ export function resendDriver(apiKey: string): EmailDriver {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
+          ...(msg.idempotencyKey ? { "Idempotency-Key": msg.idempotencyKey } : {}),
         },
         signal: AbortSignal.timeout(10_000),
         body: JSON.stringify({
@@ -76,7 +79,21 @@ export function resendDriver(apiKey: string): EmailDriver {
             : {}),
         }),
       });
-      if (!res.ok) return { ok: false, error: `Resend responded ${res.status}` };
+      if (!res.ok) {
+        let detail: string | undefined;
+        try {
+          const body = (await res.json()) as { message?: unknown };
+          if (typeof body?.message === "string" && body.message) detail = body.message;
+        } catch {
+          // non-JSON error body; fall back to the status alone
+        }
+        return {
+          ok: false,
+          error: detail
+            ? `Resend responded ${res.status}: ${detail}`
+            : `Resend responded ${res.status}`,
+        };
+      }
       let id: string | undefined;
       try {
         const json = (await res.json()) as { id?: unknown };
