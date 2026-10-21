@@ -35,7 +35,7 @@ export type PortalMatterStatus = {
  * firm-level portal switch and a disabled identity are checked here too, so
  * a staged status update never leaks once either is turned off.
  */
-async function liveMatterWhere(
+export async function livePortalMatterWhere(
   identityId: string,
 ): Promise<Prisma.MatterWhereInput | null> {
   const firm = await prisma.firm.findFirst({ select: { portalEnabled: true } });
@@ -58,7 +58,7 @@ export async function getPortalMatterStatus(
   matterId: string,
 ): Promise<PortalMatterStatus> {
   const empty: PortalMatterStatus = { updates: [], upcoming: [], past: [] };
-  const where = await liveMatterWhere(identityId);
+  const where = await livePortalMatterWhere(identityId);
   if (!where) return empty;
   const matter = await prisma.matter.findFirst({
     where: { id: matterId, ...where },
@@ -141,7 +141,7 @@ export async function latestStageLabels(
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (matterIds.length === 0) return out;
-  const where = await liveMatterWhere(identityId);
+  const where = await livePortalMatterWhere(identityId);
   if (!where) return out;
   const rows = await prisma.portalStatusUpdate.findMany({
     where: { matterId: { in: matterIds }, matter: where },
