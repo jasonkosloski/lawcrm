@@ -8,11 +8,11 @@
  * is fire-and-forget on errors so a failed notification write never
  * rolls back the underlying mutation.
  *
- * Future: when we add email / SMS / push delivery, those channels
- * fan out FROM this helper rather than each action knowing about
- * them. The Notification row stays the source of truth for the
- * in-app surface; delivery to other channels is a separate worker
- * reading the same table.
+ * Email delivery does not hang off this helper: every Notification
+ * row starts `emailState = "pending"` and the worker in
+ * src/lib/notification-email.ts drains the table, so rows written
+ * elsewhere (the deadline sweep) are emailed too. Future SMS / push
+ * channels follow the same outbox shape.
  */
 
 import { prisma } from "@/lib/prisma";

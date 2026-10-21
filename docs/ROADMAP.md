@@ -24,7 +24,7 @@ email/mail invoice "send" is logged only ([issue](issues/invoice-email-not-sent.
 ## P1: next up
 
 - [x] **Clerk staff auth**: Google sign-in via Clerk, live in production 2026-10-20; Microsoft sign-in only if needed. → [auth](features/auth.md)
-- [~] **Notification delivery channels**: email/SMS/push fan-out from `createNotification`; per-matter preferences. → [notifications](features/notifications.md)
+- [~] **Notification delivery channels**: email shipped (instant/digest per category, matter mute); SMS/push left. → [notifications](features/notifications.md)
 - [~] **Phone / SMS / voicemail**: manual call logging shipped; SMS send and voicemail transcription need providers. → [calls](features/communication-calls.md)
 - [~] **`/matters/new` v2**: conflict check, team, venues, name template, dates, required fields, drafts and originating-document gate shipped; long-tail follow-ups left. → [matters](features/matters.md)
 - [x] **Client portal**: all five sub-projects shipped (foundation, case status, documents, messages, invoices and trust); online payment later. → [client-portal](features/client-portal.md)
