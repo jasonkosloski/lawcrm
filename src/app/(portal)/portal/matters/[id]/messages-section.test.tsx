@@ -137,6 +137,18 @@ describe("MessagesSection", () => {
     expect(box.value).toBe("");
   });
 
+  test("a thrown send keeps the draft and shows a retry message", async () => {
+    send.mockRejectedValue(new Error("network"));
+    render(<MessagesSection {...base} messages={[]} />);
+    const box = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: "Question?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("Couldn't send. Please try again.");
+    expect(box.value).toBe("Question?");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   test("error keeps the draft and is announced", async () => {
     send.mockResolvedValue({
       ok: false,

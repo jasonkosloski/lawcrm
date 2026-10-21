@@ -128,6 +128,11 @@ export async function markStaffPortalThreadRead(matterId: string): Promise<void>
   });
   if (state && state.lastReadAt >= thread.lastMessageAt) return;
   await advanceReadState(thread.id, { userId: gate.userId }, thread.lastMessageAt);
+  // Reading the thread re-arms the "once per burst" notification.
+  await prisma.notification.updateMany({
+    where: { userId: gate.userId, matterId, type: "portal_message", readAt: null },
+    data: { readAt: new Date() },
+  });
   revalidatePath(`/matters/${matterId}/communication`);
   revalidatePath("/communication");
 }

@@ -125,8 +125,20 @@ export async function markPortalMessagesRead(matterId: string): Promise<void> {
   if (!matter) return;
   const thread = await prisma.portalThread.findUnique({
     where: { matterId },
-    select: { id: true },
+    select: { id: true, lastMessageAt: true },
   });
   if (!thread) return;
-  await advanceReadState(thread.id, { identityId: identity.identityId });
+  const state = await prisma.portalReadState.findUnique({
+    where: {
+      threadId_identityId: { threadId: thread.id, identityId: identity.identityId },
+    },
+    select: { lastReadAt: true },
+  });
+  if (state && state.lastReadAt >= thread.lastMessageAt) return;
+  await advanceReadState(
+    thread.id,
+    { identityId: identity.identityId },
+    thread.lastMessageAt,
+  );
+  revalidatePath("/portal");
 }

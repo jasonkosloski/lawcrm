@@ -853,6 +853,11 @@ export async function mergeContacts(
           where: { portalUploaderId: loserIdentity.id },
           data: { portalUploaderId: survivorIdentity.id },
         });
+        // Portal messages keep their author (FK is Restrict).
+        await tx.portalMessage.updateMany({
+          where: { authorIdentityId: loserIdentity.id },
+          data: { authorIdentityId: survivorIdentity.id },
+        });
         await tx.portalIdentity.delete({ where: { id: loserIdentity.id } });
       }
 

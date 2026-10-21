@@ -10,6 +10,7 @@ vi.mock("@/lib/matter-access", async (importOriginal) => {
 });
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
+import { revalidatePath } from "next/cache";
 import { getPortalIdentity } from "@/lib/portal-access";
 import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
@@ -210,12 +211,30 @@ describe("markPortalMessagesRead", () => {
     });
     await markPortalMessagesRead(matterId);
     const rs = await prisma.portalReadState.findFirstOrThrow({ where: { threadId: thread.id, identityId } });
-    expect(rs.lastReadAt.getTime()).toBeGreaterThan(Date.now() - 60_000);
+    expect(rs.lastReadAt.getTime()).toBe(thread.lastMessageAt.getTime());
 
     await prisma.portalReadState.deleteMany({});
     await prisma.portalMatterAccess.updateMany({ where: { identityId }, data: { revokedAt: new Date() } });
     await markPortalMessagesRead(matterId);
     expect(await prisma.portalReadState.count()).toBe(0);
+  });
+
+  test("stamps lastMessageAt; a second call is a no-op and does not revalidate", async () => {
+    const last = new Date(Date.now() - 3_600_000);
+    const thread = await prisma.portalThread.create({
+      data: { matterId, lastMessageAt: last, lastFromClient: false },
+    });
+    vi.mocked(revalidatePath).mockClear();
+    await markPortalMessagesRead(matterId);
+    const first = await prisma.portalReadState.findFirstOrThrow({ where: { threadId: thread.id, identityId } });
+    expect(first.lastReadAt.getTime()).toBe(last.getTime());
+    expect(revalidatePath).toHaveBeenCalledWith("/portal");
+
+    vi.mocked(revalidatePath).mockClear();
+    await markPortalMessagesRead(matterId);
+    const second = await prisma.portalReadState.findFirstOrThrow({ where: { threadId: thread.id, identityId } });
+    expect(second.updatedAt.getTime()).toBe(first.updatedAt.getTime());
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   test("off the portal host does nothing", async () => {

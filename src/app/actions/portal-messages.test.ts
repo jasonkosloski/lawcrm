@@ -188,6 +188,27 @@ describe("sendStaffPortalMessage", () => {
 });
 
 describe("markStaffPortalThreadRead", () => {
+  test("marks the caller's unread portal_message notifications for the matter read", async () => {
+    await sendStaffPortalMessage(matterId, "hi");
+    const thread = await prisma.portalThread.findFirstOrThrow();
+    await prisma.portalReadState.updateMany({ where: { userId: admin }, data: { lastReadAt: new Date(0) } });
+    const mk = (userId: string, mId: string | null) =>
+      prisma.notification.create({
+        data: { userId, matterId: mId, type: "portal_message", title: "t" },
+      });
+    const mine = await mk(admin, matterId);
+    const otherMatter = await mk(admin, null);
+    const other = (await seedUser({ firmId, roleIds: [adminRoleId] })).userId;
+    const theirs = await mk(other, matterId);
+    expect(thread.id).toBeTruthy();
+    await markStaffPortalThreadRead(matterId);
+    const read = async (id: string) =>
+      (await prisma.notification.findUniqueOrThrow({ where: { id } })).readAt;
+    expect(await read(mine.id)).not.toBeNull();
+    expect(await read(otherMatter.id)).toBeNull();
+    expect(await read(theirs.id)).toBeNull();
+  });
+
   test("advances only the caller's read state", async () => {
     const other = (await seedUser({ firmId, roleIds: [adminRoleId] })).userId;
     await sendStaffPortalMessage(matterId, "hi");

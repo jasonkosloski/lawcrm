@@ -18,12 +18,16 @@ export function MessageComposer({ matterId }: { matterId: string }) {
   const send = () => {
     setError(null);
     startTransition(async () => {
-      const res = await sendPortalMessage(matterId, draft);
-      if (res.ok) {
-        setDraft("");
-        router.refresh();
-      } else {
-        setError(res.error);
+      try {
+        const res = await sendPortalMessage(matterId, draft);
+        if (res.ok) {
+          setDraft("");
+          router.refresh();
+        } else {
+          setError(res.error);
+        }
+      } catch {
+        setError("Couldn't send. Please try again.");
       }
     });
   };

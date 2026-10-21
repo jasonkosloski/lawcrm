@@ -1792,6 +1792,30 @@ describe("mergeContacts carries the portal identity", () => {
     expect(after.portalUploaderId).toBe(sIdent.id);
   });
 
+  test("merge moves portal message authorship from the loser identity to the survivor identity", async () => {
+    const { m1 } = await twoMatters();
+    const { contactId: loserId } = await seedContact({ name: "Loser" });
+    const { contactId: survivorId } = await seedContact({ name: "Survivor" });
+    const sIdent = await prisma.portalIdentity.create({
+      data: { contactId: survivorId, email: "survivor@example.com" },
+    });
+    const lIdent = await prisma.portalIdentity.create({
+      data: { contactId: loserId, email: "loser@example.com" },
+    });
+    const thread = await prisma.portalThread.create({
+      data: { matterId: m1, lastMessageAt: new Date(), lastFromClient: true },
+    });
+    const msg = await prisma.portalMessage.create({
+      data: { threadId: thread.id, body: "hello", authorKind: "client", authorIdentityId: lIdent.id },
+    });
+
+    expect(await mergeContacts(loserId, survivorId)).toEqual({ ok: true });
+
+    expect(await prisma.portalIdentity.findUnique({ where: { id: lIdent.id } })).toBeNull();
+    const after = await prisma.portalMessage.findUniqueOrThrow({ where: { id: msg.id } });
+    expect(after.authorIdentityId).toBe(sIdent.id);
+  });
+
   test("merge with no portal identity on either side changes nothing", async () => {
     const { contactId: loserId } = await seedContact({ name: "Loser" });
     const { contactId: survivorId } = await seedContact({ name: "Survivor" });
