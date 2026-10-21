@@ -22,6 +22,7 @@
  *   - generateInvoiceFromWip, bundleAsInternalRecord → billing.generate_invoice
  *   - approveInvoice + the approved/mark-recorded flips  → billing.approve_invoice
  *   - sendInvoice + the sent flip                        → billing.send_invoice
+ *   - resendInvoiceEmail                                 → billing.send_invoice
  *   - deleteInvoice                                      → billing.delete_draft
  *   - void flips                                         → billing.void_invoice
  *   - recordInvoicePayment                               → billing.record_payment
@@ -48,4 +49,4 @@ export { generateInvoiceFromWip, bundleAsInternalRecord } from "./generate";
 export { updateInvoiceLineItem } from "./line-items";
 export { setInvoiceStatus, deleteInvoice, approveInvoice } from "./lifecycle";
 export { addTrustTransaction } from "./trust";
-export { recordInvoicePayment, sendInvoice } from "./payments";
+export { recordInvoicePayment, sendInvoice, resendInvoiceEmail } from "./payments";

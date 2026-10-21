@@ -18,6 +18,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { parseDateOnly } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { deliverInvoiceEmail } from "@/lib/billing/invoice-delivery";
 import { roundMoney } from "@/lib/money";
 import { UserFacingError, toUserMessage } from "@/lib/user-facing-error";
 import { createNotifications } from "@/lib/notifications";
@@ -71,9 +72,9 @@ const recordPaymentSchema = z.object({
   description: z.string().trim().max(400).optional().or(z.literal("")),
   /** When the lawyer ticks the "Send updated invoice" checkbox in
    *  the dialog, we send a refreshed copy of the invoice to the
-   *  client showing the new payment activity. Today this is just
-   *  a logged event (mirrors sendInvoice); when real email is
-   *  wired up the same flag will fire the actual send. The future
+   *  client showing the new payment activity, emailed to the
+   *  client's address on file with the PDF attached (and filed to
+   *  the matter). The future
    *  automatic-payment portal will call this action with
    *  notifyClient unset / false — its own confirmation flow
    *  handles client comms. */
@@ -242,19 +243,20 @@ export async function recordInvoicePayment(
         : `Partial payment to invoice ${result.invoiceNumber} · $${result.amount.toFixed(2)} (${result.source})`,
     });
 
-    // "Send updated invoice" ticked. NOTHING is emailed today (the
-    // dialog says "Logged-only for now"), so the audit row must not
-    // claim a delivery. Skip silently if the client has no email on
-    // file rather than failing the action: the payment itself still
-    // landed correctly.
+    // "Send updated invoice" ticked: email a refreshed copy to the
+    // client's address on file. Skip silently if the client has no
+    // email rather than failing the action: the payment itself still
+    // landed correctly. Delivery never throws and logs its own row; a
+    // failure only becomes a warning on the result.
+    let warning: string | undefined;
     if (data.notifyClient && result.clientEmail) {
-      await logActivity({
-        matterId: result.matterId,
+      const delivery = await deliverInvoiceEmail({
+        invoiceId: result.invoiceId,
+        to: result.clientEmail,
         userId,
-        type: "filing",
-        title: `Updated invoice ${result.invoiceNumber} copy requested for ${result.clientEmail} (not emailed)`,
-        detail: `after $${result.amount.toFixed(2)} ${result.source} payment`,
+        kind: "updated",
       });
+      if (!delivery.ok) warning = `Payment recorded. ${delivery.warning}`;
     }
 
     // Fan a payment-recorded notification out to the matter's
@@ -292,7 +294,7 @@ export async function recordInvoicePayment(
     revalidatePath(`/matters/${result.matterId}/billing`);
     revalidatePath(`/matters/${result.matterId}`);
     revalidatePath("/", "layout");
-    return { ...billingInitialState, status: "ok" };
+    return { ...billingInitialState, status: "ok", ...(warning ? { warning } : {}) };
   } catch (err) {
     return {
       status: "error",
@@ -530,10 +532,12 @@ export async function sendInvoice(
     });
 
     // Log: send event + (separately) the trust application if it
-    // happened. Two log lines so audit reads cleanly. The email/mail
-    // methods dispatch nothing ("Logged-only for now" in the dialog), so
-    // their entry records the invoice as marked sent, not delivered; the
-    // portal method emails a notice and notes a delivery failure below.
+    // happened. Two log lines so audit reads cleanly. The portal method
+    // emails a notice and notes a delivery failure on its row; the email
+    // method renders, files and emails the PDF (deliverInvoiceEmail logs
+    // its own row). Delivery failure never undoes the send: it becomes a
+    // warning on the result.
+    let warning: string | undefined;
     if (result.method === "portal") {
       // Delivery failure never undoes the send; it is noted on the row.
       let emailFailed = false;
@@ -555,13 +559,15 @@ export async function sendInvoice(
         detail: emailFailed ? "— email failed" : null,
       });
     } else {
-      await logActivity({
-        matterId: result.matterId,
+      const delivery = await deliverInvoiceEmail({
+        invoiceId,
+        to: result.recipient,
         userId,
-        type: "filing",
-        title: `Invoice ${result.invoiceNumber} marked sent via ${result.method} (not emailed)`,
-        detail: `to ${result.recipient}`,
+        kind: "initial",
       });
+      if (!delivery.ok) {
+        warning = `Invoice ${result.invoiceNumber} was marked sent. ${delivery.warning}`;
+      }
     }
     if (result.trustApplied) {
       await logActivity({
@@ -575,7 +581,7 @@ export async function sendInvoice(
     revalidatePath(`/matters/${result.matterId}/billing`);
     revalidatePath(`/matters/${result.matterId}`);
     revalidatePath("/", "layout");
-    return { ...billingInitialState, status: "ok" };
+    return { ...billingInitialState, status: "ok", ...(warning ? { warning } : {}) };
   } catch (err) {
     return {
       status: "error",
@@ -584,6 +590,66 @@ export async function sendInvoice(
         "Couldn't send the invoice.",
         "billing.sendInvoice"
       ),
+    };
+  }
+}
+
+// ── Re-send invoice email ──────────────────────────────────────────────
+//
+// Re-emails the PDF of an already-sent invoice (the first attempt failed,
+// wrong address, client lost it). Status never changes.
+
+const resendSchema = z.object({
+  recipient: z
+    .string()
+    .trim()
+    .regex(/^.+@.+\..+$/, "Enter a valid email address."),
+});
+
+export async function resendInvoiceEmail(
+  invoiceId: string,
+  _prev: BillingFormState,
+  formData: FormData
+): Promise<BillingFormState> {
+  await requirePermission("billing.send_invoice");
+  await assertChildMatterAccess("invoice", invoiceId);
+  const userId = await getCurrentUserId();
+  const parsed = resendSchema.safeParse({ recipient: formData.get("recipient") ?? "" });
+  if (!parsed.success) {
+    return { status: "error", errors: parsed.error.flatten().fieldErrors };
+  }
+  try {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { kind: true, status: true, matterId: true },
+    });
+    if (!invoice) throw new UserFacingError("Invoice not found.");
+    if (
+      invoice.kind !== "client" ||
+      !["sent", "partial", "paid"].includes(invoice.status)
+    ) {
+      throw new UserFacingError("Only sent invoices can be re-sent.");
+    }
+    const delivery = await deliverInvoiceEmail({
+      invoiceId,
+      to: parsed.data.recipient,
+      userId,
+      kind: "resend",
+    });
+    revalidatePath(`/matters/${invoice.matterId}/billing`);
+    revalidatePath(`/matters/${invoice.matterId}`);
+    if (!delivery.ok && !delivery.emailSent) {
+      return { status: "error", error: delivery.warning };
+    }
+    return {
+      ...billingInitialState,
+      status: "ok",
+      ...(delivery.ok ? {} : { warning: delivery.warning }),
+    };
+  } catch (err) {
+    return {
+      status: "error",
+      error: toUserMessage(err, "Couldn't re-send the invoice.", "billing.resendInvoiceEmail"),
     };
   }
 }

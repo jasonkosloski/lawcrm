@@ -22,6 +22,19 @@ import {
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/current-user-tz", () => ({ getCurrentUserTimeZone: vi.fn() }));
+vi.mock("@/lib/file-storage", () => {
+  const store = new Map<string, Buffer>();
+  return {
+    statFile: vi.fn(async (k: string) => (store.has(k) ? { size: store.get(k)!.length } : null)),
+    readStoredFile: vi.fn(async (k: string) => store.get(k) ?? null),
+    storeFile: vi.fn(async (f: File) => {
+      const key = `k__${store.size}__${f.name}`;
+      store.set(key, Buffer.from(await f.arrayBuffer()));
+      return { key, size: f.size, contentType: f.type };
+    }),
+    deleteFile: vi.fn(async (k: string) => void store.delete(k)),
+  };
+});
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn().mockResolvedValue("test-user"),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
@@ -56,6 +69,7 @@ import {
   seedTimeEntry,
   seedUser,
 } from "@/test/integration-helpers";
+import { captureEmails } from "@/test/email-capture";
 
 let userId: string;
 let matterId: string;
@@ -65,7 +79,10 @@ beforeAll(() => {
   expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
 });
 
+let cap: ReturnType<typeof captureEmails>;
+
 beforeEach(async () => {
+  cap = captureEmails();
   await resetDb();
   invoiceCounter = 0;
   const { firmId } = await seedFirm();
@@ -81,6 +98,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  cap.restore();
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.mocked(getCurrentUserId).mockResolvedValue(userId);
@@ -372,35 +390,32 @@ describe("recordInvoicePayment", () => {
     expect(await prisma.invoicePayment.count({ where: { invoiceId: id } })).toBe(1);
   });
 
-  test("notifyClient logs honestly: no claim that an email was sent", async () => {
+  test("notifyClient emails the updated invoice and logs the delivery", async () => {
     const id = await makeInvoice({ status: "sent", total: 100 });
     const { contactId } = await seedContact({ name: "Pat Client", email: "pat@example.com" });
     await prisma.matter.update({ where: { id: matterId }, data: { clientId: contactId } });
     await recordInvoicePayment(id, billingInitialState, payForm("25", "check", { notifyClient: "true" }));
+    const inv = await prisma.invoice.findUniqueOrThrow({ where: { id } });
     const log = await prisma.activityLog.findFirstOrThrow({
-      where: { matterId, title: { contains: "copy requested" } },
+      where: { matterId, title: { contains: "emailed to" } },
     });
-    expect(log.title).toContain("pat@example.com");
-    expect(log.title).toContain("not emailed");
-    expect(
-      await prisma.activityLog.count({ where: { matterId, title: { contains: "sent to pat" } } })
-    ).toBe(0);
+    expect(log.title).toBe(`Updated invoice ${inv.invoiceNumber} emailed to pat@example.com`);
   });
 });
 
 // ── sendInvoice ─────────────────────────────────────────────────────────
 
 describe("sendInvoice", () => {
-  test("send without trust: approved → sent, logged as marked sent (not emailed)", async () => {
+  test("send without trust: approved → sent, emailed and logged", async () => {
     const id = await makeInvoice({ status: "approved", total: 100 });
     const res = await sendInvoice(id, billingInitialState, sendForm());
     expect(res.status).toBe("ok");
     expect((await prisma.invoice.findUniqueOrThrow({ where: { id } })).status).toBe("sent");
+    const inv = await prisma.invoice.findUniqueOrThrow({ where: { id } });
     const log = await prisma.activityLog.findFirstOrThrow({
-      where: { matterId, title: { contains: "marked sent" } },
+      where: { matterId, title: { contains: "emailed to" } },
     });
-    expect(log.title).toContain("not emailed");
-    expect(log.detail).toBe("to client@example.com");
+    expect(log.title).toBe(`Invoice ${inv.invoiceNumber} emailed to client@example.com`);
   });
 
   test("only approved client invoices can be sent", async () => {

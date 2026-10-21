@@ -13,6 +13,9 @@ export type BillingFormState = {
   /** Generic error string for actions that don't have field-level
    *  errors (mark-paid, void, etc.). */
   error?: string;
+  /** Set when the action succeeded but a follow-up (e.g. the invoice
+   *  email) didn't fully complete. Shown beside the success state. */
+  warning?: string;
 };
 
 export const billingInitialState: BillingFormState = { status: "idle" };

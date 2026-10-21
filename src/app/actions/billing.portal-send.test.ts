@@ -9,6 +9,19 @@ import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vi
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/current-user-tz", () => ({ getCurrentUserTimeZone: vi.fn() }));
+vi.mock("@/lib/file-storage", () => {
+  const store = new Map<string, Buffer>();
+  return {
+    statFile: vi.fn(async (k: string) => (store.has(k) ? { size: store.get(k)!.length } : null)),
+    readStoredFile: vi.fn(async (k: string) => store.get(k) ?? null),
+    storeFile: vi.fn(async (f: File) => {
+      const key = `k__${store.size}__${f.name}`;
+      store.set(key, Buffer.from(await f.arrayBuffer()));
+      return { key, size: f.size, contentType: f.type };
+    }),
+    deleteFile: vi.fn(async (k: string) => void store.delete(k)),
+  };
+});
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn().mockResolvedValue("test-user"),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
@@ -223,12 +236,12 @@ describe("sendInvoice via portal", () => {
     expect(await statusOf(id)).toBe("approved");
   });
 
-  test("email method is unchanged", async () => {
+  test("email method emails the invoice PDF", async () => {
     const id = await makeInvoice();
     const res = await sendInvoice(id, billingInitialState, form({ method: "email", recipient: "x@example.com" }));
     expect(res.status).toBe("ok");
-    expect(cap.sent).toHaveLength(0);
-    const log = await prisma.activityLog.findFirstOrThrow({ where: { matterId, title: { contains: "marked sent" } } });
-    expect(log.title).toBe("Invoice 2026-901 marked sent via email (not emailed)");
+    expect(cap.sent).toHaveLength(1);
+    const log = await prisma.activityLog.findFirstOrThrow({ where: { matterId, title: { contains: "emailed to" } } });
+    expect(log.title).toBe("Invoice 2026-901 emailed to x@example.com");
   });
 });
