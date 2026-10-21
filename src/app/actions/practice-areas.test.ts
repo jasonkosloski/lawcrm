@@ -654,3 +654,116 @@ describe("originatingDocLabel", () => {
     expect(log?.detail).toContain('"Retainer agreement" → "Fee agreement (default)"');
   });
 });
+
+describe("allowed billing types", () => {
+  function billForm(allowed: string[], def?: string, present = true): FormData {
+    const fd = areaForm();
+    if (present) fd.set("allowedBillingTypesPresent", "1");
+    for (const t of allowed) fd.append("allowedBillingTypes", t);
+    if (def !== undefined) fd.set("defaultBillingType", def);
+    return fd;
+  }
+  async function row(id: string) {
+    return prisma.practiceArea.findUniqueOrThrow({ where: { id } });
+  }
+
+  test("update saves allowed types + default and audits old -> new", async () => {
+    await create();
+    const id = await areaIdByName("Employment");
+    const res = await updatePracticeArea(
+      id,
+      practiceAreaInitialState,
+      billForm(["court_appointed"], "court_appointed")
+    );
+    expect(res.status).toBe("ok");
+    const a = await row(id);
+    expect(a.allowedBillingTypes).toEqual(["court_appointed"]);
+    expect(a.defaultBillingType).toBe("court_appointed");
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { title: "Practice area updated — Employment" },
+    });
+    expect(log.detail).toContain("Billing types:");
+    expect(log.detail).toContain("default Contingency → Court-appointed");
+  });
+
+  test("stores types in canonical order, deduped", async () => {
+    await create();
+    const id = await areaIdByName("Employment");
+    await updatePracticeArea(
+      id,
+      practiceAreaInitialState,
+      billForm(["pro_bono", "hourly", "hourly"], "hourly")
+    );
+    expect((await row(id)).allowedBillingTypes).toEqual(["hourly", "pro_bono"]);
+  });
+
+  test("marker with zero types is an error and writes nothing", async () => {
+    await create();
+    const id = await areaIdByName("Employment");
+    const before = await row(id);
+    const res = await updatePracticeArea(id, practiceAreaInitialState, billForm([]));
+    expect(res.status).toBe("error");
+    expect(res.errors?.allowedBillingTypes?.length).toBeGreaterThan(0);
+    expect((await row(id)).allowedBillingTypes).toEqual(before.allowedBillingTypes);
+  });
+
+  test("default outside the allowed list is an error on defaultBillingType", async () => {
+    await create();
+    const id = await areaIdByName("Employment");
+    const before = await row(id);
+    const res = await updatePracticeArea(
+      id,
+      practiceAreaInitialState,
+      billForm(["contingent"], "hourly")
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.defaultBillingType?.length).toBeGreaterThan(0);
+    const after = await row(id);
+    expect(after.allowedBillingTypes).toEqual(before.allowedBillingTypes);
+    expect(after.defaultBillingType).toBe(before.defaultBillingType);
+  });
+
+  test("unknown type is an error", async () => {
+    await create();
+    const id = await areaIdByName("Employment");
+    const res = await updatePracticeArea(
+      id,
+      practiceAreaInitialState,
+      billForm(["hybrid", "contingent"], "contingent")
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.allowedBillingTypes?.length).toBeGreaterThan(0);
+  });
+
+  test("marker absent leaves billing fields unchanged", async () => {
+    await create();
+    const id = await areaIdByName("Employment");
+    await updatePracticeArea(
+      id,
+      practiceAreaInitialState,
+      billForm(["flat"], "flat")
+    );
+    const res = await updatePracticeArea(
+      id,
+      practiceAreaInitialState,
+      billForm([], undefined, false)
+    );
+    expect(res.status).toBe("ok");
+    const a = await row(id);
+    expect(a.allowedBillingTypes).toEqual(["flat"]);
+    expect(a.defaultBillingType).toBe("flat");
+  });
+
+  test("create without billing fields uses the schema defaults", async () => {
+    await create();
+    const a = await row(await areaIdByName("Employment"));
+    expect(a.allowedBillingTypes).toEqual([
+      "hourly",
+      "flat",
+      "contingent",
+      "court_appointed",
+      "pro_bono",
+    ]);
+    expect(a.defaultBillingType).toBe("contingent");
+  });
+});

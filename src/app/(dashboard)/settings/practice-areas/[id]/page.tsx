@@ -98,7 +98,8 @@ export default async function PracticeAreaDetailPage({
               statutePeriodAmount: area.statutePeriodAmount,
               statutePeriodUnit: area.statutePeriodUnit,
               statuteSourceCitation: area.statuteSourceCitation,
-              defaultBillingMode: area.defaultBillingMode,
+              allowedBillingTypes: area.allowedBillingTypes,
+              defaultBillingType: area.defaultBillingType,
             }}
           />
         </CardContent>

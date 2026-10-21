@@ -27,7 +27,12 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
-import { BILLING_MODES } from "@/lib/billing-mode-constants";
+import {
+  BILLING_TYPES,
+  BILLING_TYPE_LABEL,
+  isBillingType,
+  type BillingType,
+} from "@/lib/billing-type";
 import {
   SOL_PERIOD_UNITS,
   formatStatutePeriod,
@@ -125,11 +130,10 @@ const practiceAreaSchema = z.object({
     .max(120)
     .optional()
     .or(z.literal("")),
-  /** Billing flow new matters in this area inherit on create. The
-   *  edit form posts a string; we accept any value the enum knows
-   *  about and fall back to "client" for stale forms posting an
-   *  unknown value. */
-  defaultBillingMode: z.enum(BILLING_MODES).optional(),
+  /** Default billing type for new matters; checked against the allowed
+   *  list in `billingTypeErrors` (not a zod enum, so a stale value
+   *  reports on the right field). */
+  defaultBillingType: z.string().trim().optional(),
   /** Per-area matter-name template; blank = use the firm default. */
   matterNameTemplate: z.string().trim().max(300).optional().or(z.literal("")),
   /** Name of this area's originating document ("Retainer agreement");
@@ -174,6 +178,61 @@ function matterFieldErrors(
   return Object.keys(errors).length > 0 ? errors : null;
 }
 
+/** Billing-type parsing shared by create and update. `present` is the
+ *  hidden-marker flag; `stored` is the row's current values (update) so a
+ *  default posted without the list is checked against what is saved. */
+function billingTypeInput(
+  formData: FormData,
+  defaultPosted: string | undefined,
+  stored?: { allowed: string[]; default: string }
+): {
+  present: boolean;
+  allowed: BillingType[];
+  default: BillingType | null;
+  errors: Record<string, string[]> | null;
+} {
+  const present = formData.get("allowedBillingTypesPresent") !== null;
+  const posted = [...new Set(formData.getAll("allowedBillingTypes").map(String))];
+  const errors: Record<string, string[]> = {};
+  const unknown = posted.filter((t) => !isBillingType(t));
+  if (unknown.length > 0) {
+    errors.allowedBillingTypes = unknown.map((t) => `Unknown billing type: ${t}`);
+  } else if (present && posted.length === 0) {
+    errors.allowedBillingTypes = ["Allow at least one billing type"];
+  }
+  const allowed = BILLING_TYPES.filter((t) => posted.includes(t));
+  const effective: string[] = present || allowed.length > 0
+    ? allowed
+    : (stored?.allowed ?? [...BILLING_TYPES]);
+  const def = defaultPosted || null;
+  if (def !== null) {
+    if (!isBillingType(def)) {
+      errors.defaultBillingType = [`Unknown billing type: ${def}`];
+    } else if (!errors.allowedBillingTypes && !effective.includes(def)) {
+      errors.defaultBillingType = ["Default must be one of the allowed billing types"];
+    }
+  } else if (
+    present &&
+    !errors.allowedBillingTypes &&
+    stored &&
+    !effective.includes(stored.default)
+  ) {
+    errors.defaultBillingType = ["Default must be one of the allowed billing types"];
+  }
+  return {
+    present: present || allowed.length > 0,
+    allowed,
+    default: def !== null && isBillingType(def) ? def : null,
+    errors: Object.keys(errors).length > 0 ? errors : null,
+  };
+}
+
+function describeBillingTypes(types: readonly string[]): string {
+  return types
+    .map((t) => BILLING_TYPE_LABEL[t as BillingType] ?? t)
+    .join(", ");
+}
+
 function describeRequired(keys: readonly string[]): string {
   return keys.length > 0 ? keys.join(", ") : "none";
 }
@@ -216,6 +275,10 @@ export async function createPracticeArea(
   const matterErrors = matterFieldErrors(data.matterNameTemplate, requiredFields);
   if (matterErrors) {
     return { status: "error", errors: matterErrors, values: raw };
+  }
+  const billing = billingTypeInput(formData, data.defaultBillingType);
+  if (billing.errors) {
+    return { status: "error", errors: billing.errors, values: raw };
   }
 
   // Check for name collision — including archived rows, since the
@@ -265,12 +328,10 @@ export async function createPracticeArea(
         data.hasStatuteOfLimitations === "on"
           ? data.statuteSourceCitation || null
           : null,
-      // Defaulted to "client" at the column level; the create form
-      // doesn't expose a picker (kept lean), so this only matters
-      // if a future form posts the field.
-      ...(data.defaultBillingMode
-        ? { defaultBillingMode: data.defaultBillingMode }
-        : {}),
+      // Column defaults (all types, contingency) apply unless the form
+      // posts them; the create form doesn't expose a picker.
+      ...(billing.present ? { allowedBillingTypes: billing.allowed } : {}),
+      ...(billing.default ? { defaultBillingType: billing.default } : {}),
       stages: {
         create: DEFAULT_STAGE_TEMPLATE.map((s, i) => ({
           name: s.name,
@@ -326,7 +387,8 @@ export async function updatePracticeArea(
       statutePeriodAmount: true,
       statutePeriodUnit: true,
       statuteSourceCitation: true,
-      defaultBillingMode: true,
+      allowedBillingTypes: true,
+      defaultBillingType: true,
       matterNameTemplate: true,
       originatingDocLabel: true,
       requiredMatterFields: true,
@@ -339,6 +401,18 @@ export async function updatePracticeArea(
       values: raw,
     };
   }
+
+  const billing = billingTypeInput(formData, data.defaultBillingType, {
+    allowed: before.allowedBillingTypes,
+    default: before.defaultBillingType,
+  });
+  if (billing.errors) {
+    return { status: "error", errors: billing.errors, values: raw };
+  }
+  const newAllowed: string[] = billing.present
+    ? billing.allowed
+    : before.allowedBillingTypes;
+  const newDefault = billing.default ?? before.defaultBillingType;
 
   const collision = await prisma.practiceArea.findFirst({
     where: { name: data.name, NOT: { id } },
@@ -380,12 +454,10 @@ export async function updatePracticeArea(
             statuteSourceCitation: data.statuteSourceCitation || null,
           }
         : {}),
-      // Only write when the form actually posted a value — keeps
-      // forward-compat with older forms that don't include the
-      // select.
-      ...(data.defaultBillingMode
-        ? { defaultBillingMode: data.defaultBillingMode }
-        : {}),
+      // Billing types: the list changes only with the marker; the
+      // default only when posted. Absent = unchanged.
+      ...(billing.present ? { allowedBillingTypes: billing.allowed } : {}),
+      ...(billing.default ? { defaultBillingType: billing.default } : {}),
     },
   });
   // Matter.color is a snapshot of the area colour taken on create/edit.
@@ -437,9 +509,10 @@ export async function updatePracticeArea(
       ? `SOL period ${formatPeriodOrNone(beforePeriod)} → ${formatPeriodOrNone(newPeriod)}`
       : null,
     before.statuteSourceCitation !== newCitation ? "SOL citation" : null,
-    data.defaultBillingMode &&
-    before.defaultBillingMode !== data.defaultBillingMode
-      ? `billing mode ${before.defaultBillingMode} → ${data.defaultBillingMode}`
+    describeBillingTypes(before.allowedBillingTypes) !==
+      describeBillingTypes(newAllowed) ||
+    before.defaultBillingType !== newDefault
+      ? `Billing types: ${describeBillingTypes(before.allowedBillingTypes)} → ${describeBillingTypes(newAllowed)}; default ${describeBillingTypes([before.defaultBillingType])} → ${describeBillingTypes([newDefault])}`
       : null,
     data.matterNameTemplate !== undefined &&
     (before.matterNameTemplate ?? "") !== data.matterNameTemplate

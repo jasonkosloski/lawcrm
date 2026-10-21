@@ -24,12 +24,7 @@ import {
   practiceAreaInitialState,
   type PracticeAreaFormState,
 } from "@/lib/practice-area-constants";
-import {
-  BILLING_MODES,
-  BILLING_MODE_DESCRIPTION,
-  BILLING_MODE_LABEL,
-  type BillingMode,
-} from "@/lib/billing-mode-constants";
+import { BILLING_TYPE_OPTIONS } from "@/lib/billing-type";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 export function EditPracticeAreaForm({
@@ -48,7 +43,9 @@ export function EditPracticeAreaForm({
     statutePeriodAmount: number | null;
     statutePeriodUnit: SolPeriodUnit | null;
     statuteSourceCitation: string | null;
-    defaultBillingMode: string;
+    /** Billing types matters in this area may use, and the preselected one. */
+    allowedBillingTypes: string[];
+    defaultBillingType: string;
     /** null = inherit the firm template. */
     matterNameTemplate?: string | null;
     requiredMatterFields?: string[];
@@ -87,9 +84,25 @@ export function EditPracticeAreaForm({
   );
   const [unit, setUnit] = useState<string>(area.statutePeriodUnit ?? "YEARS");
   const [citation, setCitation] = useState(area.statuteSourceCitation ?? "");
-  const [billingMode, setBillingMode] = useState<string>(
-    area.defaultBillingMode
+  const [allowedTypes, setAllowedTypes] = useState<string[]>(
+    area.allowedBillingTypes
   );
+  const [defaultType, setDefaultType] = useState<string>(
+    area.defaultBillingType
+  );
+  const allowedOptions = BILLING_TYPE_OPTIONS.filter((o) =>
+    allowedTypes.includes(o.value)
+  );
+  const toggleType = (value: string, checked: boolean) => {
+    const next = checked
+      ? [...allowedTypes, value]
+      : allowedTypes.filter((t) => t !== value);
+    setAllowedTypes(next);
+    if (!next.includes(defaultType)) {
+      const first = BILLING_TYPE_OPTIONS.find((o) => next.includes(o.value));
+      if (first) setDefaultType(first.value);
+    }
+  };
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
@@ -233,32 +246,59 @@ export function EditPracticeAreaForm({
         </p>
       </fieldset>
 
-      {/* Default billing mode — snapshots onto each new matter on
-          create. Per-matter override happens on the matter edit
-          form, so changing this here only affects future matters. */}
-      <Field
-        label="Default billing mode"
-        htmlFor="defaultBillingMode"
-        error={errs.defaultBillingMode}
-        hint={
-          BILLING_MODE_DESCRIPTION[billingMode as BillingMode]
-        }
-      >
-        <NativeSelect
-          id="defaultBillingMode"
-          name="defaultBillingMode"
-          value={billingMode}
-          onChange={(e) => setBillingMode(e.target.value)}
-          className="w-full max-w-xs"
-          aria-invalid={!!errs.defaultBillingMode || undefined}
-        >
-          {BILLING_MODES.map((m) => (
-            <NativeSelectOption key={m} value={m}>
-              {BILLING_MODE_LABEL[m]}
-            </NativeSelectOption>
+      {/* Billing types this area allows; the default preselects on new
+          matters. The marker lets the action tell "unchecked all" from
+          "field absent". */}
+      <fieldset className="flex flex-col gap-2 px-3 py-2.5 rounded-md border border-line bg-paper-2/30">
+        <legend className="px-1 text-2xs font-medium text-ink-3">
+          Billing types
+        </legend>
+        <input type="hidden" name="allowedBillingTypesPresent" value="1" />
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+          {BILLING_TYPE_OPTIONS.map((o) => (
+            <label
+              key={o.value}
+              className="flex items-center gap-1.5 text-xs text-ink-2 cursor-pointer select-none"
+            >
+              <input
+                type="checkbox"
+                name="allowedBillingTypes"
+                value={o.value}
+                checked={allowedTypes.includes(o.value)}
+                onChange={(e) => toggleType(o.value, e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-line"
+              />
+              {o.label}
+            </label>
           ))}
-        </NativeSelect>
-      </Field>
+        </div>
+        {errs.allowedBillingTypes && (
+          <p className="text-2xs text-warn">
+            {errs.allowedBillingTypes.join(" ")}
+          </p>
+        )}
+        <Field
+          label="Default"
+          htmlFor="defaultBillingType"
+          error={errs.defaultBillingType}
+          hint="Preselected when a matter is created in this area."
+        >
+          <NativeSelect
+            id="defaultBillingType"
+            name="defaultBillingType"
+            value={defaultType}
+            onChange={(e) => setDefaultType(e.target.value)}
+            className="w-full max-w-xs"
+            aria-invalid={!!errs.defaultBillingType || undefined}
+          >
+            {allowedOptions.map((o) => (
+              <NativeSelectOption key={o.value} value={o.value}>
+                {o.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </Field>
+      </fieldset>
 
       <MatterNameTemplateField
         defaultValue={area.matterNameTemplate ?? ""}

@@ -32,7 +32,8 @@ const area = {
   statutePeriodAmount: 3,
   statutePeriodUnit: "YEARS" as const,
   statuteSourceCitation: "C.R.S. § 13-80-101",
-  defaultBillingMode: "client",
+  allowedBillingTypes: ["hourly", "flat", "contingent", "court_appointed", "pro_bono"],
+  defaultBillingType: "contingent",
 };
 
 beforeEach(() => {
@@ -107,7 +108,7 @@ describe("EditPracticeAreaForm after a server validation error", () => {
       "Amount",
       "Unit",
       "Source citation",
-      "Default billing mode",
+      "Default",
     ]) {
       expect(screen.getByLabelText(name)).toBeTruthy();
     }
@@ -171,5 +172,46 @@ describe("EditPracticeAreaForm originating document", () => {
     expect(input.name).toBe("originatingDocLabel");
     expect(input.value).toBe("Retainer");
     expect(input.placeholder).toBe("Fee agreement");
+  });
+});
+
+describe("EditPracticeAreaForm billing types", () => {
+  const box = (c: HTMLElement, v: string) =>
+    c.querySelector<HTMLInputElement>(
+      `input[name="allowedBillingTypes"][value="${v}"]`
+    )!;
+  const options = (c: HTMLElement) =>
+    Array.from(
+      c.querySelectorAll<HTMLOptionElement>('select[name="defaultBillingType"] option')
+    ).map((o) => o.value);
+
+  test("checkboxes follow the prop; default select lists only checked types", () => {
+    const { container } = render(
+      <EditPracticeAreaForm
+        area={{
+          ...area,
+          allowedBillingTypes: ["flat", "pro_bono"],
+          defaultBillingType: "pro_bono",
+        }}
+      />
+    );
+    expect(box(container, "flat").checked).toBe(true);
+    expect(box(container, "hourly").checked).toBe(false);
+    expect(options(container)).toEqual(["flat", "pro_bono"]);
+    expect(
+      container.querySelector<HTMLSelectElement>('select[name="defaultBillingType"]')!
+        .value
+    ).toBe("pro_bono");
+  });
+
+  test("unchecking the current default switches to the first remaining type", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<EditPracticeAreaForm area={area} />);
+    await user.click(box(container, "contingent"));
+    expect(options(container)).not.toContain("contingent");
+    expect(
+      container.querySelector<HTMLSelectElement>('select[name="defaultBillingType"]')!
+        .value
+    ).toBe("hourly");
   });
 });
