@@ -1,13 +1,7 @@
 import type { OutgoingEmail } from "@/lib/email/drivers";
+import { escapeHtml as esc } from "@/lib/email/escape";
 
 type Body = Omit<OutgoingEmail, "to">;
-
-const esc = (s: string) =>
-  s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 
 /** Sign-in email. Deliberately names no matter. */
 export function loginEmail(link: string): Body {
