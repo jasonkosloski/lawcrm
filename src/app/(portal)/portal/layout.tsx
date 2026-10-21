@@ -92,7 +92,7 @@ export default async function PortalLayout({
         <div className="brand-gradient-line" aria-hidden="true" />
       </header>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:py-10">
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:py-10 print:max-w-none print:p-0">
         {children}
       </main>
 

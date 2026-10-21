@@ -51,7 +51,7 @@ export default async function PortalInvoicePage({
       <div className="flex items-center justify-between gap-3 print:hidden">
         <Link
           href={`/matters/${id}`}
-          className="-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm text-ink-3 outline-none hover:text-brand-700 focus-visible:ring-3 focus-visible:ring-ring/40 print:hidden"
+          className="-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm text-ink-3 outline-none hover:text-brand-700 focus-visible:ring-3 focus-visible:ring-ring/40"
         >
           <ChevronLeft className="size-4" aria-hidden="true" />
           Back to matter

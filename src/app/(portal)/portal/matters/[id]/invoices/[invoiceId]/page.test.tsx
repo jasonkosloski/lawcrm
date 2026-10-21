@@ -92,9 +92,10 @@ describe("portal invoice page", () => {
     expect(screen.getByText("INV-77")).toBeTruthy();
     expect(screen.getByText("Acme Law")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Download PDF/ })).toBeTruthy();
-    const back = screen.getByRole("link", { name: /Smith Estate|Back/ });
+    const back = screen.getByRole("link", { name: /^Back to matter$/ });
     expect(back.getAttribute("href")).toBe(`/matters/${matterId}`);
-    expect(back.className).toContain("print:hidden");
+    // The wrapper hides the whole controls row when printing.
+    expect(back.parentElement?.className).toContain("print:hidden");
   });
 
   test("generateMetadata titles the page with the invoice number", async () => {
