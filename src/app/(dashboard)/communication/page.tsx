@@ -108,10 +108,12 @@ export default async function CommunicationPage({
 }: PageProps<"/communication">) {
   await requireUser();
   const sp = await searchParams;
-  const canViewPortal = await currentUserHasPermission("portal.view_messages");
+  // Started now; only a ?view=portal request must wait for it to pick the
+  // view. The other views read it from their first parallel wave.
+  const canViewPortalP = currentUserHasPermission("portal.view_messages");
   const parsedView = parseView(sp.view);
   const view: View =
-    parsedView === "portal" && !canViewPortal ? "email" : parsedView;
+    parsedView === "portal" && !(await canViewPortalP) ? "email" : parsedView;
   const rawThread = Array.isArray(sp.thread) ? sp.thread[0] : sp.thread;
   const threadId = typeof rawThread === "string" ? rawThread : null;
 
@@ -174,6 +176,7 @@ export default async function CommunicationPage({
       selectedThread,
       callContacts,
       callMatters,
+      canViewPortal,
     ] = await Promise.all([
       getMessengerMailboxCounts(),
       // The inactive tab only needs its unread badge.
@@ -190,6 +193,7 @@ export default async function CommunicationPage({
       Promise.all([canLogCallP, canEditCallP]).then(([log, edit]) =>
         log || edit ? getFilingMatterOptions() : []
       ),
+      canViewPortalP,
     ]);
     const callMatterOptions = callMatters.map((m) => ({
       id: m.id,
@@ -279,6 +283,7 @@ export default async function CommunicationPage({
     selectedThread,
     pinnedMatters,
     filingOptions,
+    canViewPortal,
   ] = await Promise.all([
     getCommunicationCounts(),
     // The inactive tab only needs its unread badge.
@@ -291,6 +296,7 @@ export default async function CommunicationPage({
     // reader uses it, so skip the (unbounded) query until a thread is
     // open.
     threadId ? getFilingMatterOptions() : Promise.resolve([]),
+    canViewPortalP,
   ]);
 
   return (
