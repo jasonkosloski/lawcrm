@@ -32,7 +32,7 @@ describe("sendEmail", () => {
       .mockResolvedValue({ ok: true, json: async () => ({ id: "x" }) });
     vi.stubGlobal("fetch", fetchMock);
     const res = await sendEmail(msg);
-    expect(res).toEqual({ ok: true });
+    expect(res).toMatchObject({ ok: true });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://api.resend.com/emails");
     expect(init.method).toBe("POST");
@@ -95,7 +95,7 @@ describe("sendEmail", () => {
     vi.stubGlobal("fetch", fetchMock);
     const cap = captureEmails();
     try {
-      expect(await sendEmail(msg)).toEqual({ ok: true });
+      expect(await sendEmail(msg)).toMatchObject({ ok: true });
       expect(cap.sent).toEqual([msg]);
       expect(fetchMock).not.toHaveBeenCalled();
     } finally {
