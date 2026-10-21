@@ -49,6 +49,13 @@ describe("PortalThreadList", () => {
     expect(within(beta).queryByText("Awaiting reply")).toBeNull();
   });
 
+  test("unread badge is announced as 'N unread'", () => {
+    render(
+      <PortalThreadList rows={[row({ matterName: "Alpha", unread: 4 })]} paging={paging} />
+    );
+    expect(screen.getByRole("link", { name: /4 unread/ })).toBeInTheDocument();
+  });
+
   test("unread count only when greater than zero", () => {
     render(
       <PortalThreadList

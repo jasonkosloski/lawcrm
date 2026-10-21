@@ -129,6 +129,70 @@ describe("PortalConversation", () => {
     expect(screen.getByRole("textbox")).toHaveValue("Hi there");
   });
 
+  test("a thrown send keeps the draft and shows a retry message", async () => {
+    mockedSend.mockRejectedValue(new Error("network down"));
+    setup();
+    await userEvent.type(screen.getByRole("textbox"), "Hi there");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("Couldn't send. Please try again.")
+    );
+    expect(screen.getByRole("textbox")).toHaveValue("Hi there");
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  });
+
+  test("marking read does not repeat on rerender", () => {
+    const { rerender } = setup();
+    rerender(
+      <PortalConversation
+        matterId="matter_1"
+        conversation={conversation()}
+        canSend
+        tz="America/Denver"
+      />
+    );
+    rerender(
+      <PortalConversation
+        matterId="matter_1"
+        conversation={conversation({ unread: 0 })}
+        canSend={false}
+        tz="America/Denver"
+      />
+    );
+    expect(mockedMark).toHaveBeenCalledTimes(1);
+  });
+
+  test("scrolls the thread to the newest message on mount and when a message arrives", () => {
+    let height = 500;
+    const spy = vi
+      .spyOn(HTMLElement.prototype, "scrollHeight", "get")
+      .mockImplementation(() => height);
+    try {
+      const { rerender } = setup();
+      const thread = screen.getByTestId("portal-thread");
+      expect(thread.scrollTop).toBe(500);
+
+      height = 900;
+      const more = conversation();
+      more.messages = [
+        ...more.messages,
+        {
+          id: "m3",
+          body: "Newest",
+          createdAt: new Date("2026-10-20T17:00:00Z"),
+          fromClient: true,
+          authorName: "Carla Client",
+        },
+      ];
+      rerender(
+        <PortalConversation matterId="matter_1" conversation={more} canSend tz="America/Denver" />
+      );
+      expect(thread.scrollTop).toBe(900);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   test("Enter inserts a newline and does not send", async () => {
     setup();
     await userEvent.type(screen.getByRole("textbox"), "a{Enter}b");

@@ -83,6 +83,7 @@ export function PortalThreadList({
                   {r.unread > 0 && (
                     <span className="ml-auto text-3xs font-mono font-medium px-1.5 rounded-full bg-paper-2 text-ink-2 shrink-0">
                       {r.unread}
+                      <span className="sr-only"> unread</span>
                     </span>
                   )}
                 </div>

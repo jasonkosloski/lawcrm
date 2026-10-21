@@ -50,6 +50,16 @@ export function PortalConversation({
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const threadRef = useRef<HTMLDivElement>(null);
+  const messageCount = conversation.messages.length;
+
+  // Newest message is at the bottom: show it on open and when one arrives
+  // (after a send the page revalidates with the new row). Assigning
+  // scrollTop works everywhere, including test DOMs without scrollTo.
+  useEffect(() => {
+    const el = threadRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messageCount]);
 
   const send = () => {
     const body = draft.trim();
@@ -57,12 +67,17 @@ export function PortalConversation({
     setError(null);
     setWarning(null);
     startTransition(async () => {
-      const res = await sendStaffPortalMessage(matterId, body);
-      if (res.ok) {
-        setDraft("");
-        if (res.warning) setWarning(res.warning);
-      } else {
-        setError(res.error);
+      try {
+        const res = await sendStaffPortalMessage(matterId, body);
+        if (res.ok) {
+          setDraft("");
+          if (res.warning) setWarning(res.warning);
+        } else {
+          setError(res.error);
+        }
+      } catch {
+        // Keep the draft so nothing typed is lost.
+        setError("Couldn't send. Please try again.");
       }
     });
   };
@@ -75,7 +90,11 @@ export function PortalConversation({
           No one has portal access on this matter yet.
         </p>
       )}
-      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3">
+      <div
+        ref={threadRef}
+        data-testid="portal-thread"
+        className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3"
+      >
         {conversation.messages.length === 0 ? (
           <p className="text-sm text-ink-3">No portal messages yet.</p>
         ) : (
