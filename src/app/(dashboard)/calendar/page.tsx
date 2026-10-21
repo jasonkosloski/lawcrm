@@ -44,6 +44,7 @@ import {
   getEventNotes,
   getEventTimeEntries,
 } from "@/lib/queries/calendar";
+import { getEventPortalShareProp } from "@/lib/queries/portal-status";
 import { getEditableEventIds } from "@/lib/queries/calendar-edit-flags";
 import { requireUser } from "@/lib/current-user";
 
@@ -231,6 +232,7 @@ async function EventDetailLoader({
     canPinNotes,
     canDeleteAnyNote,
     canDeleteAnyTimeEntry,
+    portalShare,
   ] = await Promise.all([
     getEventNotes(eventId),
     getEventTimeEntries(eventId),
@@ -238,6 +240,7 @@ async function EventDetailLoader({
     currentUserHasPermission("notes.pin"),
     currentUserHasPermission("notes.delete_any"),
     currentUserHasPermission("time_entries.delete_any"),
+    getEventPortalShareProp(eventId, event.matter?.id),
   ]);
   return (
     // The notes / time sections read what the viewer may do from this
@@ -255,6 +258,7 @@ async function EventDetailLoader({
         notes={notes}
         timeEntries={timeEntries}
         canEdit={editable.has(eventId)}
+        portalShare={portalShare}
       />
     </EventAttachmentsProvider>
   );

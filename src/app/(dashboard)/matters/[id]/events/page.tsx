@@ -28,6 +28,7 @@ import {
   getEventNotes,
   getEventTimeEntries,
 } from "@/lib/queries/calendar";
+import { getEventPortalShareProp } from "@/lib/queries/portal-status";
 import { assertMatterAccess } from "@/lib/matter-access";
 
 export default async function MatterEventsPage({
@@ -77,6 +78,12 @@ export default async function MatterEventsPage({
       ? await Promise.all([getEventNotes(eventId), getEventTimeEntries(eventId)])
       : [[], []];
 
+  // Same wall as the notes above: a Busy shell gets no share control.
+  const portalShare =
+    selectedEvent?.viewerCanSeeDetails && eventId
+      ? await getEventPortalShareProp(eventId, selectedEvent.matter?.id)
+      : undefined;
+
   const upcoming = events.filter((e) => e.isUpcoming);
   const past = events.filter((e) => !e.isUpcoming).reverse(); // most recent first
 
@@ -115,6 +122,7 @@ export default async function MatterEventsPage({
           event={selectedEvent}
           notes={selectedEventNotes}
           timeEntries={selectedEventTime}
+          portalShare={portalShare}
         />
       )}
     </div>

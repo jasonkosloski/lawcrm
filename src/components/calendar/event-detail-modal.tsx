@@ -63,6 +63,8 @@ import type {
   EventTimeEntry,
 } from "@/lib/queries/calendar";
 import { EventNotesSection } from "./event-notes-section";
+import { EventShareSection } from "./event-share-section";
+import type { EventPortalShareProp } from "@/lib/queries/portal-status";
 import { EventTimeEntriesSection } from "./event-time-entries-section";
 import {
   Row,
@@ -108,6 +110,9 @@ export type EventDetailModalProps = {
    *  a denied delete now reports its reason instead of failing
    *  silently. */
   canDelete?: boolean;
+  /** Client-portal share control. Omitted for lead events and when
+   *  the viewer lacks portal.view. */
+  portalShare?: EventPortalShareProp;
 };
 
 /** Keyed by event id so opening a different event (agenda link,
@@ -123,6 +128,7 @@ function EventDetailModalInner({
   timeEntries,
   canEdit = false,
   canDelete,
+  portalShare,
 }: EventDetailModalProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -515,6 +521,15 @@ function EventDetailModalInner({
             event={event}
             commit={commit}
           />
+
+          {portalShare && event.matter && (
+            <EventShareSection
+              eventId={event.id}
+              eventTitle={event.title}
+              canShare={portalShare.canShare}
+              share={portalShare.share}
+            />
+          )}
 
           {/* Notes attached to this event. data-modal-composer: an
               Escape inside these drafts only blurs the field, so a

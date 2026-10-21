@@ -9,13 +9,18 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     portalStatusUpdate: { findMany: vi.fn(async () => []) },
     portalMatterAccess: { count: vi.fn(async () => 1) },
+    portalSharedEvent: { findUnique: vi.fn() },
   },
 }));
 
 import { assertMatterAccess } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
-import { getClientStatusCardData } from "./portal-status";
+import {
+  getClientStatusCardData,
+  getEventPortalShareProp,
+  getEventShare,
+} from "./portal-status";
 
 afterEach(() => vi.clearAllMocks());
 
@@ -70,5 +75,61 @@ describe("getClientStatusCardData", () => {
         orderBy: { postedAt: "desc" },
       })
     );
+  });
+});
+
+describe("getEventShare", () => {
+  const row = (shareMatter: string, eventMatter: string | null) => ({
+    clientTitle: "Hearing",
+    clientNote: "Bring ID",
+    matterId: shareMatter,
+    event: { matterId: eventMatter },
+  });
+
+  test("returns the client-facing fields when the matter still matches", async () => {
+    vi.mocked(prisma.portalSharedEvent.findUnique).mockResolvedValue(row("m1", "m1") as never);
+    expect(await getEventShare("e1")).toEqual({
+      clientTitle: "Hearing",
+      clientNote: "Bring ID",
+    });
+  });
+
+  test("null when there is no share", async () => {
+    vi.mocked(prisma.portalSharedEvent.findUnique).mockResolvedValue(null);
+    expect(await getEventShare("e1")).toBeNull();
+  });
+
+  test("null after the event was re-filed to another matter", async () => {
+    vi.mocked(prisma.portalSharedEvent.findUnique).mockResolvedValue(row("m1", "m2") as never);
+    expect(await getEventShare("e1")).toBeNull();
+  });
+
+  test("null when the event lost its matter", async () => {
+    vi.mocked(prisma.portalSharedEvent.findUnique).mockResolvedValue(row("m1", null) as never);
+    expect(await getEventShare("e1")).toBeNull();
+  });
+});
+
+describe("getEventPortalShareProp", () => {
+  test("undefined for lead events, with no query", async () => {
+    expect(await getEventPortalShareProp("e1", null)).toBeUndefined();
+    expect(prisma.portalSharedEvent.findUnique).not.toHaveBeenCalled();
+  });
+
+  test("undefined without portal.view, with no query", async () => {
+    vi.mocked(currentUserHasPermission).mockResolvedValue(false);
+    expect(await getEventPortalShareProp("e1", "m1")).toBeUndefined();
+    expect(prisma.portalSharedEvent.findUnique).not.toHaveBeenCalled();
+  });
+
+  test("canShare follows portal.share_events", async () => {
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (k: string) => k === "portal.view"
+    );
+    vi.mocked(prisma.portalSharedEvent.findUnique).mockResolvedValue(null);
+    expect(await getEventPortalShareProp("e1", "m1")).toEqual({
+      canShare: false,
+      share: null,
+    });
   });
 });
