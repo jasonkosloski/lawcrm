@@ -283,7 +283,12 @@ export async function ThreadReader({
         {/* Reply / Reply all — self-fetching server island (permission
             + account state + derived recipients), so the embedded
             matter/intake readers get it without new page props. */}
-        <ReplySection thread={thread} />
+        <ReplySection
+          thread={thread}
+          matters={filingOptions}
+          leads={leadOptions}
+          canFile={perms.canFileEmail}
+        />
       </div>
     </div>
   );

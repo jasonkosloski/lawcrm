@@ -11,6 +11,12 @@
  */
 export const SENDABLE_EMAIL_STATUSES = ["connected", "syncing"] as const;
 
+/** Reply to an unfiled thread by a user who can't file email. Shared
+ *  by the reply action and composer ("use server" files can't export
+ *  constants). */
+export const REPLY_NEEDS_FILER_ERROR =
+  "Ask someone who can file email to file this thread first.";
+
 export function isSendableStatus(status: string): boolean {
   return (SENDABLE_EMAIL_STATUSES as readonly string[]).includes(status);
 }

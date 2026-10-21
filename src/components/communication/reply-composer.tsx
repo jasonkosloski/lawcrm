@@ -37,7 +37,15 @@ import { parseAddressList } from "@/lib/google/mime";
 import { htmlToText } from "@/lib/html-to-text";
 import { getEmailSignature } from "@/lib/email-signature";
 import { replyToThread } from "@/app/actions/email-send";
+import { REPLY_NEEDS_FILER_ERROR } from "@/lib/email-send-status";
+import { notifySuccess } from "@/lib/feedback";
+import type { RecordScope } from "@/lib/record-scope";
+import type {
+  FilingLeadOption,
+  FilingMatterOption,
+} from "@/lib/queries/communication";
 import { blockEnterSubmit, LabeledField } from "./labeled-field";
+import { RecordPicker } from "./record-picker";
 
 /** Shown when the action call itself rejects - the send may or may
  *  not have gone out, so don't invite a blind retry. */
@@ -60,6 +68,10 @@ export function ReplyComposer({
   accountEmail,
   reply,
   replyAll,
+  needsRecord,
+  canFile,
+  matters,
+  leads,
 }: {
   threadId: string;
   /** The mailbox this reply sends from — display only. */
@@ -67,6 +79,12 @@ export function ReplyComposer({
   /** Server-derived defaults for each mode (deriveReplyRecipients). */
   reply: ReplyDefaults;
   replyAll: ReplyDefaults;
+  /** Thread has no matter or lead: the reply files it first, so a
+   *  record must be chosen (and the viewer must be able to file). */
+  needsRecord: boolean;
+  canFile: boolean;
+  matters: FilingMatterOption[];
+  leads: FilingLeadOption[];
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode | null>(null);
@@ -76,6 +94,7 @@ export function ReplyComposer({
   // Editor HTML — survives collapse/mode switches (the editor
   // re-mounts from it) and only resets on a successful send.
   const [body, setBody] = useState(() => getEmailSignature() ?? "");
+  const [scope, setScope] = useState<RecordScope | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -146,6 +165,10 @@ export function ReplyComposer({
         recipientsEdited: true,
       };
     }
+    if (needsRecord && !scope) {
+      setError("Choose a matter or lead.");
+      return;
+    }
     setError(null);
 
     startTransition(async () => {
@@ -157,8 +180,10 @@ export function ReplyComposer({
           bodyHtml: body,
           replyAll: mode === "replyAll",
           ...overrides,
+          ...(needsRecord && scope ? { scope } : {}),
         });
         if (result.ok) {
+          if (result.notice) notifySuccess(result.notice);
           setBody(getEmailSignature() ?? "");
           setMode(null);
           setEditing(false);
@@ -289,6 +314,33 @@ export function ReplyComposer({
         </div>
 
         <div className="px-3 sm:px-4 py-3 flex flex-col gap-2">
+          {needsRecord && canFile && (
+            <div
+              role="group"
+              aria-labelledby="reply-record-label"
+              className="flex flex-col gap-1"
+            >
+              <span
+                id="reply-record-label"
+                className="text-2xs font-medium text-ink-3"
+              >
+                Matter or lead
+              </span>
+              <RecordPicker
+                matters={matters}
+                leads={leads}
+                value={scope}
+                disabled={isPending}
+                placeholder="Matter or lead — search to choose"
+                onChange={setScope}
+              />
+            </div>
+          )}
+          {needsRecord && !canFile && (
+            <div role="note" className="text-2xs text-ink-3">
+              {REPLY_NEEDS_FILER_ERROR}
+            </div>
+          )}
           <RichTextEditor
             initialHTML={body}
             onChange={setBody}
@@ -306,9 +358,16 @@ export function ReplyComposer({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending || !bodyText.trim()}>
-              {isPending ? "Sending…" : "Send"}
-            </Button>
+            {!(needsRecord && !canFile) && (
+              <Button
+                type="submit"
+                disabled={
+                  isPending || !bodyText.trim() || (needsRecord && !scope)
+                }
+              >
+                {isPending ? "Sending…" : "Send"}
+              </Button>
+            )}
           </div>
         </div>
       </form>

@@ -27,11 +27,8 @@ import {
 import { GmailAuthError } from "@/lib/google/gmail-client";
 import { GoogleOAuthError } from "@/lib/google/oauth";
 import type { RecordScope } from "@/lib/record-scope";
-import {
-  REPLY_NEEDS_FILER_ERROR,
-  replyToThread,
-  sendEmail,
-} from "./email-send";
+import { REPLY_NEEDS_FILER_ERROR } from "@/lib/email-send-status";
+import { replyToThread, sendEmail } from "./email-send";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // Matter-wall asserts are covered in matter-access-writes.test.ts; this

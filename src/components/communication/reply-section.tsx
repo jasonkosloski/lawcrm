@@ -21,11 +21,27 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { deriveReplyRecipients } from "@/lib/google/mime";
-import type { ThreadDetail } from "@/lib/queries/communication";
+import type {
+  FilingLeadOption,
+  FilingMatterOption,
+  ThreadDetail,
+} from "@/lib/queries/communication";
 import { isSendableStatus } from "@/lib/email-send-status";
 import { ReplyComposer } from "./reply-composer";
 
-export async function ReplySection({ thread }: { thread: ThreadDetail }) {
+export async function ReplySection({
+  thread,
+  matters,
+  leads,
+  canFile,
+}: {
+  thread: ThreadDetail;
+  /** Record options for the picker shown when the thread is unfiled. */
+  matters: FilingMatterOption[];
+  leads: FilingLeadOption[];
+  /** `communication.file_email` - whether the viewer may file it. */
+  canFile: boolean;
+}) {
   const canSend = await currentUserHasPermission("communication.send_email");
   if (!canSend) return null;
 
@@ -77,6 +93,10 @@ export async function ReplySection({ thread }: { thread: ThreadDetail }) {
       accountEmail={row.account.emailAddress}
       reply={reply}
       replyAll={replyAll}
+      needsRecord={thread.matter === null && thread.lead === null}
+      canFile={canFile}
+      matters={matters}
+      leads={leads}
     />
   );
 }

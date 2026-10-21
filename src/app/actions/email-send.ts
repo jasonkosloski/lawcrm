@@ -59,7 +59,7 @@ import {
   requirePermission,
 } from "@/lib/permission-check";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
-import { isSendableStatus } from "@/lib/email-send-status";
+import { isSendableStatus, REPLY_NEEDS_FILER_ERROR } from "@/lib/email-send-status";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
 import { GoogleOAuthError } from "@/lib/google/oauth";
 import {
@@ -141,9 +141,6 @@ const MAX_BODY_LENGTH = 1_000_000;
 
 const SAVED_LOCALLY_WARNING =
   "Sent, but the local copy could not be saved. It will appear after the next sync.";
-
-export const REPLY_NEEDS_FILER_ERROR =
-  "Ask someone who can file email to file this thread first.";
 
 const NOT_CONNECTED_ERROR =
   "This mailbox isn't connected. Reconnect it from Settings → Integrations.";

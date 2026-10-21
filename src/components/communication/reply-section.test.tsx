@@ -58,18 +58,35 @@ function thread(id: string): ThreadDetail {
   } as unknown as ThreadDetail;
 }
 
+const PROPS = { matters: [], leads: [], canFile: true };
+
 beforeEach(() => {
   vi.mocked(currentUserHasPermission).mockResolvedValue(true);
 });
 
 describe("ReplySection", () => {
+  test("passes needsRecord + filing props: unfiled thread needs a record", async () => {
+    const el = (await ReplySection({
+      ...PROPS,
+      canFile: false,
+      thread: { ...thread("t"), lead: null } as ThreadDetail,
+    })) as { props: { needsRecord: boolean; canFile: boolean } };
+    expect(el.props.needsRecord).toBe(true);
+    expect(el.props.canFile).toBe(false);
+    const filed = (await ReplySection({
+      ...PROPS,
+      thread: { ...thread("t"), matter: { id: "m" } } as unknown as ThreadDetail,
+    })) as { props: { needsRecord: boolean } };
+    expect(filed.props.needsRecord).toBe(false);
+  });
+
   test("keys the composer by thread id so a thread switch remounts it", async () => {
-    const a = (await ReplySection({ thread: thread("thread-a") })) as {
+    const a = (await ReplySection({ ...PROPS, thread: thread("thread-a") })) as {
       type: unknown;
       key: string | null;
       props: { threadId: string };
     };
-    const b = (await ReplySection({ thread: thread("thread-b") })) as {
+    const b = (await ReplySection({ ...PROPS, thread: thread("thread-b") })) as {
       key: string | null;
       props: { threadId: string };
     };
@@ -84,7 +101,7 @@ describe("ReplySection", () => {
     vi.mocked(prisma.emailThread.findFirst).mockResolvedValueOnce({
       account: { emailAddress: "me@firm.com", syncStatus: "syncing" },
     } as never);
-    const el = (await ReplySection({ thread: thread("thread-a") })) as {
+    const el = (await ReplySection({ ...PROPS, thread: thread("thread-a") })) as {
       type: unknown;
     };
     expect(el.type).toBe(ReplyComposer);
@@ -96,7 +113,7 @@ describe("ReplySection", () => {
       vi.mocked(prisma.emailThread.findFirst).mockResolvedValueOnce({
         account: { emailAddress: "me@firm.com", syncStatus },
       } as never);
-      const el = (await ReplySection({ thread: thread("thread-a") })) as {
+      const el = (await ReplySection({ ...PROPS, thread: thread("thread-a") })) as {
         type: unknown;
       };
       expect(el.type).not.toBe(ReplyComposer);
@@ -107,11 +124,11 @@ describe("ReplySection", () => {
 
   test("renders nothing when the thread isn't in the caller's mailbox", async () => {
     vi.mocked(prisma.emailThread.findFirst).mockResolvedValueOnce(null);
-    expect(await ReplySection({ thread: thread("thread-a") })).toBeNull();
+    expect(await ReplySection({ ...PROPS, thread: thread("thread-a") })).toBeNull();
   });
 
   test("renders nothing without communication.send_email", async () => {
     vi.mocked(currentUserHasPermission).mockResolvedValue(false);
-    expect(await ReplySection({ thread: thread("thread-a") })).toBeNull();
+    expect(await ReplySection({ ...PROPS, thread: thread("thread-a") })).toBeNull();
   });
 });

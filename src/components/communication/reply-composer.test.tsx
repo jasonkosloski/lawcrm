@@ -47,6 +47,11 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh }),
 }));
 
+vi.mock("@/lib/feedback", () => ({
+  notifySuccess: vi.fn(),
+  notifyError: vi.fn(),
+}));
+import { notifySuccess } from "@/lib/feedback";
 import { replyToThread } from "@/app/actions/email-send";
 const mockedReply = vi.mocked(replyToThread);
 
@@ -67,6 +72,8 @@ const REPLY_ALL: ReplyDefaults = {
 function renderComposer(over?: {
   reply?: ReplyDefaults;
   replyAll?: ReplyDefaults;
+  needsRecord?: boolean;
+  canFile?: boolean;
 }) {
   return render(
     <ReplyComposer
@@ -74,6 +81,10 @@ function renderComposer(over?: {
       accountEmail="me@firm.com"
       reply={over?.reply ?? REPLY}
       replyAll={over?.replyAll ?? REPLY_ALL}
+      needsRecord={over?.needsRecord ?? false}
+      canFile={over?.canFile ?? true}
+      matters={[{ id: "m1", name: "Smith v. Jones" } as never]}
+      leads={[]}
     />
   );
 }
@@ -275,6 +286,10 @@ describe("ReplyComposer — recipient integrity (F043/F064)", () => {
         accountEmail="me@firm.com"
         reply={{ to: [], cc: [] }}
         replyAll={{ to: [], cc: [] }}
+        needsRecord={false}
+        canFile
+        matters={[]}
+        leads={[]}
       />
     );
     await user.click(screen.getByRole("button", { name: /^send$/i }));
@@ -398,5 +413,45 @@ describe("ReplyComposer — recipient fields", () => {
     expect(screen.getByLabelText("Cc")).toHaveValue("carol@example.com");
     // Visible labels, not only placeholders.
     expect(screen.getAllByText("To").length).toBeGreaterThan(0);
+  });
+});
+
+describe("ReplyComposer - unfiled thread", () => {
+  test("filed thread shows no record picker", async () => {
+    const user = setupUser();
+    renderComposer();
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    expect(screen.queryByText("Matter or lead")).not.toBeInTheDocument();
+  });
+
+  test("Send is disabled until a record is chosen, then posts the scope and shows the notice", async () => {
+    const user = setupUser();
+    mockedReply.mockResolvedValue({ ok: true, threadId: "t1", notice: "Filed." });
+    renderComposer({ needsRecord: true });
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    expect(screen.getByText("Matter or lead")).toBeInTheDocument();
+    await user.type(bodyField(), "Thanks!");
+    expect(screen.getByRole("button", { name: /^send$/i })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /smith v\. jones/i }));
+    expect(screen.getByRole("button", { name: /^send$/i })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+    await waitFor(() =>
+      expect(mockedReply).toHaveBeenCalledWith(
+        "t1",
+        expect.objectContaining({ scope: { kind: "matter", matterId: "m1" } })
+      )
+    );
+    expect(notifySuccess).toHaveBeenCalledWith("Filed.");
+  });
+
+  test("a user who cannot file sees the message and no Send", async () => {
+    const user = setupUser();
+    renderComposer({ needsRecord: true, canFile: false });
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    expect(
+      screen.getByText("Ask someone who can file email to file this thread first.")
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^send$/i })).not.toBeInTheDocument();
   });
 });
