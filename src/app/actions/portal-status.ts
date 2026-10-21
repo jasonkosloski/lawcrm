@@ -13,7 +13,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { requirePermissionResult } from "@/lib/permission-check";
-import { logActivity } from "@/lib/activity-log";
+import { logActivity, logActivityTx } from "@/lib/activity-log";
 import { statusUpdateEmail } from "@/lib/portal/emails";
 import { getCalendarEventById } from "@/lib/queries/calendar";
 import { portalHomeUrl } from "@/lib/portal/link-url";
@@ -66,40 +66,49 @@ export async function postStatusUpdate(
   const parsed = parseUpdate(input);
   if (!parsed.ok) return parsed;
 
-  const row = await prisma.portalStatusUpdate.create({
-    data: {
+  // The update and its audit row commit together; the email goes out after.
+  const row = await prisma.$transaction(async (tx) => {
+    const created = await tx.portalStatusUpdate.create({
+      data: {
+        matterId,
+        stageLabel: parsed.stageLabel,
+        body: parsed.body,
+        postedById: gate.userId,
+      },
+      select: { id: true },
+    });
+    await logActivityTx(tx, {
       matterId,
-      stageLabel: parsed.stageLabel,
-      body: parsed.body,
-      postedById: gate.userId,
-    },
-    select: { id: true },
+      userId: gate.userId,
+      type: "note",
+      title: `Posted client status update: ${parsed.stageLabel}`,
+    });
+    return created;
   });
 
   let emailFailed = false;
   if (input.emailClient) {
     try {
       const res = await emailLivePortalUsers(matterId, statusUpdateEmail(portalHomeUrl()));
-      if (res.sent > 0) {
-        await prisma.portalStatusUpdate.update({
-          where: { id: row.id },
-          data: { emailedAt: new Date() },
-        });
-      }
       emailFailed = res.failed > 0;
+      if (res.sent > 0) {
+        // The email already went out; a failed bookkeeping write must not
+        // read as "email didn't send".
+        try {
+          await prisma.portalStatusUpdate.update({
+            where: { id: row.id },
+            data: { emailedAt: new Date() },
+          });
+        } catch (err) {
+          console.warn("[portal-status] could not record emailedAt", err);
+        }
+      }
     } catch (err) {
       console.warn("[portal-status] update email failed", err);
       emailFailed = true;
     }
   }
 
-  await logActivity({
-    matterId,
-    userId: gate.userId,
-    type: "note",
-    title: `Posted client status update: ${parsed.stageLabel}`,
-    detail: emailFailed ? "— email failed" : null,
-  });
   return done(matterId, emailFailed ? "Update posted, but the email didn't send." : undefined);
 }
 
@@ -226,10 +235,20 @@ export async function shareEventWithClient(
   }
   const { clientTitle, clientNote } = parsed.data;
 
+  const previous = await prisma.portalSharedEvent.findUnique({
+    where: { eventId },
+    select: { matterId: true },
+  });
   await prisma.portalSharedEvent.upsert({
     where: { eventId },
     create: { eventId, matterId: g.matterId, clientTitle, clientNote, sharedById: g.userId },
-    update: { matterId: g.matterId, clientTitle, clientNote },
+    update: {
+      matterId: g.matterId,
+      clientTitle,
+      clientNote,
+      sharedById: g.userId,
+      sharedAt: new Date(),
+    },
   });
   await logActivity({
     matterId: g.matterId,
@@ -237,6 +256,7 @@ export async function shareEventWithClient(
     type: "note",
     title: `Shared event with client: ${clientTitle}`,
   });
+  if (previous && previous.matterId !== g.matterId) doneEvent(previous.matterId);
   return doneEvent(g.matterId);
 }
 
@@ -269,12 +289,15 @@ export async function updateEventShare(
   return doneEvent(g.matterId);
 }
 
+/**
+ * Any key holder with matter access can stop a share, even for an event
+ * whose details they can't see (it may have gone private after sharing).
+ * Stopping only withdraws information, so no visibility check.
+ */
 export async function stopSharingEvent(eventId: string): Promise<Result> {
   const g = await gateEvent("portal.share_events", eventId);
   if (!g.ok) return g;
   await assertMatterAccess(g.matterId);
-  const visible = await requireVisibleEvent(g.eventId);
-  if (!visible.ok) return visible;
 
   const res = await prisma.portalSharedEvent.deleteMany({
     where: { eventId, matterId: g.matterId },

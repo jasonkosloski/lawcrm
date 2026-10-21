@@ -6,6 +6,18 @@ vi.mock("@/lib/current-user", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
+let failActivityTx = false;
+vi.mock("@/lib/activity-log", async (orig) => {
+  const real = await orig<typeof import("@/lib/activity-log")>();
+  return {
+    ...real,
+    logActivityTx: vi.fn(async (...args: Parameters<typeof real.logActivityTx>) => {
+      if (failActivityTx) throw new Error("activity write failed");
+      return real.logActivityTx(...args);
+    }),
+  };
+});
+
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { PERMISSION_DENIED_MESSAGE } from "@/lib/permission-check";
@@ -71,6 +83,7 @@ const activity = (title: string) =>
 beforeEach(async () => {
   await resetDb();
   cap = captureEmails();
+  failActivityTx = false;
   vi.mocked(revalidatePath).mockClear();
   ({ firmId, adminRoleId } = await seedFirm());
   await prisma.firm.update({ where: { id: firmId }, data: { portalEnabled: true } });
@@ -189,6 +202,35 @@ describe("postStatusUpdate", () => {
   });
 });
 
+describe("postStatusUpdate atomicity and email bookkeeping", () => {
+  test("the update and its activity row commit together", async () => {
+    failActivityTx = true;
+    await expect(postStatusUpdate(matterId, input)).rejects.toThrow("activity write failed");
+    expect(await prisma.portalStatusUpdate.count()).toBe(0);
+  });
+
+  test("no email is sent when the transaction fails", async () => {
+    await seedIdentity("live@example.com");
+    failActivityTx = true;
+    await expect(postStatusUpdate(matterId, { ...input, emailClient: true })).rejects.toThrow();
+    expect(cap.sent).toHaveLength(0);
+  });
+
+  test("a sent email whose emailedAt write fails does not warn", async () => {
+    await seedIdentity("live@example.com");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const spy = vi
+      .spyOn(prisma.portalStatusUpdate, "update")
+      .mockRejectedValueOnce(new Error("db down"));
+    const res = await postStatusUpdate(matterId, { ...input, emailClient: true });
+    expect(warn).toHaveBeenCalled();
+    spy.mockRestore();
+    warn.mockRestore();
+    expect(res).toEqual({ ok: true });
+    expect(cap.sent).toHaveLength(1);
+  });
+});
+
 describe("editStatusUpdate and deleteStatusUpdate", () => {
   test("edit sets editedAt and never re-sends", async () => {
     await seedIdentity("live@example.com");
@@ -256,7 +298,7 @@ describe("event sharing", () => {
     expect(await prisma.portalSharedEvent.count()).toBe(0);
   });
 
-  test("another user's private event cannot be shared, nothing is written", async () => {
+  test("another user's private event cannot be shared or updated, but any sharer can stop it", async () => {
     const { eventId } = await seedCalendarEvent({
       matterId,
       createdById: admin,
@@ -267,9 +309,17 @@ describe("event sharing", () => {
     const err = { ok: false, error: "Event not found." };
     expect(await shareEventWithClient(eventId, share)).toEqual(err);
     expect(await updateEventShare(eventId, share)).toEqual(err);
-    expect(await stopSharingEvent(eventId)).toEqual(err);
+    expect(await stopSharingEvent(eventId)).toEqual({ ok: false, error: "This event isn't shared." });
     expect(await prisma.portalSharedEvent.count()).toBe(0);
-    expect(await prisma.activityLog.count({ where: { matterId, type: "note" } })).toBe(0);
+
+    // A share that already exists (made while the event was visible) can be
+    // stopped by a key holder with matter access who can't see the details.
+    await prisma.portalSharedEvent.create({
+      data: { eventId, matterId, clientTitle: "Meeting", sharedById: admin },
+    });
+    expect(await stopSharingEvent(eventId)).toEqual({ ok: true });
+    expect(await prisma.portalSharedEvent.count()).toBe(0);
+    expect(await eventActivity(matterId, "Stopped sharing event with client")).toBe(1);
   });
 
   test("an unknown event is reported", async () => {
@@ -332,6 +382,37 @@ describe("event sharing", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].clientTitle).toBe("Again");
     expect(rows[0].clientNote).toBeNull();
+  });
+
+  test("re-sharing records the current user and time, and revalidates the old matter", async () => {
+    const second = (await seedUser({ firmId, roleIds: [adminRoleId] })).userId;
+    const { eventId } = await seedCalendarEvent({ matterId, createdById: second });
+    const first = await prisma.portalSharedEvent.create({
+      data: {
+        eventId,
+        matterId,
+        clientTitle: "Old",
+        sharedById: admin,
+        sharedAt: new Date("2026-01-01T00:00:00Z"),
+      },
+    });
+
+    const other = await otherMatter();
+    await prisma.calendarEvent.update({ where: { id: eventId }, data: { matterId: other } });
+    sessionUser = second;
+    vi.mocked(revalidatePath).mockClear();
+    expect(await shareEventWithClient(eventId, share)).toEqual({ ok: true });
+    const row = await prisma.portalSharedEvent.findUniqueOrThrow({ where: { eventId } });
+    expect(row.sharedById).toBe(second);
+    expect(row.sharedAt.getTime()).toBeGreaterThan(first.sharedAt.getTime());
+    for (const path of [
+      `/matters/${other}`,
+      `/matters/${other}/events`,
+      `/matters/${matterId}`,
+      `/matters/${matterId}/events`,
+    ]) {
+      expect(revalidatePath).toHaveBeenCalledWith(path);
+    }
   });
 
   test("after a re-file the old share is not editable; re-sharing moves it", async () => {
