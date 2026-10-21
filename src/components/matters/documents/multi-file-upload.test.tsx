@@ -216,6 +216,26 @@ describe("draft scope", () => {
     expect((StubXHR.instances[0].sent as FormData).get("draftId")).toBe("created1");
   });
 
+  test("a file over the 50 MB draft cap is rejected with the friendly copy, nothing uploads", async () => {
+    driver = "vercel-blob";
+    scopeUnderTest = { kind: "draft", draftId: "d1" };
+    const big = new File(["x"], "scan.pdf", { type: "application/pdf" });
+    Object.defineProperty(big, "size", { value: 50 * 1024 * 1024 + 1 });
+    await pickFiles([big]);
+    expect(await screen.findByText("Draft files are limited to 50 MB each.")).toBeTruthy();
+    expect(mockedUpload).not.toHaveBeenCalled();
+    expect(StubXHR.instances).toHaveLength(0);
+  });
+
+  test("a 50 MB file is still accepted on a draft", async () => {
+    driver = "local";
+    scopeUnderTest = { kind: "draft", draftId: "d1" };
+    const ok = new File(["x"], "scan.pdf", { type: "application/pdf" });
+    Object.defineProperty(ok, "size", { value: 50 * 1024 * 1024 });
+    await pickFiles([ok]);
+    await waitFor(() => expect(StubXHR.instances).toHaveLength(1));
+  });
+
   test("if the draft can't be created nothing uploads and the user is told", async () => {
     driver = "local";
     scopeUnderTest = {

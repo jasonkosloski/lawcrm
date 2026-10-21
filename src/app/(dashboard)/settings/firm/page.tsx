@@ -6,6 +6,7 @@
  * the firm can answer "what's our EIN" without needing admin perms).
  */
 
+import { countMattersMissingSignedAgreement } from "@/lib/queries/agreement-missing";
 import { FirmEditForm } from "@/components/settings/firm-edit-form";
 import { FirmReadView } from "@/components/settings/firm-read-view";
 import { FirmCalendarDefaultsCard } from "@/components/settings/calendar-defaults-card";
@@ -47,17 +48,9 @@ export default async function FirmSettingsPage() {
   ]);
   // Admin-only: the wall switch + the rosters to fix before flipping it.
   const thin = isAdmin ? await listThinTeams() : null;
-  // Admin-only: open matters (not archived, stage not terminal) with no
-  // signed agreement on file, so the switch shows what it would catch.
-  const missingCount = isAdmin
-    ? await prisma.matter.count({
-        where: {
-          isArchived: false,
-          stage: { isTerminal: false },
-          OR: [{ agreement: { is: null } }, { agreement: { status: { not: "signed" } } }],
-        },
-      })
-    : 0;
+  // Admin-only: open matters with no signed agreement (and document) on
+  // file, so the switch shows what it would catch.
+  const missingCount = isAdmin ? await countMattersMissingSignedAgreement() : 0;
   const calendarDefaults = {
     autoAddTeamToNewEvents: firmSettings.autoAddTeamToNewEvents,
     autoAddTeamToUpcomingEvents: firmSettings.autoAddTeamToUpcomingEvents,

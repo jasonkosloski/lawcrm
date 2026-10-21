@@ -55,6 +55,8 @@ import { TriangleAlert, Upload, X } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { cn } from "@/lib/utils";
 import {
+  DRAFT_FILE_TOO_LARGE_ERROR,
+  DRAFT_MAX_FILE_BYTES,
   MAX_FILES_PER_BATCH,
   MAX_MEDIA_UPLOAD_BYTES,
   MAX_STANDARD_UPLOAD_BYTES,
@@ -164,6 +166,11 @@ export function MultiFileUpload({
     }
     for (const f of files) {
       if (f.size === 0) return `"${f.name}" is empty.`;
+      // Draft files have a smaller cap; the blob path would otherwise
+      // fail with no friendly message.
+      if (scope.kind === "draft" && f.size > DRAFT_MAX_FILE_BYTES) {
+        return DRAFT_FILE_TOO_LARGE_ERROR;
+      }
       const type = contentTypeForFilename(f.name);
       const cap = isMediaType(type)
         ? MAX_MEDIA_UPLOAD_BYTES

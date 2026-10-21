@@ -47,6 +47,16 @@ async function isAdminUser(userId: string): Promise<boolean> {
   return hits > 0;
 }
 
+/** The draft when this user may see it, else null (missing and hidden are
+ *  indistinguishable). Non-throwing twin of `assertDraftAccess` for callers
+ *  that answer a miss themselves. */
+export async function loadAccessibleDraft(
+  userId: string,
+  draftId: string
+): Promise<MatterDraft | null> {
+  return loadAccessible(userId, draftId);
+}
+
 async function loadAccessible(
   userId: string,
   draftId: string

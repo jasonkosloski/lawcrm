@@ -16,7 +16,8 @@ import {
   type NewMatterDraft,
 } from "@/components/matters/new-matter-form";
 import { MatterDraftsList } from "@/components/matters/matter-drafts-list";
-import { assertDraftAccess } from "@/lib/draft-access";
+import { redirect } from "next/navigation";
+import { loadAccessibleDraft } from "@/lib/draft-access";
 import { listMatterDrafts } from "@/lib/queries/matter-drafts";
 import { originatingDocLabel } from "@/lib/originating-doc";
 import { activeStorageDriver } from "@/lib/file-storage";
@@ -45,10 +46,14 @@ export default async function NewMatterPage({
   // the user id.
   const currentUserId = await requirePermission("matters.create");
 
-  const draftParam = (await searchParams)?.draft;
+  const params = await searchParams;
+  const draftParam = params?.draft;
   const draftId = typeof draftParam === "string" && draftParam ? draftParam : null;
-  // Page-level scope check: a draft you can't see is a 404, not a form.
-  const draftRow = draftId ? await assertDraftAccess(draftId) : null;
+  const draftGone = params?.draftGone === "1";
+  // Page-level scope check. A draft that is missing OR not visible gets the
+  // same answer (no existence oracle): back to a fresh form with a notice.
+  const draftRow = draftId ? await loadAccessibleDraft(currentUserId, draftId) : null;
+  if (draftId && !draftRow) redirect("/matters/new?draftGone=1");
 
   const [
     areaRows,
@@ -160,6 +165,14 @@ export default async function NewMatterPage({
       <TopBar title="New matter" crumbs="Matters / New" />
       <div className="flex-1 overflow-y-auto p-5 animate-page-enter">
         <div className="max-w-3xl">
+          {draftGone && (
+            <div
+              role="status"
+              className="mb-3 rounded-md border border-warn-border bg-warn-soft px-3 py-2 text-xs font-medium text-warn"
+            >
+              That draft is no longer available.
+            </div>
+          )}
           <MatterDraftsList
             drafts={drafts}
             timeZone={timeZone}

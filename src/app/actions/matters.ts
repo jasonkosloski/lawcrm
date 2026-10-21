@@ -32,7 +32,7 @@ import {
   type SolPeriod,
 } from "@/lib/sol";
 import { dateOnlyKey, parseDateOnly, todayKey } from "@/lib/format-date";
-import { assertDraftAccess, canAccessDraft } from "@/lib/draft-access";
+import { loadAccessibleDraft } from "@/lib/draft-access";
 import { agreementGateErrors, originatingDocLabel } from "@/lib/originating-doc";
 import { UserFacingError } from "@/lib/user-facing-error";
 import { todayDateOnly } from "@/app/actions/billing/helpers";
@@ -536,19 +536,19 @@ export async function createMatter(
   // BEFORE the conflict gate: missing paperwork never asks for a
   // conflict acknowledgement. A file can only be attached via a draft.
   const draftId = data.draftId || "";
-  let draft: Awaited<ReturnType<typeof assertDraftAccess>> | null = null;
+  let draft: Awaited<ReturnType<typeof loadAccessibleDraft>> = null;
   let draftFiles: { id: string }[] = [];
   if (draftId) {
     // A draft that is missing OR not accessible gets the same answer,
     // so existence can't be probed (never the guard's 404).
-    if (!(await canAccessDraft(currentUserId, draftId))) {
+    draft = await loadAccessibleDraft(currentUserId, draftId);
+    if (!draft) {
       return {
         status: "error",
         errors: { draftId: [DRAFT_USED_MESSAGE] },
         values: raw,
       };
     }
-    draft = await assertDraftAccess(draftId);
     if (
       !data.draftUpdatedAt ||
       new Date(data.draftUpdatedAt).getTime() !== draft.updatedAt.getTime()
