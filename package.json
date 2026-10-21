@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
+    "vercel-build": "tsx scripts/vercel-build.ts",
     "start": "next start",
     "postinstall": "prisma generate",
     "lint": "eslint --max-warnings 0 --cache --cache-location node_modules/.cache/eslint/",
@@ -15,6 +16,7 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.json",
     "check:migrations": "node scripts/check-migrations.mjs",
+    "check:destructive-migrations": "tsx scripts/check-destructive-migrations.ts",
     "test:related": "vitest related --run --passWithNoTests",
     "precommit": "npm run typecheck && npm run lint",
     "prepare": "husky",

@@ -1,0 +1,1 @@
+Reviewed and applied by hand before ADR-058. Converts "also file in" links to document copies, then drops the link table (ADR-043).

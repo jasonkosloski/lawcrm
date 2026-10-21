@@ -1,0 +1,1 @@
+Reviewed and applied by hand before ADR-058. Retypes money columns to DECIMAL(14,2) (rounds in place); see DEPLOY_BACKFILLS.md.

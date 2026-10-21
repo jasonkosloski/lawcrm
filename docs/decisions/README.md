@@ -34,7 +34,7 @@ ADR true to the code are appended in place and dated.
 | [013](013-timer-sessions-are-pre-entries-ungated-to.md) | Timer sessions are pre-entries — ungated to run, gated to log |  |
 | [014](014-global-search-is-ilike-v1-inheriting-each.md) | Global search is ILIKE v1, inheriting each entity's read model — Postgres FTS is the upgrade path |  |
 | [015](015-driver-based-document-storage-local-disk-in.md) | Driver-based document storage — local disk in dev, Vercel Blob (client-direct + 302 serving) in prod | Public-access parts superseded by ADR-018 |
-| [016](016-postgres-migration-baseline-prisma-migrate-replaces-db.md) | Postgres migration baseline — `prisma migrate` replaces `db push` for schema changes |  |
+| [016](016-postgres-migration-baseline-prisma-migrate-replaces-db.md) | Postgres migration baseline — `prisma migrate` replaces `db push` for schema changes | Deploy step superseded by ADR-058 |
 | [017](017-password-fingerprint-in-the-jwt-revoke-sessions.md) | Password fingerprint in the JWT — revoke sessions on password change without a Session table | Superseded by 053 |
 | [018](018-private-blob-store-presigned-urls-for-documents.md) | Private Blob store + presigned URLs for documents | Public-access parts superseded by ADR-018 |
 | [019](019-deadline-rules-task-lists-as-firm-libraries.md) | Deadline rules + task lists as firm libraries, applied on demand or by AutoApply defaults |  |
@@ -76,3 +76,4 @@ ADR true to the code are appended in place and dated.
 | [055](055-venues-are-a-firm-list-required-fields-are-per-area.md) | Venues are a firm list; required matter fields are per practice area (enforced on create, can't-clear-but-don't-block on edit) |  |
 | [056](056-drafts-hold-intake-files-firm-can-require-originating-document.md) | Matter drafts hold intake files; a firm switch can require a signed originating document to open a matter |  |
 | [057](057-ui-system-v2-legibility-floor-and-colour-on-meaning.md) | UI system v2: an 11px legibility floor, contrast-safe greys, colour spent only on meaning |  |
+| [058](058-production-build-applies-expand-only-migrations.md) | The production build applies pending migrations; destructive ones need an `ALLOW_DESTRUCTIVE` marker |  |

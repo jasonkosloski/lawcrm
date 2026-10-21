@@ -1,7 +1,7 @@
 # ADR-016: Postgres migration baseline — `prisma migrate` replaces `db push` for schema changes
 
 **Date:** 2026-10-16
-**Status:** Accepted
+**Status:** Accepted. The "build does not run `migrate deploy`" trade-off is superseded by ADR-058.
 
 **Context:** `prisma/migrations/` held 30 migrations generated while the app ran on SQLite (`migration_lock.toml` said `provider = "sqlite"`; the SQL used `PRAGMA` / `DATETIME` / table-rebuild idioms). They could never run against Postgres, so after the Postgres switch every database — dev, test, and production — was shaped by `prisma db push`, and nothing recorded the schema changes made after 2026-04-28 (document folders, calendar sync, saved searches, timers, notifications, firm goals, …).
 

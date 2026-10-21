@@ -1,3 +1,36 @@
+# How migrations reach production (ADR-058)
+
+The production build (`npm run vercel-build`, `scripts/vercel-build.ts`)
+runs `prisma migrate deploy` before `next build`. Preview and local
+builds never migrate. A migration committed to main goes live with the
+next push; nothing to run by hand.
+
+- **Write expand-only migrations.** The previous deployment keeps
+  serving while the build migrates. A migration that drops, renames or
+  retypes anything (or sets `NOT NULL`, drops a default, truncates,
+  deletes) fails the build and the pre-commit hook unless its folder has
+  an `ALLOW_DESTRUCTIVE` file stating why it is safe. Add one only after
+  a deploy that no longer reads what it removes (expand, deploy,
+  contract).
+- **A failed migration** fails the build; the old deployment keeps
+  serving, but `_prisma_migrations` records the failure and every later
+  production build stops with P3009. Read the build log, fix the data or
+  the SQL, then resolve it by hand (next paragraph) with
+  `npx prisma migrate resolve --rolled-back <name>` (or `--applied` if
+  you finished it manually) and redeploy.
+- **Pre-checks and post-deploy checks** in the per-migration sections
+  below still apply. Their `migrate deploy` steps predate ADR-058 and
+  now happen in the build.
+
+**Running Prisma against production by hand** (recovery only): load the
+production env, `export DIRECT_DATABASE_URL="$DATABASE_URL"` (gotcha
+below), and check the host `npx prisma migrate status` prints before
+anything else. Your shell's exported `DATABASE_URL` /
+`DIRECT_DATABASE_URL` override `.env`; a placeholder left exported there
+fails with P1013.
+
+---
+
 # Deploy backfills
 
 One-off, idempotent data repairs that must run once per environment

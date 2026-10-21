@@ -14,6 +14,9 @@
 #      prisma/migrations is staged: apply every migration to a scratch
 #      database and diff it against schema.prisma (ADR-016). Catches a
 #      schema edit committed without its migration.
+#   5. destructive migrations — staged migration.sql files that drop,
+#      rename or retype need an ALLOW_DESTRUCTIVE file, or the
+#      production build refuses them (ADR-058).
 #
 # This checks the working tree, not the staged index, so unrelated
 # unstaged edits (another session mid-refactor) can fail the commit
@@ -43,5 +46,11 @@ else
 fi
 
 if git diff --cached --name-only | grep -qE '^prisma/(schema\.prisma|migrations/)'; then
-  npm run check:migrations
+  npm run check:migrations || exit 1
+fi
+
+staged_migrations=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^prisma/migrations/[^/]+/migration\.sql$' || true)
+if [ -n "$staged_migrations" ]; then
+  # shellcheck disable=SC2086 -- word-splitting the file list is intended
+  npm run check:destructive-migrations -- $staged_migrations || exit 1
 fi

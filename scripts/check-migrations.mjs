@@ -4,8 +4,8 @@
  *
  * The integration tests build their database with `prisma db push`, so
  * nothing in the normal test run notices a schema.prisma edit that has
- * no migration - until production (migrated by hand with
- * `prisma migrate deploy`) throws P2022 "column does not exist".
+ * no migration - until production (migrated by the production build,
+ * ADR-058) throws P2022 "column does not exist".
  *
  * This script proves the migration chain on its own:
  *   1. create a scratch database next to the test one,

@@ -1,0 +1,1 @@
+Reviewed and applied by hand before ADR-058 (2026-10-20). Drops Auth.js password columns and tables after the Clerk cutover (ADR-053).
