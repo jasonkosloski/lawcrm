@@ -64,3 +64,15 @@ export function invoiceEmail(input: {
 export function portalInvoiceUrl(matterId: string, invoiceId: string): string {
   return `${portalHomeUrl()}/matters/${matterId}/invoices/${invoiceId}`;
 }
+
+/** Subject/text/html telling a client their invoice was voided. The VOID copy is attached by the caller. */
+export function invoiceVoidEmail(input: {
+  invoiceNumber: string;
+  firmName: string;
+  matterName: string;
+}): { subject: string; text: string; html: string } {
+  const { invoiceNumber, firmName, matterName } = input;
+  const subject = `Invoice ${invoiceNumber} from ${firmName} has been voided`;
+  const body = `Invoice ${invoiceNumber} for ${matterName} has been voided and no payment is due on it. A copy marked VOID is attached for your records.`;
+  return { subject, text: body, html: `<p>${esc(body)}</p>` };
+}

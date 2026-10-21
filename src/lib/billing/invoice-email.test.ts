@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatDate } from "@/lib/format-date";
-import { invoiceEmail, portalInvoiceUrl } from "./invoice-email";
+import { invoiceEmail, invoiceVoidEmail, portalInvoiceUrl } from "./invoice-email";
 
 const base = {
   kind: "initial" as const,
@@ -67,5 +67,28 @@ describe("portalInvoiceUrl", () => {
     expect(portalInvoiceUrl("m1", "i1")).toBe(
       "https://portal.litgox.com/matters/m1/invoices/i1"
     );
+  });
+});
+
+describe("invoiceVoidEmail", () => {
+  it("says the invoice is voided and a VOID copy is attached", () => {
+    const e = invoiceVoidEmail({
+      invoiceNumber: "2026-101",
+      firmName: "Kosloski Law",
+      matterName: "Smith v. Jones",
+    });
+    expect(e.subject).toBe("Invoice 2026-101 from Kosloski Law has been voided");
+    expect(e.text).toContain("has been voided and no payment is due on it");
+    expect(e.text).toContain("A copy marked VOID is attached for your records.");
+  });
+
+  it("escapes html", () => {
+    const e = invoiceVoidEmail({
+      invoiceNumber: "1",
+      firmName: "F",
+      matterName: "<b>A&B</b>",
+    });
+    expect(e.html).toContain("&lt;b&gt;A&amp;B&lt;/b&gt;");
+    expect(e.html).not.toContain("<b>");
   });
 });
