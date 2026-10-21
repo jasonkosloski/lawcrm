@@ -42,6 +42,8 @@ const ALLOWLIST: Record<string, string> = {
     "Creates an event on an intake lead (no matter, creator-only attendees); `matterId: null` is the only matter reference.",
   "contacts.ts:mergeContacts":
     "Firm-wide contact directory operation (contacts.merge); re-points party rows across matters by contact id, not a matter-scoped write.",
+  "email-filing.ts:setEmailThreadRecord":
+    "Delegates to fileEmailThread (src/lib/email-filing.ts), which asserts scope access on the thread's current record and on the target; runtime-tested in email-filing.test.ts.",
   "email-send.ts:sendEmail":
     "Composes a NEW unfiled thread on the sender's own mailbox; takes no matter input. (replyToThread asserts the thread's matter.)",
   "email-thread-flags.ts:toggleEmailThreadStar":
@@ -122,8 +124,8 @@ const files = readdirSync(DIR)
 
 const cases = files.flatMap((f) =>
   exportedAsyncFunctions(readFileSync(path.join(DIR, f), "utf8")).map(
-    (fn) => [`${f}:${fn.name}`, fn] as const
-  )
+    (fn) => [`${f}:${fn.name}`, fn] as const,
+  ),
 );
 
 describe("matter-access guards on server actions", () => {
@@ -165,14 +167,14 @@ export async function b() { return 1; }
 
   test("flags a matter-scoped action with no assert", () => {
     const [fn] = exportedAsyncFunctions(
-      `export async function f(fd: FormData) { const matterId = fd.get("matterId"); await prisma.note.create({}); }`
+      `export async function f(fd: FormData) { const matterId = fd.get("matterId"); await prisma.note.create({}); }`,
     );
     expect(checkFunction(fn)).not.toBeNull();
   });
 
   test("a call in a comment does not satisfy the scan", () => {
     const [fn] = exportedAsyncFunctions(
-      `export async function f(matterId: string) {\n // await assertMatterAccess(matterId);\n await prisma.note.create({});\n}`
+      `export async function f(matterId: string) {\n // await assertMatterAccess(matterId);\n await prisma.note.create({});\n}`,
     );
     expect(checkFunction(fn)).not.toBeNull();
   });
@@ -184,7 +186,7 @@ export async function b() { return 1; }
       "assertChildMatterAccess('note', noteId)",
     ]) {
       const [fn] = exportedAsyncFunctions(
-        `export async function f(matterId: string, noteId: string) { await ${call}; }`
+        `export async function f(matterId: string, noteId: string) { await ${call}; }`,
       );
       expect(checkFunction(fn)).toBeNull();
     }
@@ -192,7 +194,7 @@ export async function b() { return 1; }
 
   test("ignores functions with no matter or child ids", () => {
     const [fn] = exportedAsyncFunctions(
-      `export async function f(name: string) { await prisma.tag.create({}); }`
+      `export async function f(name: string) { await prisma.tag.create({}); }`,
     );
     expect(checkFunction(fn)).toBeNull();
   });
@@ -211,6 +213,8 @@ const LEAD_ACCESS_CALL =
 
 /** "file.ts:functionName" -> reason. */
 const LEAD_ALLOWLIST: Record<string, string> = {
+  "email-filing.ts:setEmailThreadRecord":
+    "Delegates to fileEmailThread (src/lib/email-filing.ts), which asserts scope access on the thread's current record and on the target; runtime-tested in email-filing.test.ts.",
   "leads.ts:createLead":
     "Creates a brand-new, unrestricted lead; `leadId` is only the new row's id on its activity entry.",
 };
@@ -244,11 +248,11 @@ describe("lead-access guards on server actions", () => {
 
   test("self-check: assertOptionalMatterAccess does not satisfy the lead rule", () => {
     const [fn] = exportedAsyncFunctions(
-      `export async function f(leadId: string) { await assertOptionalMatterAccess(null); }`
+      `export async function f(leadId: string) { await assertOptionalMatterAccess(null); }`,
     );
     expect(checkLeadFunction(fn)).not.toBeNull();
     const [ok] = exportedAsyncFunctions(
-      `export async function f(leadId: string) { await assertLeadAccess(leadId); }`
+      `export async function f(leadId: string) { await assertLeadAccess(leadId); }`,
     );
     expect(checkLeadFunction(ok)).toBeNull();
   });
