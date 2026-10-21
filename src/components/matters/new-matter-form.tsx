@@ -34,7 +34,11 @@ import { Sparkles, UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createMatter } from "@/app/actions/matters";
 import { formatStatutePeriod, type SolPeriod } from "@/lib/sol";
-import { FEE_OPTIONS } from "@/lib/fee-structure-constants";
+import {
+  BILLING_TYPE_OPTIONS,
+  isBillingType,
+  type BillingType,
+} from "@/lib/billing-type";
 import {
   effectiveTemplate,
   renderMatterName,
@@ -92,6 +96,9 @@ export type AreaOption = {
   matterNameTemplate: string | null;
   /** Keys from REQUIRED_MATTER_FIELDS the area insists on at creation. */
   requiredMatterFields: string[];
+  /** Billing types the area offers, and the preselected one. */
+  allowedBillingTypes: BillingType[];
+  defaultBillingType: BillingType;
   stages: Array<{
     id: string;
     name: string;
@@ -180,7 +187,7 @@ export function NewMatterForm({
   >(createMatter, createMatterInitialState);
   // Submit via onSubmit + startTransition rather than
   // `<form action={formAction}>`: React 19 auto-resets the form after a
-  // function action, reverting every <select> (area, stage, fee, lead)
+  // function action, reverting any <select> not held in state
   // to its mount value after a validation error — so the corrected
   // resubmit would create the matter with the wrong values.
   const [, startTransition] = useTransition();
@@ -351,6 +358,14 @@ export function NewMatterForm({
 
   const [practiceAreaId, setPracticeAreaId] = useState<string>(initialAreaId);
   const [stageId, setStageId] = useState<string>(initialStageId);
+  // Controlled so the area-change handler can reset it; kept in state
+  // (not defaultValue) so React 19's form reset can't revert it either.
+  const [billingType, setBillingType] = useState<string>(() => {
+    const allowed = initialArea?.allowedBillingTypes ?? [];
+    return isBillingType(vals.billingType) && allowed.includes(vals.billingType)
+      ? vals.billingType
+      : (initialArea?.defaultBillingType ?? "contingent");
+  });
 
   const selectedArea = options.areas.find((a) => a.id === practiceAreaId);
   // Area change retitles the section; files and the mark stay (they
@@ -388,6 +403,14 @@ export function NewMatterForm({
     const nextArea = options.areas.find((a) => a.id === nextAreaId);
     const stageBelongs = nextArea?.stages.some((s) => s.id === stageId);
     if (!stageBelongs) setStageId(nextArea?.stages[0]?.id ?? "");
+    // Same for billing type: keep the pick only if the new area offers it.
+    if (
+      !nextArea ||
+      !isBillingType(billingType) ||
+      !nextArea.allowedBillingTypes.includes(billingType)
+    ) {
+      setBillingType(nextArea?.defaultBillingType ?? "contingent");
+    }
   };
 
   const selectedClient = selectedClientId
@@ -673,17 +696,20 @@ export function NewMatterForm({
           </VenueField>
         </Row>
 
-        <Field label="Fee structure" name="feeStructure" error={errs.feeStructure}>
+        <Field label="Billing type" name="billingType" error={errs.billingType}>
           <NativeSelect
             className="w-full"
-            id="feeStructure"
-            name="feeStructure"
-            defaultValue={vals.feeStructure ?? "contingent"}
-            aria-invalid={!!errs.feeStructure || undefined}
+            id="billingType"
+            name="billingType"
+            value={billingType}
+            onChange={(e) => setBillingType(e.target.value)}
+            aria-invalid={!!errs.billingType || undefined}
           >
-            {FEE_OPTIONS.map((f) => (
-              <NativeSelectOption key={f.value} value={f.value}>
-                {f.label}
+            {BILLING_TYPE_OPTIONS.filter((o) =>
+              selectedArea?.allowedBillingTypes.includes(o.value)
+            ).map((o) => (
+              <NativeSelectOption key={o.value} value={o.value}>
+                {o.label}
               </NativeSelectOption>
             ))}
           </NativeSelect>

@@ -30,6 +30,9 @@ import {
   type NewMatterFormOptions,
 } from "./new-matter-form";
 
+import type { BillingType } from "@/lib/billing-type";
+const ALL_BT: BillingType[] = ["hourly", "flat", "contingent", "court_appointed", "pro_bono"];
+
 const create = vi.mocked(createMatter);
 const save = vi.mocked(saveMatterDraft);
 
@@ -41,6 +44,8 @@ const area = (id: string, name: string) => ({
   statuteSourceCitation: null,
   matterNameTemplate: null,
   requiredMatterFields: [],
+  allowedBillingTypes: ALL_BT,
+  defaultBillingType: "contingent" as const,
   stages: [{ id: `${id}-s`, name: "Intake", order: 0, isTerminal: false }],
 });
 

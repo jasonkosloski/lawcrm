@@ -220,6 +220,65 @@ describe("createMatter — automatic defaults (ADR-019)", () => {
   });
 });
 
+describe("createMatter — billing type", () => {
+  const restrictArea = (allowed: string[], def: string) =>
+    prisma.practiceArea.update({
+      where: { id: areaId },
+      data: { allowedBillingTypes: allowed, defaultBillingType: def },
+    });
+
+  test("court_appointed writes hourly + court_voucher", async () => {
+    await restrictArea(["court_appointed"], "court_appointed");
+    await expect(
+      createMatter(
+        createMatterInitialState,
+        createForm({ billingType: "court_appointed" })
+      )
+    ).rejects.toThrow(/__REDIRECT__:\/matters\//);
+    const m = await prisma.matter.findFirstOrThrow({
+      select: { feeStructure: true, billingMode: true },
+    });
+    expect(m).toEqual({ feeStructure: "hourly", billingMode: "court_voucher" });
+  });
+
+  test("a type the area does not allow is rejected and nothing is written", async () => {
+    await restrictArea(["court_appointed"], "court_appointed");
+    const res = await createMatter(
+      createMatterInitialState,
+      createForm({ billingType: "hourly" })
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.billingType).toEqual([
+      "Not offered for this practice area",
+    ]);
+    expect(await prisma.matter.count()).toBe(0);
+  });
+
+  test("omitted billingType uses the area default", async () => {
+    await restrictArea(["hourly", "flat"], "flat");
+    await expect(
+      createMatter(createMatterInitialState, createForm())
+    ).rejects.toThrow(/__REDIRECT__:\/matters\//);
+    const m = await prisma.matter.findFirstOrThrow({
+      select: { feeStructure: true, billingMode: true },
+    });
+    expect(m).toEqual({ feeStructure: "flat", billingMode: "client" });
+  });
+
+  test("pro_bono writes pro_bono + none", async () => {
+    await expect(
+      createMatter(
+        createMatterInitialState,
+        createForm({ billingType: "pro_bono" })
+      )
+    ).rejects.toThrow(/__REDIRECT__:\/matters\//);
+    const m = await prisma.matter.findFirstOrThrow({
+      select: { feeStructure: true, billingMode: true },
+    });
+    expect(m).toEqual({ feeStructure: "pro_bono", billingMode: "none" });
+  });
+});
+
 // ── updateMatter: SOL satisfied flag ────────────────────────────────────
 
 describe("updateMatter SOL satisfied sync", () => {

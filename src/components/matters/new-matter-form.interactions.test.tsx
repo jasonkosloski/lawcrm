@@ -33,6 +33,9 @@ import {
   type NewMatterFormOptions,
 } from "./new-matter-form";
 
+import type { BillingType } from "@/lib/billing-type";
+const ALL_BT: BillingType[] = ["hourly", "flat", "contingent", "court_appointed", "pro_bono"];
+
 const mockedAction = vi.mocked(createMatter);
 
 const options: NewMatterFormOptions = {
@@ -45,6 +48,8 @@ const options: NewMatterFormOptions = {
       statuteSourceCitation: null,
       matterNameTemplate: null,
       requiredMatterFields: [],
+      allowedBillingTypes: ALL_BT,
+      defaultBillingType: "contingent" as const,
       stages: [{ id: "stage1", name: "Intake", order: 0, isTerminal: false }],
     },
     {
@@ -55,6 +60,8 @@ const options: NewMatterFormOptions = {
       statuteSourceCitation: null,
       matterNameTemplate: "State v. {client_last}",
       requiredMatterFields: [],
+      allowedBillingTypes: ALL_BT,
+      defaultBillingType: "contingent" as const,
       stages: [
         { id: "stage2a", name: "Screening", order: 0, isTerminal: false },
         { id: "stage2b", name: "Demand", order: 1, isTerminal: false },
@@ -68,6 +75,8 @@ const options: NewMatterFormOptions = {
       statuteSourceCitation: null,
       matterNameTemplate: null,
       requiredMatterFields: ["caseNumber", "venue"],
+      allowedBillingTypes: ALL_BT,
+      defaultBillingType: "contingent" as const,
       stages: [{ id: "stage3", name: "Arraignment", order: 0, isTerminal: false }],
     },
   ],
@@ -324,6 +333,8 @@ describe("NewMatterForm — per-area required fields", () => {
       id,
       name: `Area ${id}`,
       requiredMatterFields: fields,
+      allowedBillingTypes: ALL_BT,
+      defaultBillingType: "contingent" as const,
       stages: [{ id: `s-${id}`, name: "Intake", order: 0, isTerminal: false }],
     });
     render(

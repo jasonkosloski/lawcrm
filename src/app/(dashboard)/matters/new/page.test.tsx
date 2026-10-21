@@ -128,8 +128,8 @@ describe("NewMatterPage — drafts and the Engagement section", () => {
     vi.mocked(requirePermission).mockResolvedValue("user_1");
     vi.mocked(currentUserHasPermission).mockResolvedValue(true);
     vi.mocked(prisma.practiceArea.findMany).mockResolvedValue([
-      { id: "a1", name: "PI", originatingDocLabel: "Retainer", stages: [] },
-      { id: "a2", name: "Crim", originatingDocLabel: null, stages: [] },
+      { id: "a1", name: "PI", originatingDocLabel: "Retainer", allowedBillingTypes: [], defaultBillingType: "contingent", stages: [] },
+      { id: "a2", name: "Crim", originatingDocLabel: null, allowedBillingTypes: [], defaultBillingType: "contingent", stages: [] },
     ] as never);
     vi.mocked(listMatterDrafts).mockResolvedValue([{ id: "d1" }] as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({

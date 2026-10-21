@@ -64,6 +64,7 @@ vi.mock("react", async (importOriginal) => {
 
 import {
   NewMatterForm,
+  type AreaOption as AreaOptionT,
   type NewMatterFormOptions,
 } from "./new-matter-form";
 
@@ -77,6 +78,8 @@ const options: NewMatterFormOptions = {
       statuteSourceCitation: null,
       matterNameTemplate: null,
       requiredMatterFields: [],
+      allowedBillingTypes: ["hourly", "flat", "contingent", "court_appointed", "pro_bono"],
+      defaultBillingType: "contingent",
       stages: [
         { id: "stage1", name: "Intake", order: 0, isTerminal: false },
       ],
@@ -167,7 +170,7 @@ describe("NewMatterForm — validation-error re-seed", () => {
 });
 
 describe("NewMatterForm — selections survive a validation error (F095)", () => {
-  test("fee structure and lead keep the user's picks after the server returns an error, and are re-posted", async () => {
+  test("billing type and lead keep the user's picks after the server returns an error, and are re-posted", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     const { waitFor } = await import("@testing-library/react");
     const { createMatter } = await import("@/app/actions/matters");
@@ -197,7 +200,7 @@ describe("NewMatterForm — selections survive a validation error (F095)", () =>
       screen.getByPlaceholderText(/client name/i),
       "Alvarez, Maria"
     );
-    await user.selectOptions(screen.getByLabelText(/fee structure/i), "hourly");
+    await user.selectOptions(screen.getByLabelText(/billing type/i), "hourly");
     await user.selectOptions(screen.getByLabelText(/lead attorney/i), "u2");
 
     await user.click(screen.getByRole("button", { name: /create matter/i }));
@@ -205,12 +208,12 @@ describe("NewMatterForm — selections survive a validation error (F095)", () =>
     await screen.findByText(/add an email or phone/i);
 
     // The auto-reset used to snap these back to the mount defaults.
-    expect(screen.getByLabelText(/fee structure/i)).toHaveValue("hourly");
+    expect(screen.getByLabelText(/billing type/i)).toHaveValue("hourly");
     expect(screen.getByLabelText(/lead attorney/i)).toHaveValue("u2");
 
     await user.click(screen.getByRole("button", { name: /create matter/i }));
     await waitFor(() => expect(posted).toHaveLength(2));
-    expect(posted[1].get("feeStructure")).toBe("hourly");
+    expect(posted[1].get("billingType")).toBe("hourly");
     expect(posted[1].get("leadUserId")).toBe("u2");
   });
 });
@@ -304,5 +307,49 @@ describe("NewMatterForm — extra team members", () => {
     expect(JSON.parse(fd.get("extraTeam") as string)).toEqual([
       { userId: "u2", role: "paralegal" },
     ]);
+  });
+});
+
+describe("NewMatterForm — billing type follows the practice area", () => {
+  const areaOf = (
+    id: string,
+    allowed: AreaOptionT["allowedBillingTypes"],
+    def: AreaOptionT["defaultBillingType"]
+  ): AreaOptionT => ({
+    ...options.areas[0],
+    id,
+    name: `Area ${id}`,
+    allowedBillingTypes: allowed,
+    defaultBillingType: def,
+    stages: [{ id: `${id}-s`, name: "Intake", order: 0, isTerminal: false }],
+  });
+
+  test("offers only the area's types, resets on area change", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    render(
+      <NewMatterForm
+        options={{
+          ...options,
+          areas: [
+            areaOf("A", ["hourly", "contingent"], "hourly"),
+            areaOf("B", ["court_appointed"], "court_appointed"),
+          ],
+        }}
+      />
+    );
+    const select = () => screen.getByLabelText(/billing type/i);
+    const labels = () =>
+      Array.from(select().querySelectorAll("option")).map((o) => o.textContent);
+    expect(labels()).toEqual(["Hourly", "Contingency"]);
+    expect(select()).toHaveValue("hourly");
+
+    await user.selectOptions(screen.getByLabelText(/practice area/i), "B");
+    expect(labels()).toEqual(["Court-appointed"]);
+    expect(select()).toHaveValue("court_appointed");
+
+    await user.selectOptions(screen.getByLabelText(/practice area/i), "A");
+    expect(labels()).toEqual(["Hourly", "Contingency"]);
+    expect(select()).toHaveValue("hourly");
   });
 });

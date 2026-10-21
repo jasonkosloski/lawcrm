@@ -9,6 +9,7 @@
  * to the new matter's detail page.
  */
 
+import { isBillingType } from "@/lib/billing-type";
 import { TopBar } from "@/components/layout/topbar";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -83,6 +84,8 @@ export default async function NewMatterPage({
         matterNameTemplate: true,
         originatingDocLabel: true,
         requiredMatterFields: true,
+        allowedBillingTypes: true,
+        defaultBillingType: true,
         stages: {
           where: { isActive: true },
           orderBy: { order: "asc" },
@@ -154,10 +157,18 @@ export default async function NewMatterPage({
 
   // Calendar period (ADR-035) as one serializable value for the forms.
   const areas = areaRows.map(
-    ({ statutePeriodAmount, statutePeriodUnit, ...a }) => ({
-      ...a,
-      statutePeriod: toSolPeriod(statutePeriodAmount, statutePeriodUnit),
-    })
+    ({ statutePeriodAmount, statutePeriodUnit, ...a }) => {
+      // Stored as plain strings; drop anything that isn't a known type.
+      const allowedBillingTypes = a.allowedBillingTypes.filter(isBillingType);
+      return {
+        ...a,
+        allowedBillingTypes,
+        defaultBillingType: isBillingType(a.defaultBillingType)
+          ? a.defaultBillingType
+          : (allowedBillingTypes[0] ?? ("contingent" as const)),
+        statutePeriod: toSolPeriod(statutePeriodAmount, statutePeriodUnit),
+      };
+    }
   );
 
   return (

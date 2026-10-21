@@ -65,6 +65,12 @@ import {
 } from "@/lib/matter-conflict-gate";
 import { normalize } from "@/lib/conflict-check";
 import {
+  BILLING_TYPES,
+  billingTypeFields,
+  isBillingType,
+  type BillingType,
+} from "@/lib/billing-type";
+import {
   clearedRequired,
   missingRequired,
   requiredFieldError,
@@ -87,9 +93,8 @@ const createMatterSchema = z
       .max(200, "Name is too long"),
     practiceAreaId: z.string().trim().min(1, "Practice area is required"),
     stageId: z.string().trim().min(1, "Stage is required"),
-    feeStructure: z
-      .enum(["contingent", "hourly", "flat", "hybrid", "pro_bono"])
-      .default("contingent"),
+    /** Omitted => the practice area's default billing type. */
+    billingType: z.enum(BILLING_TYPES).optional(),
     caseNumber: z.string().trim().max(80).optional().or(z.literal("")),
     court: z.string().trim().max(200).optional().or(z.literal("")),
     clientId: z.string().trim().optional().or(z.literal("")),
@@ -342,10 +347,10 @@ async function resolveAreaAndStage(
       /** Calendar statute period configured by the firm (ADR-035).
        *  Drives auto-compute of the matter's SOL date from incidentDate. */
       statutePeriod: SolPeriod | null;
-      /** Snapshotted onto the new Matter so per-area changes don't
-       *  rewrite history. Per-matter override happens via the matter
-       *  edit form. */
-      defaultBillingMode: string;
+      /** Billing types the area offers, and the one used when the
+       *  caller doesn't pick. */
+      allowedBillingTypes: BillingType[];
+      defaultBillingType: BillingType;
       /** Keys the firm requires on new matters in this area. */
       requiredMatterFields: string[];
     }
@@ -361,7 +366,8 @@ async function resolveAreaAndStage(
       hasStatuteOfLimitations: true,
       statutePeriodAmount: true,
       statutePeriodUnit: true,
-      defaultBillingMode: true,
+      allowedBillingTypes: true,
+      defaultBillingType: true,
       requiredMatterFields: true,
       stages: {
         where: { isActive: true },
@@ -378,6 +384,10 @@ async function resolveAreaAndStage(
   if (!resolvedStageId) {
     return { ok: false, error: "This practice area has no active stages" };
   }
+  const allowedBillingTypes = area.allowedBillingTypes.filter(isBillingType);
+  const defaultBillingType = isBillingType(area.defaultBillingType)
+    ? area.defaultBillingType
+    : (allowedBillingTypes[0] ?? "contingent");
   return {
     ok: true,
     practiceAreaId: area.id,
@@ -386,7 +396,8 @@ async function resolveAreaAndStage(
     color: area.color,
     hasStatuteOfLimitations: area.hasStatuteOfLimitations,
     statutePeriod: toSolPeriod(area.statutePeriodAmount, area.statutePeriodUnit),
-    defaultBillingMode: area.defaultBillingMode,
+    allowedBillingTypes,
+    defaultBillingType,
     requiredMatterFields: area.requiredMatterFields ?? [],
   };
 }
@@ -479,6 +490,15 @@ export async function createMatter(
     return {
       status: "error",
       errors: { practiceAreaId: [resolved.error] },
+      values: raw,
+    };
+  }
+
+  const billingType = data.billingType ?? resolved.defaultBillingType;
+  if (!resolved.allowedBillingTypes.includes(billingType)) {
+    return {
+      status: "error",
+      errors: { billingType: ["Not offered for this practice area"] },
       values: raw,
     };
   }
@@ -753,11 +773,9 @@ export async function createMatter(
           name: data.name,
           practiceAreaId: resolved.practiceAreaId,
           stageId: resolved.stageId,
-          feeStructure: data.feeStructure,
-          // Snapshot the area's defaultBillingMode onto the matter on
-          // create. Per-area changes don't rewrite history; per-matter
-          // override happens on the matter edit form.
-          billingMode: resolved.defaultBillingMode,
+          // Billing type maps to the stored fee structure + billing
+          // mode pair; the area's allowed list was enforced above.
+          ...billingTypeFields(billingType),
           caseNumber: data.caseNumber || null,
           court: data.court || null,
           opposingParty: data.opposingParty || null,
