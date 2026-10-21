@@ -81,7 +81,10 @@ Migrations `20261019090000_client_portal_foundation` (new tables, `firms."portal
 
 Migration `20261020225241_matter_drafts_and_agreements` (ADR-056). Add-only: new draft and agreement tables, `firms."requireOriginatingDoc"` (default false), `practice_areas."originatingDocLabel"`; grants `matters.agreement.edit` to every role holding `matters.edit`. Nothing is dropped.
 
-1. If the venues migration from the previous release (ADR-055) has not been applied, it must go first; `migrate deploy` applies both in order.
+**Apply BOTH migrations to production (venues `20261020214030_venues_and_matter_name_template` first, then `20261020225241_matter_drafts_and_agreements`) BEFORE pushing main.** A push deploys, and the new code reads the new columns on every matter Overview; code live ahead of the migration breaks every Overview.
+
+1. `migrate deploy` applies both in order (venues first).
 2. Back up, load the PRODUCTION env, `export DIRECT_DATABASE_URL="$DATABASE_URL"` (see the gotcha above), `npx prisma migrate status` (check the printed host), then `npx prisma migrate deploy`.
 3. Deploy the code carrying the new daily cron `/api/matter-draft-sweep` (`vercel.json`). It authenticates with `CRON_SECRET`, already required in production; no new env var.
 4. Existing matters get no agreement row; the Overview card treats a missing row as "No agreement on file".
+5. Smoke check after the deploy: open an existing matter's Overview (it shows "No {label} on file" in the agreement card), then open `/matters/new` and confirm "Save draft" works.
