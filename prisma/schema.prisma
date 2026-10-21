@@ -833,6 +833,7 @@ model Lead {
   /// Task.leadId / CalendarEvent.leadId.
   tasks           Task[]           @relation("LeadTasks")
   events          CalendarEvent[]  @relation("LeadEvents")
+  emailThreads    EmailThread[]    @relation("LeadEmailThreads")
   /// Intake documents and folders — re-homed onto the new matter when
   /// the lead converts. See Document.leadId / DocumentFolder.leadId.
   documents       Document[]       @relation("LeadDocuments")
@@ -1657,6 +1658,12 @@ model EmailThread {
   id             String    @id @default(cuid())
   accountId      String
   matterId       String? /// Null for unfiled emails
+  /// Filed to a lead instead of a matter. At most one of (matterId,
+  /// leadId) is set; neither = unfiled inbound only. Lead conversion
+  /// re-homes the thread to the new matter. A future lead-delete path
+  /// must re-home or refuse threads containing app-sent mail (SetNull
+  /// is only a fallback).
+  leadId         String?
   externalId     String? /// Gmail thread ID or provider-specific ID
   subject        String
   snippet        String? /// Preview text for thread list
@@ -1676,6 +1683,7 @@ model EmailThread {
 
   account          EmailAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   matter           Matter?        @relation(fields: [matterId], references: [id], onDelete: SetNull)
+  lead             Lead?          @relation("LeadEmailThreads", fields: [leadId], references: [id], onDelete: SetNull)
   messages         EmailMessage[]
   labels           EmailLabel[]
   /// Inverse for the inbox-to-action affordances on the email
@@ -1687,6 +1695,7 @@ model EmailThread {
   @@unique([accountId, externalId])
   @@index([accountId])
   @@index([matterId])
+  @@index([leadId])
   @@index([lastMessageAt])
   @@index([followUpAt])
   @@map("email_threads")
@@ -1704,6 +1713,9 @@ model EmailMessage {
   body         String /// Email body text (HTML or plain)
   sentAt       DateTime
   isPrivileged Boolean  @default(false) /// Flagged as attorney-client privileged
+  /// True for messages sent from this app. Written only by
+  /// persistSentMessage; sync never writes it.
+  sentFromApp  Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   thread      EmailThread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
