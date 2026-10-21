@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { portalMatterWhere, requirePortalIdentity } from "@/lib/portal-access";
 import { prisma } from "@/lib/prisma";
 import { countOpenRequestsByMatter } from "@/lib/portal/requests";
+import { latestStageLabels } from "@/lib/portal/status";
 import { MatterStatus } from "./matter-status";
 
 export default async function PortalHome() {
@@ -24,6 +25,10 @@ export default async function PortalHome() {
     countOpenRequestsByMatter(identityId),
   ]);
 
+  const stageLabels = await latestStageLabels(
+    identityId,
+    matters.map((m) => m.id)
+  );
   const open = matters.filter((m) => !m.isArchived);
   const closed = matters.filter((m) => m.isArchived);
 
@@ -53,6 +58,7 @@ export default async function PortalHome() {
               heading="My matters"
               matters={open}
               openCounts={openCounts}
+              stageLabels={stageLabels}
             />
           ) : null}
           {closed.length > 0 ? (
@@ -60,6 +66,7 @@ export default async function PortalHome() {
               heading="Closed matters"
               matters={closed}
               openCounts={openCounts}
+              stageLabels={stageLabels}
             />
           ) : null}
         </>
@@ -72,9 +79,11 @@ function MatterList({
   heading,
   matters,
   openCounts,
+  stageLabels,
 }: {
   heading: string;
   openCounts: Map<string, number>;
+  stageLabels: Map<string, string>;
   matters: { id: string; name: string; isArchived: boolean }[];
 }) {
   const id = `${heading.toLowerCase().replace(/\s+/g, "-")}-heading`;
@@ -98,6 +107,11 @@ function MatterList({
                   {openCounts.get(m.id) === 1
                     ? "1 item requested"
                     : `${openCounts.get(m.id)} items requested`}
+                </span>
+              ) : null}
+              {stageLabels.get(m.id) ? (
+                <span className="max-w-[40%] shrink-0 truncate text-sm text-ink-3">
+                  {stageLabels.get(m.id)}
                 </span>
               ) : null}
               <MatterStatus closed={m.isArchived} />

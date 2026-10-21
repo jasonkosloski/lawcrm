@@ -15,9 +15,12 @@ import {
   listPortalUploads,
 } from "@/lib/portal/document-visibility.server";
 import { listPortalRequests } from "@/lib/portal/requests";
+import { getPortalMatterStatus } from "@/lib/portal/status";
 import { MatterStatus } from "../../matter-status";
+import { EventsSection } from "./events-section";
 import { RequestsSection } from "./requests-section";
 import { SharedSection } from "./shared-section";
+import { StatusSection } from "./status-section";
 import { UploadsSection } from "./uploads-section";
 
 export default async function PortalMatterPage({
@@ -35,10 +38,11 @@ export default async function PortalMatterPage({
   });
   if (!matter) notFound();
 
-  const [requests, shared, uploads] = await Promise.all([
+  const [requests, shared, uploads, status] = await Promise.all([
     listPortalRequests(identityId, id),
     listPortalSharedDocuments(identityId, id),
     listPortalUploads(identityId, id),
+    getPortalMatterStatus(identityId, id),
   ]);
   const storageDriver = activeStorageDriver();
 
@@ -59,6 +63,8 @@ export default async function PortalMatterPage({
         </h1>
       </div>
 
+      <StatusSection updates={status.updates} />
+      <EventsSection upcoming={status.upcoming} past={status.past} />
       <RequestsSection
         requests={requests}
         matterId={matter.id}

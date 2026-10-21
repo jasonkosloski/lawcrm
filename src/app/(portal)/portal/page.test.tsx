@@ -98,4 +98,23 @@ describe("portal home", () => {
     render(await PortalHome());
     expect(screen.getByText("1 item requested")).toBeTruthy();
   });
+
+  test("shows the latest stage label beside the status", async () => {
+    const mk = (stageLabel: string, postedAt: Date) =>
+      prisma.portalStatusUpdate.create({
+        data: {
+          matterId: openId,
+          stageLabel,
+          body: "b",
+          postedById: userId0,
+          postedAt,
+        },
+      });
+    await prisma.firm.updateMany({ data: { portalEnabled: true } });
+    await mk("Intake", new Date("2026-01-01T00:00:00Z"));
+    await mk("Discovery", new Date("2026-02-01T00:00:00Z"));
+    render(await PortalHome());
+    expect(screen.getByText("Discovery")).toBeTruthy();
+    expect(screen.queryByText("Intake")).toBeNull();
+  });
 });
