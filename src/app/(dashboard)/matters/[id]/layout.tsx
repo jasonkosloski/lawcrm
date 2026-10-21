@@ -25,6 +25,7 @@ import { Pencil } from "lucide-react";
 import { TopBar } from "@/components/layout/topbar";
 import { MatterTabs } from "@/components/matters/matter-tabs";
 import { PinToggle } from "@/components/matters/pin-toggle";
+import { EmailMuteToggle } from "@/components/matters/email-mute-toggle";
 import { MatterCreateMenu } from "@/components/matters/matter-create-menu";
 import { CreateDock } from "@/components/create-stack/create-dock";
 import { CreateStackProvider } from "@/components/create-stack/create-stack-provider";
@@ -35,6 +36,7 @@ import {
   MATTER_CREATE_PERMISSION,
 } from "@/lib/matter-create-types";
 import { requireUser } from "@/lib/current-user";
+import { isMatterEmailMuted } from "@/lib/queries/notification-preferences";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { RestrictedBadge } from "@/components/shared/restricted-badge";
 
@@ -50,10 +52,10 @@ export default async function MatterDetailLayout({
   children,
   params,
 }: LayoutProps<"/matters/[id]">) {
-  await requireUser();
+  const userId = await requireUser();
   const { id } = await params;
   await assertMatterAccess(id);
-  const [matter, canEditMatter, canManageTeam, canViewBilling, canViewRecords, createFlags] =
+  const [matter, canEditMatter, canManageTeam, canViewBilling, canViewRecords, createFlags, emailMuted] =
     await Promise.all([
       getMatterById(id),
       currentUserHasPermission("matters.edit"),
@@ -70,6 +72,7 @@ export default async function MatterDetailLayout({
           ),
         }))
       ),
+      isMatterEmailMuted(userId, id),
     ]);
   if (!matter) notFound();
   const allowedCreateTypes = createFlags
@@ -120,6 +123,7 @@ export default async function MatterDetailLayout({
               matterId={matter.id}
               initialPinned={matter.isPinnedByCurrentUser}
             />
+            <EmailMuteToggle matterId={matter.id} initialMuted={emailMuted} />
             <MatterCreateMenu allowedTypes={allowedCreateTypes} />
           </>
         }
