@@ -47,6 +47,6 @@
 
 export { generateInvoiceFromWip, bundleAsInternalRecord } from "./generate";
 export { updateInvoiceLineItem } from "./line-items";
-export { setInvoiceStatus, deleteInvoice, approveInvoice } from "./lifecycle";
+export { setInvoiceStatus, voidInvoice, deleteInvoice, approveInvoice } from "./lifecycle";
 export { addTrustTransaction } from "./trust";
 export { recordInvoicePayment, sendInvoice, resendInvoiceEmail } from "./payments";

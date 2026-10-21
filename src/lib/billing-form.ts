@@ -18,6 +18,10 @@ export type BillingFormState = {
   warning?: string;
 };
 
+/** One recipient: no whitespace, commas or semicolons, so "a@b.com, c@d.com"
+ *  can't reach the email provider as a multi-recipient string. */
+export const RECIPIENT_EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+
 export const billingInitialState: BillingFormState = { status: "idle" };
 
 /** Form state for `updateInvoiceLineItem`. Narrower than

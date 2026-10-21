@@ -10,7 +10,18 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertChildMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
-import { requirePermission } from "@/lib/permission-check";
+import { randomUUID } from "node:crypto";
+import { requirePermission, currentUserHasPermission } from "@/lib/permission-check";
+import { loadFirmProfileForUser } from "@/lib/firm";
+import { sendEmail } from "@/lib/email/send";
+import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { formatDateOnly } from "@/lib/format-date";
+import { getInvoiceById } from "@/lib/queries/billing";
+import { renderInvoicePdf } from "@/lib/billing/invoice-pdf";
+import { stampVoid } from "@/lib/billing/void-stamp";
+import { stampFiledInvoicePdfs } from "@/lib/billing/void-filing";
+import { fileInvoicePdf } from "@/lib/billing/invoice-filing";
+import { invoiceVoidEmail } from "@/lib/billing/invoice-email";
 import { logActivity } from "@/lib/activity-log";
 import { roundMoney } from "@/lib/money";
 import { toUserMessage } from "@/lib/user-facing-error";
@@ -18,10 +29,13 @@ import {
   invoiceStatusTransitions,
   canDeleteInvoice,
   canVoidInvoice,
+  RECIPIENT_EMAIL_RE,
+  type BillingFormState,
   type InvoiceKind,
 } from "@/lib/billing-form";
 import {
   ZERO_TOTAL_ERROR,
+  todayDateOnly,
 } from "./helpers";
 
 // ── Invoice status transitions ──────────────────────────────────────────
@@ -203,6 +217,173 @@ async function setInvoiceStatusUnchecked(
   revalidatePath(`/matters/${invoice.matterId}`);
   revalidatePath("/", "layout");
   return { ok: true };
+}
+
+// ── Void with stamp + client notice ─────────────────────────────────────
+//
+// Voids a client invoice. For one that was `sent` it then stamps the
+// filed PDFs VOID (or files a stamped fresh copy when none exist) and
+// optionally emails the client the stamped PDF. Stamping happens only
+// when THIS call's own void transition succeeded, so a VOID can never
+// be stamped over a VOID. The post-commit block can't undo the void:
+// failures come back as a warning.
+
+const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+export async function voidInvoice(
+  invoiceId: string,
+  _prev: BillingFormState,
+  formData: FormData
+): Promise<BillingFormState> {
+  await requirePermission("billing.void_invoice");
+  await assertChildMatterAccess("invoice", invoiceId);
+  const userId = await getCurrentUserId();
+
+  // The email leg needs its own capability on top of void.
+  const wantsNotify = formData.get("notifyClient") === "true";
+  const notify = wantsNotify && (await currentUserHasPermission("billing.send_invoice"));
+  const recipient = String(formData.get("recipient") ?? "").trim();
+  if (notify && !RECIPIENT_EMAIL_RE.test(recipient)) {
+    return {
+      status: "error",
+      errors: { recipient: ["Enter a valid email address."] },
+    };
+  }
+
+  try {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { matterId: true, invoiceNumber: true, kind: true, status: true },
+    });
+    if (!invoice) return { status: "error", error: "Invoice not found." };
+    const wasSent = invoice.kind === "client" && invoice.status === "sent";
+    const n = invoice.invoiceNumber;
+
+    // The void unlinks the time and expenses, so a fresh render has to
+    // happen first. Only needed when no PDF was ever filed for it.
+    let fresh: Buffer | null = null;
+    let renderFailed = false;
+    let voidedOn = "";
+    let timeZone = "";
+    let firm: Awaited<ReturnType<typeof loadFirmProfileForUser>> = null;
+    let matterName = "";
+    let preDocCount = 0;
+    if (wasSent) {
+      preDocCount = await prisma.document.count({ where: { invoiceId } });
+      voidedOn = formatDateOnly(await todayDateOnly(), "long");
+      timeZone = await getCurrentUserTimeZone();
+      try {
+        firm = await loadFirmProfileForUser(userId);
+        const detail = await getInvoiceById(invoiceId, timeZone);
+        if (detail) matterName = detail.matterName;
+        if (preDocCount === 0) {
+          if (!firm || !detail) throw new Error("invoice or firm profile missing");
+          fresh = await stampVoid(await renderInvoicePdf(detail, firm, timeZone), voidedOn);
+        }
+      } catch (err) {
+        renderFailed = true;
+        console.warn("[void-invoice] pre-void render failed", err);
+      }
+    }
+
+    const res = await setInvoiceStatusUnchecked(invoiceId, "void", userId);
+    if (!res.ok) {
+      return { status: "error", error: res.error ?? "Couldn't void the invoice." };
+    }
+    if (!wasSent) return { status: "ok" };
+
+    const warnings: string[] = [];
+    try {
+      let pdf: { name: string; bytes: Buffer } | null = null;
+      let copiesWarn = false;
+      if (preDocCount > 0) {
+        const r = await stampFiledInvoicePdfs({ invoiceId, voidedOn });
+        if (r.stamped > 0) {
+          await logActivity({
+            matterId: invoice.matterId,
+            userId,
+            type: "filing",
+            title: `Stamped ${r.stamped} filed PDF(s) of invoice ${n} VOID`,
+          });
+          pdf = r.latest;
+        }
+        if (r.failed > 0) copiesWarn = true;
+      } else if (fresh) {
+        try {
+          await fileInvoicePdf({
+            matterId: invoice.matterId,
+            invoiceId,
+            invoiceNumber: n,
+            kind: "void",
+            bytes: fresh,
+            userId,
+            day: await todayDateOnly(),
+          });
+          await logActivity({
+            matterId: invoice.matterId,
+            userId,
+            type: "filing",
+            title: `Filed voided copy of invoice ${n}`,
+          });
+        } catch (err) {
+          copiesWarn = true;
+          console.warn("[void-invoice] filing voided copy failed", err);
+        }
+        pdf = { name: `Invoice ${n} (VOID).pdf`, bytes: fresh };
+      } else if (renderFailed && !notify) {
+        warnings.push("No voided copy could be filed.");
+      }
+      if (copiesWarn) warnings.push("Some filed copies couldn't be stamped VOID.");
+      revalidatePath(`/matters/${invoice.matterId}/documents`);
+
+      if (notify) {
+        if (!pdf) {
+          warnings.push("No PDF was available, so the client wasn't emailed.");
+        } else {
+          const sender = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true },
+          });
+          const firmName = firm ? (firm.shortName ?? firm.name) : "Our firm";
+          const result = await sendEmail({
+            to: recipient,
+            ...invoiceVoidEmail({ invoiceNumber: n, firmName, matterName }),
+            idempotencyKey: `invoice-void-${invoiceId}-${randomUUID()}`,
+            fromName: firmName,
+            ...(sender?.email ? { replyTo: sender.email } : {}),
+            attachments: [
+              {
+                filename: `Invoice ${n} (VOID).pdf`,
+                content: pdf.bytes,
+                contentType: "application/pdf",
+              },
+            ],
+          });
+          await logActivity({
+            matterId: invoice.matterId,
+            userId,
+            type: "filing",
+            title: result.ok
+              ? `Void notice for invoice ${n} emailed to ${recipient}`
+              : `Void notice for invoice ${n} email failed: ${recipient}`,
+            detail: result.ok ? (result.id ? `Resend id ${result.id}` : null) : result.error,
+          });
+          if (!result.ok) {
+            warnings.push(`The void notice didn't go out: ${result.error}.`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[void-invoice] post-void step failed", err);
+      warnings.push(`Some follow-up steps didn't finish: ${errMessage(err)}.`);
+    }
+
+    return warnings.length
+      ? { status: "ok", warning: `Invoice voided. ${warnings.join(" ")}` }
+      : { status: "ok" };
+  } catch (err) {
+    return { status: "error", error: invoiceActionError(err, "billing.voidInvoice") };
+  }
 }
 
 // ── Delete draft invoice ───────────────────────────────────────────────

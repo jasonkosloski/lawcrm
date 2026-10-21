@@ -30,6 +30,7 @@ import {
   INVOICE_PAYMENT_SOURCES,
   billingInitialState,
   type BillingFormState,
+  RECIPIENT_EMAIL_RE,
 } from "@/lib/billing-form";
 import {
   todayDateOnly,
@@ -54,10 +55,6 @@ import {
 //   - Creates the canonical InvoicePayment row.
 //   - Bumps Invoice.paidAmount and flips status: paid when fully
 //     covered, partial otherwise.
-
-/** One recipient: no whitespace, commas or semicolons, so "a@b.com, c@d.com"
- *  can't reach the email provider as a multi-recipient string. */
-const RECIPIENT_EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 
 const recordPaymentSchema = z.object({
   amount: z
