@@ -12,22 +12,27 @@
 
 import { describe, expect, test } from "vitest";
 import {
+  DASHBOARD_CARDS,
   DASHBOARD_CARD_COLUMNS,
   DASHBOARD_CARD_KEYS,
-  DASHBOARD_CARD_LABELS,
-  cardsInColumn,
+  DEFAULT_LAYOUT,
+  layoutsEqual,
+  mergeLayout,
   mergeOrder,
-  mergePrefs,
   mergeVisibility,
-  moveCardInColumn,
-  type DashboardCardKey,
+  moveCard,
+  setSplit,
+  type DashboardLayout,
 } from "./dashboard-prefs";
 
 describe("records card", () => {
-  test("is a right-rail card, labelled, and visible by default", () => {
+  test("is a column-1 card, labelled, and visible by default", () => {
     expect(DASHBOARD_CARD_KEYS).toContain("records");
-    expect(DASHBOARD_CARD_LABELS.records).toBe("Records to chase");
-    expect(DASHBOARD_CARD_COLUMNS.records).toBe("rail");
+    expect(DASHBOARD_CARDS.records.label).toBe("Records to chase");
+    expect(DASHBOARD_CARDS.records.defaultPlacement).toEqual({
+      zone: "column",
+      index: 1,
+    });
     expect(mergeVisibility(null).records).toBe(true);
   });
 });
@@ -36,7 +41,7 @@ describe("DASHBOARD_CARD_KEYS shape", () => {
   test("non-empty + every key has a label", () => {
     expect(DASHBOARD_CARD_KEYS.length).toBeGreaterThan(0);
     for (const k of DASHBOARD_CARD_KEYS) {
-      expect(DASHBOARD_CARD_LABELS[k]).toBeTruthy();
+      expect(DASHBOARD_CARDS[k].label).toBeTruthy();
     }
   });
 
@@ -210,100 +215,124 @@ describe("mergeOrder — defensive against bad entries", () => {
   });
 });
 
-describe("mergePrefs", () => {
-  test("decodes both halves of the blob", () => {
-    const out = mergePrefs({
-      visible: { activity: false },
-      order: ["pulse", "deadlines"],
+// ── v3 layout model ───────────────────────────────────────────────────
+
+const ALL = [...DASHBOARD_CARD_KEYS].sort();
+const keysIn = (l: DashboardLayout) =>
+  [...l.band, ...l.columns.flat(), ...l.hidden].sort();
+
+describe("mergeLayout", () => {
+  test("null / garbage → DEFAULT_LAYOUT", () => {
+    for (const s of [null, undefined, 42, "x", []]) {
+      expect(mergeLayout(s)).toEqual(DEFAULT_LAYOUT);
+    }
+  });
+
+  test("empty v2 blob converts to the default", () => {
+    expect(mergeLayout({})).toEqual(DEFAULT_LAYOUT);
+  });
+
+  test("v2: kpis first in main → band", () => {
+    const l = mergeLayout({
+      order: ["kpis", "tasks", "agenda", "followUps", "activity", "records", "deadlines", "pulse"],
     });
-    expect(out.visible.activity).toBe(false);
-    expect(out.visible.kpis).toBe(true);
-    expect(out.order.slice(0, 2)).toEqual(["pulse", "deadlines"]);
-    expect(out.order.length).toBe(DASHBOARD_CARD_KEYS.length);
-  });
-
-  test("null blob → full defaults", () => {
-    const out = mergePrefs(null);
-    expect(out.visible.kpis).toBe(true);
-    expect(out.order).toEqual(DEFAULT_ORDER);
-  });
-});
-
-describe("cardsInColumn", () => {
-  test("splits the default order by column assignment", () => {
-    const main = cardsInColumn(DEFAULT_ORDER, "main");
-    const rail = cardsInColumn(DEFAULT_ORDER, "rail");
-    expect(main.length + rail.length).toBe(DASHBOARD_CARD_KEYS.length);
-    for (const k of main) expect(DASHBOARD_CARD_COLUMNS[k]).toBe("main");
-    for (const k of rail) expect(DASHBOARD_CARD_COLUMNS[k]).toBe("rail");
-  });
-
-  test("preserves the relative order of the input", () => {
-    const order: DashboardCardKey[] = [
-      "pulse",
-      "activity",
-      "deadlines",
-      "kpis",
-      "agenda",
-      "tasks",
-      "followUps",
-    ];
-    expect(cardsInColumn(order, "rail")).toEqual(["pulse", "deadlines"]);
-    expect(cardsInColumn(order, "main")[0]).toBe("activity");
-  });
-});
-
-describe("moveCardInColumn", () => {
-  test("moves a card up one slot within its column", () => {
-    const out = moveCardInColumn(DEFAULT_ORDER, "agenda", "up");
-    expect(out).not.toBeNull();
-    expect(cardsInColumn(out!, "main").slice(0, 2)).toEqual([
-      "agenda",
-      "kpis",
+    expect(l.band).toEqual(["kpis"]);
+    expect(l.columns).toEqual([
+      ["tasks", "agenda", "followUps", "activity"],
+      ["records", "deadlines", "pulse"],
     ]);
   });
 
-  test("moves a card down one slot within its column", () => {
-    const out = moveCardInColumn(DEFAULT_ORDER, "kpis", "down");
-    expect(cardsInColumn(out!, "main").slice(0, 2)).toEqual([
-      "agenda",
-      "kpis",
-    ]);
+  test("v2: kpis not first stays in column 0 at its position", () => {
+    const l = mergeLayout({
+      order: ["agenda", "kpis", "tasks", "followUps", "activity", "deadlines", "pulse", "records"],
+    });
+    expect(l.band).toEqual([]);
+    expect(l.columns[0]).toEqual(["agenda", "kpis", "tasks", "followUps", "activity"]);
   });
 
-  test("returns null at the column edges", () => {
-    // First main card can't go up; last rail card can't go down.
-    expect(moveCardInColumn(DEFAULT_ORDER, "kpis", "up")).toBeNull();
-    expect(moveCardInColumn(DEFAULT_ORDER, "records", "down")).toBeNull();
+  test("v2: visible:false → hidden, removed from zones", () => {
+    const l = mergeLayout({ visible: { pulse: false, kpis: false } });
+    expect([...l.hidden].sort()).toEqual(["kpis", "pulse"]);
+    expect(l.band).toEqual([]);
+    expect(l.columns[1]).toEqual(["deadlines", "records"]);
   });
 
-  test("moving a main card never disturbs rail cards (and vice versa)", () => {
-    const out = moveCardInColumn(DEFAULT_ORDER, "activity", "up")!;
-    expect(cardsInColumn(out, "rail")).toEqual(
-      cardsInColumn(DEFAULT_ORDER, "rail")
-    );
-    const out2 = moveCardInColumn(DEFAULT_ORDER, "pulse", "up")!;
-    expect(cardsInColumn(out2, "main")).toEqual(
-      cardsInColumn(DEFAULT_ORDER, "main")
-    );
+  test("v3: duplicates — first occurrence wins band → columns → hidden", () => {
+    const l = mergeLayout({
+      v: 3,
+      split: "8/4",
+      band: ["agenda"],
+      columns: [["agenda", "tasks"], ["tasks"]],
+      hidden: ["agenda"],
+    });
+    // agenda keeps its band slot; kpis (missing) is appended to the band
+    // by its default placement.
+    expect(l.band).toEqual(["agenda", "kpis"]);
+    expect(l.columns[0][0]).toBe("tasks");
+    expect(keysIn(l)).toEqual(ALL);
   });
 
-  test("column edge respects the CURRENT order, not the default", () => {
-    // agenda moved to the top of main — now IT can't go up, but
-    // kpis (now second) can.
-    const reordered = moveCardInColumn(DEFAULT_ORDER, "agenda", "up")!;
-    expect(moveCardInColumn(reordered, "agenda", "up")).toBeNull();
-    expect(moveCardInColumn(reordered, "kpis", "up")).not.toBeNull();
+  test("v3: unknown keys and non-strings dropped; unknown split → 8/4", () => {
+    const l = mergeLayout({ v: 3, split: "9/3", band: ["nope", 7], columns: "x", hidden: [] });
+    expect(l.split).toBe("8/4");
+    expect(keysIn(l)).toEqual(ALL);
   });
 
-  test("does not mutate the input array", () => {
-    const input = [...DEFAULT_ORDER];
-    moveCardInColumn(input, "agenda", "up");
-    expect(input).toEqual(DEFAULT_ORDER);
+  test("v3: missing keys land in their default zone (column index clamped)", () => {
+    const l = mergeLayout({ v: 3, split: "12", band: [], columns: [["agenda"]], hidden: [] });
+    expect(l.band).toEqual(["kpis"]);
+    expect(l.columns).toHaveLength(1);
+    expect(l.columns[0].slice(-3)).toEqual(["deadlines", "pulse", "records"]);
   });
 
-  test("result is still a permutation of every key", () => {
-    const out = moveCardInColumn(DEFAULT_ORDER, "followUps", "down")!;
-    expect([...out].sort()).toEqual([...DASHBOARD_CARD_KEYS].sort());
+  test("v3: too many columns fold into the last; too few pad", () => {
+    const l = mergeLayout({
+      v: 3,
+      split: "8/4",
+      band: [],
+      columns: [["agenda"], ["tasks"], ["pulse"]],
+      hidden: [],
+    });
+    expect(l.columns[1].slice(0, 2)).toEqual(["tasks", "pulse"]);
+    expect(
+      mergeLayout({ v: 3, split: "4/4/4", band: [], columns: [], hidden: [] }).columns
+    ).toHaveLength(3);
+  });
+});
+
+describe("moveCard", () => {
+  test("column → band at position, hidden, and back", () => {
+    let l = moveCard(DEFAULT_LAYOUT, "deadlines", { zone: "band" }, 0);
+    expect(l.band).toEqual(["deadlines", "kpis"]);
+    l = moveCard(l, "deadlines", { zone: "hidden" });
+    expect(l.hidden).toEqual(["deadlines"]);
+    l = moveCard(l, "deadlines", { zone: "column", index: 9 });
+    expect(l.columns[1].at(-1)).toBe("deadlines");
+    expect(DEFAULT_LAYOUT.band).toEqual(["kpis"]); // no mutation
+  });
+
+  test("keeps every card exactly once", () => {
+    const l = moveCard(DEFAULT_LAYOUT, "agenda", { zone: "column", index: 1 }, 1);
+    expect(keysIn(l)).toEqual(ALL);
+    expect(l.columns[1][1]).toBe("agenda");
+  });
+});
+
+describe("setSplit", () => {
+  test("round trip 4/4/4 → 12 → 8/4 keeps every card once", () => {
+    const l = setSplit(setSplit(setSplit(DEFAULT_LAYOUT, "4/4/4"), "12"), "8/4");
+    expect(keysIn(l)).toEqual(ALL);
+    expect(l.columns).toHaveLength(2);
+  });
+});
+
+describe("layoutsEqual", () => {
+  test("structural compare", () => {
+    expect(layoutsEqual(DEFAULT_LAYOUT, mergeLayout(null))).toBe(true);
+    expect(layoutsEqual(DEFAULT_LAYOUT, setSplit(DEFAULT_LAYOUT, "6/6"))).toBe(false);
+    expect(
+      layoutsEqual(DEFAULT_LAYOUT, moveCard(DEFAULT_LAYOUT, "kpis", { zone: "hidden" }))
+    ).toBe(false);
   });
 });

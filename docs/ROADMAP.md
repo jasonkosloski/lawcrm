@@ -71,7 +71,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 
 **Shell, settings, automations**
 - [~] **Command palette v2 leftovers**: fuzzy highlight, New task, Log a call, Start timer. → [app-shell](features/app-shell.md)
-- [ ] **Dashboard layout v3**: drag + resize, per-card width, role defaults. → [app-shell](features/app-shell.md)
+- [ ] **Dashboard next**: "Needs me now" triage + new cards, then role default layouts (v3 layout shipped). → [app-shell](features/app-shell.md)
 - [ ] **Role-based & customizable sidebar**: needs UserPreferences. → [app-shell](features/app-shell.md)
 - [ ] **Reports follow-ups**: date-range picker, CSV export, per-user drill-down. → [reports](features/reports.md)
 - [~] **Automations follow-ups**: due dates relative to a deadline, stage-change trigger, notifications for auto-created tasks. → [deadlines-and-tasks](features/deadlines-and-tasks.md)
