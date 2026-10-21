@@ -18,7 +18,7 @@ import {
   editStatusUpdate,
   postStatusUpdate,
 } from "@/app/actions/portal-status";
-import { confirmAction } from "@/lib/feedback";
+import { confirmAction, notifyError } from "@/lib/feedback";
 import { ClientStatusCard } from "./client-status-card";
 import type { ClientStatusUpdateRow } from "@/lib/queries/portal-status";
 
@@ -140,5 +140,62 @@ describe("ClientStatusCard", () => {
     await userEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
     expect(confirmAction).toHaveBeenCalled();
     await waitFor(() => expect(deleteStatusUpdate).toHaveBeenCalledWith("s2"));
+  });
+
+  const warnOnce = async () => {
+    vi.mocked(postStatusUpdate).mockResolvedValueOnce({
+      ok: true,
+      warning: "Posted, but the email could not be sent.",
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Post update" }));
+    await userEvent.type(screen.getByLabelText("What's next"), "Hi");
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Post update" }),
+    );
+    await screen.findByText("Posted, but the email could not be sent.");
+  };
+
+  test("the warning notice clears when a dialog is opened again", async () => {
+    renderCard();
+    await warnOnce();
+    await userEvent.click(screen.getByRole("button", { name: "Post update" }));
+    expect(screen.queryByText("Posted, but the email could not be sent.")).toBeNull();
+  });
+
+  test("the warning notice clears when an update is deleted", async () => {
+    renderCard();
+    await warnOnce();
+    await userEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    await waitFor(() => expect(deleteStatusUpdate).toHaveBeenCalledWith("s2"));
+    expect(screen.queryByText("Posted, but the email could not be sent.")).toBeNull();
+  });
+
+  test("a failed delete reports the error", async () => {
+    vi.mocked(deleteStatusUpdate).mockResolvedValueOnce({ ok: false, error: "Update not found." });
+    renderCard();
+    await userEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    await waitFor(() => expect(notifyError).toHaveBeenCalledWith("Update not found."));
+  });
+
+  test("cancelling the delete confirmation leaves the update alone", async () => {
+    vi.mocked(confirmAction).mockResolvedValueOnce(false);
+    renderCard();
+    await userEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    expect(confirmAction).toHaveBeenCalled();
+    expect(deleteStatusUpdate).not.toHaveBeenCalled();
+    expect(screen.getByText("Mediation set.")).toBeTruthy();
+  });
+
+  test("the earlier-updates toggle expands and collapses", async () => {
+    renderCard();
+    const toggle = screen.getByRole("button", { name: "1 earlier" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    await userEvent.click(toggle);
+    expect(screen.getByText("Waiting on records.")).toBeTruthy();
+    const hide = screen.getByRole("button", { name: "Hide earlier" });
+    expect(hide.getAttribute("aria-expanded")).toBe("true");
+    await userEvent.click(hide);
+    expect(screen.queryByText("Waiting on records.")).toBeNull();
+    expect(screen.getByRole("button", { name: "1 earlier" })).toBeTruthy();
   });
 });

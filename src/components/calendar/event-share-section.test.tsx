@@ -7,10 +7,11 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+type Res = { ok: boolean; warning?: string; error?: string };
 const { shareEventWithClient, updateEventShare, stopSharingEvent } = vi.hoisted(() => ({
-  shareEventWithClient: vi.fn(async () => ({ ok: true })),
-  updateEventShare: vi.fn(async () => ({ ok: true })),
-  stopSharingEvent: vi.fn(async () => ({ ok: true })),
+  shareEventWithClient: vi.fn<(...args: unknown[]) => Promise<Res>>(async () => ({ ok: true })),
+  updateEventShare: vi.fn<(...args: unknown[]) => Promise<Res>>(async () => ({ ok: true })),
+  stopSharingEvent: vi.fn<(...args: unknown[]) => Promise<Res>>(async () => ({ ok: true })),
 }));
 
 vi.mock("@/app/actions/portal-status", () => ({
@@ -81,5 +82,38 @@ describe("EventShareSection", () => {
       <EventShareSection eventId="e1" eventTitle="Hearing" canShare={false} share={null} />
     );
     expect(container).toBeEmptyDOMElement();
+  });
+
+  test("the notice clears at the start of the next share submit", async () => {
+    const user = userEvent.setup();
+    shareEventWithClient.mockResolvedValueOnce({ ok: true, warning: "Heads up" });
+    shareEventWithClient.mockResolvedValueOnce({ ok: false, error: "Nope" });
+    render(<EventShareSection eventId="e1" eventTitle="Hearing" canShare share={null} />);
+    await user.click(screen.getByRole("button", { name: /share with client/i }));
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    expect(await screen.findByText("Heads up")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /share with client/i }));
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    expect(await screen.findByText("Nope")).toBeInTheDocument();
+    expect(screen.queryByText("Heads up")).toBeNull();
+  });
+
+  test("the notice clears when sharing is stopped", async () => {
+    const user = userEvent.setup();
+    updateEventShare.mockResolvedValueOnce({ ok: true, warning: "Heads up" });
+    render(
+      <EventShareSection
+        eventId="e1"
+        eventTitle="Hearing"
+        canShare
+        share={{ clientTitle: "Court date", clientNote: null }}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "Edit share" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Heads up")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Stop sharing" }));
+    expect(stopSharingEvent).toHaveBeenCalledWith("e1");
+    expect(screen.queryByText("Heads up")).toBeNull();
   });
 });

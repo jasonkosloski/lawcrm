@@ -58,6 +58,12 @@ export function ClientStatusCard({
 
   const [latest, ...earlier] = data.updates;
 
+  // Opening a dialog starts a new action: drop any leftover warning.
+  const openDialog = (next: Editing) => {
+    setNotice(null);
+    setEditing(next);
+  };
+
   const remove = async (u: ClientStatusUpdateRow) => {
     if (
       !(await confirmAction({
@@ -69,6 +75,7 @@ export function ClientStatusCard({
     ) {
       return;
     }
+    setNotice(null);
     startTransition(async () => {
       const res = await deleteStatusUpdate(u.id);
       if (!res.ok) notifyError(res.error);
@@ -94,7 +101,7 @@ export function ClientStatusCard({
               size="sm"
               variant="outline"
               disabled={pending}
-              onClick={() => setEditing({ mode: "edit", update: u })}
+              onClick={() => openDialog({ mode: "edit", update: u })}
             >
               Edit
             </Button>
@@ -120,7 +127,7 @@ export function ClientStatusCard({
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold">Client status</CardTitle>
           {canAdd && (
-            <Button size="sm" variant="outline" onClick={() => setEditing({ mode: "new" })}>
+            <Button size="sm" variant="outline" onClick={() => openDialog({ mode: "new" })}>
               Post update
             </Button>
           )}

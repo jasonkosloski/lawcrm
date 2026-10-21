@@ -44,11 +44,13 @@ export function EventShareSection({
 
   if (!share && !canShare) return null;
 
-  const stop = () =>
+  const stop = () => {
+    setNotice(null);
     startTransition(async () => {
       const res = await stopSharingEvent(eventId);
       if (!res.ok) notifyError(res.error);
     });
+  };
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -116,6 +118,7 @@ function ShareDialog({
 
   const submit = () => {
     setError(null);
+    onWarning(null);
     startTransition(async () => {
       const input = { clientTitle, clientNote: clientNote.trim() || undefined };
       const res = share
