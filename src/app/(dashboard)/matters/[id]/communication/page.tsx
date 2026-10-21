@@ -23,6 +23,7 @@ import { MatterPhoneLog } from "@/components/communication/matter-phone-log";
 import { LogCallButton } from "@/components/communication/log-call-button";
 import { PortalConversation } from "@/components/communication/portal-conversation";
 import { getPortalConversation } from "@/lib/queries/portal-messages";
+import { ComposeEmailLauncher } from "@/components/communication/compose-email-launcher";
 import { ChannelToggle } from "@/components/communication/channel-toggle";
 import {
   getFilingLeadOptions,
@@ -190,7 +191,12 @@ export default async function MatterCommunicationPage({
           active="email"
           showPortal={canViewPortal}
         />
-        {logCallButton}
+        <div className="flex items-center gap-2">
+          <ComposeEmailLauncher
+            initialScope={{ kind: "matter", matterId: id }}
+          />
+          {logCallButton}
+        </div>
       </div>
       <EmbeddedInbox
         threads={threadList}

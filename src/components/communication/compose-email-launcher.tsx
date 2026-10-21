@@ -19,22 +19,44 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { SENDABLE_EMAIL_STATUSES } from "@/lib/email-send-status";
+import {
+  getFilingLeadOptions,
+  getFilingMatterOptions,
+} from "@/lib/queries/communication";
+import type { RecordScope } from "@/lib/record-scope";
 import { ComposeEmailButton } from "./compose-email";
 
-export async function ComposeEmailLauncher() {
+/** `initialScope` prefills the required record (matter / lead tabs). */
+export async function ComposeEmailLauncher({
+  initialScope,
+}: {
+  initialScope?: RecordScope;
+} = {}) {
   const canSend = await currentUserHasPermission("communication.send_email");
   if (!canSend) return null;
 
   const userId = await getCurrentUserId();
-  const accounts = await prisma.emailAccount.findMany({
-    where: {
-      userId,
-      provider: "gmail", // send path is Gmail-only today
-      syncStatus: { in: [...SENDABLE_EMAIL_STATUSES] },
-    },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, emailAddress: true },
-  });
+  // Record options load only past the send gate.
+  const [accounts, matters, leads] = await Promise.all([
+    prisma.emailAccount.findMany({
+      where: {
+        userId,
+        provider: "gmail", // send path is Gmail-only today
+        syncStatus: { in: [...SENDABLE_EMAIL_STATUSES] },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, emailAddress: true },
+    }),
+    getFilingMatterOptions(),
+    getFilingLeadOptions(),
+  ]);
 
-  return <ComposeEmailButton accounts={accounts} />;
+  return (
+    <ComposeEmailButton
+      accounts={accounts}
+      matters={matters}
+      leads={leads}
+      initialScope={initialScope}
+    />
+  );
 }

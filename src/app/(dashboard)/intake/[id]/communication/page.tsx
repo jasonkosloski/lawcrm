@@ -44,6 +44,7 @@ import { formatPhone } from "@/lib/format-phone";
 import { getLeadById } from "@/lib/queries/leads";
 import { listContactPickerOptions } from "@/lib/queries/contacts";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { ComposeEmailLauncher } from "@/components/communication/compose-email-launcher";
 import { LogCallButton } from "@/components/communication/log-call-button";
 import { requireUser } from "@/lib/current-user";
 import { assertLeadAccess } from "@/lib/lead-access";
@@ -110,6 +111,13 @@ export default async function LeadCommunicationPage({
       />
     ) : null;
 
+  // Compose prefilled with this lead; a converted lead's mail lives
+  // on its matter now, so it can't be a filing target.
+  const composeButton =
+    lead.stage === "converted" ? null : (
+      <ComposeEmailLauncher initialScope={{ kind: "lead", leadId: id }} />
+    );
+
   const emailThreads = emailMatch.rows;
 
   // Only allow reading email threads that are actually in the lead's set.
@@ -135,8 +143,9 @@ export default async function LeadCommunicationPage({
     return (
       <div className="p-5">
         <div className="max-w-4xl flex flex-col gap-3">
-          {logCallButton && (
-            <div className="flex items-center justify-end">
+          {(logCallButton || composeButton) && (
+            <div className="flex items-center justify-end gap-2">
+              {composeButton}
               {logCallButton}
             </div>
           )}
@@ -154,8 +163,9 @@ export default async function LeadCommunicationPage({
 
   return (
     <div className="p-5 flex flex-col flex-1 min-h-0 gap-4">
-      {logCallButton && (
-        <div className="flex items-center justify-end shrink-0">
+      {(logCallButton || composeButton) && (
+        <div className="flex items-center justify-end gap-2 shrink-0">
+          {composeButton}
           {logCallButton}
         </div>
       )}

@@ -89,6 +89,14 @@ vi.mock("@/components/communication/matter-phone-log", () => ({
 vi.mock("@/components/communication/log-call-button", () => ({
   LogCallButton: () => <div data-testid="log-call-button" />,
 }));
+vi.mock("@/components/communication/compose-email-launcher", () => ({
+  ComposeEmailLauncher: (props: { initialScope?: { kind: string; matterId?: string } }) => (
+    <div
+      data-testid="compose-launcher"
+      data-scope={JSON.stringify(props.initialScope)}
+    />
+  ),
+}));
 vi.mock("@/components/communication/channel-toggle", () => ({
   ChannelToggle: (props: { showPortal?: boolean }) => (
     <div data-testid="channel-toggle" data-show-portal={String(!!props.showPortal)} />
@@ -213,6 +221,15 @@ describe("log-call gate", () => {
 
     expect(mockedContacts).toHaveBeenCalledWith({ priorityMatterId: "matter_1" });
     expect(screen.getByTestId("log-call-button")).toBeInTheDocument();
+  });
+});
+
+describe("compose launcher", () => {
+  test("email channel mounts Compose prefilled with the matter", async () => {
+    render(await MatterCommunicationPage(props()));
+    expect(screen.getByTestId("compose-launcher").dataset.scope).toBe(
+      JSON.stringify({ kind: "matter", matterId: "matter_1" }),
+    );
   });
 });
 

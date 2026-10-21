@@ -19,10 +19,18 @@ vi.mock("@/lib/current-user", () => ({
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
+vi.mock("@/lib/queries/communication", () => ({
+  getFilingMatterOptions: vi.fn().mockResolvedValue([{ id: "m1" }]),
+  getFilingLeadOptions: vi.fn().mockResolvedValue([{ id: "l1" }]),
+}));
 vi.mock("./compose-email", () => ({ ComposeEmailButton: () => null }));
 
 import { prisma } from "@/lib/prisma";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import {
+  getFilingLeadOptions,
+  getFilingMatterOptions,
+} from "@/lib/queries/communication";
 import { SENDABLE_EMAIL_STATUSES } from "@/lib/email-send-status";
 import { ComposeEmailButton } from "./compose-email";
 import { ComposeEmailLauncher } from "./compose-email-launcher";
@@ -40,6 +48,18 @@ describe("ComposeEmailLauncher", () => {
     vi.mocked(currentUserHasPermission).mockResolvedValue(false);
     expect(await ComposeEmailLauncher()).toBeNull();
     expect(prisma.emailAccount.findMany).not.toHaveBeenCalled();
+    expect(getFilingMatterOptions).not.toHaveBeenCalled();
+    expect(getFilingLeadOptions).not.toHaveBeenCalled();
+  });
+
+  test("passes record options and initialScope to the button", async () => {
+    const scope = { kind: "lead", leadId: "l1" } as const;
+    const el = (await ComposeEmailLauncher({ initialScope: scope })) as {
+      props: Record<string, unknown>;
+    };
+    expect(el.props.matters).toEqual([{ id: "m1" }]);
+    expect(el.props.leads).toEqual([{ id: "l1" }]);
+    expect(el.props.initialScope).toEqual(scope);
   });
 
   test("lists only the caller's gmail accounts in a sendable status", async () => {

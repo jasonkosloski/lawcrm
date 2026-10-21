@@ -43,8 +43,14 @@ import { parseAddressList } from "@/lib/google/mime";
 import { htmlToText } from "@/lib/html-to-text";
 import { getEmailSignature } from "@/lib/email-signature";
 import { sendEmail } from "@/app/actions/email-send";
+import { notifySuccess } from "@/lib/feedback";
 import type { RecordScope } from "@/lib/record-scope";
+import type {
+  FilingLeadOption,
+  FilingMatterOption,
+} from "@/lib/queries/communication";
 import { blockEnterSubmit, LabeledField } from "./labeled-field";
+import { RecordPicker } from "./record-picker";
 
 /** Shown when the action call itself rejects - the send may or may
  *  not have gone out, so don't invite a blind retry. */
@@ -58,9 +64,15 @@ export type SendableEmailAccount = {
 
 export function ComposeEmailButton({
   accounts,
+  matters,
+  leads,
   initialScope,
 }: {
-  /** Record the email is filed to. Task 7 replaces this with a picker. */
+  /** Record options for the required "Matter or lead" field. */
+  matters: FilingMatterOption[];
+  leads: FilingLeadOption[];
+  /** Prefills the record (matter / lead Communication tabs); the
+   *  field stays editable and is restored to this on reset. */
   initialScope?: RecordScope;
   /** The current user's connected Gmail accounts. Empty = show the
    *  connect affordance instead of the composer. */
@@ -78,6 +90,10 @@ export function ComposeEmailButton({
   const [cc, setCc] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState(() => getEmailSignature() ?? "");
+  const [scope, setScope] = useState<RecordScope | null>(
+    initialScope ?? null,
+  );
+  const [changingRecord, setChangingRecord] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -107,6 +123,8 @@ export function ComposeEmailButton({
     setCc("");
     setSubject("");
     setBody(getEmailSignature() ?? "");
+    setScope(initialScope ?? null);
+    setChangingRecord(false);
     setError(null);
   };
 
@@ -130,7 +148,7 @@ export function ComposeEmailButton({
       setError(`Invalid Cc address: ${ccParsed.invalid.join(", ")}`);
       return;
     }
-    if (!initialScope) {
+    if (!scope) {
       setError("Choose a matter or lead.");
       return;
     }
@@ -146,11 +164,14 @@ export function ComposeEmailButton({
           // (note profile) before it reaches the MIME builder.
           bodyText,
           bodyHtml: body,
-          scope: initialScope,
+          scope,
         });
         if (result.ok) {
           resetDraft();
           setOpen(false);
+          // Outlives the dialog: e.g. "Added to an existing thread
+          // filed to X." when Gmail merged the send into a thread.
+          if (result.notice) notifySuccess(result.notice);
           // Surface the locally-upserted sent thread in the list.
           router.refresh();
         } else {
@@ -166,6 +187,14 @@ export function ComposeEmailButton({
       }
     });
   };
+
+  const scopeLabel = (() => {
+    if (!scope) return null;
+    if (scope.kind === "matter") {
+      return matters.find((m) => m.id === scope.matterId)?.name ?? "Selected matter";
+    }
+    return leads.find((l) => l.id === scope.leadId)?.name ?? "Selected lead";
+  })();
 
   const fromOptions = accounts.map((a) => ({
     value: a.id,
@@ -218,6 +247,40 @@ export function ComposeEmailButton({
             onKeyDown={blockEnterSubmit}
             className="flex flex-col gap-3"
           >
+            <LabeledField label="Record">
+              {scope && !changingRecord ? (
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="flex-1 truncate text-xs text-ink"
+                    aria-label="Matter or lead"
+                  >
+                    {scopeLabel}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => setChangingRecord(true)}
+                  >
+                    Change
+                  </Button>
+                </div>
+              ) : (
+                <RecordPicker
+                  matters={matters}
+                  leads={leads}
+                  value={scope}
+                  disabled={isPending}
+                  placeholder="Matter or lead — search to choose"
+                  onChange={(next) => {
+                    setScope(next);
+                    setChangingRecord(false);
+                  }}
+                />
+              )}
+            </LabeledField>
+
             {accounts.length > 1 && (
               <div className="flex items-center gap-2">
                 <span className="text-2xs font-medium text-ink-3 shrink-0 w-10">
@@ -283,7 +346,7 @@ export function ComposeEmailButton({
               </Button>
               <Button
                 type="submit"
-                disabled={isPending || !to.trim() || !bodyText.trim()}
+                disabled={isPending || !scope || !to.trim() || !bodyText.trim()}
               >
                 {isPending ? "Sending…" : "Send"}
               </Button>
