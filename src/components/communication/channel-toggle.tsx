@@ -2,7 +2,7 @@
  * Communication Channel Toggle
  *
  * Segmented control for the matter/intake Communication tabs that
- * switches between the Email mini-inbox and the Phone log by writing
+ * switches between the Email mini-inbox, the Phone log and (optionally) the Portal messages by writing
  * `?channel=...` to the URL (default channel `email` omits the
  * param). Plain links rather than router.replace — switching channel
  * also drops `?thread=`, which is per-channel state.
@@ -11,12 +11,13 @@
  */
 
 import Link from "next/link";
-import { Mail, Phone } from "lucide-react";
+import { Globe, Mail, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CHANNELS = [
   { value: "email", label: "Email", icon: Mail },
   { value: "phone", label: "Phone", icon: Phone },
+  { value: "portal", label: "Portal", icon: Globe },
 ] as const;
 
 export type CommunicationChannel = (typeof CHANNELS)[number]["value"];
@@ -24,9 +25,12 @@ export type CommunicationChannel = (typeof CHANNELS)[number]["value"];
 export function ChannelToggle({
   basePath,
   active,
+  showPortal = false,
 }: {
   basePath: string;
   active: CommunicationChannel;
+  /** Portal (client messages) is shown only to portal.view_messages holders. */
+  showPortal?: boolean;
 }) {
   return (
     <div
@@ -34,7 +38,7 @@ export function ChannelToggle({
       aria-label="Communication channel"
       className="inline-flex items-center rounded-md bg-paper-2 p-0.5"
     >
-      {CHANNELS.map((c) => {
+      {CHANNELS.filter((c) => c.value !== "portal" || showPortal).map((c) => {
         const isActive = active === c.value;
         const Icon = c.icon;
         return (

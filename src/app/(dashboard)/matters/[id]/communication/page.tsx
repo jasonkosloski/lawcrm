@@ -1,7 +1,7 @@
 /**
  * Matter Detail — Communication tab
  *
- * Two channels, URL-driven (`?channel=email|phone`, ADR-007 style):
+ * Three channels, URL-driven (`?channel=email|phone|portal`, ADR-007 style):
  *
  *   - **Email** (default) — mini inbox scoped to this matter: thread
  *     list on the left, reader on the right. Clicking a thread
@@ -12,6 +12,8 @@
  *     (item-level list, newest first), plus the "Log call" composer
  *     with the matter pre-selected and the matter's people floated
  *     to the top of the contact typeahead.
+ *   - **Portal** — the client-portal conversation (portal.view_messages;
+ *     without it `?channel=portal` falls back to email).
  */
 
 import { notFound } from "next/navigation";
@@ -19,6 +21,8 @@ import { prisma } from "@/lib/prisma";
 import { EmbeddedInbox } from "@/components/communication/embedded-inbox";
 import { MatterPhoneLog } from "@/components/communication/matter-phone-log";
 import { LogCallButton } from "@/components/communication/log-call-button";
+import { PortalConversation } from "@/components/communication/portal-conversation";
+import { getPortalConversation } from "@/lib/queries/portal-messages";
 import { ChannelToggle } from "@/components/communication/channel-toggle";
 import {
   getFilingMatterOptions,
@@ -44,7 +48,18 @@ export default async function MatterCommunicationPage({
   await assertMatterAccess(id);
   const sp = await searchParams;
   const rawChannel = Array.isArray(sp.channel) ? sp.channel[0] : sp.channel;
-  const channel = rawChannel === "phone" ? "phone" : "email";
+  // Portal visibility is a permission, so resolve it before choosing
+  // the channel: a pasted ?channel=portal without the key becomes email.
+  const [canViewPortal, canSendPortal] = await Promise.all([
+    currentUserHasPermission("portal.view_messages"),
+    currentUserHasPermission("portal.send_messages"),
+  ]);
+  const channel =
+    rawChannel === "phone"
+      ? "phone"
+      : rawChannel === "portal" && canViewPortal
+        ? "portal"
+        : "email";
   const rawThread = Array.isArray(sp.thread) ? sp.thread[0] : sp.thread;
   const requestedThreadId =
     typeof rawThread === "string" ? rawThread : null;
@@ -67,6 +82,7 @@ export default async function MatterCommunicationPage({
     canDeleteCall,
     editMatters,
     tz,
+    portalConversation,
   ] = await Promise.all([
     prisma.matter.findUnique({
       where: { id },
@@ -94,6 +110,7 @@ export default async function MatterCommunicationPage({
         )
       : null,
     getCurrentUserTimeZone(),
+    channel === "portal" ? getPortalConversation(id) : null,
   ]);
   if (!matter) notFound();
 
@@ -104,11 +121,35 @@ export default async function MatterCommunicationPage({
     />
   ) : null;
 
+  if (channel === "portal") {
+    return (
+      <div className="p-5 flex flex-col flex-1 min-h-0 gap-3">
+        <ChannelToggle
+          basePath={`/matters/${id}/communication`}
+          active="portal"
+          showPortal
+        />
+        {portalConversation && (
+          <PortalConversation
+            matterId={id}
+            conversation={portalConversation}
+            canSend={canSendPortal}
+            tz={tz}
+          />
+        )}
+      </div>
+    );
+  }
+
   if (channel === "phone") {
     return (
       <div className="p-5 flex flex-col flex-1 min-h-0 gap-3">
         <div className="flex items-center justify-between gap-2">
-          <ChannelToggle basePath={`/matters/${id}/communication`} active="phone" />
+          <ChannelToggle
+            basePath={`/matters/${id}/communication`}
+            active="phone"
+            showPortal={canViewPortal}
+          />
           {logCallButton}
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto">
@@ -141,7 +182,11 @@ export default async function MatterCommunicationPage({
   return (
     <div className="p-5 flex flex-col flex-1 min-h-0 gap-3">
       <div className="flex items-center justify-between gap-2">
-        <ChannelToggle basePath={`/matters/${id}/communication`} active="email" />
+        <ChannelToggle
+          basePath={`/matters/${id}/communication`}
+          active="email"
+          showPortal={canViewPortal}
+        />
         {logCallButton}
       </div>
       <EmbeddedInbox

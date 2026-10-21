@@ -41,6 +41,18 @@ vi.mock("@/lib/queries/messenger", () => ({
 vi.mock("@/lib/queries/contacts", () => ({
   listContactPickerOptions: vi.fn(),
 }));
+vi.mock("@/lib/queries/portal-messages", () => ({
+  getPortalConversation: vi.fn(),
+}));
+vi.mock("@/components/communication/portal-conversation", () => ({
+  PortalConversation: (props: { canSend: boolean; tz: string }) => (
+    <div
+      data-testid="portal-conversation"
+      data-can-send={String(props.canSend)}
+      data-tz={props.tz}
+    />
+  ),
+}));
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(),
 }));
@@ -77,7 +89,9 @@ vi.mock("@/components/communication/log-call-button", () => ({
   LogCallButton: () => <div data-testid="log-call-button" />,
 }));
 vi.mock("@/components/communication/channel-toggle", () => ({
-  ChannelToggle: () => <div data-testid="channel-toggle" />,
+  ChannelToggle: (props: { showPortal?: boolean }) => (
+    <div data-testid="channel-toggle" data-show-portal={String(!!props.showPortal)} />
+  ),
 }));
 
 import {
@@ -86,6 +100,7 @@ import {
   listThreadsForMatter,
 } from "@/lib/queries/communication";
 import { listMessengerItemsForMatter } from "@/lib/queries/messenger";
+import { getPortalConversation } from "@/lib/queries/portal-messages";
 import { listContactPickerOptions } from "@/lib/queries/contacts";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
@@ -247,5 +262,43 @@ describe("per-channel fetch plumbing", () => {
 
     render(await MatterCommunicationPage(props({ channel: "phone" })));
     expect(mockedFiling).not.toHaveBeenCalled();
+  });
+});
+
+describe("portal channel", () => {
+  const convo = { messages: [], hasLiveAccess: true, unread: 0 };
+
+  test("loads the conversation only on ?channel=portal and passes send gate and tz", async () => {
+    vi.mocked(getPortalConversation).mockResolvedValue(convo);
+    mockedHasPermission.mockImplementation(
+      async (k: string) => k !== "portal.send_messages"
+    );
+
+    render(await MatterCommunicationPage(props({ channel: "portal" })));
+
+    expect(getPortalConversation).toHaveBeenCalledWith("matter_1");
+    const el = screen.getByTestId("portal-conversation");
+    expect(el.dataset.canSend).toBe("false");
+    expect(el.dataset.tz).toBe("America/Denver");
+    expect(mockedThreads).not.toHaveBeenCalled();
+    expect(mockedPhoneItems).not.toHaveBeenCalled();
+  });
+
+  test("email channel never loads the portal conversation", async () => {
+    render(await MatterCommunicationPage(props()));
+    expect(getPortalConversation).not.toHaveBeenCalled();
+    expect(screen.getByTestId("channel-toggle").dataset.showPortal).toBe("true");
+  });
+
+  test("without portal.view_messages ?channel=portal falls back to email and hides the option", async () => {
+    mockedHasPermission.mockImplementation(
+      async (k: string) => k !== "portal.view_messages"
+    );
+
+    render(await MatterCommunicationPage(props({ channel: "portal" })));
+
+    expect(getPortalConversation).not.toHaveBeenCalled();
+    expect(screen.getByTestId("embedded-inbox")).toBeInTheDocument();
+    expect(screen.getByTestId("channel-toggle").dataset.showPortal).toBe("false");
   });
 });
