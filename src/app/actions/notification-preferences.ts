@@ -18,6 +18,7 @@ import { prisma } from "@/lib/prisma";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
+  CATEGORY_BY_TYPE,
   categoryMeta,
   isAllowedMode,
   isNotificationCategory,
@@ -54,6 +55,18 @@ export async function setNotificationEmailMode(
       create: { userId, category, emailMode: mode },
       update: { emailMode: mode },
     });
+    if (mode !== "digest") {
+      // Rows already held for a digest follow the new mode now rather
+      // than at the next 07:00: back to the outbox, where the worker
+      // re-decides them (Instant sends, Off skips).
+      const types = Object.entries(CATEGORY_BY_TYPE)
+        .filter(([, c]) => c === category)
+        .map(([t]) => t);
+      await prisma.notification.updateMany({
+        where: { userId, emailState: "held", type: { in: types } },
+        data: { emailState: "pending" },
+      });
+    }
   } catch (err) {
     console.error("setNotificationEmailMode failed", err);
     return { ok: false, error: "Couldn't save the setting. Please try again." };

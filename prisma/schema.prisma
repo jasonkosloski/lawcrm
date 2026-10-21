@@ -2230,40 +2230,44 @@ model AutoApply {
 /// no fan-out tables, no email/SMS/push delivery — those land later
 /// behind the same writer helper.
 model Notification {
-  id            String    @id @default(cuid())
+  id             String    @id @default(cuid())
   /// Who sees this notification. Notifications are strictly
   /// per-recipient — fan-out is the writer's job.
-  userId        String
+  userId         String
   /// Trigger kind. UI maps to icon + tone via NOTIFICATION_TYPE_META.
   /// task_assigned | task_due_soon | deadline_approaching |
   /// deadline_overdue | settlement_step_approved |
   /// settlement_step_rejected | invoice_payment_recorded |
   /// note_mentioned | matter_assigned | portal_upload |
   /// portal_message | generic
-  type          String
+  type           String
   /// Short, headline-style copy ("Discovery cutoff in 7 days").
   /// Renders as the primary line in the bell dropdown row.
-  title         String
+  title          String
   /// Optional secondary line — context, matter name, who did it.
-  body          String?
+  body           String?
   /// Where clicking the row navigates to. Null = no navigation
   /// (the notification is purely a heads-up).
-  link          String?
+  link           String?
   /// Optional matter scope so the bell can filter / group when we
   /// add per-matter notification preferences later. Today the bell
   /// shows the global stream regardless.
-  matterId      String?
+  matterId       String?
   /// Set when the user marks this row read (or "mark all read"
   /// flips every open row to readAt = now).
-  readAt        DateTime?
-  createdAt     DateTime  @default(now())
-  /// Email outbox state: pending | sent | skipped | failed. The
-  /// delivery worker (src/lib/notification-email.ts) drains pending
-  /// rows; rows from before email delivery were backfilled skipped.
-  emailState    String    @default("pending")
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+  /// Email outbox state: pending | held (waiting for the daily
+  /// digest) | sending (claimed by a run) | sent | skipped | failed.
+  /// The delivery worker (src/lib/notification-email.ts) drains it;
+  /// rows from before email delivery were backfilled skipped.
+  emailState     String    @default("pending")
   /// Failed send attempts; the row turns "failed" at 3.
-  emailAttempts Int       @default(0)
-  emailedAt     DateTime?
+  emailAttempts  Int       @default(0)
+  emailedAt      DateTime?
+  /// When a run claimed the row ("sending"); a claim older than the
+  /// reclaim window is treated as abandoned and retried.
+  emailClaimedAt DateTime?
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   matter Matter? @relation(fields: [matterId], references: [id], onDelete: SetNull)

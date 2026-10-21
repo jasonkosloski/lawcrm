@@ -76,6 +76,24 @@ describe("setNotificationEmailMode", () => {
     expect(await setNotificationEmailMode("deadlines", "digest")).toEqual({ ok: true });
   });
 
+  test("leaving digest releases that category's held rows", async () => {
+    const held = (type: string, user = userId) =>
+      prisma.notification.create({
+        data: { userId: user, type, title: "x", emailState: "held" },
+        select: { id: true },
+      });
+    const task = await held("task_assigned");
+    const billing = await held("invoice_payment_recorded");
+    const othersTask = await held("task_assigned", otherId);
+    await setNotificationEmailMode("tasks", "digest");
+    await setNotificationEmailMode("tasks", "instant");
+    const state = async (id: string) =>
+      (await prisma.notification.findUniqueOrThrow({ where: { id } })).emailState;
+    expect(await state(task.id)).toBe("pending");
+    expect(await state(billing.id)).toBe("held");
+    expect(await state(othersTask.id)).toBe("held");
+  });
+
   test("only touches the caller's preferences", async () => {
     await setNotificationEmailMode("billing", "off");
     expect(await prisma.notificationPreference.count({ where: { userId: otherId } })).toBe(0);
