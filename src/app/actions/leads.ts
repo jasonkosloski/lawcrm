@@ -57,6 +57,7 @@ import {
 } from "@/lib/records-requests/fee-expense";
 import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import { plural } from "@/lib/utils";
 import type {
   ConvertLeadFormState,
   DeclineLeadFormState,
@@ -639,6 +640,13 @@ export async function convertLeadToMatter(
       where: { leadId },
       data: { matterId: matter.id, leadId: null },
     });
+    // Email threads filed to the lead, from every user's mailbox,
+    // follow it onto the matter (the thread list is per-account, so
+    // no account filter).
+    const carriedEmailThreads = await tx.emailThread.updateMany({
+      where: { leadId },
+      data: { matterId: matter.id, leadId: null },
+    });
 
     // Mark lead converted so it leaves the active intake queue.
     await tx.lead.update({
@@ -727,6 +735,7 @@ export async function convertLeadToMatter(
       carriedNoteCount: carriedNotes.count,
       carriedTaskCount: carriedTasks.count,
       carriedEventCount: carriedEvents.count,
+      carriedEmailThreadCount: carriedEmailThreads.count,
       carriedDocumentCount,
       carriedRequestCount: requests.length,
       carriedRecordsFeeCount,
@@ -759,6 +768,7 @@ export async function convertLeadToMatter(
     carriedNoteCount,
     carriedTaskCount,
     carriedEventCount,
+    carriedEmailThreadCount,
     carriedDocumentCount,
     carriedRequestCount,
     carriedRecordsFeeCount,
@@ -848,6 +858,16 @@ export async function convertLeadToMatter(
       detail: `Scheduled on the lead before conversion · ${lead.name}`,
     });
     revalidatePath("/calendar");
+  }
+  if (carriedEmailThreadCount > 0) {
+    await logActivity({
+      matterId,
+      userId,
+      type: "email",
+      title: `${plural(carriedEmailThreadCount, "email thread")} carried over`,
+      detail: `Filed to the lead before conversion · ${lead.name}`,
+    });
+    revalidatePath(`/matters/${matterId}/communication`);
   }
   if (carriedDocumentCount > 0) {
     await logActivity({

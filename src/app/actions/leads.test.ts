@@ -571,6 +571,54 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
     expect(titles).toContain("1 intake event carried forward");
   });
 
+  test("conversion moves every user's lead threads to the matter", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    const other = await seedUser({
+      firmId: (await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { firmId: true } })).firmId!,
+      email: "second@example.com",
+    });
+    const mk = async (uid: string, addr: string) =>
+      (
+        await prisma.emailAccount.create({
+          data: { userId: uid, emailAddress: addr, accessToken: "t", refreshToken: "r" },
+          select: { id: true },
+        })
+      ).id;
+    const a1 = await mk(userId, "a1@example.com");
+    const a2 = await mk(other.userId, "a2@example.com");
+    for (const accountId of [a1, a2]) {
+      await prisma.emailThread.create({
+        data: { accountId, leadId, subject: "Intake", lastMessageAt: new Date() },
+      });
+    }
+
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+    ).rejects.toThrow(/^REDIRECT:\/matters\//);
+
+    const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
+    expect(await prisma.emailThread.count({ where: { matterId: matter.id, leadId: null } })).toBe(2);
+    expect(await prisma.emailThread.count({ where: { leadId } })).toBe(0);
+    const titles = (
+      await prisma.activityLog.findMany({ where: { matterId: matter.id }, select: { title: true } })
+    ).map((l) => l.title);
+    expect(titles).toContain("2 email threads carried over");
+  });
+
+  test("no email threads: no carried-over timeline entry", async () => {
+    const { areaId, stageId } = await seedArea({});
+    const { leadId } = await seedIntakeLead();
+    await expect(
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+    ).rejects.toThrow(/^REDIRECT:\/matters\//);
+    const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
+    const titles = (
+      await prisma.activityLog.findMany({ where: { matterId: matter.id }, select: { title: true } })
+    ).map((l) => l.title);
+    expect(titles.some((t) => t.includes("email thread"))).toBe(false);
+  });
+
   test("re-homes lead folders and documents onto the new matter", async () => {
     const { areaId, stageId } = await seedArea({});
     const { leadId } = await seedIntakeLead();
