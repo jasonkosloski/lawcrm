@@ -167,7 +167,7 @@ export function EditPracticeAreaForm({
           ignores the values (keeping the stored ones) when the toggle
           is off. Pre-fills from the stored amount + unit. */}
       <fieldset className="flex flex-col gap-2 px-3 py-2.5 rounded-md border border-line bg-paper-2/30">
-        <legend className="px-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
+        <legend className="px-1 text-2xs font-medium text-ink-3">
           Statute period (auto-computes Matter SOL date from incident)
         </legend>
         <div className="grid grid-cols-2 gap-2">
@@ -287,7 +287,7 @@ export function EditPracticeAreaForm({
           type="submit"
           disabled={isPending}
           className={cn(
-            "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium bg-brand-500 text-white",
+            "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium bg-brand-700 hover:bg-brand-900 text-white",
             "hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           )}
         >

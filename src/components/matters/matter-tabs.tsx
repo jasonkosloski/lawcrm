@@ -81,9 +81,9 @@ export function MatterTabs({
               href={href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "px-3 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap shrink-0",
+                "px-3 py-2.5 text-sm border-b-2 transition-colors whitespace-nowrap shrink-0",
                 active
-                  ? "text-brand-700 border-brand-500"
+                  ? "text-ink border-ink font-medium"
                   : "text-ink-3 border-transparent hover:text-ink hover:border-line"
               )}
             >

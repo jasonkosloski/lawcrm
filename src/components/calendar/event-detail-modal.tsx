@@ -289,7 +289,7 @@ function EventDetailModalInner({
           />
           <div className="flex-1 min-w-0">
             {/* Type — click-to-edit dropdown when canEdit. */}
-            <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1">
+            <div className="text-2xs font-medium text-ink-3 mb-1">
               {canEdit ? (
                 <InlineSelect
                   value={committed.type}
@@ -489,7 +489,7 @@ function EventDetailModalInner({
           {/* Description */}
           {(canEdit || committed.description) && (
             <div className="pt-3 border-t border-line">
-              <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1.5">
+              <div className="text-2xs font-medium text-ink-3 mb-1.5">
                 Description
               </div>
               {canEdit ? (
@@ -559,7 +559,7 @@ function EventDetailModalInner({
           {event.matter && (
             <Link
               href={`/matters/${event.matter.id}`}
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors"
             >
               Open matter
               <ArrowRight size={13} />
@@ -568,7 +568,7 @@ function EventDetailModalInner({
           {event.lead && (
             <Link
               href={`/intake/${event.lead.id}/events`}
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors"
             >
               Open intake
               <ArrowRight size={13} />

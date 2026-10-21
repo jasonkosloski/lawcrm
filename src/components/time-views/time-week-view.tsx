@@ -34,14 +34,19 @@ const segmentTimeHref = (seg: { matterId: string; leadId?: string }): string =>
 export function TimeWeekView({
   week,
   todayKey,
+  dailyHoursGoal,
 }: {
   week: MyWeekTime;
+  /** Firm daily hours goal; draws a quiet reference line on the bars. */
+  dailyHoursGoal?: number;
   /** YYYY-MM-DD of the viewer's today (their TZ) — highlights the row. */
   todayKey: string;
 }) {
+  const goal = dailyHoursGoal && dailyHoursGoal > 0 ? dailyHoursGoal : null;
   const scale = Math.max(
     MIN_SCALE_HOURS,
-    ...week.days.map((d) => d.totalHours)
+    goal ?? 0,
+    ...week.days.map((d) => d.totalHours),
   );
 
   // Legend: every matter/lead touched this week, deduped, widest
@@ -74,22 +79,35 @@ export function TimeWeekView({
   const legendRows = [...legend.values()].sort((a, b) => b.hours - a.hours);
 
   return (
-    <div className="flex-1 overflow-y-auto p-3 sm:p-5 flex flex-col gap-4">
+    <div className="flex-1 overflow-y-auto p-3 sm:p-6 flex flex-col gap-4">
       <div className="rounded-md border border-line bg-card overflow-hidden">
+        {goal !== null && (
+          <div className="flex items-end gap-3 px-3 sm:px-4 pt-2">
+            <div className="w-16 shrink-0" />
+            <div className="relative flex-1 min-w-0 h-4">
+              <span
+                className="absolute bottom-0 -translate-x-1/2 whitespace-nowrap text-3xs text-ink-4"
+                style={{ left: `${(goal / scale) * 100}%` }}
+              >
+                Goal {goal.toFixed(1)}h
+              </span>
+            </div>
+            <div className="w-28 shrink-0" />
+          </div>
+        )}
         {week.days.map((day) => (
           <DayRow
             key={day.dayKey}
             day={day}
             scale={scale}
+            goal={goal}
             isToday={day.dayKey === todayKey}
           />
         ))}
 
         {/* Week running totals */}
         <div className="flex items-center justify-between gap-3 px-3 sm:px-4 py-2.5 bg-paper-2 border-t border-line">
-          <span className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
-            Week total
-          </span>
+          <span className="text-2xs font-medium text-ink-3">Week total</span>
           <span className="text-xs font-mono text-ink">
             {formatHours(week.totalHours)}h
             <span className="text-ink-4">
@@ -113,14 +131,16 @@ export function TimeWeekView({
                 style={{ background: m.matterColor }}
               />
               <span className="max-w-40 truncate">{m.matterName}</span>
-              <span className="font-mono text-ink-4">{formatHours(m.hours)}h</span>
+              <span className="font-mono text-ink-4">
+                {formatHours(m.hours)}h
+              </span>
             </Link>
           ))}
         </div>
       ) : (
         <div className="text-xs text-ink-4 text-center py-4">
-          No time logged this week yet — entries are added from a
-          matter&rsquo;s Time tab.
+          No time logged this week yet — entries are added from a matter&rsquo;s
+          Time tab.
         </div>
       )}
     </div>
@@ -130,10 +150,12 @@ export function TimeWeekView({
 function DayRow({
   day,
   scale,
+  goal,
   isToday,
 }: {
   day: WeekDayTime;
   scale: number;
+  goal: number | null;
   isToday: boolean;
 }) {
   // The row's day is a date-only key: label it with the date-only
@@ -145,7 +167,7 @@ function DayRow({
     <div
       className={cn(
         "flex items-center gap-3 px-3 sm:px-4 py-2 border-b border-line last:border-b-0",
-        isToday && "bg-brand-soft/40"
+        isToday && "bg-brand-soft/40",
       )}
     >
       {/* Day label → deep-link into the reconciliation view */}
@@ -155,11 +177,13 @@ function DayRow({
       >
         <span
           className={cn(
-            "text-2xs font-semibold uppercase tracking-wider",
-            isToday ? "text-brand-700" : "text-ink-3"
+            "text-2xs font-semibold",
+            isToday ? "text-brand-700" : "text-ink-3",
           )}
         >
-          {dayDate ? formatDateOnly(dayDate, "short_weekday").split(",")[0] : ""}
+          {dayDate
+            ? formatDateOnly(dayDate, "short_weekday").split(",")[0]
+            : ""}
         </span>
         <span className="text-xs text-ink-4 font-mono">
           {dayDate ? formatDateOnly(dayDate, "short") : day.dayKey}
@@ -168,35 +192,44 @@ function DayRow({
 
       {/* Hour bar — one segment per matter, billable solid +
           non-billable remainder at reduced opacity. */}
-      <div className="flex-1 min-w-0 h-5 rounded bg-paper-2 overflow-hidden flex">
-        {day.segments.map((seg) => {
-          const nonBillable = seg.hours - seg.billableHours;
-          return (
-            <Link
-              key={seg.matterId}
-              href={segmentTimeHref(seg)}
-              className="h-full flex hover:opacity-80 transition-opacity"
-              style={{ width: `${(seg.hours / scale) * 100}%` }}
-              title={`${seg.matterName} — ${formatHours(seg.hours)}h (${formatHours(seg.billableHours)}h billable)`}
-            >
-              {seg.billableHours > 0 && (
-                <span
-                  className="h-full"
-                  style={{
-                    width: `${(seg.billableHours / seg.hours) * 100}%`,
-                    background: seg.matterColor,
-                  }}
-                />
-              )}
-              {nonBillable > 0.001 && (
-                <span
-                  className="h-full flex-1"
-                  style={{ background: seg.matterColor, opacity: 0.35 }}
-                />
-              )}
-            </Link>
-          );
-        })}
+      <div className="relative flex-1 min-w-0 h-5">
+        <div className="h-full rounded bg-paper-2 overflow-hidden flex">
+          {day.segments.map((seg) => {
+            const nonBillable = seg.hours - seg.billableHours;
+            return (
+              <Link
+                key={seg.matterId}
+                href={segmentTimeHref(seg)}
+                className="h-full flex hover:opacity-80 transition-opacity"
+                style={{ width: `${(seg.hours / scale) * 100}%` }}
+                title={`${seg.matterName} — ${formatHours(seg.hours)}h (${formatHours(seg.billableHours)}h billable)`}
+              >
+                {seg.billableHours > 0 && (
+                  <span
+                    className="h-full"
+                    style={{
+                      width: `${(seg.billableHours / seg.hours) * 100}%`,
+                      background: seg.matterColor,
+                    }}
+                  />
+                )}
+                {nonBillable > 0.001 && (
+                  <span
+                    className="h-full flex-1"
+                    style={{ background: seg.matterColor, opacity: 0.35 }}
+                  />
+                )}
+              </Link>
+            );
+          })}
+        </div>
+        {goal !== null && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 border-l border-dashed border-ink-5"
+            style={{ left: `${(goal / scale) * 100}%` }}
+          />
+        )}
       </div>
 
       {/* Day totals */}

@@ -91,7 +91,7 @@ export function SettlementApprovals({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between">
-        <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+        <div className="text-2xs font-medium text-ink-3">
           Approval chain
         </div>
         <div className="text-2xs text-ink-4 font-mono">

@@ -213,7 +213,7 @@ export function UploadDocumentForm({
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor={fileId}
-          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          className="text-2xs font-medium text-ink-3"
         >
           File <span className="text-warn">*</span>
         </label>
@@ -229,12 +229,12 @@ export function UploadDocumentForm({
               "block w-full text-xs text-ink-3",
               "file:mr-3 file:py-1.5 file:px-3 file:rounded-md",
               "file:border-0 file:text-xs file:font-medium",
-              "file:bg-brand-500 file:text-white file:cursor-pointer",
-              "hover:file:bg-brand-600"
+              "file:bg-brand-700 file:text-white file:cursor-pointer",
+              "hover:file:bg-brand-900"
             )}
           />
         </div>
-        <span className="text-[10px] text-ink-4 leading-relaxed">
+        <span className="text-3xs text-ink-4 leading-relaxed">
           Max {MAX_MB} MB. PDFs preview inline; everything else downloads.
         </span>
       </div>
@@ -243,7 +243,7 @@ export function UploadDocumentForm({
         <div className="flex flex-col gap-1">
           <label
             htmlFor={nameId}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Display name (optional)
           </label>
@@ -259,7 +259,7 @@ export function UploadDocumentForm({
         <div className="flex flex-col gap-1">
           <label
             htmlFor={categoryId}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Category
           </label>
@@ -303,7 +303,7 @@ export function UploadDocumentForm({
           disabled={pending}
           className={cn(
             "inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium",
-            "bg-brand-500 text-white hover:bg-brand-600 transition-colors",
+            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
             "disabled:opacity-60 disabled:cursor-not-allowed"
           )}
         >

@@ -28,7 +28,7 @@ export default async function DevSignInAsPage() {
     <div className="min-h-dvh flex items-center justify-center bg-paper-2 px-4 py-10">
       <div className="w-full max-w-md">
         <h1 className="text-lg font-semibold text-ink">Dev: sign in as</h1>
-        <p className="text-2xs font-mono uppercase tracking-wider text-ink-4 mt-1 mb-6">
+        <p className="text-2xs font-medium text-ink-3 mt-1 mb-6">
           Local development only
         </p>
         <StaffClerkProvider>

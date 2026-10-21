@@ -225,7 +225,7 @@ export function MemberEditForm({
           disabled={isPending}
           className={cn(
             "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium",
-            "bg-brand-500 text-white hover:bg-brand-600 transition-colors",
+            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
             "disabled:opacity-60 disabled:cursor-not-allowed"
           )}
         >
@@ -256,7 +256,7 @@ export function RoleMultiSelect({
 }) {
   return (
     <div className="flex flex-col gap-2 pt-2 border-t border-line">
-      <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+      <div className="text-2xs font-medium text-ink-3">
         Roles
       </div>
       <div className="flex flex-wrap gap-2">
@@ -301,7 +301,7 @@ export function RoleMultiSelect({
         })}
       </div>
       {error && <div className="text-2xs text-warn">{error}</div>}
-      <div className="text-[10px] text-ink-4 leading-relaxed">
+      <div className="text-3xs text-ink-4 leading-relaxed">
         Members can hold any number of roles. The{" "}
         <span className="font-mono">Admin</span> role grants admin
         powers; manage the role list on{" "}

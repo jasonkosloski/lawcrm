@@ -89,7 +89,7 @@ function renderWeek(items: Parameters<typeof WeekView>[0]["items"]) {
 
 /** Index (0 = Sunday) of the all-day column holding `text`. */
 function allDayColumnOf(container: HTMLElement, text: string) {
-  const label = screen.getByText("all-day");
+  const label = screen.getByText("All day");
   const cells = Array.from(label.parentElement!.children).slice(1);
   return cells.findIndex((c) => c.textContent?.includes(text));
 }
@@ -121,7 +121,7 @@ describe("WeekView date-only bucketing (Denver)", () => {
       "application/json": JSON.stringify(data),
       "application/x-lawcrm-dnd-kind": CALENDAR_EVENT_KIND,
     };
-    const label = screen.getByText("all-day");
+    const label = screen.getByText("All day");
     const wednesday = label.parentElement!.children[4]!;
     await act(async () => {
       fireEvent.drop(wednesday, {

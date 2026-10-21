@@ -142,10 +142,10 @@ function NoteForm({
             onClick={() => setType(t)}
             aria-pressed={type === t}
             className={cn(
-              "text-2xs font-medium px-2 py-0.5 rounded transition-colors",
+              "text-2xs font-medium px-2 py-0.5 rounded-[5px] transition-colors",
               type === t
-                ? "bg-brand-500 text-white"
-                : "text-ink-3 hover:text-brand-700"
+                ? "bg-white text-ink shadow-sm"
+                : "text-ink-3 hover:text-ink"
             )}
           >
             {NOTE_TYPE_LABEL[t]}

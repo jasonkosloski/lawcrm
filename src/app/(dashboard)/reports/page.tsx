@@ -54,9 +54,9 @@ export default async function ReportsPage() {
 
   return (
     <>
-      <TopBar title="Reports" crumbs="Reports · live snapshot" />
-      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 max-w-6xl">
+      <TopBar title="Reports" />
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 animate-page-enter">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
           <PipelineCard report={pipeline} />
           <UtilizationCard report={utilization} />
           <ArAgingCard report={arAging} />

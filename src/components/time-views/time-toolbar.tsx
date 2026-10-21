@@ -94,7 +94,7 @@ export function TimeToolbar({
         </h2>
       </div>
 
-      <div className="inline-flex items-center rounded-md border border-line bg-white p-0.5">
+      <div className="inline-flex items-center rounded-md bg-paper-2 p-0.5">
         {(["week", "day"] as TimeView[]).map((v) => {
           const active = v === view;
           return (
@@ -102,10 +102,10 @@ export function TimeToolbar({
               key={v}
               href={buildTimeHref(view, focal, { view: v })}
               className={cn(
-                "h-6 px-2.5 rounded text-2xs font-medium capitalize transition-colors",
+                "h-6 px-2.5 rounded-[5px] text-xs font-medium capitalize transition-colors",
                 active
-                  ? "bg-brand-soft text-brand-700"
-                  : "text-ink-3 hover:text-brand-700"
+                  ? "bg-white text-ink shadow-sm"
+                  : "text-ink-3 hover:text-ink"
               )}
             >
               {v}

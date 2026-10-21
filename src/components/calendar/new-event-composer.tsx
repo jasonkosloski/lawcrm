@@ -254,7 +254,7 @@ export function NewEventComposer({
         />
         <span>
           <span className="text-ink">Show details to everyone in the firm</span>
-          <span className="block text-[10px] text-ink-4 leading-relaxed mt-0.5">
+          <span className="block text-3xs text-ink-4 leading-relaxed mt-0.5">
             Off: invited attendees and the matter team always see details;
             others follow your profile default (usually &ldquo;Busy&rdquo;).
           </span>

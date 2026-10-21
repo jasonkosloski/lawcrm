@@ -78,7 +78,7 @@ export default async function PracticeAreasSettingsPage() {
       </Card>
 
       <section className="flex flex-col gap-2">
-        <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+        <div className="text-2xs font-medium text-ink-3">
           Active ({active.length})
         </div>
         {active.length === 0 ? (
@@ -103,7 +103,7 @@ export default async function PracticeAreasSettingsPage() {
 
       {archived.length > 0 && (
         <section className="flex flex-col gap-2">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <div className="text-2xs font-medium text-ink-3">
             Archived ({archived.length})
           </div>
           <div className="flex flex-col gap-1.5">

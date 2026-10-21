@@ -145,8 +145,8 @@ export function PermissionsMatrix({
             scrolling on small screens with many roles. */}
         <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-paper-2/60 border-b border-line">
-              <th className="sticky left-0 z-10 bg-paper-2/60 text-left px-3 py-2 text-2xs font-mono uppercase tracking-wider text-ink-4 min-w-[16rem]">
+            <tr className="border-b border-line">
+              <th className="sticky left-0 z-10 bg-paper text-left px-3 py-2 text-2xs font-medium text-ink-4 min-w-[16rem]">
                 Permission
               </th>
               {roles.map((r) => (
@@ -181,7 +181,7 @@ export function PermissionsMatrix({
                 <tr>
                   <td
                     colSpan={1 + roles.length}
-                    className="sticky left-0 bg-paper-2/30 border-b border-line px-3 py-1.5 text-2xs font-mono uppercase tracking-wider text-ink-3"
+                    className="sticky left-0 bg-paper-2/30 border-b border-line px-3 py-1.5 text-2xs font-medium text-ink-3"
                   >
                     {cat.label}
                   </td>
@@ -201,7 +201,7 @@ export function PermissionsMatrix({
                           {p.label}
                           {p.unwired && (
                             <span
-                              className="ml-2 align-middle text-[10px] font-normal text-ink-4 px-1.5 py-px rounded-full border border-line bg-paper-2"
+                              className="ml-2 align-middle text-3xs font-normal text-ink-4 px-1.5 py-px rounded-full border border-line bg-paper-2"
                               title="No action or page checks this permission yet — granting it changes nothing today."
                             >
                               Not enforced yet

@@ -113,7 +113,7 @@ export default async function MatterBillingPage({
             action buttons + close. The body section is the scroll
             container, so this header naturally sits put. */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-line bg-paper-2/60 shrink-0">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mr-auto pl-1">
+          <div className="text-2xs font-medium text-ink-3 mr-auto pl-1">
             Invoice {selectedInvoice.invoiceNumber}
           </div>
           {/* Keyed by invoice: the bar owns dialog open-flags, which

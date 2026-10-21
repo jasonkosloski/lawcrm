@@ -26,6 +26,7 @@
 
 "use client";
 
+import { CalendarClock, MapPin, Users } from "lucide-react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
@@ -664,8 +665,9 @@ function ChipBody({
     lines.push({
       key: "location",
       render: () => (
-        <span className="text-3xs text-ink-3 truncate block">
-          📍 {event.location}
+        <span className="text-3xs text-ink-3 flex items-center gap-1 min-w-0">
+          <MapPin size={11} aria-hidden className="shrink-0" />
+          <span className="truncate">{event.location}</span>
         </span>
       ),
     });
@@ -676,9 +678,12 @@ function ChipBody({
     lines.push({
       key: "attendees",
       render: () => (
-        <span className="text-3xs text-ink-3 truncate block">
-          👥 {names.join(", ")}
-          {extra > 0 && ` +${extra} more`}
+        <span className="text-3xs text-ink-3 flex items-center gap-1 min-w-0">
+          <Users size={11} aria-hidden className="shrink-0" />
+          <span className="truncate">
+            {names.join(", ")}
+            {extra > 0 && ` +${extra} more`}
+          </span>
         </span>
       ),
     });
@@ -694,20 +699,28 @@ function ChipBody({
     });
   }
 
-  // Available secondary slots = (height - title - padding) / line height
-  // The title itself uses ~14px; padding is 8px (py-1 each side).
-  const TITLE_HEIGHT = 14;
+  // Sized for the v2 type ramp (12px title, 11px lines, leading-tight).
+  // The title wins the space: a block tall enough for two title lines
+  // wraps it instead of cutting it at a few characters (the grid
+  // position already says the time); the meta lines get what is left.
+  const TITLE_LINE = 15;
   const PADDING = 8;
-  const LINE_HEIGHT = 13;
+  const LINE_HEIGHT = 14;
+  const titleLines = renderHeight >= PADDING + TITLE_LINE * 2 ? 2 : 1;
   const availableSlots = Math.max(
     0,
-    Math.floor((renderHeight - TITLE_HEIGHT - PADDING) / LINE_HEIGHT)
+    Math.floor((renderHeight - TITLE_LINE * titleLines - PADDING) / LINE_HEIGHT)
   );
   const visibleLines = lines.slice(0, availableSlots);
 
   return (
     <>
-      <div className="text-2xs font-medium text-ink leading-tight truncate">
+      <div
+        className={cn(
+          "text-2xs font-medium text-ink leading-tight break-words",
+          titleLines === 2 ? "line-clamp-2" : "truncate"
+        )}
+      >
         {event.title}
       </div>
       {visibleLines.map((line) => (
@@ -824,10 +837,9 @@ function DraggableEventWrapper({
 export function DeadlineChip({ deadline }: { deadline: CalendarDeadlineRow }) {
   const cls =
     deadline.deadlineKind === "critical"
-      ? "bg-warn-soft text-warn border-warn-border"
-      : deadline.deadlineKind === "auto_rule"
-        ? "bg-brand-soft text-brand-700 border-brand-200"
-        : "bg-paper-2 text-ink-3 border-line";
+      ? "bg-danger-soft text-danger border-danger/30"
+      : "bg-white text-ink-2 border-warn/40";
+  const critical = deadline.deadlineKind === "critical";
   return (
     <Link
       href={`/matters/${deadline.matterId}/deadlines`}
@@ -837,7 +849,12 @@ export function DeadlineChip({ deadline }: { deadline: CalendarDeadlineRow }) {
       )}
       title={`${deadline.title} — ${deadline.matterName}`}
     >
-      <span className="shrink-0">⚠</span>
+      <CalendarClock
+        size={11}
+        strokeWidth={2}
+        aria-label="Due"
+        className={cn("shrink-0", critical ? "text-danger" : "text-warn")}
+      />
       <span className="truncate">{deadline.title}</span>
     </Link>
   );

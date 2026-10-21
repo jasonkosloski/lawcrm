@@ -70,7 +70,7 @@ export function SettlementLienList({
   if (liens.length === 0) return null;
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+      <div className="text-2xs font-medium text-ink-3">
         Liens
       </div>
       <ul className="border border-line rounded-md overflow-hidden divide-y divide-line">
@@ -192,7 +192,7 @@ function LienRow({
             <div className="flex flex-col gap-1">
               <label
                 htmlFor={`${uid}-negotiated`}
-                className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+                className="text-2xs font-medium text-ink-3"
               >
                 Negotiated amount
               </label>
@@ -218,7 +218,7 @@ function LienRow({
             <div className="flex flex-col gap-1">
               <label
                 htmlFor={`${uid}-status`}
-                className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+                className="text-2xs font-medium text-ink-3"
               >
                 Status
               </label>

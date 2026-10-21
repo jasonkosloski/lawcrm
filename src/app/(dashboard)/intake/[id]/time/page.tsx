@@ -138,7 +138,7 @@ export default async function LeadTimePage({
 
           <section>
             <div className="flex items-center gap-2 mb-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+              <h2 className="text-xs font-semibold text-ink-2">
                 Intake time entries
               </h2>
               <span className="text-2xs font-mono text-ink-4">
@@ -189,7 +189,7 @@ function SummaryCard({
 }) {
   return (
     <Card className="p-3">
-      <div className="text-2xs font-semibold uppercase tracking-wider text-ink-3 mb-1">
+      <div className="text-2xs font-medium text-ink-3 mb-1">
         {label}
       </div>
       <div className="text-xl font-display font-medium tracking-tight text-ink">

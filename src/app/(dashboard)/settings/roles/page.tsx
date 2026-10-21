@@ -109,7 +109,7 @@ export default async function RolesSettingsPage() {
         {canManageRoles && (
           <div className="flex flex-col gap-2">
             <CreateRoleForm />
-            <div className="text-[10px] text-ink-4 leading-relaxed">
+            <div className="text-3xs text-ink-4 leading-relaxed">
               System roles (<span className="font-mono">Admin</span>,{" "}
               <span className="font-mono">default</span>) can&apos;t
               be renamed or deleted. The{" "}

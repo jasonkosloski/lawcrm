@@ -110,7 +110,7 @@ export function NotePanelBody({
                 className={cn(
                   "text-2xs font-medium px-2 py-0.5 rounded transition-colors",
                   type === t
-                    ? "bg-brand-500 text-white"
+                    ? "bg-paper-2 text-ink"
                     : "text-ink-3 hover:text-brand-700"
                 )}
               >
@@ -177,7 +177,7 @@ export function NotePanelBody({
         <button
           type="submit"
           disabled={isPending || html.trim().length === 0}
-          className="text-xs px-2.5 h-7 rounded-md bg-brand-500 text-white hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          className="text-xs px-2.5 h-7 rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {isPending
             ? "Saving…"

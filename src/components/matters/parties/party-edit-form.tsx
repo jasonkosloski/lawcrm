@@ -289,7 +289,7 @@ export function PartyEditForm({
       {/* Contact core — edits flow back to the global Contact record
           and affect every matter this contact appears on. */}
       <div className="flex flex-col gap-1.5">
-        <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+        <div className="text-2xs font-medium text-ink-3">
           Contact
         </div>
         <input
@@ -336,7 +336,7 @@ export function PartyEditForm({
         <input type="hidden" name="phones" value={phonesJson} />
         <div className="flex flex-col gap-1.5 pt-1">
           <div className="flex items-center justify-between">
-            <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+            <div className="text-2xs font-medium text-ink-3">
               Phones
             </div>
             <button
@@ -428,7 +428,7 @@ export function PartyEditForm({
           )}
         </div>
 
-        <div className="text-[10px] text-ink-4 leading-relaxed pt-0.5">
+        <div className="text-3xs text-ink-4 leading-relaxed pt-0.5">
           {canEditContact
             ? "Changes here update the contact across every matter they appear on."
             : CONTACT_LOCKED_HINT}
@@ -437,7 +437,7 @@ export function PartyEditForm({
 
       {/* Matter-specific fields — only apply to this matter. */}
       <div className="flex flex-col gap-1.5 pt-2 border-t border-line">
-        <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+        <div className="text-2xs font-medium text-ink-3">
           Role on this matter
         </div>
         <div className="grid grid-cols-[1fr_2fr] gap-2">
@@ -602,8 +602,8 @@ export function PartyEditForm({
           type="submit"
           disabled={isPending}
           className={cn(
-            "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-500 text-white",
-            "hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white",
+            "hover:bg-brand-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           )}
         >
           {isPending ? "Saving…" : "Save"}

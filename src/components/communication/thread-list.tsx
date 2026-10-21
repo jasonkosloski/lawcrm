@@ -146,7 +146,7 @@ export function ThreadList({
           label={matterLabel ?? FILTER_LABEL[filter]}
         />
         <div className="min-w-0 flex-1">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 truncate">
+          <div className="text-2xs font-medium text-ink-3 truncate">
             {matterLabel ?? FILTER_LABEL[filter]}
           </div>
           <div className="text-sm font-display font-medium text-ink">
@@ -180,15 +180,15 @@ export function ThreadList({
                 className={cn(
                   "block px-4 py-3 border-b border-line transition-colors",
                   t.id === selectedThreadId
-                    ? "bg-brand-soft border-l-2 border-l-brand-500"
-                    : "hover:bg-brand-tint border-l-2 border-l-transparent"
+                    ? "bg-paper-2 border-l-2 border-l-ink"
+                    : "hover:bg-paper-2/60 border-l-2 border-l-transparent"
                 )}
               >
                 <div className="flex items-center gap-2 mb-1">
                   <span
                     className={cn(
-                      "text-xs truncate flex-1 min-w-0",
-                      t.isRead ? "text-ink-2" : "font-semibold text-ink"
+                      "text-sm truncate flex-1 min-w-0",
+                      t.isRead ? "font-normal text-ink-2" : "font-semibold text-ink"
                     )}
                   >
                     {t.fromDisplay}
@@ -205,7 +205,7 @@ export function ThreadList({
                 <div
                   className={cn(
                     "text-xs leading-tight truncate mb-0.5",
-                    t.isRead ? "text-ink-3" : "text-ink font-medium"
+                    t.isRead ? "text-ink" : "text-ink font-medium"
                   )}
                 >
                   {t.subject}
@@ -217,7 +217,7 @@ export function ThreadList({
                 )}
                 <div className="flex items-center gap-2 mt-1.5">
                   {t.matter && (
-                    <span className="inline-flex items-center gap-1 text-2xs font-mono text-ink-3">
+                    <span className="inline-flex items-center gap-1 text-2xs text-ink-3">
                       <span
                         className="w-1.5 h-1.5 rounded-full"
                         style={{ background: t.matter.color }}

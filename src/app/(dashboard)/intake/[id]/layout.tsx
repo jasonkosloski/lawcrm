@@ -31,17 +31,13 @@ function StageChip({ stage }: { stage: string }) {
   const label = (LEAD_STAGE_LABEL as Record<string, string>)[stage] ?? stage;
   const cls =
     stage === "new"
-      ? "bg-brand-soft text-brand-700 border-brand-200"
+      ? "bg-brand-soft text-brand-700"
       : stage === "converted"
-        ? "bg-ok-soft text-ok border-line"
-        : stage === "declined"
-          ? "bg-paper-2 text-ink-4 border-line"
-          : stage === "hold"
-            ? "bg-warn-soft text-warn border-warn-border"
-            : "bg-paper-2 text-ink-3 border-line";
+        ? "bg-ok-soft text-ok"
+        : "bg-paper-2 text-ink-3";
   return (
     <span
-      className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${cls}`}
+      className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full ${cls}`}
     >
       {label}
     </span>
@@ -105,7 +101,6 @@ export default async function LeadDetailLayout({
     <>
       <TopBar
         title={lead.displayName}
-        crumbs="Intake"
         subtitle={
           <>
             <StageChip stage={lead.stage} />

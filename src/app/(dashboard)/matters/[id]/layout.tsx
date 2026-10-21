@@ -93,10 +93,9 @@ export default async function MatterDetailLayout({
     >
       <TopBar
         title={matter.name}
-        crumbs="Matters"
         subtitle={
           <>
-            <span className="inline-block text-2xs font-medium px-2 py-0.5 rounded-full border bg-brand-soft text-brand-700 border-brand-200">
+            <span className="inline-block text-2xs font-medium px-2 py-0.5 rounded-full border bg-paper-2 text-ink-2 border-line">
               {matter.stage}
             </span>
             <span className="text-2xs text-ink-3">{matter.area}</span>

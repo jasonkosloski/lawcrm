@@ -303,7 +303,7 @@ function PanelChrome({
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
         <div className="flex flex-col min-w-0">
-          <span className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <span className="text-2xs font-medium text-ink-3">
             Create
           </span>
           <h2 className="text-sm font-display font-medium text-ink">
@@ -353,7 +353,7 @@ function PanelChrome({
       {/* Minimized-panel chips */}
       {minimized.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap px-3 py-2 border-b border-line shrink-0 bg-paper-2/30">
-          <span className="text-2xs font-mono uppercase tracking-wider text-ink-4 mr-1">
+          <span className="text-2xs font-medium text-ink-3 mr-1">
             Also open
           </span>
           {minimized.map((m) => (
@@ -452,7 +452,7 @@ function PanelBody({
               <Link
                 href={`/matters/${matterId}/${tab.slug}`}
                 onClick={onClose}
-                className="inline-flex items-center text-xs px-2.5 h-7 rounded-md bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+                className="inline-flex items-center text-xs px-2.5 h-7 rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors"
               >
                 Go to {tab.label}
               </Link>

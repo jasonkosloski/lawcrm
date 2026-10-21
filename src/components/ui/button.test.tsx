@@ -73,7 +73,7 @@ describe("Button — render passthrough + nativeButton inference", () => {
     // The cva root class is on the rendered element.
     const el = container.querySelector("a");
     expect(el).toBeTruthy();
-    expect(el!.className).toMatch(/border-border/);
+    expect(el!.className).toMatch(/border-input/);
   });
 
   test("explicit nativeButton overrides the inferred default", () => {
@@ -96,6 +96,6 @@ describe("Button — render passthrough + nativeButton inference", () => {
       </Button>
     );
     const el = container.querySelector("a");
-    expect(el!.className).toMatch(/h-7/);
+    expect(el!.className).toMatch(/h-8/);
   });
 });

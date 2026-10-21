@@ -24,13 +24,13 @@ export function DashboardCard({
       data-slot="dashboard-card"
       className="@container flex flex-col rounded-xl border border-line bg-card px-4 py-3"
     >
-      <header className="mb-2 flex items-center gap-2">
-        <h2 className="font-display text-base text-ink">{title}</h2>
+      <header className="mb-1 flex items-center gap-2">
+        <h2 className="text-[15px] leading-snug font-semibold text-ink">{title}</h2>
         {count !== undefined && (
-          <span className="font-mono text-2xs text-ink-3">{count}</span>
+          <span className="text-xs font-normal text-ink-4 tabular-nums">{count}</span>
         )}
         {warn && (
-          <LatePill tone="warn">{warn}</LatePill>
+          <LatePill tone="danger">{warn}</LatePill>
         )}
         {viewAllHref && (
           <Link
@@ -55,7 +55,7 @@ export function DashboardCard({
 }
 
 const ROW_CLASS =
-  "flex items-center gap-3 py-2 border-b border-line last:border-b-0";
+  "flex items-center gap-3 py-2 border-b border-line-2 last:border-b-0";
 
 export function DashboardRow({
   href,
@@ -66,7 +66,7 @@ export function DashboardRow({
 }) {
   if (href) {
     return (
-      <Link href={href} className={cn(ROW_CLASS, "hover:bg-paper-2")}>
+      <Link href={href} className={cn(ROW_CLASS, "-mx-2 rounded-md px-2 transition-colors hover:bg-paper")}>
         {children}
       </Link>
     );
@@ -75,9 +75,8 @@ export function DashboardRow({
 }
 
 const TONES = {
-  warn: "bg-warn-soft text-warn border-warn-border",
-  brand: "bg-brand-soft text-brand-700 border-brand-200",
-  muted: "bg-paper-2 text-ink-3 border-line",
+  danger: "bg-danger-soft text-danger",
+  muted: "bg-paper-2 text-ink-3",
 } as const;
 
 export function LatePill({
@@ -90,7 +89,7 @@ export function LatePill({
   return (
     <span
       className={cn(
-        "text-2xs font-mono font-medium px-2 py-0.5 rounded-full border",
+        "text-2xs font-medium px-2 py-0.5 rounded-full",
         TONES[tone],
       )}
     >

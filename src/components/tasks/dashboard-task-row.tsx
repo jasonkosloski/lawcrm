@@ -24,6 +24,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Clock, MessageSquarePlus, MoreHorizontal } from "lucide-react";
+import { DueLabel } from "@/components/shared/due-label";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -51,6 +52,7 @@ export function DashboardTaskRow({
   leadId = null,
   matterName,
   daysUntilDue,
+  dueDate = null,
   dueLabel,
   canLogTime = true,
   canAddNote = true,
@@ -63,6 +65,8 @@ export function DashboardTaskRow({
   leadId?: string | null;
   matterName: string | null;
   daysUntilDue: number | null;
+  /** The due date itself (date-only); with `daysUntilDue` it renders as a DueLabel. */
+  dueDate?: Date | null;
   /** Pre-formatted "due in 3d" / "Apr 28" / "—" string from the
    *  parent server component. Keeps formatting logic (today's date
    *  reasoning) in one place. */
@@ -72,13 +76,6 @@ export function DashboardTaskRow({
 }) {
   const [logTimeOpen, setLogTimeOpen] = useState(false);
   const [addNoteOpen, setAddNoteOpen] = useState(false);
-
-  const dueClass =
-    daysUntilDue !== null && daysUntilDue < 0
-      ? "text-warn"
-      : daysUntilDue === 0
-        ? "text-brand-700"
-        : "text-ink-4";
 
   const titleNode = (
     <div className="flex-1 min-w-0">
@@ -111,10 +108,12 @@ export function DashboardTaskRow({
         ) : (
           titleNode
         )}
-        <span
-          className={cn("text-2xs font-mono shrink-0 w-16 text-right", dueClass)}
-        >
-          {dueLabel}
+        <span className="shrink-0 w-28 text-right">
+          {daysUntilDue !== null ? (
+            <DueLabel dueDate={dueDate} days={daysUntilDue} />
+          ) : (
+            <span className="text-2xs text-ink-4">{dueLabel}</span>
+          )}
         </span>
         {/* Kebab — only meaningful when the task lives on a matter
             (log time + add note both need a matter context). */}

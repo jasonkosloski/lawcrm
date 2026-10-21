@@ -46,7 +46,7 @@ export function MessengerMailboxRail({
       {/* See `mailbox-rail.tsx` for the dual-mode pattern — rail
           renders as a persistent column at lg+ and is wrapped by
           `<MailboxDrawer>` for the slide-out at `<lg`. */}
-      <div className="px-3 pb-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
+      <div className="px-3 pb-1 text-2xs font-medium text-ink-3">
         Messages
       </div>
       <nav className="flex flex-col gap-px px-1.5">
@@ -61,13 +61,13 @@ export function MessengerMailboxRail({
               className={cn(
                 "flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors",
                 active
-                  ? "bg-brand-500 text-white"
-                  : "text-ink-2 hover:bg-[#eaf0f5] hover:text-brand-700"
+                  ? "bg-sidebar-accent text-ink font-medium"
+                  : "text-ink-2 hover:bg-paper-2 hover:text-ink"
               )}
             >
               <Icon
                 size={13}
-                className={active ? "text-white" : "text-ink-3"}
+                className={active ? "text-ink" : "text-ink-3"}
               />
               <span className="flex-1">{item.label}</span>
               {count > 0 && (
@@ -75,8 +75,8 @@ export function MessengerMailboxRail({
                   className={cn(
                     "text-2xs font-mono font-medium px-1.5 py-px rounded-lg border",
                     active
-                      ? "bg-white/[.18] text-white border-transparent"
-                      : "bg-brand-50 text-brand-700 border-brand-100"
+                      ? "bg-white text-ink border-line"
+                      : "bg-paper-2 text-ink-3 border-transparent"
                   )}
                 >
                   {count}

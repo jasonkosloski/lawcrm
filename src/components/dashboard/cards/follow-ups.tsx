@@ -10,28 +10,28 @@ function FollowUpRow({ item }: { item: FollowUpItem }) {
     item.kind === "email"
       ? `/communication?view=email&thread=${item.id}`
       : `/communication?view=messages&thread=${item.id}`;
-  const glyph = item.kind === "email" ? "✉ " : "💬 ";
+  const kindLabel = item.kind === "email" ? "Email" : "Message";
   return (
     <DashboardRow href={href}>
       <span
         className={
           "h-1.5 w-1.5 shrink-0 rounded-full " +
-          (item.isOverdue ? "bg-warn" : "bg-brand-500")
+          (item.isOverdue ? "bg-danger" : "bg-ink-5")
         }
       />
       <div className="min-w-0 flex-1">
         <div className="truncate text-xs text-ink">{item.label}</div>
         {item.matterName && (
-          <div className="truncate font-mono text-3xs uppercase tracking-wider text-ink-4">
+          <div className="truncate text-2xs text-ink-4">
             {item.matterName}
           </div>
         )}
       </div>
       {item.isOverdue ? (
-        <LatePill tone="warn">{glyph}Late</LatePill>
+        <LatePill tone="danger">{kindLabel} · Late</LatePill>
       ) : (
-        <span className="shrink-0 font-mono text-2xs text-ink-4">
-          {glyph}Today
+        <span className="shrink-0 text-2xs text-ink-4">
+          {kindLabel} · Today
         </span>
       )}
     </DashboardRow>

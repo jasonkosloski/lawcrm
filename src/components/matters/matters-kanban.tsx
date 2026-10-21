@@ -16,7 +16,8 @@
  */
 
 import Link from "next/link";
-import { FEE_LABELS, formatDeadlineDays } from "@/lib/matters-filters";
+import { FEE_LABELS } from "@/lib/matters-filters";
+import { DueLabel } from "@/components/shared/due-label";
 import { formatMoney } from "@/lib/format-money";
 import type { MatterListRow } from "@/lib/queries/matters";
 
@@ -58,7 +59,7 @@ export function MattersKanban({
   }
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 sm:-mx-5 sm:px-5">
+    <div className="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3 sm:-mx-6 sm:px-6">
       {stages.map((stage) => {
         const rows = byStage.get(stage) ?? [];
         return (
@@ -94,7 +95,7 @@ function KanbanCard({
   return (
     <Link
       href={`/matters/${matter.id}`}
-      className="flex flex-col gap-1.5 p-2.5 rounded-md bg-white border border-line hover:border-brand-300 hover:shadow-[0_2px_6px_-2px_rgba(37,99,168,0.2)] transition-all"
+      className="flex flex-col gap-1.5 p-2.5 rounded-md bg-white border border-line hover:border-ink-5 transition-colors"
     >
       <div className="flex items-start gap-2">
         <span
@@ -130,25 +131,26 @@ function KanbanCard({
             </span>
           )}
           {showTrust && (
-            <span className="font-mono text-2xs text-ink-3">
+            <span
+              className={
+                "font-mono text-2xs " +
+                (!matter.trustBalance
+                  ? "text-ink-4"
+                  : matter.trustBalance < 0
+                    ? "text-danger"
+                    : "text-ink-3")
+              }
+            >
               {formatMoney(matter.trustBalance ?? 0)}
             </span>
           )}
         </div>
-        <span className="font-mono text-2xs">
-          {matter.nextDeadlineDays === null ? (
-            <span className="text-ink-4">—</span>
-          ) : matter.nextDeadlineDays <= 7 ? (
-            <span className="text-warn font-medium">
-              {formatDeadlineDays(matter.nextDeadlineDays)}
-            </span>
-          ) : (
-            <span className="text-ink-3">
-              {formatDeadlineDays(matter.nextDeadlineDays)}
-            </span>
-          )}
-        </span>
-      </div>
+        {matter.nextDeadlineDays === null ? (
+          <span className="text-2xs text-ink-4">—</span>
+        ) : (
+          <DueLabel dueDate={matter.nextDeadlineDate} days={matter.nextDeadlineDays} />
+        )}
+              </div>
     </Link>
   );
 }

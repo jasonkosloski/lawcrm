@@ -124,7 +124,7 @@ export function BundleInternalRecordForm({
       <div className="flex flex-col gap-1">
         <label
           htmlFor={`${ids}-notes`}
-          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          className="text-2xs font-medium text-ink-3"
         >
           Reason <span className="text-warn">*</span>
         </label>

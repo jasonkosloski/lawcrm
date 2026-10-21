@@ -281,10 +281,10 @@ describe("EventNoteComposer", () => {
     ).toBe("false");
     expect(
       screen.getByRole("button", { name: "Note" }).className
-    ).toContain("bg-brand-500");
+    ).toContain("bg-white");
     expect(
       screen.getByRole("button", { name: "Strategy" }).className
-    ).not.toContain("bg-brand-500");
+    ).not.toContain("bg-white");
   });
 
   test("a saved note collapses the composer and resets it", async () => {
@@ -306,7 +306,7 @@ describe("EventNoteComposer", () => {
     await user.click(screen.getByText("Add a note about this event…"));
     expect(
       screen.getByRole("button", { name: "Note" }).className
-    ).toContain("bg-brand-500");
+    ).toContain("bg-white");
   });
 });
 

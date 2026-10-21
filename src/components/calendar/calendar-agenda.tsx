@@ -11,6 +11,7 @@
  * both remain visible.
  */
 
+import { CalendarClock } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { EventLink } from "./event-link";
@@ -122,7 +123,7 @@ export async function CalendarAgenda({ userTz }: { userTz: string }) {
   return (
     <aside className="hidden lg:flex w-72 shrink-0 border-l border-line bg-paper-2/30 flex-col min-h-0">
       <header className="px-4 py-3 border-b border-line shrink-0 bg-white">
-        <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+        <div className="text-2xs font-medium text-ink-3">
           Agenda
         </div>
         <h2 className="text-sm font-display font-medium text-ink">
@@ -144,7 +145,7 @@ export async function CalendarAgenda({ userTz }: { userTz: string }) {
               >
                 <div
                   className={cn(
-                    "sticky top-0 z-10 bg-paper-2/80 backdrop-blur-sm px-4 py-1.5 text-2xs font-mono uppercase tracking-wider",
+                    "sticky top-0 z-10 bg-paper-2/80 backdrop-blur-sm px-4 py-1.5 text-2xs font-mono",
                     group.dayKey === todayKey
                       ? "text-brand-700 font-semibold"
                       : "text-ink-4"
@@ -233,18 +234,21 @@ function AgendaEvent({
 function AgendaDeadline({ deadline }: { deadline: CalendarDeadlineRow }) {
   const pillCls =
     deadline.deadlineKind === "critical"
-      ? "text-warn"
-      : deadline.deadlineKind === "auto_rule"
-        ? "text-brand-700"
-        : "text-ink-3";
+      ? "text-danger"
+      : "text-ink-2";
   return (
     <li>
       <Link
         href={`/matters/${deadline.matterId}/deadlines`}
         className="flex items-start gap-2 px-4 py-2 hover:bg-brand-tint transition-colors"
       >
-        <span className={cn("text-2xs font-mono w-12 pt-0.5 shrink-0", pillCls)}>
-          ⚠ due
+        <span
+          className={cn(
+            "text-2xs w-12 pt-0.5 shrink-0 inline-flex items-center gap-0.5",
+            deadline.deadlineKind === "critical" ? "text-danger" : "text-warn"
+          )}
+        >
+          <CalendarClock size={11} strokeWidth={2} aria-hidden /> Due
         </span>
         <div className="flex-1 min-w-0">
           <div className={cn("text-xs font-medium truncate", pillCls)}>

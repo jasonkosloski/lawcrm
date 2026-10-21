@@ -16,9 +16,9 @@ describe("DashboardCard", () => {
     expect(screen.getByText("body")).toBeTruthy();
   });
 
-  test("renders the warn text as a warn pill", () => {
+  test("renders the warn text as a danger pill", () => {
     render(<DashboardCard title="T" warn="3 overdue" />);
-    expect(screen.getByText("3 overdue").className).toContain("bg-warn-soft");
+    expect(screen.getByText("3 overdue").className).toContain("bg-danger-soft");
   });
 
   test("view all link is named after its card", () => {
@@ -68,7 +68,7 @@ describe("DashboardRow", () => {
 
 describe("LatePill", () => {
   test("renders children with tone classes", () => {
-    render(<LatePill tone="warn">2d late</LatePill>);
-    expect(screen.getByText("2d late").className).toContain("bg-warn-soft");
+    render(<LatePill tone="danger">2d late</LatePill>);
+    expect(screen.getByText("2d late").className).toContain("bg-danger-soft");
   });
 });

@@ -50,7 +50,7 @@ export function EventTimeEntriesSection({
     <div className="pt-3 border-t border-line flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <div className="flex items-baseline gap-2">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <div className="text-2xs font-medium text-ink-3">
             Time {entries.length > 0 && `(${entries.length})`}
           </div>
           {entries.length > 0 && (
@@ -143,7 +143,7 @@ function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
           {entry.privileged && (
             <span
               title="Privileged"
-              className="inline-flex items-center gap-0.5 text-[10px] text-ink-4"
+              className="inline-flex items-center gap-0.5 text-3xs text-ink-4"
             >
               <Lock size={10} />
               priv
@@ -188,7 +188,7 @@ function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
         </div>
       )}
 
-      <div className="flex items-center gap-2 pl-8 text-[10px] text-ink-4 font-mono">
+      <div className="flex items-center gap-2 pl-8 text-3xs text-ink-4 font-mono">
         <span>{STATUS_LABEL[entry.status] ?? entry.status}</span>
         {!entry.billable && <span>· non-billable</span>}
         {entry.noCharge && <span>· no charge</span>}

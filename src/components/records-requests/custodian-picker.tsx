@@ -85,7 +85,7 @@ export function CustodianPicker({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+      <span className="text-2xs font-medium text-ink-3">
         Custodian
       </span>
       <input type="hidden" name="custodianContactId" value={value?.id ?? ""} />
@@ -167,7 +167,7 @@ export function CustodianPicker({
                 type="button"
                 disabled={pending || !newName.trim()}
                 onClick={create}
-                className="h-8 px-3 rounded-md bg-brand-500 text-white text-xs font-medium hover:bg-brand-600 disabled:opacity-50"
+                className="h-8 px-3 rounded-md bg-brand-700 text-white text-xs font-medium hover:bg-brand-900 disabled:opacity-50"
               >
                 {pending ? "Adding…" : "Add custodian"}
               </button>

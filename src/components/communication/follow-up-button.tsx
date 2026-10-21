@@ -134,7 +134,7 @@ export function FollowUpButton({
       />
       <PopoverContent align="end" className="w-64">
         <div className="flex flex-col gap-2.5">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-3">
+          <div className="text-2xs font-medium text-ink-3">
             Follow up by
           </div>
 
@@ -176,7 +176,7 @@ export function FollowUpButton({
               type="button"
               disabled={!picked}
               onClick={() => save(picked || null)}
-              className="ml-auto inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50"
+              className="ml-auto inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white hover:bg-brand-900 disabled:opacity-50"
             >
               Save
             </button>

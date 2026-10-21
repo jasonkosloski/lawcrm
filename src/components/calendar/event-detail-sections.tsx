@@ -30,7 +30,7 @@ export function BusyEventView({
         <header className="flex items-start gap-3 px-5 pt-5 pb-4 border-b border-line">
           <div className="w-1 self-stretch rounded-full shrink-0 bg-ink-3" />
           <div className="flex-1 min-w-0">
-            <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-1">
+            <div className="text-2xs font-medium text-ink-3 mb-1">
               Busy
             </div>
             <h2 className="text-lg font-display font-medium text-ink leading-tight">
@@ -125,7 +125,7 @@ export function EventAttendeesSection({
   if (!(canEdit || committed.attendees.length > 0)) return null;
   return (
     <div className="pt-3 border-t border-line">
-      <div className="flex items-center gap-2 text-2xs font-mono uppercase tracking-wider text-ink-4 mb-2">
+      <div className="flex items-center gap-2 text-2xs font-medium text-ink-3 mb-2">
         <Users size={11} />
         {committed.attendees.length} attendee
         {committed.attendees.length === 1 ? "" : "s"}

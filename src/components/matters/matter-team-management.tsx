@@ -206,7 +206,7 @@ export function MatterTeamManagement({
           <div className="flex flex-col gap-1 flex-1 min-w-48">
             <label
               htmlFor={addUserSelectId}
-              className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+              className="text-2xs font-medium text-ink-3"
             >
               Add member
             </label>
@@ -229,7 +229,7 @@ export function MatterTeamManagement({
           <div className="flex flex-col gap-1 w-44">
             <label
               htmlFor={addRoleSelectId}
-              className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+              className="text-2xs font-medium text-ink-3"
             >
               Role
             </label>
@@ -273,7 +273,7 @@ export function MatterTeamManagement({
           edit. */}
       {former.length > 0 && (
         <div className="flex flex-col gap-1.5 pt-2 border-t border-line">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <div className="text-2xs font-medium text-ink-3">
             Former members
           </div>
           <ul className="border border-line rounded-md overflow-hidden divide-y divide-line">

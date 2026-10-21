@@ -16,7 +16,7 @@ export function ClientShareBadge({ reason }: { reason: ShareReason }) {
   return (
     <span
       title={title}
-      className="ml-2 inline-block text-2xs font-medium px-1.5 py-0.5 rounded-full border border-line bg-paper-2 text-ink-3 align-middle"
+      className="ml-2 inline-block text-2xs font-medium px-1.5 py-0.5 rounded-full bg-paper-2 text-ink-3 align-middle"
     >
       Shared
     </span>

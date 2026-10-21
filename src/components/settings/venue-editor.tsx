@@ -35,7 +35,7 @@ import type { VenueOption } from "@/lib/queries/venues";
 
 type VenueRow = VenueOption & { matterCount: number };
 
-const labelCls = "text-2xs font-mono uppercase tracking-wider text-ink-4";
+const labelCls = "text-xs font-medium text-ink-2";
 const inputCls =
   "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30";
 const iconBtn =

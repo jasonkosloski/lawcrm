@@ -203,7 +203,7 @@ function SendInvoiceForm({
       <div className="flex flex-col gap-1">
         <span
           id={`${ids}-method`}
-          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          className="text-2xs font-medium text-ink-3"
         >
           Sent via <span className="text-warn">*</span>
         </span>
@@ -250,7 +250,7 @@ function SendInvoiceForm({
       <div className="flex flex-col gap-1">
         <label
           htmlFor={`${ids}-recipient`}
-          className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+          className="text-2xs font-medium text-ink-3"
         >
           {method === "email" ? "Sent to (email)" : "Mailing address"}{" "}
           <span className="text-warn">*</span>
@@ -314,7 +314,7 @@ function SendInvoiceForm({
             <div className="flex flex-col gap-1 pl-6">
               <label
                 htmlFor={`${ids}-trust-amount`}
-                className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+                className="text-2xs font-medium text-ink-3"
               >
                 Amount
               </label>

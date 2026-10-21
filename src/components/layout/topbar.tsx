@@ -1,9 +1,9 @@
 /**
  * Top Bar
  *
- * 56px header with breadcrumbs, page title (Fraunces display font),
- * and right-side actions. A 3px brand gradient hairline runs along the
- * top edge per the design spec.
+ * Page header: an optional context line (a breadcrumb or the page's
+ * counts, sentence case), the page title in Fraunces, and the actions.
+ * White on the paper ground with one hairline under it; no ornament.
  */
 
 "use client";
@@ -17,7 +17,8 @@ import { useMobileNav } from "./mobile-nav-provider";
 interface TopBarProps {
   /** Page title displayed in Fraunces display font. */
   title: string;
-  /** Optional uppercase breadcrumb text, e.g. "WORK · MATTERS". */
+  /** Optional context line above the title: a breadcrumb
+   *  ("Matters / New") or the page's counts ("10 open · 1 closed"). */
   crumbs?: string;
   /** Content rendered to the right of the title (action buttons, etc.). */
   actions?: React.ReactNode;
@@ -32,11 +33,8 @@ export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps)
   const { toggle } = useMobileNav();
   return (
     <div className="flex flex-col shrink-0 bg-card border-b border-line">
-      {/* ── Brand gradient hairline ──────────────────────────────────────── */}
-      <div className="brand-gradient-line" />
-
       {/* ── Title row ────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2.5">
+      <div className="flex items-center justify-between gap-3 px-3 sm:px-6 min-h-14 py-2">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {/* Hamburger — visible only below `lg` where the sidebar
               is hidden by default. lg+ users have the persistent
@@ -51,15 +49,12 @@ export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps)
           </button>
           <div className="flex flex-col gap-0.5 min-w-0">
             {crumbs && (
-              <div className="font-mono text-[10px] text-ink-4 tracking-[0.04em] uppercase truncate">
+              <div className="text-2xs text-ink-4 truncate tabular-nums">
                 {crumbs}
               </div>
             )}
-            <div className="flex items-center gap-2 min-w-0">
-              <h1
-                className="font-display text-base sm:text-xl font-medium tracking-tight truncate"
-                style={{ color: "#0f1b2e", letterSpacing: "-0.02em" }}
-              >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <h1 className="font-display text-lg sm:text-xl leading-tight font-medium tracking-[-0.015em] text-ink truncate">
                 {title}
               </h1>
               {/* Subtitle chips hide below sm — they're contextual
@@ -79,18 +74,15 @@ export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps)
           <button
             onClick={openPalette}
             className={cn(
-              "flex items-center gap-1.5 h-9 sm:h-7 px-2 sm:px-2.5 rounded-md border border-line-2",
-              "bg-white text-ink-3 text-xs hover:border-brand-300 transition-colors"
+              "flex items-center gap-2 h-9 px-2.5 sm:w-52 rounded-md border border-input",
+              "bg-white text-ink-4 text-xs hover:text-ink-2 transition-colors"
             )}
             title="Search (⌘K)"
             aria-label="Search"
           >
-            <Search size={13} />
-            <span className="hidden sm:inline">Search</span>
-            <span
-              className="hidden sm:inline text-[10px] font-mono text-brand-700 px-1 border border-line-2 rounded bg-white ml-1"
-              style={{ borderBottomWidth: 2 }}
-            >
+            <Search size={15} aria-hidden />
+            <span className="hidden sm:inline whitespace-nowrap">Search</span>
+            <span className="hidden sm:inline ml-auto text-2xs text-ink-4">
               ⌘K
             </span>
           </button>

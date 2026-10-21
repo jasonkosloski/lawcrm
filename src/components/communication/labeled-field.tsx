@@ -16,7 +16,7 @@ export function LabeledField({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-2xs font-mono uppercase tracking-wider text-ink-4 shrink-0 w-10">
+      <span className="text-2xs font-medium text-ink-3 shrink-0 w-10">
         {label}
       </span>
       <div className="flex-1 min-w-0">{children}</div>

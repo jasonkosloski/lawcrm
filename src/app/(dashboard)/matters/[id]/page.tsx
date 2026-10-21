@@ -476,7 +476,7 @@ export default async function MatterOverviewPage({
                               </a>
                               {p.isPrimary &&
                                 row.contact.phones.length > 1 && (
-                                  <span className="text-[9px] text-brand-700">
+                                  <span className="text-3xs text-brand-700">
                                     primary
                                   </span>
                                 )}

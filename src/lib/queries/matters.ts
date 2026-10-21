@@ -55,6 +55,8 @@ export type MatterListRow = {
    *  deadline: 0 = due today, negative = overdue (-12 = 12 days late).
    *  Null when the matter has no open deadline. */
   nextDeadlineDays: number | null;
+  /** That deadline's date-only due date (ADR-012); null with no open deadline. */
+  nextDeadlineDate: Date | null;
   /** True if pinned by the current user (not a global property of the matter). */
   isPinned: boolean;
   isArchived: boolean;
@@ -331,6 +333,7 @@ export async function listMatters(
     nextDeadlineDays: m.deadlines[0]
       ? daysUntilDateOnly(m.deadlines[0].dueDate, zone)
       : null,
+    nextDeadlineDate: m.deadlines[0]?.dueDate ?? null,
     isPinned: m.pins.length > 0,
     isArchived: m.isArchived,
     createdAt: m.createdAt,

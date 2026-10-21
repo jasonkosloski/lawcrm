@@ -319,7 +319,7 @@ export function FirmEditForm({
           disabled={isPending}
           className={cn(
             "inline-flex items-center h-9 px-4 rounded-md text-sm font-medium",
-            "bg-brand-500 text-white hover:bg-brand-600 transition-colors",
+            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
             "disabled:opacity-60 disabled:cursor-not-allowed"
           )}
         >
@@ -338,7 +338,7 @@ export function FirmEditForm({
 
 function SectionHeader({ label }: { label: string }) {
   return (
-    <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 -mb-3">
+    <div className="text-2xs font-medium text-ink-3 -mb-3">
       {label}
     </div>
   );

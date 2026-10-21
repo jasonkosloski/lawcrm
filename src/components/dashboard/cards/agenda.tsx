@@ -16,15 +16,15 @@ export function AgendaCard({ items }: { items: AgendaItem[] }) {
       <div className="flex flex-col">
         {items.map((item) => (
           <DashboardRow key={item.id}>
-            <span className="w-12 shrink-0 font-mono text-2xs text-ink-4">
+            <span className="w-16 shrink-0 text-xs text-ink-3 tabular-nums">
               {item.time}
             </span>
             <span
               className="h-1.5 w-1.5 shrink-0 rounded-full"
               style={{ background: item.color }}
             />
-            <span className="text-xs text-ink">{item.title}</span>
-            <span className="ml-auto font-mono text-2xs text-ink-4">
+            <span className="truncate text-xs text-ink">{item.title}</span>
+            <span className="ml-auto shrink-0 text-2xs text-ink-4">
               {item.area}
             </span>
           </DashboardRow>

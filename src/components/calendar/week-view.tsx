@@ -184,7 +184,7 @@ export function WeekView({
           >
             <div
               className={cn(
-                "text-2xs font-mono uppercase tracking-wider",
+                "text-2xs font-mono",
                 weekend ? "text-ink-4/80" : "text-ink-4"
               )}
             >
@@ -194,7 +194,7 @@ export function WeekView({
               className={cn(
                 "text-base font-display tracking-tight",
                 dayIsToday
-                  ? "text-brand-500 font-semibold"
+                  ? "text-brand-700 font-semibold"
                   : weekend
                     ? "text-ink-3"
                     : "text-ink"
@@ -293,8 +293,8 @@ export function WeekView({
           height: allDayRowHeight,
         }}
       >
-        <div className="text-2xs font-mono text-ink-4 text-right pr-1.5 pt-1 border-r border-line">
-          all-day
+        <div className="text-2xs text-ink-4 text-right pr-1.5 pt-1 border-r border-line leading-tight">
+          All day
         </div>
         {byDayBuckets.map((b) => (
           <WeekAllDayCell

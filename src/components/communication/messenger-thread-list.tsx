@@ -112,7 +112,7 @@ export function MessengerThreadList({
       <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-line shrink-0">
         <MailboxDrawerTrigger label={MESSENGER_FILTER_LABEL[filter]} />
         <div className="min-w-0 flex-1">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 truncate">
+          <div className="text-2xs font-medium text-ink-3 truncate">
             {MESSENGER_FILTER_LABEL[filter]}
           </div>
           <div className="text-xs font-semibold text-ink">
@@ -147,8 +147,8 @@ export function MessengerThreadList({
                   className={cn(
                     "flex items-start gap-3 px-4 py-2.5 border-b border-line transition-colors",
                     active
-                      ? "bg-brand-50"
-                      : "hover:bg-paper-2 bg-white"
+                      ? "bg-paper-2 shadow-[inset_2px_0_0_var(--color-ink)]"
+                      : "hover:bg-paper-2/60 bg-white"
                   )}
                 >
                   {/* Avatar / matter color dot */}
@@ -200,7 +200,7 @@ export function MessengerThreadList({
                         {t.lastBody ?? "—"}
                       </span>
                       {t.unreadCount > 0 && (
-                        <span className="ml-auto text-3xs font-mono font-medium px-1.5 rounded-full bg-brand-500 text-white shrink-0">
+                        <span className="ml-auto text-3xs font-mono font-medium px-1.5 rounded-full bg-brand-700 text-white shrink-0">
                           {t.unreadCount}
                         </span>
                       )}
@@ -212,7 +212,7 @@ export function MessengerThreadList({
                           className="w-1.5 h-1.5 rounded-full shrink-0"
                           style={{ background: t.defaultMatterColor ?? "var(--color-ink-3)" }}
                         />
-                        <span className="text-3xs font-mono uppercase tracking-wider text-ink-4 truncate">
+                        <span className="text-3xs text-ink-4 truncate">
                           {t.defaultMatterName}
                         </span>
                       </div>

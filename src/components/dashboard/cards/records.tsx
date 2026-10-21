@@ -23,14 +23,14 @@ export function RecordsCard({ items }: { items: RecordsChaseItem[] }) {
           <DashboardRow key={r.id} href={r.href}>
             <div className="min-w-0 flex-1">
               <div className="truncate text-xs text-ink">{r.subject}</div>
-              <div className="truncate font-mono text-3xs uppercase tracking-wider text-ink-4">
+              <div className="truncate text-2xs text-ink-4">
                 {r.custodianName} · {r.context}
               </div>
             </div>
             {r.label.endsWith("overdue") ? (
-              <LatePill tone="warn">{r.label}</LatePill>
+              <LatePill tone="danger">{r.label}</LatePill>
             ) : (
-              <span className="shrink-0 font-mono text-2xs text-ink-4">
+              <span className="shrink-0 text-2xs tabular-nums text-ink-4">
                 {r.label}
               </span>
             )}

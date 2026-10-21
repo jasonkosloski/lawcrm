@@ -769,7 +769,7 @@ export function NewMatterForm({
                     aria-label="Matching clients"
                     className="absolute left-0 right-0 top-[calc(100%+2px)] z-20 rounded-md border border-line bg-white shadow-md py-1"
                   >
-                    <div className="px-2.5 py-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
+                    <div className="px-2.5 py-1 text-2xs font-medium text-ink-3">
                       Matching clients
                     </div>
                     {suggestions.map((c, i) => (
@@ -1152,8 +1152,8 @@ export function NewMatterForm({
           type="submit"
           disabled={isPending}
           className={cn(
-            "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium bg-brand-500 text-white",
-            "hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium bg-brand-700 text-white",
+            "hover:bg-brand-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           )}
         >
           {isPending ? "Creating…" : "Create matter"}

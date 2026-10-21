@@ -216,7 +216,7 @@ export function EventComposer({
           />
           <span>
             <span className="text-ink">Show details firm-wide</span>
-            <span className="block text-[10px] text-ink-4 leading-relaxed mt-0.5">
+            <span className="block text-3xs text-ink-4 leading-relaxed mt-0.5">
               Off: only the matter team and invited attendees see details.
             </span>
           </span>

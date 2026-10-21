@@ -195,7 +195,7 @@ export function GenerateFromTemplateDialog({
               <div className="flex flex-col gap-1">
                 <label
                   htmlFor="generate-template"
-                  className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+                  className="text-xs font-medium text-ink-2"
                 >
                   Template
                 </label>

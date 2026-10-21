@@ -24,7 +24,7 @@ export function FlagCategoryChip({ category }: { category: string }) {
     : FLAG_TONE_CHIP_CLASS.neutral;
   return (
     <span
-      className={`inline-block rounded-full border px-2 py-0.5 text-2xs font-medium whitespace-nowrap ${className}`}
+      className={`inline-block rounded-full px-2 py-0.5 text-2xs font-medium whitespace-nowrap ${className}`}
     >
       {label}
     </span>

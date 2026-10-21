@@ -147,7 +147,7 @@ function Section({
 }) {
   return (
     <div className="flex flex-col mb-2">
-      <div className="px-3 pb-1 pt-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
+      <div className="px-3 pb-1 pt-1 text-2xs font-medium text-ink-3">
         {label}
       </div>
       <nav className="flex flex-col gap-px px-1.5">{children}</nav>
@@ -179,12 +179,12 @@ function RailRow({
       className={cn(
         "flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors",
         active
-          ? "bg-brand-500 text-white"
-          : "text-ink-2 hover:bg-[#eaf0f5] hover:text-brand-700"
+          ? "bg-sidebar-accent text-ink font-medium"
+          : "text-ink-2 hover:bg-paper-2 hover:text-ink"
       )}
     >
       {icon ? (
-        <span className={active ? "text-white" : "text-ink-3"}>{icon}</span>
+        <span className={active ? "text-ink" : "text-ink-3"}>{icon}</span>
       ) : dotColor ? (
         <span
           className="w-2 h-2 rounded-full shrink-0"
@@ -197,8 +197,8 @@ function RailRow({
           className={cn(
             "text-2xs font-mono font-medium px-1.5 py-px rounded-lg border",
             active
-              ? "bg-white/[.18] text-white border-transparent"
-              : "bg-brand-50 text-brand-700 border-brand-100"
+              ? "bg-white text-ink border-line"
+              : "bg-paper-2 text-ink-3 border-transparent"
           )}
         >
           {count}

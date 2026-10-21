@@ -199,7 +199,7 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
               />
               <span>
                 <span className="font-medium">Private by default</span>
-                <span className="block text-[10px] text-ink-4 leading-relaxed">
+                <span className="block text-3xs text-ink-4 leading-relaxed">
                   Others see only an &ldquo;Unavailable&rdquo; block during your event time. Matter team and invited attendees still see full detail.
                 </span>
               </span>
@@ -214,7 +214,7 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
               />
               <span>
                 <span className="font-medium">Show details to everyone in the firm</span>
-                <span className="block text-[10px] text-ink-4 leading-relaxed">
+                <span className="block text-3xs text-ink-4 leading-relaxed">
                   Every event you create is visible firm-wide with full detail, including events already on your calendar. Switching back to private hides them again.
                 </span>
               </span>
@@ -229,7 +229,7 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
           disabled={isPending}
           className={cn(
             "inline-flex items-center h-9 px-4 rounded-md text-sm font-medium",
-            "bg-brand-500 text-white hover:bg-brand-600 transition-colors",
+            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
             "disabled:opacity-60 disabled:cursor-not-allowed"
           )}
         >
@@ -246,7 +246,7 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
   );
 }
 
-const LABEL_CLASS = "text-2xs font-mono uppercase tracking-wider text-ink-4";
+const LABEL_CLASS = "text-xs font-medium text-ink-2";
 
 function Field({
   label,
@@ -273,7 +273,7 @@ function Field({
   const footer = (
     <>
       {hint && !error && (
-        <span className="text-[10px] text-ink-4 leading-relaxed">{hint}</span>
+        <span className="text-3xs text-ink-4 leading-relaxed">{hint}</span>
       )}
       {error && <span className="text-2xs text-warn">{error}</span>}
     </>

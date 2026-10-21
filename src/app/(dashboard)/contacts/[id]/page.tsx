@@ -140,7 +140,7 @@ export default async function ContactDetailPage({
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 animate-page-enter">
         <div className="max-w-3xl flex flex-col gap-4">
           <Card>
             <CardHeader className="pb-2">

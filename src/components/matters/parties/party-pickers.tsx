@@ -178,7 +178,7 @@ export function ContactTypeahead({
       />
       {listVisible && (
         <div className="rounded-md border border-line bg-white shadow-sm py-1">
-          <div className="px-2.5 py-1 text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <div className="px-2.5 py-1 text-2xs font-medium text-ink-3">
             Matching contacts
           </div>
           <div role="listbox" id={listId} aria-label="Matching contacts">
@@ -276,7 +276,7 @@ export function RepresentationToggle({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+      <span className="text-2xs font-medium text-ink-3">
         Represented
       </span>
       <div
@@ -293,7 +293,7 @@ export function RepresentationToggle({
             className={cn(
               "text-2xs font-medium px-2 py-0.5 rounded transition-colors",
               value === v
-                ? "bg-brand-500 text-white"
+                ? "bg-paper-2 text-ink"
                 : "text-ink-3 hover:text-brand-700"
             )}
           >

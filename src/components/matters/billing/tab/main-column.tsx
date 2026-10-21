@@ -29,7 +29,8 @@ import { type MatterBilling } from "@/lib/queries/billing";
 import { type UnbilledExpenseSummary } from "@/lib/queries/billing-expenses";
 import { type MatterSettlement } from "@/lib/queries/settlements";
 import { bundleTotal } from "@/components/matters/billing/bundle-summary";
-import { formatMoney, formatDay, Kpi, type BillingPermissions } from "./shared";
+import { StatStrip } from "@/components/shared/stat-strip";
+import { formatMoney, formatDay, type BillingPermissions } from "./shared";
 import { InvoicesCard } from "./invoices-card";
 import { ReceivedPaymentsCard, TrustLedgerCard } from "./ledger-cards";
 import { SettlementCard } from "./settlement-card";
@@ -138,25 +139,26 @@ export function MainColumn({
       )}
 
       {/* ── Top KPI strip — stacks on phones, side-by-side from sm+. ─── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Kpi
-          label="Work-in-progress"
-          primary={formatMoney(wipTotal)}
-          secondary={wipSecondary}
-        />
-        <Kpi
-          label="Trust balance"
-          primary={formatMoney(billing.trust.balance)}
-          secondary={`${billing.trust.transactions.length} recent ${billing.trust.transactions.length === 1 ? "txn" : "txns"}`}
-          tone={billing.trust.balance > 0 ? "ok" : undefined}
-        />
-        <Kpi
-          label="Outstanding AR"
-          primary={formatMoney(billing.outstandingAr)}
-          secondary={`${openInvoiceCount} open ${openInvoiceCount === 1 ? "invoice" : "invoices"}`}
-          tone={billing.outstandingAr > 0 ? "brand" : undefined}
-        />
-      </div>
+      <StatStrip
+        stats={[
+          {
+            label: "Work-in-progress",
+            value: formatMoney(wipTotal),
+            detail: wipSecondary,
+          },
+          {
+            label: "Trust balance",
+            value: formatMoney(billing.trust.balance),
+            detail: `${billing.trust.transactions.length} recent ${billing.trust.transactions.length === 1 ? "txn" : "txns"}`,
+            tone: billing.trust.balance < 0 ? "danger" : undefined,
+          },
+          {
+            label: "Outstanding AR",
+            value: formatMoney(billing.outstandingAr),
+            detail: `${openInvoiceCount} open ${openInvoiceCount === 1 ? "invoice" : "invoices"}`,
+          },
+        ]}
+      />
 
       <InvoicesCard
         billing={billing}

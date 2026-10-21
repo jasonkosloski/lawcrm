@@ -52,13 +52,13 @@ function ScoreBadge({ score }: { score: number | null }) {
   if (score === null) return <span className="text-2xs text-ink-4">—</span>;
   const cls =
     score >= 75
-      ? "bg-ok-soft text-ok border-line"
+      ? "bg-ok-soft text-ok"
       : score >= 55
-        ? "bg-brand-soft text-brand-700 border-brand-200"
-        : "bg-paper-2 text-ink-3 border-line";
+        ? "bg-paper-2 text-ink-2"
+        : "bg-warn-soft text-warn";
   return (
     <span
-      className={`inline-block text-xs font-mono font-semibold px-2 py-0.5 rounded-full border ${cls}`}
+      className={`inline-block text-xs font-mono font-semibold px-2 py-0.5 rounded-full ${cls}`}
     >
       {score}
     </span>
@@ -71,17 +71,13 @@ function StageChip({ stage }: { stage: string }) {
   const label = (LEAD_STAGE_LABEL as Record<string, string>)[stage] ?? stage;
   const cls =
     stage === "new"
-      ? "bg-brand-soft text-brand-700 border-brand-200"
+      ? "bg-brand-soft text-brand-700"
       : stage === "converted"
-        ? "bg-ok-soft text-ok border-line"
-        : stage === "declined"
-          ? "bg-paper-2 text-ink-4 border-line"
-          : stage === "hold"
-            ? "bg-warn-soft text-warn border-warn-border"
-            : "bg-paper-2 text-ink-3 border-line";
+        ? "bg-ok-soft text-ok"
+        : "bg-paper-2 text-ink-3";
   return (
     <span
-      className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${cls}`}
+      className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full ${cls}`}
     >
       {label}
     </span>
@@ -213,7 +209,7 @@ export default async function IntakePage({
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter flex flex-col gap-3">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 animate-page-enter flex flex-col gap-3">
         {leads.activeTruncated && (
           <TruncationNotice
             shown={ACTIVE_LEADS_SAFETY_CAP}
@@ -314,7 +310,7 @@ export default async function IntakePage({
                           {lead.restricted && <RestrictedBadge />}
                         </span>
                         {lead.summary && (
-                          <span className="text-2xs text-ink-3 truncate max-w-md">
+                          <span className="text-2xs text-ink-3 truncate max-w-56 xl:max-w-80 2xl:max-w-md">
                             {lead.summary}
                           </span>
                         )}

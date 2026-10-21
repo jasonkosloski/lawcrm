@@ -53,7 +53,7 @@ export function PrintToolbar({ autoprint }: { autoprint: boolean }) {
         <button
           type="button"
           onClick={() => window.print()}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-brand-700 text-white hover:bg-brand-900 transition-colors"
         >
           <Printer size={13} />
           Print or save as PDF

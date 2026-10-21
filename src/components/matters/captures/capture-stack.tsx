@@ -109,7 +109,7 @@ export function CaptureStack({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+        <span className="text-2xs font-medium text-ink-3">
           Also capture
         </span>
         {allowedKinds.map((kind) => {
@@ -170,7 +170,7 @@ function CaptureCard({
     <div className="rounded-md border border-line bg-paper-2/30 p-2.5 flex flex-col gap-2">
       <div className="flex items-center gap-2">
         <Icon size={12} className="text-ink-3 shrink-0" />
-        <span className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+        <span className="text-2xs font-medium text-ink-3">
           {CAPTURE_KIND_LABEL[capture.kind]}
         </span>
         <button
@@ -442,7 +442,7 @@ function NoteSiblingFields({
               className={cn(
                 "text-2xs font-medium px-1.5 py-0.5 rounded transition-colors",
                 capture.type === t
-                  ? "bg-brand-500 text-white"
+                  ? "bg-paper-2 text-ink"
                   : "text-ink-3 hover:text-brand-700"
               )}
             >

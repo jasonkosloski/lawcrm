@@ -262,7 +262,7 @@ function FilterPill({
       className={cn(
         "inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-2xs font-medium border transition-colors",
         active
-          ? "bg-brand-500 text-white border-brand-500"
+          ? "bg-paper-2 text-ink border-ink-5"
           : count === 0
             ? "bg-paper text-ink-4 border-line opacity-60 cursor-default pointer-events-none"
             : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700"

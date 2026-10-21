@@ -85,7 +85,7 @@ function NoteItem({
     <li className="rounded-md border border-line bg-paper-2/40 p-2.5 flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
         <span
-          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-50 text-[10px] font-mono font-medium text-brand-700 border border-brand-100 shrink-0"
+          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-50 text-3xs font-mono font-medium text-brand-700 border border-brand-100 shrink-0"
           title={note.authorName}
         >
           {note.authorInitials}
@@ -94,18 +94,18 @@ function NoteItem({
           <span className="text-2xs font-medium text-ink-2 truncate">
             {note.authorName}
           </span>
-          <span className="text-[10px] font-mono text-ink-4">
+          <span className="text-3xs font-mono text-ink-4">
             {formatDate(note.createdAt, "datetime", tz)}
           </span>
         </div>
-        <span className="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full border bg-white text-ink-3 border-line shrink-0">
+        <span className="inline-block text-3xs font-medium px-1.5 py-0.5 rounded-full border bg-white text-ink-3 border-line shrink-0">
           {typeLabel}
         </span>
         {/* Anchor link to the full note in the Notes tab — same
             pattern the EntitySourceChip uses for symmetric navigation. */}
         <Link
           href={`/matters/${matterId}/notes#note-${note.id}`}
-          className="text-[10px] text-brand-700 hover:underline shrink-0"
+          className="text-3xs text-brand-700 hover:underline shrink-0"
         >
           Open
         </Link>
@@ -119,7 +119,7 @@ function NoteItem({
           "[&_h3]:text-2xs [&_h3]:font-semibold [&_h3]:mt-1 [&_h3]:mb-0",
           "[&_ul]:my-1 [&_ol]:my-1 [&_li]:text-2xs [&_ul]:pl-4 [&_ol]:pl-4 [&_ul]:list-disc [&_ol]:list-decimal",
           "[&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-2 [&_blockquote]:text-ink-3 [&_blockquote]:italic",
-          "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px] [&_code]:font-mono"
+          "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-3xs [&_code]:font-mono"
         )}
         // sanitizeUserHtml ran on insert; safe to render.
         dangerouslySetInnerHTML={{ __html: note.content }}
