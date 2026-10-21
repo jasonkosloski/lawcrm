@@ -14,6 +14,8 @@ export const FOLDER_SYSTEM_KINDS = [
   "records_responsive_docs",
   /** Portal client uploads ("From client"); no records request. */
   "portal_uploads",
+  /** Sent invoice PDFs ("Invoices"); no records request. */
+  "invoices",
 ] as const;
 export type FolderSystemKind = (typeof FOLDER_SYSTEM_KINDS)[number];
 
