@@ -96,6 +96,7 @@ export async function DocumentsBrowser({
     canFolderEdit,
     canFolderDelete,
     canOrganize,
+    canEdit,
     canSharePermission,
     canViewPortal,
     templates,
@@ -105,14 +106,14 @@ export async function DocumentsBrowser({
     getFolderDocumentCounts(scope),
     getCurrentUserId(),
     currentUserHasPermission("documents.delete_any"),
-    // Gates uploads (multi + composer) and the generate dialog's
-    // "Save to documents" affordance — previewing/copying merged
-    // text stays open to everyone.
+    // Gates uploads (multi + composer) and the generate dialog
+    // (preview, copy and save all need it).
     currentUserHasPermission("documents.upload"),
     currentUserHasPermission("documents.folder.create"),
     currentUserHasPermission("documents.folder.edit"),
     currentUserHasPermission("documents.folder.delete"),
     currentUserHasPermission("documents.organize"),
+    currentUserHasPermission("documents.edit"),
     // Client-portal sharing (matters only — leads have no portal).
     currentUserHasPermission("portal.share_documents"),
     currentUserHasPermission("portal.view"),
@@ -222,6 +223,8 @@ export async function DocumentsBrowser({
             canDelete={canDelete}
             hasFile={d.hasFile}
             canMove={canOrganize}
+            canEdit={canEdit}
+            category={d.category}
             folders={flat}
             currentFolderId={d.folderId}
             isAttachment={d.parentDocumentId !== null}
@@ -473,11 +476,14 @@ function DocumentComposerRow({
           />
         </div>
       )}
-      <GenerateFromTemplateDialog
-        scope={scope}
-        templates={templates}
-        canUpload={canUpload}
-      />
+      {/* Preview shares generate's documents.upload key. */}
+      {canUpload && (
+        <GenerateFromTemplateDialog
+          scope={scope}
+          templates={templates}
+          canUpload={canUpload}
+        />
+      )}
     </div>
   );
 }

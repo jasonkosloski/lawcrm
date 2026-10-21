@@ -86,6 +86,7 @@ describe("DocumentsBrowser", () => {
     expect(screen.getByTestId("multi-upload")).toBeInTheDocument();
     expect(screen.getByTestId("upload-form")).toBeInTheDocument();
     expect(screen.getByTestId("new-folder")).toBeInTheDocument();
+    expect(screen.getByTestId("generate")).toBeInTheDocument();
   });
 
   test("without documents.upload the uploaders are hidden", async () => {
@@ -93,6 +94,8 @@ describe("DocumentsBrowser", () => {
     await renderBrowser();
     expect(screen.queryByTestId("multi-upload")).toBeNull();
     expect(screen.queryByTestId("upload-form")).toBeNull();
+    // Template preview shares generate's key, so no dialog either.
+    expect(screen.queryByTestId("generate")).toBeNull();
   });
 
   test("writable=false hides upload, new-folder and generate even with every permission", async () => {

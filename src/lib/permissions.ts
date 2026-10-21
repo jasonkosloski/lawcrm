@@ -372,6 +372,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
           "Attach files to a matter via the Documents tab (an uploaded email's attachments are added as documents too). Uploaders can always delete their own uploads.",
       },
       {
+        key: "documents.edit",
+        label: "Edit document details",
+        description:
+          "Rename a document's display name and change its category after upload. The file itself is never changed.",
+      },
+      {
         key: "documents.delete_any",
         label: "Delete any document",
         description:
