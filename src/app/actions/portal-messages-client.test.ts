@@ -4,10 +4,15 @@ vi.mock("@/lib/portal-access", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/portal-access")>()),
   getPortalIdentity: vi.fn(),
 }));
+vi.mock("@/lib/matter-access", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/matter-access")>();
+  return { ...actual, canAccessMatter: vi.fn(actual.canAccessMatter) };
+});
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { getPortalIdentity } from "@/lib/portal-access";
 import { prisma } from "@/lib/prisma";
+import { canAccessMatter } from "@/lib/matter-access";
 import {
   resetDb,
   seedContact,
@@ -56,6 +61,7 @@ beforeEach(async () => {
   ({ contactId } = await seedContact({ name: "Jane Client", email: "jane@example.com" }));
   identityId = (await prisma.portalIdentity.create({ data: { contactId, email: "jane@example.com" } })).id;
   await prisma.portalMatterAccess.create({ data: { identityId, matterId, invitedById: lead } });
+  vi.mocked(canAccessMatter).mockClear();
   vi.mocked(getPortalIdentity).mockResolvedValue({ identityId, contactId, email: "jane@example.com" });
 });
 
@@ -101,6 +107,22 @@ describe("sendPortalMessage rate limit", () => {
         threadId: thread.id, body: `m${i}`, authorKind: "client", authorIdentityId: identityId,
       })),
     });
+    // None of these may count toward this identity's 30 on this matter.
+    const { contactId: otherContact } = await seedContact({ name: "Co", email: "co@example.com" });
+    const co = await prisma.portalIdentity.create({ data: { contactId: otherContact, email: "co@example.com" } });
+    await prisma.portalMessage.createMany({
+      data: [
+        ...Array.from({ length: 5 }, (_, i) => ({ threadId: thread.id, body: `s${i}`, authorKind: "staff", authorUserId: lead })),
+        ...Array.from({ length: 5 }, (_, i) => ({ threadId: thread.id, body: `c${i}`, authorKind: "client", authorIdentityId: co.id })),
+      ],
+    });
+    const otherMatter = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: lead })).matterId;
+    const otherThread = await prisma.portalThread.create({
+      data: { matterId: otherMatter, lastMessageAt: new Date(), lastFromClient: true },
+    });
+    await prisma.portalMessage.createMany({
+      data: Array.from({ length: 10 }, (_, i) => ({ threadId: otherThread.id, body: `o${i}`, authorKind: "client", authorIdentityId: identityId })),
+    });
     expect(await sendPortalMessage(matterId, "29th")).toEqual({ ok: true });
     expect(await sendPortalMessage(matterId, "30th")).toEqual({ ok: true });
     expect(await sendPortalMessage(matterId, "31st")).toEqual({
@@ -135,6 +157,28 @@ describe("sendPortalMessage effects", () => {
     });
     expect(await notifs(unkeyed)).toHaveLength(0);
     expect(await notifs(inactive)).toHaveLength(0);
+  });
+
+  test("a non-team user holding the key who cannot access the matter gets nothing", async () => {
+    // Walls bind users off the team: a keyed non-team user is never a recipient.
+    await prisma.firm.update({ where: { id: firmId }, data: { matterVisibility: "TEAM" } });
+    const role = await prisma.role.create({ data: { firmId, name: "outsider" }, select: { id: true } });
+    await prisma.rolePermission.create({ data: { roleId: role.id, permission: "portal.view_messages" } });
+    const { userId: outsider } = await seedUser({ firmId, roleIds: [role.id] });
+    await sendPortalMessage(matterId, "hello");
+    expect(await notifs(outsider)).toHaveLength(0);
+  });
+
+  test("the access check is applied: a keyed team member failing canAccessMatter gets nothing", async () => {
+    // By design (matter-access.ts matterAccessWhere) an active team member always
+    // passes, so a walled member cannot be seeded; stub the check to pin the filter.
+    const keyed = await teamMember({ keyed: true });
+    const other = await teamMember({ keyed: true });
+    vi.mocked(canAccessMatter).mockImplementation(async (uid) => uid !== keyed);
+    await sendPortalMessage(matterId, "hello");
+    expect(await notifs(keyed)).toHaveLength(0);
+    expect(await notifs(other)).toHaveLength(1);
+    vi.mocked(canAccessMatter).mockReset();
   });
 
   test("an admin team member is notified without an explicit key", async () => {
