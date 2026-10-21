@@ -14,8 +14,10 @@ import {
   StyleSheet,
   Text,
   View,
+  Font,
   renderToBuffer,
 } from "@react-pdf/renderer";
+import path from "node:path";
 import {
   invoiceStatusLabel,
   INVOICE_PAYMENT_SOURCE_LABEL,
@@ -33,12 +35,25 @@ export function invoicePdfFilename(invoiceNumber: string): string {
   return `Invoice ${invoiceNumber}.pdf`;
 }
 
+// Built-in Helvetica is WinAnsi only, which garbles names like
+// "Nguyễn Łukasz". Liberation Sans (bundled; see fonts/LICENSE.txt) covers
+// Latin Extended. Shipped to Vercel via outputFileTracingIncludes.
+const fontPath = (file: string) =>
+  path.join(process.cwd(), "src/lib/billing/fonts", file);
+Font.register({
+  family: "LiberationSans",
+  fonts: [
+    { src: fontPath("LiberationSans-Regular.ttf"), fontWeight: "normal" },
+    { src: fontPath("LiberationSans-Bold.ttf"), fontWeight: "bold" },
+  ],
+});
+
 const INK = "#1a1a1a";
 const MUTED = "#6b6b6b";
 const LINE = "#d4d4d4";
 
 const s = StyleSheet.create({
-  page: { padding: 40, fontFamily: "Helvetica", fontSize: 9, color: INK },
+  page: { padding: 40, fontFamily: "LiberationSans", fontSize: 9, color: INK },
   row: { flexDirection: "row" },
   between: { flexDirection: "row", justifyContent: "space-between" },
   section: {
@@ -46,15 +61,16 @@ const s = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: LINE,
   },
-  label: { fontSize: 8, color: MUTED, fontFamily: "Helvetica-Bold", marginBottom: 3 },
-  firmName: { fontSize: 14, fontFamily: "Helvetica-Bold" },
+  label: { fontSize: 8, color: MUTED, fontFamily: "LiberationSans", fontWeight: "bold", marginBottom: 3 },
+  firmName: { fontSize: 14, fontFamily: "LiberationSans", fontWeight: "bold" },
   muted: { color: MUTED },
-  bold: { fontFamily: "Helvetica-Bold" },
-  invNo: { fontSize: 14, fontFamily: "Helvetica-Bold", textAlign: "right" },
+  bold: { fontFamily: "LiberationSans", fontWeight: "bold" },
+  invNo: { fontSize: 14, fontFamily: "LiberationSans", fontWeight: "bold", textAlign: "right" },
   right: { textAlign: "right" },
   th: {
     color: MUTED,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "LiberationSans",
+    fontWeight: "bold",
     fontSize: 8,
     paddingBottom: 3,
     borderBottomWidth: 0.5,
@@ -77,7 +93,8 @@ const s = StyleSheet.create({
     paddingTop: 3,
     borderTopWidth: 0.5,
     borderTopColor: LINE,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "LiberationSans",
+    fontWeight: "bold",
   },
 });
 

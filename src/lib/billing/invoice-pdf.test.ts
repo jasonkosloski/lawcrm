@@ -131,6 +131,22 @@ describe("renderInvoicePdf", () => {
   });
 });
 
+describe("renderInvoicePdf fonts", () => {
+  it("round-trips non-WinAnsi text (Latin Extended) exactly", async () => {
+    // Beyond WinAnsi (Ł, Đ, đ, ć) so built-in Helvetica would garble it.
+    // Note: the bundled Liberation Sans 1.07.4 has no Vietnamese stacked
+    // diacritics (e.g. U+1EC5), so those names still can't render.
+    const name = "Łukasz Đorđević — Ödön";
+    const buf = await renderInvoicePdf(
+      { ...invoice, clientName: name },
+      firm,
+      "America/Denver"
+    );
+    const text = (await extractText(buf)).replace(/\s+/g, " ");
+    expect(text).toContain(name);
+  });
+});
+
 describe("invoicePdfFilename", () => {
   it("names the file after the invoice number", () => {
     expect(invoicePdfFilename("2026-101")).toBe("Invoice 2026-101.pdf");
