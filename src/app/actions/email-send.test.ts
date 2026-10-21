@@ -65,6 +65,7 @@ vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
 
 import { requirePermission } from "@/lib/permission-check";
 import { getCurrentUserId } from "@/lib/current-user";
+import { canAccessMatter } from "@/lib/matter-access";
 import { gmailFetch } from "@/lib/google/gmail-client";
 
 const mockedRequirePermission = vi.mocked(requirePermission);
@@ -327,6 +328,31 @@ describe("sendEmail — record filing", () => {
       where: { threadId, externalId: "gm-X" },
     });
     expect(msg.sentFromApp).toBe(true);
+  });
+
+  test("the notice does not name a record the sender can no longer see", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const { areaId, stageId } = await seedPracticeArea();
+    const other = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+      name: "Walled Matter",
+    });
+    await seedThread({
+      accountId,
+      externalId: "gt-W",
+      matterId: other.matterId,
+    });
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-W", "gt-W"));
+    vi.mocked(canAccessMatter).mockResolvedValueOnce(false);
+
+    const result = await sendEmail(accountId, BASE_SEND);
+    expect(result).toMatchObject({
+      ok: true,
+      notice: "Added to an existing thread filed to another matter.",
+    });
   });
 
   test("a thread Gmail returns that is unfiled gets filed to the scope", async () => {

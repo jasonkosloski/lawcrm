@@ -44,6 +44,8 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { canAccessMatter } from "@/lib/matter-access";
+import { canAccessLead } from "@/lib/lead-access";
 import { assertScopeAccess, assertScopeWritable } from "@/lib/scope-access";
 import { optionalScopeOf, scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { revalidationPathsFor, sameScope } from "@/lib/email-filing";
@@ -232,6 +234,7 @@ export async function sendEmail(
   // send the same email to the recipient a second time.
   try {
     const persisted = await persistSentMessage({
+      userId,
       accountId: account.id,
       gmailMessageId: sent.id,
       gmailThreadId: sent.threadId,
@@ -423,6 +426,7 @@ export async function replyToThread(
   // Gmail has ACCEPTED the message - see sendEmail: never fail past here.
   try {
     const persisted = await persistSentMessage({
+      userId,
       accountId: thread.account.id,
       gmailMessageId: sent.id,
       gmailThreadId: sent.threadId,
@@ -636,6 +640,8 @@ function serializeRecipients(list: MimeAddress[]): string {
  * same row.
  */
 async function persistSentMessage(opts: {
+  /** The sender - used to decide whether a record may be named. */
+  userId: string;
   accountId: string;
   gmailMessageId: string;
   gmailThreadId: string;
@@ -739,17 +745,27 @@ async function persistSentMessage(opts: {
       });
       thread = fresh;
     } else if (!sameScope(current, opts.scope)) {
-      const record =
+      // Name the record only if the sender can still see it; a walled
+      // matter / restricted lead must not leak its name.
+      const visible =
         current.kind === "matter"
-          ? await prisma.matter.findUnique({
-              where: { id: current.matterId },
-              select: { name: true },
-            })
-          : await prisma.lead.findUnique({
-              where: { id: current.leadId },
-              select: { name: true },
-            });
-      notice = `Added to an existing thread filed to ${record?.name ?? `another ${current.kind}`}.`;
+          ? await canAccessMatter(opts.userId, current.matterId)
+          : await canAccessLead(opts.userId, current.leadId);
+      let label = `another ${current.kind}`;
+      if (visible) {
+        const record =
+          current.kind === "matter"
+            ? await prisma.matter.findUnique({
+                where: { id: current.matterId },
+                select: { name: true },
+              })
+            : await prisma.lead.findUnique({
+                where: { id: current.leadId },
+                select: { name: true },
+              });
+        if (record) label = record.name;
+      }
+      notice = `Added to an existing thread filed to ${label}.`;
     }
   }
 
