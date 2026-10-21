@@ -19,9 +19,11 @@
  *   `readStoredBytes(key)` — buffer a stored file back out of either
  *       driver (local stream / blob URL fetch). Used by the
  *       file-to-matter action to COPY attachment bytes into an
- *       independent Document key — Document delete unlinks its
- *       `fileUrl`, so a Document must never share a storage key with
- *       the EmailAttachment (or with another filing of it).
+ *       independent Document key, so filing an inbound attachment
+ *       never ties its cached bytes to the Document's lifetime. (The
+ *       reverse sharing does exist: an app-sent attachment row points
+ *       at its Document's key, and byte deletion checks
+ *       `isStoredFileReferenced` first; ADR-061.)
  *
  * SCOPING IS THE CALLER'S JOB. This module resolves rows by id
  * without any user check — the download route and the filing action

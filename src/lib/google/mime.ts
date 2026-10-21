@@ -20,15 +20,20 @@
  *     base64 content-transfer-encoded and wrapped at 76 columns
  *     (that's where RFC 2045's 76-col rule applies)
  *   - Optional In-Reply-To / References for replies
+ *   - Optional attachments: the alternative part nests inside
+ *     multipart/mixed, one base64 part per file, filenames carried
+ *     as an ASCII fallback plus RFC 2231 `filename*` for UTF-8
  *
  * `encodeMimeForGmail` produces the `raw` value for
  * `users/me/messages/send`: base64url of the whole message,
  * UNWRAPPED — the raw field is a JSON string, not a MIME body, so
  * the 76-col convention does not apply there (Google's own client
  * libraries emit it unwrapped; embedded newlines are what breaks).
+ * A message with attachments goes up through the upload endpoint
+ * instead (see `postGmailSend` in email-send.ts).
  *
- * Attachments are a documented follow-up (v1 is text-only): they
- * need multipart/mixed nesting + the upload endpoint for >5 MB.
+ * Attachment bytes arrive ALREADY base64-encoded: the server reads
+ * them with Buffer, and this module stays client-safe.
  */
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -36,6 +41,13 @@
 export interface MimeAddress {
   name?: string;
   email: string;
+}
+
+export interface MimeAttachment {
+  filename: string;
+  contentType: string;
+  /** The file's bytes, standard base64, unwrapped. */
+  base64: string;
 }
 
 export interface MimeMessageInput {
@@ -54,6 +66,7 @@ export interface MimeMessageInput {
    *  threads server-side via the send payload's `threadId`. */
   inReplyTo?: string;
   references?: string[];
+  attachments?: MimeAttachment[];
   /** Injectable for deterministic tests. The default's `=_` prefix
    *  can never collide with base64 part content ("=" only appears
    *  as trailing padding). */
@@ -267,7 +280,15 @@ export function buildMimeMessage(input: MimeMessageInput): string {
     );
   }
   headers.push("MIME-Version: 1.0");
-  headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+  const attachments = input.attachments ?? [];
+  // Outer boundary for multipart/mixed. Neither boundary is a prefix
+  // of the other, and "_" never occurs in base64 content.
+  const mixed = `mix_${boundary}`;
+  headers.push(
+    attachments.length > 0
+      ? `Content-Type: multipart/mixed; boundary="${mixed}"`
+      : `Content-Type: multipart/alternative; boundary="${boundary}"`
+  );
 
   const part = (contentType: string, content: string): string =>
     [
@@ -278,16 +299,97 @@ export function buildMimeMessage(input: MimeMessageInput): string {
       wrap76(utf8Base64(content)),
     ].join("\r\n");
 
-  return [
-    headers.join("\r\n"),
-    "",
+  const alternative = [
     // text/plain first, text/html last — multipart/alternative
     // convention is least- to most-preferred.
     part("text/plain", input.text),
     part("text/html", input.html),
     `--${boundary}--`,
+  ].join("\r\n");
+
+  if (attachments.length === 0) {
+    return [headers.join("\r\n"), "", alternative, ""].join("\r\n");
+  }
+
+  return [
+    headers.join("\r\n"),
+    "",
+    `--${mixed}`,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    "",
+    alternative,
+    ...attachments.map((a) => attachmentPart(mixed, a)),
+    `--${mixed}--`,
     "",
   ].join("\r\n");
+}
+
+/** MIME token chars (RFC 2045) — anything else rules out a bare
+ *  Content-Type. */
+const MIME_TYPE_RE = /^[\w!#$&^.+-]+\/[\w!#$&^.+-]+$/;
+
+function attachmentPart(boundary: string, a: MimeAttachment): string {
+  const type = MIME_TYPE_RE.test(a.contentType.trim())
+    ? a.contentType.trim()
+    : "application/octet-stream";
+  const params = filenameParams(a.filename);
+  return [
+    `--${boundary}`,
+    `Content-Type: ${type}; name=${params.ascii}`,
+    `Content-Disposition: attachment; filename=${params.ascii}` +
+      (params.extended ? extendedFilename(params.extended) : ""),
+    "Content-Transfer-Encoding: base64",
+    "",
+    wrap76(a.base64),
+  ].join("\r\n");
+}
+
+/** Longest encoded segment per header line; keeps a long non-ASCII
+ *  name far under RFC 5322's 998-octet line limit. */
+const FILENAME_SEGMENT_CHARS = 60;
+
+/** `filename*` as one parameter, or as RFC 2231 continuations
+ *  (`filename*0*=UTF-8''…; filename*1*=…`) when long. Segments never
+ *  split a %XX escape. */
+function extendedFilename(extended: string): string {
+  if (extended.length <= FILENAME_SEGMENT_CHARS) {
+    return `;\r\n filename*=${extended}`;
+  }
+  const segments: string[] = [];
+  let i = 0;
+  while (i < extended.length) {
+    let end = Math.min(i + FILENAME_SEGMENT_CHARS, extended.length);
+    const pct = extended.lastIndexOf("%", end - 1);
+    if (pct > i && pct > end - 3 && end < extended.length) end = pct;
+    segments.push(extended.slice(i, end));
+    i = end;
+  }
+  return segments.map((seg, n) => `;\r\n filename*${n}*=${seg}`).join("");
+}
+
+/** A filename as a quoted ASCII parameter, plus an RFC 2231
+ *  `UTF-8''…` form when the name isn't plain ASCII. Clients that
+ *  read `filename*` show the real name; older ones see the fallback
+ *  with non-ASCII characters replaced. */
+export function filenameParams(filename: string): {
+  ascii: string;
+  extended: string | null;
+} {
+  const clean = sanitizeHeaderText(filename) || "attachment";
+  const fallback = clean.replace(/[^\x20-\x7e]/g, "_").replace(/[\\"]/g, "_");
+  const ascii = `"${fallback}"`;
+  if (ASCII_PRINTABLE_RE.test(clean) && clean === fallback) {
+    return { ascii, extended: null };
+  }
+  const encoded = Array.from(new TextEncoder().encode(clean))
+    .map((b) => {
+      const c = String.fromCharCode(b);
+      return /[A-Za-z0-9!#$&+.^_`|~-]/.test(c)
+        ? c
+        : `%${b.toString(16).toUpperCase().padStart(2, "0")}`;
+    })
+    .join("");
+  return { ascii, extended: `UTF-8''${encoded}` };
 }
 
 // ── Plain text → minimal HTML ────────────────────────────────────────────

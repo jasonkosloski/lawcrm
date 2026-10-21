@@ -12,6 +12,7 @@ import {
   deriveReplyRecipients,
   encodeHeaderText,
   encodeMimeForGmail,
+  filenameParams,
   formatAddress,
   formatRfc2822Date,
   isValidEmailAddress,
@@ -314,6 +315,112 @@ describe("buildMimeMessage", () => {
     expect(boundary).toMatch(/^=_lawcrm_/);
     // Exactly 2 opening delimiters + 1 terminator.
     expect(msg.split(`--${boundary}`)).toHaveLength(4);
+  });
+});
+
+describe("buildMimeMessage with attachments", () => {
+  const pdf = {
+    filename: "Retainer.pdf",
+    contentType: "application/pdf",
+    base64: Buffer.from("%PDF-1.4 fake").toString("base64"),
+  };
+
+  test("no attachments keeps the plain multipart/alternative shape", () => {
+    const msg = buildMimeMessage(baseInput({ attachments: [] }));
+    expect(msg).toBe(buildMimeMessage(baseInput()));
+    expect(msg).not.toContain("multipart/mixed");
+  });
+
+  test("nests the alternative part inside multipart/mixed", () => {
+    const msg = buildMimeMessage(baseInput({ attachments: [pdf] }));
+    const { headers, body } = splitMessage(msg);
+    expect(headers).toContain(
+      `Content-Type: multipart/mixed; boundary="mix_${BOUNDARY}"`
+    );
+    expect(body.startsWith(`--mix_${BOUNDARY}\r\n`)).toBe(true);
+    expect(body).toContain(
+      `Content-Type: multipart/alternative; boundary="${BOUNDARY}"`
+    );
+    // Alternative closes before the attachment; mixed closes last.
+    expect(body.indexOf(`--${BOUNDARY}--`)).toBeLessThan(
+      body.indexOf("Content-Disposition: attachment")
+    );
+    expect(body.endsWith(`--mix_${BOUNDARY}--\r\n`)).toBe(true);
+  });
+
+  test("attachment part carries type, filename and base64 bytes", () => {
+    const msg = buildMimeMessage(baseInput({ attachments: [pdf] }));
+    expect(msg).toContain('Content-Type: application/pdf; name="Retainer.pdf"');
+    expect(msg).toContain(
+      'Content-Disposition: attachment; filename="Retainer.pdf"\r\n'
+    );
+    expect(msg).toContain(pdf.base64);
+  });
+
+  test("long attachment bodies wrap at 76 columns", () => {
+    const big = {
+      ...pdf,
+      base64: Buffer.alloc(300, 7).toString("base64"),
+    };
+    const msg = buildMimeMessage(baseInput({ attachments: [big] }));
+    const tail = msg.slice(msg.indexOf("Content-Disposition: attachment"));
+    const lines = tail.split("\r\n").filter((l) => /^[A-Za-z0-9+/=]+$/.test(l));
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines.every((l) => l.length <= 76)).toBe(true);
+  });
+
+  test("an unsafe content type falls back to octet-stream", () => {
+    const msg = buildMimeMessage(
+      baseInput({
+        attachments: [{ ...pdf, contentType: "text/html\r\nX-Evil: 1" }],
+      })
+    );
+    expect(msg).toContain("Content-Type: application/octet-stream;");
+    expect(msg).not.toContain("X-Evil");
+  });
+});
+
+describe("long non-ASCII filenames", () => {
+  test("split into RFC 2231 continuations without breaking escapes", () => {
+    const name = "訴状".repeat(40) + ".pdf";
+    const msg = buildMimeMessage(
+      baseInput({
+        attachments: [
+          { filename: name, contentType: "application/pdf", base64: "QQ==" },
+        ],
+      })
+    );
+    const lines = msg.split("\r\n");
+    expect(lines.every((l) => l.length <= 998)).toBe(true);
+    const segs = lines
+      .map((l) => /filename\*(\d+)\*=(.*?);?$/.exec(l))
+      .filter((m): m is RegExpExecArray => m !== null);
+    expect(segs.length).toBeGreaterThan(1);
+    expect(segs.map((m) => Number(m[1]))).toEqual(segs.map((_, i) => i));
+    const joined = segs.map((m) => m[2]).join("");
+    expect(decodeURIComponent(joined.replace(/^UTF-8''/, ""))).toBe(name);
+  });
+});
+
+describe("filenameParams", () => {
+  test("plain ASCII needs no extended form", () => {
+    expect(filenameParams("Letter.pdf")).toEqual({
+      ascii: '"Letter.pdf"',
+      extended: null,
+    });
+  });
+
+  test("non-ASCII gets an RFC 2231 UTF-8 form and a safe fallback", () => {
+    const p = filenameParams("Déclaration.pdf");
+    expect(p.ascii).toBe('"D_claration.pdf"');
+    expect(p.extended).toBe("UTF-8''D%C3%A9claration.pdf");
+  });
+
+  test("quotes and newlines cannot break out of the parameter", () => {
+    const p = filenameParams('a"b\r\nX-Evil: 1.pdf');
+    expect(p.ascii).not.toMatch(/[\r\n]/);
+    expect(p.ascii.slice(1, -1)).not.toContain('"');
+    expect(p.extended).toContain("%22");
   });
 });
 

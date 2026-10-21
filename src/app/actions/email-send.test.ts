@@ -56,6 +56,17 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 
+// Attachment bytes come from storage; serve them from memory.
+vi.mock("@/lib/file-storage", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/file-storage")>();
+  return { ...actual, statFile: vi.fn() };
+});
+vi.mock("@/lib/email-attachments", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/email-attachments")>();
+  return { ...actual, readStoredBytes: vi.fn() };
+});
+
 // Keep the real error classes (instanceof in the action must match);
 // stub only the network call.
 vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
@@ -71,6 +82,8 @@ import {
 import { getCurrentUserId } from "@/lib/current-user";
 import { canAccessMatter } from "@/lib/matter-access";
 import { gmailFetch } from "@/lib/google/gmail-client";
+import { readStoredBytes } from "@/lib/email-attachments";
+import { statFile } from "@/lib/file-storage";
 
 const mockedRequirePermission = vi.mocked(requirePermission);
 const mockedGmailFetch = vi.mocked(gmailFetch);
@@ -1318,5 +1331,279 @@ describe("send — size and address hardening (F702)", () => {
       to: ["alice+case@example.com"],
     });
     expect(r.ok).toBe(true);
+  });
+});
+
+// ── Attachments ─────────────────────────────────────────────────────────
+
+describe("attachments on send", () => {
+  const PDF = Buffer.from("%PDF-1.4 retainer");
+
+  async function seedDoc(
+    scope: { matterId: string } | { leadId: string },
+    over?: { name?: string; fileSize?: number; fileUrl?: string | null }
+  ): Promise<string> {
+    const doc = await prisma.document.create({
+      data: {
+        ...scope,
+        name: over?.name ?? "Retainer.pdf",
+        fileUrl: over?.fileUrl === undefined ? "k__retainer.pdf" : over.fileUrl,
+        contentType: "application/pdf",
+        fileSize: over?.fileSize ?? PDF.length,
+      },
+      select: { id: true },
+    });
+    return doc.id;
+  }
+
+  function matterOf(): { matterId: string } {
+    if (BASE_SEND.scope.kind !== "matter") throw new Error("matter scope");
+    return { matterId: BASE_SEND.scope.matterId };
+  }
+
+  /** The upload-endpoint request: URL, and the message/rfc822 part. */
+  function uploadCall(call = 0): { url: string; metadata: unknown; mime: string } {
+    const [, url, init] = mockedGmailFetch.mock.calls[call];
+    const body = init?.body as string;
+    const boundary = /boundary=(\S+)/.exec(
+      new Headers(init?.headers).get("content-type") ?? ""
+    )![1];
+    const parts = body.split(`--${boundary}`);
+    const json = parts[1].split("\r\n\r\n")[1].trim();
+    const rfc = parts[2].slice(parts[2].indexOf("\r\n\r\n") + 4);
+    return { url: url as string, metadata: JSON.parse(json), mime: rfc };
+  }
+
+  beforeEach(() => {
+    vi.mocked(readStoredBytes).mockResolvedValue(PDF);
+    vi.mocked(statFile).mockResolvedValue({ size: PDF.length });
+  });
+
+  test("bytes deleted while Gmail took the upload are not referenced", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const docId = await seedDoc(matterOf());
+    vi.mocked(statFile).mockResolvedValue(null);
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-D", "gt-D"));
+    const result = await sendEmail(accountId, {
+      ...BASE_SEND,
+      attachmentDocumentIds: [docId],
+    });
+    expect(result.ok).toBe(true);
+    const row = await prisma.emailAttachment.findFirstOrThrow();
+    expect(row.filename).toBe("Retainer.pdf");
+    expect(row.fileUrl).toBeNull();
+  });
+
+  test("a record document goes out as an attachment via the upload endpoint", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const docId = await seedDoc(matterOf());
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-A", "gt-A"));
+
+    const result = await sendEmail(accountId, {
+      ...BASE_SEND,
+      attachmentDocumentIds: [docId],
+    });
+    expect(result.ok).toBe(true);
+
+    const { url, metadata, mime } = uploadCall();
+    expect(url).toContain("/upload/gmail/v1/users/me/messages/send");
+    expect(metadata).toEqual({});
+    expect(mime).toContain("multipart/mixed");
+    expect(mime).toContain('filename="Retainer.pdf"');
+    expect(mime).toContain(PDF.toString("base64"));
+    expect(readStoredBytes).toHaveBeenCalledWith("k__retainer.pdf");
+
+    // The sent message records the attachment against the stored bytes.
+    const rows = await prisma.emailAttachment.findMany();
+    expect(rows).toMatchObject([
+      {
+        filename: "Retainer.pdf",
+        fileUrl: "k__retainer.pdf",
+        fileSize: PDF.length,
+      },
+    ]);
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { type: "email" },
+    });
+    expect(log.title).toBe("Email sent (1 attachment)");
+  });
+
+  test("without attachments the JSON raw path is unchanged", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    mockedGmailFetch.mockResolvedValue(gmailOk());
+    await sendEmail(accountId, { ...BASE_SEND, attachmentDocumentIds: [] });
+    expect(mockedGmailFetch.mock.calls[0][1]).toBe("/users/me/messages/send");
+    expect(sentPayload().mime).not.toContain("multipart/mixed");
+  });
+
+  test("a document from another record is refused before Gmail", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const { areaId, stageId } = await seedPracticeArea();
+    const other = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    const foreign = await seedDoc({ matterId: other.matterId });
+
+    const result = await sendEmail(accountId, {
+      ...BASE_SEND,
+      attachmentDocumentIds: [foreign],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/no longer in this matter/i);
+    expect(mockedGmailFetch).not.toHaveBeenCalled();
+    expect(readStoredBytes).not.toHaveBeenCalled();
+  });
+
+  test("over the size cap is refused before reading bytes", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const big = await seedDoc(matterOf(), { fileSize: 26 * 1024 * 1024 });
+    const result = await sendEmail(accountId, {
+      ...BASE_SEND,
+      attachmentDocumentIds: [big],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/too large/i);
+    expect(readStoredBytes).not.toHaveBeenCalled();
+    expect(mockedGmailFetch).not.toHaveBeenCalled();
+  });
+
+  test("more than 20 files is refused", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const ids = Array.from({ length: 21 }, (_, i) => `doc-${i}`);
+    const result = await sendEmail(accountId, {
+      ...BASE_SEND,
+      attachmentDocumentIds: ids,
+    });
+    expect(result).toEqual({
+      ok: false,
+      error: "Too many attachments (max 20).",
+    });
+  });
+
+  test("a reply attaches from the thread's record and keeps its threadId", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const { threadId } = await seedThread({ accountId });
+    await seedMessage({
+      threadId,
+      fromEmail: "alice@example.com",
+      to: [{ email: "me@firm.com" }],
+    });
+    const docId = await seedDoc(matterOf());
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-2", "gt-1"));
+
+    const result = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      attachmentDocumentIds: [docId],
+    });
+    expect(result.ok).toBe(true);
+    const { metadata, mime } = uploadCall();
+    expect(metadata).toEqual({ threadId: "gt-1" });
+    expect(mime).toContain('filename="Retainer.pdf"');
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { type: "email" },
+    });
+    expect(log.title).toBe("Email reply sent (1 attachment)");
+  });
+
+  test("a reply filing an unfiled thread attaches from the chosen lead", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const { threadId } = await seedThread({ accountId, matterId: null });
+    await seedMessage({
+      threadId,
+      fromEmail: "alice@example.com",
+      to: [{ email: "me@firm.com" }],
+    });
+    const { leadId } = await seedLead();
+    const leadDoc = await seedDoc({ leadId });
+    const matterDoc = await seedDoc(matterOf());
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-2", "gt-1"));
+
+    // A document from a different record than the one chosen is refused.
+    const refused = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      scope: { kind: "lead", leadId },
+      attachmentDocumentIds: [matterDoc],
+    });
+    expect(refused.ok).toBe(false);
+    expect(mockedGmailFetch).not.toHaveBeenCalled();
+
+    const ok = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      scope: { kind: "lead", leadId },
+      attachmentDocumentIds: [leadDoc],
+    });
+    expect(ok.ok).toBe(true);
+  });
+
+  test("an unfiled reply never reads documents behind the chosen record's wall", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const { threadId } = await seedThread({ accountId, matterId: null });
+    await seedMessage({
+      threadId,
+      fromEmail: "alice@example.com",
+      to: [{ email: "me@firm.com" }],
+    });
+    // Only the restricted-lead bypass is withheld.
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key) => !String(key).includes("restricted")
+    );
+    const { leadId } = await seedLead({ restricted: true });
+    const walledDoc = await seedDoc({ leadId }, { fileUrl: null });
+
+    await expect(
+      replyToThread(threadId, {
+        ...BASE_REPLY,
+        scope: { kind: "lead", leadId },
+        attachmentDocumentIds: [walledDoc],
+      })
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(readStoredBytes).not.toHaveBeenCalled();
+    expect(mockedGmailFetch).not.toHaveBeenCalled();
+  });
+
+  test("a renamed document keeps its extension and marks the thread", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const docId = await seedDoc(matterOf(), {
+      name: "Signed retainer",
+      fileUrl: "abc__retainer.pdf",
+    });
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-R", "gt-R"));
+    const result = await sendEmail(accountId, {
+      ...BASE_SEND,
+      attachmentDocumentIds: [docId],
+    });
+    expect(result.ok).toBe(true);
+    expect(uploadCall().mime).toContain('filename="Signed retainer.pdf"');
+    const thread = await prisma.emailThread.findFirstOrThrow({
+      where: { externalId: "gt-R" },
+    });
+    expect(thread.hasAttachments).toBe(true);
+  });
+
+  test("an upload that times out is reported as unconfirmed", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const docId = await seedDoc(matterOf());
+    mockedGmailFetch.mockRejectedValue(
+      Object.assign(new Error("timed out"), { name: "TimeoutError" })
+    );
+    const result = await sendEmail(accountId, {
+      ...BASE_SEND,
+      attachmentDocumentIds: [docId],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/check your Sent folder/i);
   });
 });

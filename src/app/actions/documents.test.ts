@@ -125,6 +125,43 @@ describe("deleteDocument authorization", () => {
   });
 });
 
+describe("deleteDocument keeps bytes a sent email still uses", () => {
+  test("a file sent as an email attachment is not unlinked", async () => {
+    const id = await seedFiledDocument("k__sent.pdf");
+    const account = await prisma.emailAccount.create({
+      data: { userId: uploaderId, emailAddress: "me@firm.com" },
+    });
+    const thread = await prisma.emailThread.create({
+      data: {
+        accountId: account.id,
+        subject: "Retainer",
+        matterId,
+        lastMessageAt: new Date(),
+      },
+    });
+    await prisma.emailMessage.create({
+      data: {
+        threadId: thread.id,
+        externalId: "gm-1",
+        fromName: "Me",
+        fromEmail: "me@firm.com",
+        toRecipients: "[]",
+        body: "",
+        sentAt: new Date(),
+        sentFromApp: true,
+        attachments: {
+          create: { filename: "sent.pdf", fileUrl: "k__sent.pdf" },
+        },
+      },
+    });
+
+    const res = await deleteDocument(id);
+    expect(res).toEqual({ ok: true });
+    expect(await prisma.document.count({ where: { id } })).toBe(0);
+    expect(deleteFile).not.toHaveBeenCalled();
+  });
+});
+
 describe("deleteDocument audit + storage ordering", () => {
   test("writes the audit row and revalidates", async () => {
     const id = await seedFiledDocument();

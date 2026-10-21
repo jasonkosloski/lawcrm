@@ -35,6 +35,8 @@ vi.mock("@/lib/prisma", () => ({
     matterDraftFile: { count: vi.fn(), create: vi.fn(), findFirst: vi.fn() },
     documentFolder: { findFirst: vi.fn() },
     document: { create: vi.fn(), findFirst: vi.fn() },
+    // isStoredFileReferenced also checks sent email attachments.
+    emailAttachment: { findFirst: vi.fn().mockResolvedValue(null) },
     recordsRequest: { findFirst: vi.fn() },
     $transaction: vi.fn(),
     $queryRaw: vi.fn(),

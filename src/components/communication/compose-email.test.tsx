@@ -141,6 +141,7 @@ describe("ComposeEmailButton — account states", () => {
         bodyText: "Hi Alice",
         bodyHtml: "Hi Alice",
         scope: SCOPE,
+        attachmentDocumentIds: [],
       })
     );
   });

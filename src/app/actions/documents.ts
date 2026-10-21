@@ -41,6 +41,7 @@ import { DOCUMENT_CATEGORIES } from "@/lib/document-form";
 import { documentCategoryLabel } from "@/lib/document-display";
 import { MAX_DOCUMENT_NAME_LENGTH } from "@/app/api/documents/upload/upload-config";
 import { deleteFile } from "@/lib/file-storage";
+import { isStoredFileReferenced } from "@/lib/stored-file-refs";
 import { extractEmailAttachments } from "@/lib/email-attachment-extract";
 
 
@@ -171,14 +172,14 @@ export async function deleteDocument(
   // Unlink the stored bytes — best-effort: the DB row is the source
   // of truth and a stray file is recoverable, an unlogged delete is
   // not. Skip when another row still points at the same file (a
-  // duplicate would otherwise 410 after its twin is deleted).
+  // duplicate would otherwise 410 after its twin is deleted), or when
+  // an email sent from the app carried it as an attachment.
   for (const gone of [doc, ...deletingAttachments]) {
     if (!gone.fileUrl) continue;
     try {
-      const stillReferenced = await prisma.document.count({
-        where: { fileUrl: gone.fileUrl },
-      });
-      if (stillReferenced === 0) await deleteFile(gone.fileUrl);
+      if (!(await isStoredFileReferenced(gone.fileUrl))) {
+        await deleteFile(gone.fileUrl);
+      }
     } catch (err) {
       console.error("[deleteDocument] storage cleanup failed", {
         documentId: gone.id,

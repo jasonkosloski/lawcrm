@@ -29,7 +29,7 @@ email/mail invoice "send" is logged only ([issue](issues/invoice-email-not-sent.
 - [~] **`/matters/new` v2**: conflict check, team, venues, name template, dates, required fields, drafts and originating-document gate shipped; long-tail follow-ups left. → [matters](features/matters.md)
 - [x] **Client portal**: all five sub-projects shipped (foundation, case status, documents, messages, invoices and trust); online payment later. → [client-portal](features/client-portal.md)
 - [ ] **Calendar: recurring events**: blocked on an RRULE data-model ADR (series vs materialized). → [calendar](features/calendar.md)
-- [ ] **Email: attachments on send**: receive side shipped. → [email](features/communication-email.md)
+- [x] **Email: attachments on send**: attach the record's documents (or upload one) on compose and reply. → [email](features/communication-email.md)
 - [ ] **Email: per-user signatures**: `getEmailSignature()` seam ready; needs lookup + sanitizing. → [email](features/communication-email.md)
 - [ ] **Template follow-ups**: rich-text/DOCX output, per-practice-area defaults, template versioning. → [documents](features/documents.md)
 - [~] **Search follow-ups**: within-list keyword filters; Postgres FTS when ILIKE stops scaling. → [search](features/search.md)

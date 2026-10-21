@@ -27,6 +27,7 @@ import type {
   ThreadDetail,
 } from "@/lib/queries/communication";
 import { isSendableStatus } from "@/lib/email-send-status";
+import { activeStorageDriver } from "@/lib/file-storage";
 import { ReplyComposer } from "./reply-composer";
 
 export async function ReplySection({
@@ -82,6 +83,12 @@ export async function ReplySection({
   }));
   const reply = deriveReplyRecipients(source, row.account.emailAddress, false);
   const replyAll = deriveReplyRecipients(source, row.account.emailAddress, true);
+  const canUpload = await currentUserHasPermission("documents.upload");
+  const recordScope = thread.matter
+    ? ({ kind: "matter", matterId: thread.matter.id } as const)
+    : thread.lead
+      ? ({ kind: "lead", leadId: thread.lead.id } as const)
+      : null;
 
   return (
     // key by thread: ?thread= switches are search-param navigations
@@ -93,7 +100,10 @@ export async function ReplySection({
       accountEmail={row.account.emailAddress}
       reply={reply}
       replyAll={replyAll}
-      needsRecord={thread.matter === null && thread.lead === null}
+      needsRecord={recordScope === null}
+      recordScope={recordScope}
+      canUpload={canUpload}
+      storageDriver={activeStorageDriver()}
       canFile={canFile}
       matters={matters}
       leads={leads}

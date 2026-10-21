@@ -79,3 +79,4 @@ ADR true to the code are appended in place and dated.
 | [058](058-production-build-applies-expand-only-migrations.md) | The production build applies pending migrations; destructive ones need an `ALLOW_DESTRUCTIVE` marker |  |
 | [059](059-every-app-sent-email-is-filed.md) | Every app-sent email is filed to a matter or lead; threads file to either; unfiling app-sent mail is refused |  |
 | [060](060-billing-type-derived-court-appointed-is-hourly.md) | Billing type is derived from fee structure + billing mode (no column); court-appointed is hourly work with a voucher; locked after creation |  |
+| [061](061-sent-email-attachments-share-document-bytes.md) | Sent email attachments share their document's stored bytes; byte deletion checks both Document and EmailAttachment references |  |

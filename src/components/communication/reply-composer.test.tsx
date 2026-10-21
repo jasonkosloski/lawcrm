@@ -139,6 +139,7 @@ describe("ReplyComposer — prefill + wiring", () => {
         to: ["alice@example.com"],
         cc: [],
         recipientsEdited: false,
+        attachmentDocumentIds: [],
       })
     );
     await waitFor(() => expect(refresh).toHaveBeenCalled());

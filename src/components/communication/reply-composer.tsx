@@ -23,6 +23,9 @@
  * the new recipients are visible. The composer is keyed by thread id
  * in ReplySection so switching threads never carries a draft (or its
  * recipients) onto another conversation.
+ *
+ * Attachments come from the thread's record (or, on an unfiled
+ * thread, the record picked to file it to; changing it clears them).
  */
 
 "use client";
@@ -46,6 +49,9 @@ import type {
 } from "@/lib/queries/communication";
 import { blockEnterSubmit, LabeledField } from "./labeled-field";
 import { RecordPicker } from "./record-picker";
+import { SendAttachmentsField } from "./send-attachments-field";
+import type { AttachableDocument } from "@/app/actions/email-send-attachments";
+import type { StorageDriver } from "@/lib/storage/storage-key";
 
 /** Shown when the action call itself rejects - the send may or may
  *  not have gone out, so don't invite a blind retry. */
@@ -69,7 +75,10 @@ export function ReplyComposer({
   reply,
   replyAll,
   needsRecord,
+  recordScope = null,
   canFile,
+  canUpload = false,
+  storageDriver,
   matters,
   leads,
 }: {
@@ -82,7 +91,12 @@ export function ReplyComposer({
   /** Thread has no matter or lead: the reply files it first, so a
    *  record must be chosen (and the viewer must be able to file). */
   needsRecord: boolean;
+  /** The thread's matter or lead; null when unfiled. */
+  recordScope?: RecordScope | null;
   canFile: boolean;
+  /** `documents.upload` - offers "Upload new…" in the attach picker. */
+  canUpload?: boolean;
+  storageDriver?: StorageDriver;
   matters: FilingMatterOption[];
   leads: FilingLeadOption[];
 }) {
@@ -95,6 +109,9 @@ export function ReplyComposer({
   // re-mounts from it) and only resets on a successful send.
   const [body, setBody] = useState(() => getEmailSignature() ?? "");
   const [scope, setScope] = useState<RecordScope | null>(null);
+  const [attachments, setAttachments] = useState<AttachableDocument[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const attachScope = needsRecord ? scope : recordScope;
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -181,10 +198,12 @@ export function ReplyComposer({
           replyAll: mode === "replyAll",
           ...overrides,
           ...(needsRecord && scope ? { scope } : {}),
+          attachmentDocumentIds: attachments.map((a) => a.id),
         });
         if (result.ok) {
           if (result.notice) notifySuccess(result.notice);
           setBody(getEmailSignature() ?? "");
+          setAttachments([]);
           setMode(null);
           setEditing(false);
           router.refresh();
@@ -330,9 +349,15 @@ export function ReplyComposer({
                 matters={matters}
                 leads={leads}
                 value={scope}
-                disabled={isPending}
+                disabled={isPending || uploading}
                 placeholder="Matter or lead — search to choose"
-                onChange={setScope}
+                onChange={(next) => {
+                  // Attachments belong to the record they came from.
+                  if (JSON.stringify(next) !== JSON.stringify(scope)) {
+                    setAttachments([]);
+                  }
+                  setScope(next);
+                }}
               />
             </div>
           )}
@@ -346,6 +371,17 @@ export function ReplyComposer({
             onChange={setBody}
             placeholder="Write your reply…"
           />
+          {!(needsRecord && !canFile) && (
+            <SendAttachmentsField
+              scope={attachScope}
+              value={attachments}
+              onChange={setAttachments}
+              disabled={isPending}
+              canUpload={canUpload}
+              storageDriver={storageDriver}
+              onBusyChange={setUploading}
+            />
+          )}
           {error && <div className="text-2xs text-warn">{error}</div>}
           <div className="flex items-center justify-end gap-2">
             <Button
@@ -362,7 +398,10 @@ export function ReplyComposer({
               <Button
                 type="submit"
                 disabled={
-                  isPending || !bodyText.trim() || (needsRecord && !scope)
+                  isPending ||
+                  uploading ||
+                  !bodyText.trim() ||
+                  (needsRecord && !scope)
                 }
               >
                 {isPending ? "Sending…" : "Send"}

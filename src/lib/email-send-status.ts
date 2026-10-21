@@ -20,3 +20,8 @@ export const REPLY_NEEDS_FILER_ERROR =
 export function isSendableStatus(status: string): boolean {
   return (SENDABLE_EMAIL_STATUSES as readonly string[]).includes(status);
 }
+
+/** Most files one sent email may carry. */
+export const MAX_SEND_ATTACHMENTS = 20;
+/** Total attachment bytes per sent email: Gmail's own 25 MB limit. */
+export const MAX_SEND_ATTACHMENT_BYTES = 25 * 1024 * 1024;

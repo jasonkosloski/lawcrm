@@ -31,6 +31,12 @@
  * is deliberately self-contained (no import from gmail-sync.ts,
  * which is being built in parallel).
  *
+ * Attachments: the composer posts DOCUMENT IDS filed to the email's
+ * matter or lead, never bytes (ADR-034); `loadSendAttachments` reads
+ * only documents inside that record and the bytes from storage. A
+ * message with attachments goes up through Gmail's upload endpoint
+ * (35 MB) instead of the JSON `raw` field.
+ *
  * Reply-threading honesty: `EmailMessage` does not store the RFC
  * Message-ID / References headers, so `In-Reply-To` is NOT set on
  * replies today. Instead the send payload carries Gmail's own
@@ -59,8 +65,13 @@ import {
   requirePermission,
 } from "@/lib/permission-check";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
+import { statFile } from "@/lib/file-storage";
 import { isSendableStatus, REPLY_NEEDS_FILER_ERROR } from "@/lib/email-send-status";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
+import {
+  loadSendAttachments,
+  type SendAttachment,
+} from "@/lib/email-send-attachments";
 import { GoogleOAuthError } from "@/lib/google/oauth";
 import {
   buildMimeMessage,
@@ -84,6 +95,8 @@ export type SendEmailInput = {
   /** The matter or lead the sent email is filed to. Required: every
    *  app-sent email is filed. */
   scope: RecordScope;
+  /** Documents filed to `scope` to attach, in order. */
+  attachmentDocumentIds?: string[];
 };
 
 export type ReplyToThreadInput = {
@@ -102,6 +115,8 @@ export type ReplyToThreadInput = {
   /** Required when the thread is unfiled: the record to file it to
    *  before sending. Ignored on a filed thread (its record wins). */
   scope?: RecordScope;
+  /** Documents filed to the reply's record to attach, in order. */
+  attachmentDocumentIds?: string[];
 };
 
 export type SendEmailResult =
@@ -146,6 +161,11 @@ const NOT_CONNECTED_ERROR =
   "This mailbox isn't connected. Reconnect it from Settings → Integrations.";
 const TRANSIENT_GOOGLE_ERROR =
   "Google is temporarily unreachable — your draft is untouched; try again in a moment.";
+/** The request died mid-flight: Gmail may already have the message. */
+const SEND_UNCONFIRMED_ERROR =
+  "Couldn't confirm the send — check your Sent folder before retrying. Your draft is kept.";
+/** A 25 MB upload on a slow line outlasts gmailFetch's default. */
+const UPLOAD_SEND_TIMEOUT_MS = 280_000;
 
 // ── Actions ──────────────────────────────────────────────────────────────
 
@@ -218,6 +238,9 @@ export async function sendEmail(
   }
   const sizeError = checkContentSize(input.subject, input);
   if (sizeError) return { ok: false, error: sizeError };
+  const loaded = await loadSendAttachments(scope, input.attachmentDocumentIds);
+  if (!loaded.ok) return loaded;
+  const attachments = loaded.attachments;
 
   const subject = input.subject.trim();
   const sentAt = new Date();
@@ -233,10 +256,14 @@ export async function sendEmail(
     text: input.bodyText,
     html: bodyHtml,
     date: sentAt,
+    attachments,
   });
   if (!raw.ok) return raw;
 
-  const sent = await postGmailSend(account.id, { raw: raw.raw });
+  const sent = await postGmailSend(account.id, {
+    message: raw.message,
+    viaUpload: attachments.length > 0,
+  });
   if (!sent.ok) return sent;
 
   // Gmail has ACCEPTED the message. Nothing below may turn the result
@@ -257,6 +284,7 @@ export async function sendEmail(
       bodyText: input.bodyText,
       sentAt,
       scope,
+      attachments,
     });
 
     if (persisted.matterId || persisted.leadId) {
@@ -265,7 +293,7 @@ export async function sendEmail(
         leadId: persisted.leadId,
         userId,
         type: "email",
-        title: "Email sent",
+        title: `Email sent${attachmentSuffix(attachments)}`,
         detail: subject || "(no subject)",
       });
     }
@@ -426,6 +454,21 @@ export async function replyToThread(
   const subject = buildReplySubject(thread.subject);
   const sizeError = checkContentSize(subject, input);
   if (sizeError) return { ok: false, error: sizeError };
+  // Attachments come from the record the reply is filed to. The
+  // record to file to must pass its wall BEFORE its documents are
+  // read (fileEmailThread checks again when it files).
+  const attachScope = (threadScope ?? fileTo)!;
+  if (fileTo && (input.attachmentDocumentIds?.length ?? 0) > 0) {
+    await assertScopeAccess(fileTo);
+    const blocked = await assertScopeWritable(fileTo);
+    if (blocked) return { ok: false, error: blocked };
+  }
+  const loaded = await loadSendAttachments(
+    attachScope,
+    input.attachmentDocumentIds
+  );
+  if (!loaded.ok) return loaded;
+  const attachments = loaded.attachments;
   const sentAt = new Date();
   // Same outbound sanitize boundary as sendEmail (module header).
   const bodyHtml =
@@ -443,6 +486,7 @@ export async function replyToThread(
     date: sentAt,
     // No In-Reply-To/References — Message-ID headers aren't stored
     // locally (see module header). Gmail threads via `threadId`.
+    attachments,
   });
   if (!raw.ok) return raw;
 
@@ -457,12 +501,22 @@ export async function replyToThread(
     if (!filed.ok) return { ok: false, error: filed.error };
     threadScope = filed.scope;
     revalidateSendSurfaces(filed.scope);
+    // Another tab filed it elsewhere first: the attachments belong to
+    // the record the user chose, not the one the thread landed on.
+    if (attachments.length > 0 && !sameScope(filed.scope, attachScope)) {
+      return {
+        ok: false,
+        error:
+          "This thread was just filed to a different record. Re-attach files from that record and send again - your draft is untouched.",
+      };
+    }
   }
 
-  const payload: { raw: string; threadId?: string } = { raw: raw.raw };
-  if (thread.externalId) payload.threadId = thread.externalId;
-
-  const sent = await postGmailSend(thread.account.id, payload);
+  const sent = await postGmailSend(thread.account.id, {
+    message: raw.message,
+    threadId: thread.externalId ?? undefined,
+    viaUpload: attachments.length > 0,
+  });
   if (!sent.ok) return sent;
 
   // Gmail has ACCEPTED the message - see sendEmail: never fail past here.
@@ -486,6 +540,7 @@ export async function replyToThread(
       // The thread's own record: files the new local thread if Gmail
       // forks the reply into a different Gmail thread.
       scope: threadScope,
+      attachments,
     });
 
     if (persisted.matterId || persisted.leadId) {
@@ -494,7 +549,7 @@ export async function replyToThread(
         leadId: persisted.leadId,
         userId,
         type: "email",
-        title: "Email reply sent",
+        title: `Email reply sent${attachmentSuffix(attachments)}`,
         detail: subject,
       });
     }
@@ -550,9 +605,9 @@ function checkContentSize(
  *  into a draft-preserving failure. */
 function tryBuildRaw(
   input: Parameters<typeof buildMimeMessage>[0]
-): { ok: true; raw: string } | { ok: false; error: string } {
+): { ok: true; message: string } | { ok: false; error: string } {
   try {
-    return { ok: true, raw: encodeMimeForGmail(buildMimeMessage(input)) };
+    return { ok: true, message: buildMimeMessage(input) };
   } catch (err) {
     console.warn("[email-send] could not build message", err);
     return {
@@ -598,19 +653,53 @@ function sameAddressSet(a: MimeAddress[], b: MimeAddress[]): boolean {
 
 type GmailSendSuccess = { ok: true; id: string; threadId: string };
 
+/** Gmail's media-upload send: the message as message/rfc822 beside a
+ *  JSON metadata part (which carries threadId). Takes up to 35 MB,
+ *  where the JSON `raw` field is meant for small messages. */
+const GMAIL_UPLOAD_SEND_URL =
+  "https://www.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=multipart";
+
 /** POST users/me/messages/send via gmailFetch, translating every
  *  expected failure into a draft-preserving `{ ok: false }`. */
 async function postGmailSend(
   accountId: string,
-  payload: { raw: string; threadId?: string }
+  opts: { message: string; threadId?: string; viaUpload: boolean }
 ): Promise<GmailSendSuccess | { ok: false; error: string }> {
+  const metadata = opts.threadId ? { threadId: opts.threadId } : {};
   let res: Response;
   try {
-    res = await gmailFetch(accountId, "/users/me/messages/send", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    if (opts.viaUpload) {
+      // The built message is pure ASCII (encoded headers, base64
+      // parts), so it can sit verbatim inside this multipart body.
+      const boundary = `send_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+      const body = [
+        `--${boundary}`,
+        "Content-Type: application/json; charset=UTF-8",
+        "",
+        JSON.stringify(metadata),
+        `--${boundary}`,
+        "Content-Type: message/rfc822",
+        "",
+        opts.message,
+        `--${boundary}--`,
+        "",
+      ].join("\r\n");
+      res = await gmailFetch(accountId, GMAIL_UPLOAD_SEND_URL, {
+        method: "POST",
+        headers: { "content-type": `multipart/related; boundary=${boundary}` },
+        body,
+        signal: AbortSignal.timeout(UPLOAD_SEND_TIMEOUT_MS),
+      });
+    } else {
+      res = await gmailFetch(accountId, "/users/me/messages/send", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          raw: encodeMimeForGmail(opts.message),
+          ...metadata,
+        }),
+      });
+    }
   } catch (err) {
     if (err instanceof GmailAuthError) {
       // User-presentable "reconnect from Settings → Integrations".
@@ -618,6 +707,13 @@ async function postGmailSend(
     }
     if (err instanceof GoogleOAuthError) {
       return { ok: false, error: TRANSIENT_GOOGLE_ERROR };
+    }
+    // Timed out after the body went up: Gmail may have accepted it,
+    // so never invite a blind resend.
+    const name = (err as { name?: string } | null)?.name;
+    if (name === "TimeoutError" || name === "AbortError") {
+      console.warn("[email-send] send timed out", err);
+      return { ok: false, error: SEND_UNCONFIRMED_ERROR };
     }
     // Network-level failure (fetch TypeError etc.) — still return
     // rather than throw so the composer keeps the draft.
@@ -701,6 +797,9 @@ async function persistSentMessage(opts: {
   /** Plain-text body — snippet source only. */
   bodyText: string;
   sentAt: Date;
+  /** Files that went out with the message; recorded as attachment
+   *  rows pointing at the documents' stored bytes. */
+  attachments: SendAttachment[];
   localThreadId?: string;
   /** Record to file a newly created or still-unfiled thread to. A
    *  thread already filed elsewhere keeps its filing (see `notice`).
@@ -832,6 +931,23 @@ async function persistSentMessage(opts: {
       body: opts.bodyHtml,
       sentAt: opts.sentAt,
       sentFromApp: true,
+      ...(opts.attachments.length > 0
+        ? {
+            attachments: {
+              create: await Promise.all(
+                opts.attachments.map(async (a) => ({
+                  filename: a.filename,
+                  contentType: a.contentType,
+                  fileSize: a.size,
+                  // The document may have been deleted (and its bytes
+                  // unlinked) while Gmail took the upload; never point
+                  // at bytes that are gone.
+                  fileUrl: (await storedBytesExist(a.fileUrl)) ? a.fileUrl : null,
+                }))
+              ),
+            },
+          }
+        : {}),
     },
     // Sync may later enrich this row (clean headers, HTML body);
     // never clobber on a repeat of our own write - but a row sync
@@ -849,6 +965,7 @@ async function persistSentMessage(opts: {
       messageCount,
       lastMessageAt: opts.sentAt,
       snippet: makeSnippet(opts.bodyText),
+      ...(opts.attachments.length > 0 ? { hasAttachments: true } : {}),
     },
   });
 
@@ -858,6 +975,21 @@ async function persistSentMessage(opts: {
     leadId: thread.leadId,
     ...(notice ? { notice } : {}),
   };
+}
+
+async function storedBytesExist(key: string): Promise<boolean> {
+  try {
+    return (await statFile(key)) !== null;
+  } catch {
+    // Unknown: keep the reference rather than drop a good one.
+    return true;
+  }
+}
+
+function attachmentSuffix(attachments: SendAttachment[]): string {
+  const n = attachments.length;
+  if (n === 0) return "";
+  return ` (${n} attachment${n === 1 ? "" : "s"})`;
 }
 
 function makeSnippet(bodyText: string): string {

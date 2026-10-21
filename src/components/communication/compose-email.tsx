@@ -14,9 +14,10 @@
  * everything typed. Body is rich text (Email v1.1): the shared
  * Tiptap editor holds HTML; on send it goes up as `bodyHtml` (the
  * server action sanitizes it before the MIME builder) plus an
- * `htmlToText` downgrade as `bodyText`. Attachments + per-user
- * signatures are documented follow-ups in FEATURES —
- * `getEmailSignature()` is the seam for the latter.
+ * `htmlToText` downgrade as `bodyText`. Attachments are documents of
+ * the chosen record (SendAttachmentsField); changing the record clears
+ * them. Per-user signatures are a documented follow-up —
+ * `getEmailSignature()` is the seam.
  */
 
 "use client";
@@ -51,6 +52,9 @@ import type {
 } from "@/lib/queries/communication";
 import { blockEnterSubmit, LabeledField } from "./labeled-field";
 import { RecordPicker } from "./record-picker";
+import { SendAttachmentsField } from "./send-attachments-field";
+import type { AttachableDocument } from "@/app/actions/email-send-attachments";
+import type { StorageDriver } from "@/lib/storage/storage-key";
 
 /** Shown when the action call itself rejects - the send may or may
  *  not have gone out, so don't invite a blind retry. */
@@ -67,7 +71,12 @@ export function ComposeEmailButton({
   matters,
   leads,
   initialScope,
+  canUpload = false,
+  storageDriver,
 }: {
+  /** `documents.upload` - offers "Upload new…" in the attach picker. */
+  canUpload?: boolean;
+  storageDriver?: StorageDriver;
   /** Record options for the required "Matter or lead" field. */
   matters: FilingMatterOption[];
   leads: FilingLeadOption[];
@@ -94,6 +103,8 @@ export function ComposeEmailButton({
     initialScope ?? null,
   );
   const [changingRecord, setChangingRecord] = useState(false);
+  const [attachments, setAttachments] = useState<AttachableDocument[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -125,6 +136,7 @@ export function ComposeEmailButton({
     setBody(getEmailSignature() ?? "");
     setScope(initialScope ?? null);
     setChangingRecord(false);
+    setAttachments([]);
     setError(null);
   };
 
@@ -165,6 +177,7 @@ export function ComposeEmailButton({
           bodyText,
           bodyHtml: body,
           scope,
+          attachmentDocumentIds: attachments.map((a) => a.id),
         });
         if (result.ok) {
           resetDraft();
@@ -235,7 +248,7 @@ export function ComposeEmailButton({
                   (<span className="text-ink-2">{accounts[0].emailAddress}</span>)
                 </>
               ) : null}
-              . Attachments are on the way.
+              .
             </DialogDescription>
           </DialogHeader>
 
@@ -270,7 +283,7 @@ export function ComposeEmailButton({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    disabled={isPending}
+                    disabled={isPending || uploading}
                     onClick={() => setChangingRecord(true)}
                   >
                     Change
@@ -281,9 +294,13 @@ export function ComposeEmailButton({
                   matters={matters}
                   leads={leads}
                   value={scope}
-                  disabled={isPending}
+                  disabled={isPending || uploading}
                   placeholder="Matter or lead — search to choose"
                   onChange={(next) => {
+                    // Attachments belong to the record they came from.
+                    if (JSON.stringify(next) !== JSON.stringify(scope)) {
+                      setAttachments([]);
+                    }
                     setScope(next);
                     setChangingRecord(false);
                   }}
@@ -342,6 +359,15 @@ export function ComposeEmailButton({
               onChange={setBody}
               placeholder="Write your email…"
             />
+            <SendAttachmentsField
+              scope={scope}
+              value={attachments}
+              onChange={setAttachments}
+              disabled={isPending}
+              canUpload={canUpload}
+              storageDriver={storageDriver}
+              onBusyChange={setUploading}
+            />
 
             {error && <div className="text-2xs text-warn">{error}</div>}
 
@@ -356,7 +382,13 @@ export function ComposeEmailButton({
               </Button>
               <Button
                 type="submit"
-                disabled={isPending || !scope || !to.trim() || !bodyText.trim()}
+                disabled={
+                  isPending ||
+                  uploading ||
+                  !scope ||
+                  !to.trim() ||
+                  !bodyText.trim()
+                }
               >
                 {isPending ? "Sending…" : "Send"}
               </Button>
