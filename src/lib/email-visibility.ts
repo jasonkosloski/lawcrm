@@ -5,7 +5,7 @@
  * Mailboxes are personal: a thread belongs to the EmailAccount that
  * synced it, and an account belongs to one user. The Communication
  * inbox, a matter's Communication tab (listThreadsForMatter), a
- * lead's tab (listThreadsForEmail), the counts and the attachment
+ * lead's tab (listThreadsForLead), the counts and the attachment
  * download route all scope to `account: { userId }`. Filing a thread
  * to a matter does NOT make it visible to the rest of the matter's
  * team — there is no admin override either.

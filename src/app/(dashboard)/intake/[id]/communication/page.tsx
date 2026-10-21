@@ -1,17 +1,20 @@
 /**
  * Lead Detail — Communication tab
  *
- * Mini inbox scoped to this lead, driven by the lead's joined Contact:
- *   - Email threads matching `displayEmail` (sender / recipient / cc)
- *   - SMS / call / voicemail threads on `displayPhone`
+ * Mini inbox scoped to this lead:
+ *   - Email threads filed to the lead (listThreadsForLead, the
+ *     viewer's own mailbox). Always rendered; it does not depend on
+ *     the contact having an email address.
+ *   - SMS / call / voicemail threads on `displayPhone`, rendered when
+ *     the contact has a phone. SMS / calls match by the contact record
+ *     (calls logged from this tab file to the contact whatever number
+ *     was typed) or any of the contact's known numbers.
  *
- * Either side renders only when the corresponding contact channel is
- * known. Empty state covers the genuinely-no-contact case (no email
- * AND no phone). SMS / calls match by the contact record (calls logged
- * from this tab file to the contact whatever number was typed) or any
- * of the contact's known numbers. Clicking an email thread updates `?thread=<id>` in
- * place; SMS rows link out to the main `/communication?view=messages`
- * page since there's no embedded messenger reader today.
+ * Clicking an email thread updates `?thread=<id>` in place; the
+ * selected thread is validated against the lead it is filed to, so a
+ * pasted id can't read other records' mail. SMS rows link out to the
+ * main `/communication?view=messages` page since there's no embedded
+ * messenger reader today.
  *
  * "Log call" (gated on `communication.log_call`) opens the manual
  * call composer with the lead's contact pre-selected — mirrors the
@@ -23,14 +26,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { EmailLink } from "@/components/ui/email-link";
 import { EmbeddedInbox } from "@/components/communication/embedded-inbox";
 import {
   getFilingLeadOptions,
   getFilingMatterOptions,
   getThreadById,
-  listThreadsForEmail,
-  THREADS_FOR_EMAIL_CAP,
+  listThreadsForLead,
 } from "@/lib/queries/communication";
 import {
   listMessengerThreadsForLead,
@@ -48,7 +49,7 @@ import { ComposeEmailLauncher } from "@/components/communication/compose-email-l
 import { LogCallButton } from "@/components/communication/log-call-button";
 import { requireUser } from "@/lib/current-user";
 import { assertLeadAccess } from "@/lib/lead-access";
-import { TruncationNotice } from "@/components/shared/pager";
+import { parsePageParam } from "@/lib/pagination";
 
 export default async function LeadCommunicationPage({
   params,
@@ -65,16 +66,14 @@ export default async function LeadCommunicationPage({
   const lead = await getLeadById(id);
   if (!lead) notFound();
 
-  const email = lead.displayEmail;
   const phone = lead.displayPhone;
 
-  // Email + SMS in parallel; either may be empty depending on what
-  // contact channels we know about.
-  const [emailMatch, messengerThreads, callContacts, tz] =
+  // Filed email + SMS + the (eager) requested thread in one wave; the
+  // thread is discarded below if it isn't filed to this lead.
+  const [emailThreads, requestedThread, messengerThreads, callContacts, tz] =
     await Promise.all([
-      email
-        ? listThreadsForEmail(email)
-        : Promise.resolve({ rows: [], truncated: false }),
+      listThreadsForLead(id, parsePageParam(sp.page)),
+      requestedThreadId ? getThreadById(requestedThreadId) : null,
       phone
         ? listMessengerThreadsForLead({
             contactId: lead.contact?.id,
@@ -118,48 +117,15 @@ export default async function LeadCommunicationPage({
       <ComposeEmailLauncher initialScope={{ kind: "lead", leadId: id }} />
     );
 
-  const emailThreads = emailMatch.rows;
+  // Only the lead's own filed threads may open in the reader.
+  const selectedThread =
+    requestedThread && requestedThread.lead?.id === id ? requestedThread : null;
 
-  // Only allow reading email threads that are actually in the lead's set.
-  const threadId =
-    requestedThreadId && emailThreads.some((t) => t.id === requestedThreadId)
-      ? requestedThreadId
-      : null;
-
-  // The filing-matter list only feeds the open thread's reader, so
-  // skip that (unbounded) query until a thread is selected.
-  const [selectedThread, filingOptions, leadOptions] = threadId
-    ? await Promise.all([
-        getThreadById(threadId),
-        getFilingMatterOptions(),
-        getFilingLeadOptions(),
-      ])
-    : [null, [], []];
-
-  // Truly no contact info — show a single empty card. The composer
-  // stays available (it accepts a typed phone number) so the first
-  // call can still be captured.
-  if (!email && !phone) {
-    return (
-      <div className="p-5">
-        <div className="max-w-4xl flex flex-col gap-3">
-          {(logCallButton || composeButton) && (
-            <div className="flex items-center justify-end gap-2">
-              {composeButton}
-              {logCallButton}
-            </div>
-          )}
-          <Card>
-            <div className="p-5 text-xs text-ink-3">
-              This lead has no email or phone on file yet, so there&apos;s
-              nothing to match threads against. Add contact info on the
-              Overview tab to start surfacing communication.
-            </div>
-          </Card>
-        </div>
-      </div>
-    );
-  }
+  // The filing options only feed the open thread's reader, so skip
+  // those (unbounded) queries until a thread is selected.
+  const [filingOptions, leadOptions] = selectedThread
+    ? await Promise.all([getFilingMatterOptions(), getFilingLeadOptions()])
+    : [[], []];
 
   return (
     <div className="p-5 flex flex-col flex-1 min-h-0 gap-4">
@@ -169,42 +135,20 @@ export default async function LeadCommunicationPage({
           {logCallButton}
         </div>
       )}
-      {email ? (
-        <div className="flex flex-col flex-1 min-h-0 gap-3">
-          <div className="text-2xs font-mono text-ink-4 shrink-0">
-            Email threads where{" "}
-            <EmailLink
-              email={email}
-              className="text-ink-3 hover:text-brand-700 hover:underline"
-            />{" "}
-            is the sender, recipient, or cc.
-          </div>
-          {emailMatch.truncated && (
-            <TruncationNotice
-              shown={THREADS_FOR_EMAIL_CAP}
-              hint="Only the newest matching threads are searched; older mail with this address is in Communication."
-              className="shrink-0"
-            />
-          )}
-          <EmbeddedInbox
-            threads={emailThreads}
-            selectedThread={selectedThread}
-            filingOptions={filingOptions}
-            leadOptions={leadOptions}
-            basePath={`/intake/${id}/communication`}
-            emptyLabel="No emails yet"
-            emptyHint={`Emails to or from ${email} will surface here.`}
-            tz={tz}
-          />
-        </div>
-      ) : (
-        <Card>
-          <div className="p-4 text-xs text-ink-3">
-            No email on file — capture one on the Overview tab to start
-            tracking email threads here.
-          </div>
-        </Card>
-      )}
+      <div className="flex flex-col flex-1 min-h-0 gap-3">
+        <EmbeddedInbox
+          threads={emailThreads.rows}
+          selectedThread={selectedThread}
+          filingOptions={filingOptions}
+          leadOptions={leadOptions}
+          basePath={`/intake/${id}/communication`}
+          emptyLabel="No emails filed to this lead yet"
+          emptyHint="Emails filed to this lead will appear here."
+          showMatterChip={false}
+          tz={tz}
+          paging={emailThreads}
+        />
+      </div>
 
       {phone && (
         <SmsSection

@@ -25,11 +25,6 @@ import { paginate, type Page } from "@/lib/pagination";
  *  (`?page=N`, see src/lib/pagination.ts). */
 export const THREAD_PAGE_SIZE = 100;
 
-/** Candidate cap for the lead tab's address match (listThreadsForEmail).
- *  It can't page cheaply (a verification pass runs after the fetch), so
- *  it reports `truncated` and the tab says so instead. */
-export const THREADS_FOR_EMAIL_CAP = 500;
-
 /** Ethical walls: a thread filed to a matter or lead the viewer can't
  *  see is hidden from every list / count / reader (unfiled threads
  *  stay). Spread as `AND: await threadRecordAccessAnd(userId)`. */
@@ -404,85 +399,6 @@ export async function listThreadsForLead(
     },
     page
   );
-}
-
-/** Threads that touch a given email address (sender OR recipient).
- *  Sender matching runs exactly (case-insensitive) in SQL; recipients
- *  are stored as JSON strings, so those match by substring in SQL and
- *  get sharpened by a message-scoped verification pass below.
- *
- *  Used by the lead Communication tab — since Leads don't have direct
- *  EmailThread links today, email address is the matching key. Schema
- *  may eventually gain a `Lead.threadId[]` relation (see SCHEMA_NOTES
- *  open questions) at which point this becomes a direct join. */
-export async function listThreadsForEmail(
-  email: string
-): Promise<{ rows: ThreadListRow[]; truncated: boolean }> {
-  if (!email) return { rows: [], truncated: false };
-  const normalized = email.toLowerCase();
-  const userId = await getCurrentUserId();
-
-  // Shared by both queries. The recipient `contains` is intentionally
-  // loose ("joe@x.com" also hits inside "bjoe@x.com") — the
-  // verification pass exact-matches the parsed addresses.
-  const matchOr: Prisma.EmailMessageWhereInput[] = [
-    { fromEmail: { equals: normalized, mode: "insensitive" } },
-    { toRecipients: { contains: normalized, mode: "insensitive" } },
-    { ccRecipients: { contains: normalized, mode: "insensitive" } },
-  ];
-
-  const candidates = await prisma.emailThread.findMany({
-    where: {
-      ...visibleEmailThreadWhere(userId),
-      AND: await threadRecordAccessAnd(userId),
-      messages: { some: { OR: matchOr } },
-    },
-    // Capped (one past the cap detects truncation): without it a busy
-    // address pulls its entire history in one query. Recipient JSON
-    // for verification comes from the message-scoped query below;
-    // loading it here would scale with total mail volume in every
-    // candidate thread, not with the number of actual matches.
-    take: THREADS_FOR_EMAIL_CAP + 1,
-    include: threadListInclude,
-    orderBy: [{ lastMessageAt: "desc" }, { id: "desc" }],
-  });
-  const truncated = candidates.length > THREADS_FOR_EMAIL_CAP;
-  if (truncated) candidates.length = THREADS_FOR_EMAIL_CAP;
-  if (candidates.length === 0) return { rows: [], truncated: false };
-
-  // Verification pass: sharpen the recipient substring hits so a
-  // collision doesn't produce a false positive. Only fetches messages
-  // that hit the OR at all — not every message of every thread.
-  const hits = await prisma.emailMessage.findMany({
-    where: {
-      threadId: { in: candidates.map((t) => t.id) },
-      OR: matchOr,
-    },
-    select: {
-      threadId: true,
-      fromEmail: true,
-      toRecipients: true,
-      ccRecipients: true,
-    },
-  });
-  const verified = new Set<string>();
-  for (const m of hits) {
-    if (verified.has(m.threadId)) continue;
-    const isMatch =
-      m.fromEmail.toLowerCase() === normalized ||
-      parseRecipients(m.toRecipients).some(
-        (r) => r.email.toLowerCase() === normalized
-      ) ||
-      parseRecipients(m.ccRecipients).some(
-        (r) => r.email.toLowerCase() === normalized
-      );
-    if (isMatch) verified.add(m.threadId);
-  }
-
-  return {
-    rows: candidates.filter((t) => verified.has(t.id)).map(toThreadListRow),
-    truncated,
-  };
 }
 
 export type CommunicationCounts = {
