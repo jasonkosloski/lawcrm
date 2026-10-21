@@ -99,10 +99,20 @@ export async function getTriage(tz: string): Promise<TriageData> {
   const openMatter = { ...wallMatter, isArchived: false };
 
   const deadlinesP = (async () => {
+    // "Me": deadlines I own, plus unowned ones on matters I'm on the
+    // team of (someone has to catch those). Legacy rows can carry a
+    // stored "overdue" status (deadline-status.ts) and are still live.
     const where = {
-      status: "open",
+      status: { in: ["open", "overdue"] },
       dueDate: { lt: dueBefore },
       matter: openMatter,
+      OR: [
+        { ownerId: userId },
+        {
+          ownerId: null,
+          matter: { teamMembers: { some: { userId, removedAt: null } } },
+        },
+      ],
     };
     const [rows, total] = await Promise.all([
       prisma.deadline.findMany({
@@ -139,7 +149,11 @@ export async function getTriage(tz: string): Promise<TriageData> {
       ownerId: userId,
       status: { notIn: [...TASK_CLOSED_STATUSES] },
       dueDate: { lt: dueBefore },
-      AND: await optionalRecordAccessClause(userId),
+      AND: [
+        ...(await optionalRecordAccessClause(userId)),
+        // Same rule as the deadlines group: archived matters are done.
+        { OR: [{ matterId: null }, { matter: { isArchived: false } }] },
+      ],
     };
     const [rows, total] = await Promise.all([
       prisma.task.findMany({

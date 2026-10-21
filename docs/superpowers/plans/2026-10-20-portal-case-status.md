@@ -36,7 +36,7 @@
 
 **Files:**
 - Modify: `prisma/schema.prisma` (add two models + back-relations on `Matter`, `CalendarEvent`, `User`)
-- Create: `prisma/migrations/20261020120000_portal_case_status/migration.sql`
+- Create: `prisma/migrations/20261021130000_portal_case_status/migration.sql`
 - Modify: `src/lib/permissions.ts` (portal group)
 - Modify: `src/test/integration-helpers.ts` (`TABLES_IN_DELETE_ORDER`: add `"portal_shared_events"`, `"portal_status_updates"` in the Client portal block, before `portal_login_tokens`)
 - Test: `src/lib/permissions.test.ts` (or the existing permissions test file)
@@ -55,7 +55,7 @@
   WHERE "permission" = 'matters.edit'
   ON CONFLICT ("roleId", "permission") DO NOTHING;
   ```
-  Rename the folder to `20261020120000_portal_case_status` if Prisma chose another timestamp, as long as it sorts after the latest existing migration.
+  Rename the folder to `20261021130000_portal_case_status` if Prisma chose another timestamp, as long as it sorts after the latest existing migration.
 - [ ] **Step 5:** Run `npm run check:migrations` (expect no drift) and the permissions test (expect PASS).
 - [ ] **Step 6:** Commit `feat(portal): case status schema and permission keys`.
 

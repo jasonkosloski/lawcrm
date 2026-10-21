@@ -28,6 +28,7 @@ import {
   DOCUMENT_CATEGORY_LABEL,
   type DocumentCategory,
 } from "@/lib/document-form";
+import { documentCategoryLabel } from "@/lib/document-display";
 import { MAX_DOCUMENT_NAME_LENGTH } from "@/app/api/documents/upload/upload-config";
 import { cn } from "@/lib/utils";
 
@@ -118,7 +119,7 @@ export function EditDocumentDialog({
               className="w-full"
             >
               {!known && (
-                <NativeSelectOption value={category}>{category}</NativeSelectOption>
+                <NativeSelectOption value={category}>{documentCategoryLabel(category)}</NativeSelectOption>
               )}
               {DOCUMENT_CATEGORIES.map((c: DocumentCategory) => (
                 <NativeSelectOption key={c} value={c}>

@@ -37,7 +37,8 @@ import { SAME_SCOPE_ERROR, scopeOf, scopeWhere } from "@/lib/record-scope";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { logActivity, logActivityTx } from "@/lib/activity-log";
-import { DOCUMENT_CATEGORIES, DOCUMENT_CATEGORY_LABEL, type DocumentCategory } from "@/lib/document-form";
+import { DOCUMENT_CATEGORIES } from "@/lib/document-form";
+import { documentCategoryLabel } from "@/lib/document-display";
 import { MAX_DOCUMENT_NAME_LENGTH } from "@/app/api/documents/upload/upload-config";
 import { deleteFile } from "@/lib/file-storage";
 import { extractEmailAttachments } from "@/lib/email-attachment-extract";
@@ -366,7 +367,16 @@ export async function updateDocumentMetadata(
   const userId = await requirePermission("documents.edit");
   await assertChildMatterAccess("document", documentId);
 
-  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const doc = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: { id: true, matterId: true, leadId: true, name: true, category: true },
+  });
+  if (!doc) return { ok: false, error: "Document not found." };
+
+  const name = keepExtension(
+    typeof input.name === "string" ? input.name.trim() : "",
+    doc.name
+  );
   if (!name) return { ok: false, error: "Name can't be empty." };
   if (name.length > MAX_DOCUMENT_NAME_LENGTH) {
     return {
@@ -374,16 +384,15 @@ export async function updateDocumentMetadata(
       error: `Name must be ${MAX_DOCUMENT_NAME_LENGTH} characters or fewer.`,
     };
   }
-  if (!(DOCUMENT_CATEGORIES as readonly string[]).includes(input.category)) {
+  // An unchanged legacy category is kept, so such a file can still be
+  // renamed; changing TO an unknown category is refused.
+  const category = input.category;
+  if (
+    category !== doc.category &&
+    !(DOCUMENT_CATEGORIES as readonly string[]).includes(category)
+  ) {
     return { ok: false, error: "Pick a valid category." };
   }
-  const category = input.category as DocumentCategory;
-
-  const doc = await prisma.document.findUnique({
-    where: { id: documentId },
-    select: { id: true, matterId: true, leadId: true, name: true, category: true },
-  });
-  if (!doc) return { ok: false, error: "Document not found." };
 
   const renamed = name !== doc.name;
   const recategorized = category !== doc.category;
@@ -394,8 +403,6 @@ export async function updateDocumentMetadata(
       where: { id: doc.id },
       data: { name, category },
     });
-    const label = (c: string) =>
-      DOCUMENT_CATEGORY_LABEL[c as DocumentCategory] ?? c;
     await logActivityTx(tx, {
       matterId: doc.matterId,
       leadId: doc.leadId,
@@ -410,7 +417,7 @@ export async function updateDocumentMetadata(
       detail: [
         renamed ? `${doc.name} → ${name}` : null,
         recategorized
-          ? `${renamed ? "" : `${doc.name}: `}${label(doc.category)} → ${label(category)}`
+          ? `${renamed ? "" : `${doc.name}: `}${documentCategoryLabel(doc.category)} → ${documentCategoryLabel(category)}`
           : null,
       ]
         .filter(Boolean)
@@ -420,4 +427,18 @@ export async function updateDocumentMetadata(
 
   revalidateDocumentScope(scopeOf(doc), doc.id);
   return { ok: true, changed: true };
+}
+
+/**
+ * The viewer and downloads fall back to the name's extension when the
+ * stored content type is missing or generic, so a rename keeps the
+ * original extension (same extension rule as `capDocumentName`).
+ * Empty input stays empty so the caller can reject it.
+ */
+function keepExtension(name: string, original: string): string {
+  if (!name) return name;
+  const dot = original.lastIndexOf(".");
+  const ext = dot > 0 && original.length - dot <= 17 ? original.slice(dot) : "";
+  if (!ext || name.toLowerCase().endsWith(ext.toLowerCase())) return name;
+  return name + ext;
 }

@@ -151,6 +151,25 @@ describe("updateDocumentMetadata", () => {
     expect((await docRow()).category).toBe("other");
   });
 
+  test("a rename that drops the extension keeps the original one", async () => {
+    const res = await updateDocumentMetadata(documentId, {
+      name: "Amended Complaint",
+      category: "other",
+    });
+    expect(res).toEqual({ ok: true, changed: true });
+    expect((await docRow()).name).toBe("Amended Complaint.pdf");
+  });
+
+  test("a legacy category can stay unchanged while renaming", async () => {
+    await prisma.document.update({ where: { id: documentId }, data: { category: "legacy" } });
+    const res = await updateDocumentMetadata(documentId, {
+      name: "Renamed.pdf",
+      category: "legacy",
+    });
+    expect(res).toEqual({ ok: true, changed: true });
+    expect(await docRow()).toMatchObject({ name: "Renamed.pdf", category: "legacy" });
+  });
+
   test("unchanged input is a no-op: no write, no activity, no revalidation", async () => {
     const before = await docRow();
     const res = await updateDocumentMetadata(documentId, {

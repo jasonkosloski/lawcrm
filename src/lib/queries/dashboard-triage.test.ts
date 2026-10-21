@@ -87,9 +87,15 @@ async function outsider(): Promise<string> {
   return id;
 }
 
-async function deadline(mId: string, title: string, due: string, status = "open") {
+async function deadline(
+  mId: string,
+  title: string,
+  due: string,
+  status = "open",
+  ownerId: string | null = userId,
+) {
   return prisma.deadline.create({
-    data: { matterId: mId, title, dueDate: day(due), status },
+    data: { matterId: mId, title, dueDate: day(due), status, ownerId },
   });
 }
 
@@ -174,20 +180,39 @@ describe("deadlines", () => {
 
   test("a walled-off matter's deadlines never appear", async () => {
     await wallFirm();
-    await deadline(matterId, "secret", "2026-06-10");
     const other = await outsider();
+    await deadline(matterId, "secret", "2026-06-10", "open", other);
     vi.mocked(getCurrentUserId).mockResolvedValue(other);
     expect(await groupOf("deadlines")).toBeUndefined();
-
-    vi.mocked(getCurrentUserId).mockResolvedValue(userId);
-    expect((await groupOf("deadlines"))?.rows).toHaveLength(1);
   });
 
   test("a restricted matter is hidden from non-team members even in firm mode", async () => {
     await prisma.matter.update({ where: { id: matterId }, data: { restricted: true } });
-    await deadline(matterId, "secret", "2026-06-10");
-    vi.mocked(getCurrentUserId).mockResolvedValue(await outsider());
+    const other = await outsider();
+    await deadline(matterId, "secret", "2026-06-10", "open", other);
+    vi.mocked(getCurrentUserId).mockResolvedValue(other);
     expect(await groupOf("deadlines")).toBeUndefined();
+  });
+
+  test("only mine, or unowned on a matter I'm on the team of", async () => {
+    const other = await outsider();
+    await deadline(matterId, "mine", "2026-06-10");
+    await deadline(matterId, "someone else's", "2026-06-10", "open", other);
+    await deadline(matterId, "unowned, my team", "2026-06-11", "open", null);
+    // The seeded matter has the viewer as lead; `other` is not on it.
+    expect((await groupOf("deadlines"))?.rows.map((r) => r.title)).toEqual([
+      "mine",
+      "unowned, my team",
+    ]);
+    vi.mocked(getCurrentUserId).mockResolvedValue(other);
+    expect((await groupOf("deadlines"))?.rows.map((r) => r.title)).toEqual([
+      "someone else's",
+    ]);
+  });
+
+  test("legacy stored 'overdue' status still shows", async () => {
+    await deadline(matterId, "legacy", "2026-06-10", "overdue");
+    expect((await groupOf("deadlines"))?.rows.map((r) => r.title)).toEqual(["legacy"]);
   });
 });
 
@@ -206,6 +231,12 @@ describe("tasks", () => {
     expect(g?.rows.map((r) => r.title)).toEqual(["overdue", "firm-wide", "today"]);
     expect(g?.rows.find((r) => r.title === "firm-wide")?.href).toBeNull();
     expect(g?.total).toBe(3);
+  });
+
+  test("a task on an archived matter is left off", async () => {
+    await prisma.matter.update({ where: { id: matterId }, data: { isArchived: true } });
+    await task(userId, "on archived", "2026-06-01");
+    expect(await groupOf("tasks")).toBeUndefined();
   });
 
   test("my task on a matter I cannot access is left off", async () => {
