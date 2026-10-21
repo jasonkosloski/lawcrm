@@ -456,8 +456,11 @@ export type InvoiceDetail = InvoiceRow & {
   paymentsRecordedTotal: number;
 };
 
+/** `tz` is for callers with no staff session (the client portal); staff
+ *  callers omit it and get the signed-in user's zone. */
 export async function getInvoiceById(
-  invoiceId: string
+  invoiceId: string,
+  tz?: string
 ): Promise<InvoiceDetail | null> {
   const inv = await prisma.invoice.findUnique({
     where: { id: invoiceId },
@@ -499,7 +502,7 @@ export async function getInvoiceById(
 
   // Reuse the same daysUntilDue logic as the row shape so the
   // preview's "X days late" text matches the table.
-  const tz = await getCurrentUserTimeZone();
+  tz = tz ?? (await getCurrentUserTimeZone());
   const total = inv.totalAmount.toNumber();
   const paid = inv.paidAmount.toNumber();
   const daysUntilDue = invoiceDaysUntilDue(inv.status, inv.dueDate, tz);
