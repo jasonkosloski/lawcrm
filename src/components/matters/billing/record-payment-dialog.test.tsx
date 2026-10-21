@@ -69,6 +69,7 @@ describe("RecordPaymentDialog — email copy", () => {
       <RecordPaymentDialog
         {...baseProps}
         clientEmail="c@x.com"
+        canSendInvoice
         open
         onOpenChange={vi.fn()}
       />
@@ -91,6 +92,37 @@ describe("RecordPaymentDialog — email copy", () => {
     await waitFor(() => expect(notifyWarning).toHaveBeenCalledWith("W"));
     rerender(ui);
     expect(notifyWarning).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("RecordPaymentDialog — send updated invoice", () => {
+  test("is opt-in: unchecked by default even with a client email", () => {
+    render(
+      <RecordPaymentDialog
+        {...baseProps}
+        clientEmail="c@x.com"
+        canSendInvoice
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(
+      document.querySelector<HTMLInputElement>('input[name="notifyClient"]')?.value
+    ).toBe("");
+  });
+
+  test("is hidden without billing.send_invoice", () => {
+    render(
+      <RecordPaymentDialog
+        {...baseProps}
+        clientEmail="c@x.com"
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(document.querySelector('input[name="notifyClient"]')).toBeNull();
   });
 });
 

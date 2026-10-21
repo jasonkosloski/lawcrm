@@ -70,6 +70,7 @@ export function RecordPaymentDialog({
   trustBalance,
   clientEmail,
   canApplyTrust = false,
+  canSendInvoice = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -91,6 +92,9 @@ export function RecordPaymentDialog({
    *  else. Defaults to false (hidden) so a caller that forgets the
    *  prop can't expose the option. */
   canApplyTrust?: boolean;
+  /** billing.send_invoice: emailing the updated invoice is part of it,
+   *  so without it the "Send updated invoice" checkbox is hidden. */
+  canSendInvoice?: boolean;
 }) {
   // Trust appears as a method only when the viewer may apply trust
   // AND the matter actually has funds in trust to draw from. Other
@@ -159,6 +163,7 @@ export function RecordPaymentDialog({
           invoiceBalance={invoiceBalance}
           trustBalance={trustBalance}
           clientEmail={clientEmail}
+          canSendInvoice={canSendInvoice}
           selectableSources={selectableSources}
         />
       </DialogContent>
@@ -175,6 +180,7 @@ function RecordPaymentForm({
   invoiceBalance,
   trustBalance,
   clientEmail,
+  canSendInvoice,
   selectableSources,
 }: {
   state: BillingFormState;
@@ -185,6 +191,7 @@ function RecordPaymentForm({
   invoiceBalance: number;
   trustBalance: number;
   clientEmail: string | null;
+  canSendInvoice: boolean;
   selectableSources: InvoicePaymentSource[];
 }) {
   const tz = useUserTimeZone();
@@ -208,11 +215,9 @@ function RecordPaymentForm({
   const [source, setSource] = useState<InvoicePaymentSource>("check");
   const [reference, setReference] = useState("");
   const [description, setDescription] = useState("");
-  // Default to checked when the client has an email — the common
-  // case is "got the check, send them an updated copy." If there's
-  // no email on file the checkbox stays disabled + unchecked
-  // regardless of clicks.
-  const [notifyClient, setNotifyClient] = useState(!!clientEmail);
+  // Opt-in: this sends a real email to the client, so it starts
+  // unchecked. With no email on file the checkbox stays disabled.
+  const [notifyClient, setNotifyClient] = useState(false);
 
   const errs = state.errors ?? {};
   // Same parse as the server's amount schema ("$1,200.00" is
@@ -379,10 +384,10 @@ function RecordPaymentForm({
         />
       </div>
 
-      {/* Notify-client opt-out. Checked by default so the lawyer
-          doesn't have to think about it; unchecks silently when
-          there's no email on file. The hidden input mirrors the
-          boolean so the server reads "true" / "" cleanly. */}
+      {/* Notify-client opt-in (unchecked by default; hidden without
+          billing.send_invoice). The hidden input mirrors the boolean
+          so the server reads "true" / "" cleanly. */}
+      {canSendInvoice && (
       <label
         className={cn(
           "flex items-start gap-2 px-3 py-2 rounded-md border text-xs",
@@ -414,6 +419,7 @@ function RecordPaymentForm({
           </div>
         </div>
       </label>
+      )}
 
       {state.status === "error" && state.error && (
         <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">

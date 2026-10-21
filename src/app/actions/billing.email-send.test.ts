@@ -32,7 +32,7 @@ vi.mock("@/lib/file-storage", () => ({
 import { notFound } from "next/navigation";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
-import { requirePermission } from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { assertChildMatterAccess } from "@/lib/matter-access";
 import { prisma } from "@/lib/prisma";
 import { recordInvoicePayment, resendInvoiceEmail, sendInvoice } from "@/app/actions/billing";
@@ -128,6 +128,22 @@ describe("sendInvoice by email", () => {
     expect(titles.some((t) => t.includes("not emailed"))).toBe(false);
   });
 
+  test("each send carries a fresh per-call idempotency key", async () => {
+    const id = await makeInvoice();
+    await sendInvoice(id, billingInitialState, sendForm());
+    const key = cap.sent[0].idempotencyKey;
+    expect(key).toMatch(new RegExp(`^invoice-${id}-initial-[0-9a-f-]{36}$`));
+  });
+
+  test("rejects a multi-recipient string", async () => {
+    const id = await makeInvoice();
+    const res = await sendInvoice(id, billingInitialState, sendForm({ recipient: "a@b.com, c@d.com" }));
+    expect(res.status).toBe("error");
+    expect(res.errors?.recipient).toBeDefined();
+    expect(cap.sent).toHaveLength(0);
+    expect(await statusOf(id)).toBe("approved");
+  });
+
   test("with applyTrust the PDF shows the trust payment", async () => {
     await prisma.matter.update({ where: { id: matterId }, data: { trustBalance: 2000 } });
     const id = await makeInvoice();
@@ -164,6 +180,27 @@ describe("recordInvoicePayment notifyClient", () => {
     expect(cap.sent[0].subject.startsWith("Updated invoice")).toBe(true);
   });
 
+  test("without billing.send_invoice: payment recorded, no email, warning", async () => {
+    const { contactId } = await seedContact({ name: "Pat", email: "pat@example.com" });
+    await prisma.matter.update({ where: { id: matterId }, data: { clientId: contactId } });
+    const id = await makeInvoice("sent", 100);
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key: string) => key !== "billing.send_invoice"
+    );
+    try {
+      const res = await recordInvoicePayment(id, billingInitialState, fd({ amount: "25", source: "check", notifyClient: "true" }));
+      expect(res.status).toBe("ok");
+      expect(res.warning).toBe(
+        "Payment recorded. You don't have permission to email invoices, so no updated copy was sent."
+      );
+      expect(cap.sent).toHaveLength(0);
+      expect(await prisma.invoicePayment.count({ where: { invoiceId: id } })).toBe(1);
+    } finally {
+      vi.mocked(currentUserHasPermission).mockReset();
+      vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    }
+  });
+
   test("no client email: no email, payment still recorded", async () => {
     const id = await makeInvoice("sent", 100);
     const res = await recordInvoicePayment(id, billingInitialState, fd({ amount: "25", source: "check", notifyClient: "true" }));
@@ -181,6 +218,14 @@ describe("resendInvoiceEmail", () => {
     expect(cap.sent).toHaveLength(1);
     expect(await statusOf(id)).toBe("sent");
     expect(requirePermission).toHaveBeenCalledWith("billing.send_invoice");
+  });
+
+  test("rejects a multi-recipient string", async () => {
+    const id = await makeInvoice("sent");
+    const res = await resendInvoiceEmail(id, billingInitialState, fd({ recipient: "a@b.com, c@d.com" }));
+    expect(res.status).toBe("error");
+    expect(res.errors?.recipient).toBeDefined();
+    expect(cap.sent).toHaveLength(0);
   });
 
   test("refuses an approved invoice", async () => {

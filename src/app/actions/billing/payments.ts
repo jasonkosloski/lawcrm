@@ -16,7 +16,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 // in UTC (ADR-012). "Today" is the user's calendar day in their
 // profile zone, never the server's.
 import { parseDateOnly } from "@/lib/format-date";
-import { requirePermission } from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { deliverInvoiceEmail } from "@/lib/billing/invoice-delivery";
 import { roundMoney } from "@/lib/money";
@@ -54,6 +54,10 @@ import {
 //   - Creates the canonical InvoicePayment row.
 //   - Bumps Invoice.paidAmount and flips status: paid when fully
 //     covered, partial otherwise.
+
+/** One recipient: no whitespace, commas or semicolons, so "a@b.com, c@d.com"
+ *  can't reach the email provider as a multi-recipient string. */
+const RECIPIENT_EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 
 const recordPaymentSchema = z.object({
   amount: z
@@ -250,6 +254,12 @@ export async function recordInvoicePayment(
     // failure only becomes a warning on the result.
     let warning: string | undefined;
     if (data.notifyClient && result.clientEmail) {
+      // Emailing an invoice is part of billing.send_invoice. Without it
+      // the payment still stands; only the delivery is skipped.
+      if (!(await currentUserHasPermission("billing.send_invoice"))) {
+        warning =
+          "Payment recorded. You don't have permission to email invoices, so no updated copy was sent.";
+      } else {
       const delivery = await deliverInvoiceEmail({
         invoiceId: result.invoiceId,
         to: result.clientEmail,
@@ -257,6 +267,7 @@ export async function recordInvoicePayment(
         kind: "updated",
       });
       if (!delivery.ok) warning = `Payment recorded. ${delivery.warning}`;
+      }
     }
 
     // Fan a payment-recorded notification out to the matter's
@@ -389,7 +400,7 @@ export async function sendInvoice(
       error: "US mail isn't wired up yet — pick email for now.",
     };
   }
-  if (data.method === "email" && !/^.+@.+\..+$/.test(data.recipient)) {
+  if (data.method === "email" && !RECIPIENT_EMAIL_RE.test(data.recipient)) {
     return {
       status: "error",
       errors: { recipient: ["Enter a valid email address."] },
@@ -603,7 +614,7 @@ const resendSchema = z.object({
   recipient: z
     .string()
     .trim()
-    .regex(/^.+@.+\..+$/, "Enter a valid email address."),
+    .regex(RECIPIENT_EMAIL_RE, "Enter a valid email address."),
 });
 
 export async function resendInvoiceEmail(

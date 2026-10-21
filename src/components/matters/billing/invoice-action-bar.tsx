@@ -211,6 +211,7 @@ export function InvoiceActionBar({
         trustBalance={trustBalance}
         clientEmail={clientEmail}
         canApplyTrust={canApplyTrust}
+        canSendInvoice={canSendInvoice}
       />
     </>
   );
@@ -264,7 +265,6 @@ export function InvoiceActionBar({
     <>
       {!nothingToDo && (
         <div className="flex items-center gap-1.5">
-          {" "}
           {canApprove && (
             <button
               type="button"
