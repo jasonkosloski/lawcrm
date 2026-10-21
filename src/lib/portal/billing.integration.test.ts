@@ -10,7 +10,6 @@ import {
 } from "@/test/integration-helpers";
 import { getInvoiceById } from "@/lib/queries/billing";
 import {
-  canSeePortalBilling,
   getPortalBillingForMatter,
   getPortalInvoice,
   getPortalTrust,
@@ -112,7 +111,7 @@ describe("visibility", () => {
     expect(await listPortalInvoices(identityId, matterId)).toEqual([]);
     expect(await getPortalInvoice(identityId, inv.id)).toBeNull();
     expect(await getPortalTrust(identityId, matterId)).toBeNull();
-    expect(await canSeePortalBilling(identityId, matterId)).toBe(false);
+    expect(await getPortalBillingForMatter(identityId, matterId)).toBeNull();
     expect((await portalBalanceDueByMatter(identityId, [matterId])).size).toBe(0);
   });
 
@@ -122,7 +121,7 @@ describe("visibility", () => {
     expect(await listPortalInvoices(otherIdentityId, matterId)).toEqual([]);
     expect(await getPortalInvoice(otherIdentityId, inv.id)).toBeNull();
     expect(await getPortalTrust(otherIdentityId, matterId)).toBeNull();
-    expect(await canSeePortalBilling(otherIdentityId, matterId)).toBe(false);
+    expect(await getPortalBillingForMatter(otherIdentityId, matterId)).toBeNull();
     expect((await portalBalanceDueByMatter(otherIdentityId, [matterId])).size).toBe(0);
   });
 
@@ -130,7 +129,7 @@ describe("visibility", () => {
     const inv = await mkInvoice({ clientId: otherId });
     expect((await listPortalInvoices(otherIdentityId, matterId)).map((r) => r.id)).toEqual([inv.id]);
     expect(await getPortalInvoice(otherIdentityId, inv.id)).not.toBeNull();
-    expect(await canSeePortalBilling(otherIdentityId, matterId)).toBe(true);
+    expect(await getPortalBillingForMatter(otherIdentityId, matterId)).not.toBeNull();
     expect(await getPortalTrust(otherIdentityId, matterId)).toBeNull();
     expect(await listPortalInvoices(identityId, matterId)).toEqual([]);
     expect(await getPortalInvoice(identityId, inv.id)).toBeNull();
@@ -155,7 +154,7 @@ describe("visibility", () => {
       expect(await listPortalInvoices(identityId, matterId)).toEqual([]);
       expect(await getPortalInvoice(identityId, inv.id)).toBeNull();
       expect(await getPortalTrust(identityId, matterId)).toBeNull();
-      expect(await canSeePortalBilling(identityId, matterId)).toBe(false);
+      expect(await getPortalBillingForMatter(identityId, matterId)).toBeNull();
     };
     await prisma.portalMatterAccess.updateMany({ where: { identityId }, data: { revokedAt: new Date() } });
     await gone();
@@ -283,7 +282,7 @@ describe("trust", () => {
     // running balance of the ledger.
     expect(trust!.balance).toBe(trust!.entries[0].runningBalance);
     expect(trust!.entries[0].runningBalance).toBe(trust!.entries.reduce((s, e) => s + e.amount, 0));
-    expect(await canSeePortalBilling(identityId, matterId)).toBe(true);
+    expect(await getPortalBillingForMatter(identityId, matterId)).not.toBeNull();
   });
 
   test("a matter with no invoices and no trust still yields an empty-ledger object for the primary client", async () => {

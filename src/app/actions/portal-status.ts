@@ -109,6 +109,19 @@ export async function postStatusUpdate(
     }
   }
 
+  if (emailFailed) {
+    // Best-effort audit signal; the send itself stays outside the transaction.
+    try {
+      await logActivity({
+        matterId,
+        userId: gate.userId,
+        type: "note",
+        title: `Client status update email failed: ${parsed.stageLabel}`,
+      });
+    } catch (err) {
+      console.warn("[portal-status] could not log email failure", err);
+    }
+  }
   return done(matterId, emailFailed ? "Update posted, but the email didn't send." : undefined);
 }
 

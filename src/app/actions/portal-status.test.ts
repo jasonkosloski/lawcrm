@@ -175,6 +175,7 @@ describe("postStatusUpdate", () => {
       expect(s).not.toContain("motion");
     }
     expect(await activity("Posted client status update: Discovery")).toBe(1);
+    expect(await activity("Client status update email failed")).toBe(0);
     expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}`);
   });
 
@@ -199,6 +200,7 @@ describe("postStatusUpdate", () => {
     const res = await postStatusUpdate(matterId, { ...input, emailClient: true });
     expect(res).toEqual({ ok: true, warning: "Update posted, but the email didn't send." });
     expect((await prisma.portalStatusUpdate.findFirstOrThrow()).emailedAt).toBeNull();
+    expect(await activity("Client status update email failed: Discovery")).toBe(1);
   });
 });
 

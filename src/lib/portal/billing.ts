@@ -210,14 +210,6 @@ export async function getPortalBillingForMatter(
   return { invoices, trust };
 }
 
-/** Can the identity see any money on this matter (trust or an invoice)? */
-export async function canSeePortalBilling(
-  identityId: string,
-  matterId: string,
-): Promise<boolean> {
-  return (await getPortalBillingForMatter(identityId, matterId)) !== null;
-}
-
 /** Unpaid visible-invoice balances per matter (only matters owing > 0). */
 export async function portalBalanceDueByMatter(
   identityId: string,

@@ -875,22 +875,24 @@ export async function mergeContacts(
               },
             },
           });
-          if (!existing) {
-            await tx.portalReadState.create({
-              data: {
+          // Upsert so a concurrent mark-read creating the survivor row
+          // can't fail the merge.
+          await tx.portalReadState.upsert({
+            where: {
+              threadId_identityId: {
                 threadId: st.threadId,
                 identityId: survivorIdentity.id,
-                lastReadAt: st.lastReadAt,
-                lastEmailedAt: st.lastEmailedAt,
               },
-            });
-            continue;
-          }
-          await tx.portalReadState.update({
-            where: { id: existing.id },
-            data: {
-              lastReadAt: laterOf(existing.lastReadAt, st.lastReadAt) as Date,
-              lastEmailedAt: laterOf(existing.lastEmailedAt, st.lastEmailedAt),
+            },
+            create: {
+              threadId: st.threadId,
+              identityId: survivorIdentity.id,
+              lastReadAt: st.lastReadAt,
+              lastEmailedAt: st.lastEmailedAt,
+            },
+            update: {
+              lastReadAt: laterOf(existing?.lastReadAt ?? null, st.lastReadAt) as Date,
+              lastEmailedAt: laterOf(existing?.lastEmailedAt ?? null, st.lastEmailedAt),
             },
           });
         }
