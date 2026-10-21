@@ -27,6 +27,6 @@ Follow-up queue from the old P0 entry (P1-and-below altitude now):
 - [x] **Matter detail — Communication tab** — Email threads filed via `EmailThread.matterId`; embeds the thread reader; Email | Phone channel toggle (phone side in [communication-calls.md](communication-calls.md)).
 
 ## Notes
-- Email reads and mutations are owner-scoped: the inbox shows only the viewer's own mailbox; filing a thread to a matter (`setEmailThreadMatter`), create-from-email and log-time-on-email are owner-only.
+- Email reads and mutations are owner-scoped: the inbox shows only the viewer's own mailbox; filing a thread to a matter (`setEmailThreadRecord`), create-from-email and log-time-on-email are owner-only.
 - Unread filter, rail count and tab badge exclude archived threads; the pinned-matter drilldown lists archived threads (default filter all).
 - Operations: `CRON_SECRET` required in production; Google Cloud project needs BOTH Gmail and Calendar APIs enabled.

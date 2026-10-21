@@ -19,7 +19,7 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
-const setEmailThreadMatter = vi.fn();
+const setEmailThreadRecord = vi.fn();
 vi.mock("@/lib/feedback", () => ({
   confirmAction: vi.fn(async () => true),
   notifyError: vi.fn(),
@@ -27,7 +27,7 @@ vi.mock("@/lib/feedback", () => ({
 }));
 
 vi.mock("@/app/actions/email-filing", () => ({
-  setEmailThreadMatter: (...args: unknown[]) => setEmailThreadMatter(...args),
+  setEmailThreadRecord: (...args: unknown[]) => setEmailThreadRecord(...args),
 }));
 
 import type { FilingMatterOption } from "@/lib/queries/communication";
@@ -35,7 +35,13 @@ import { notifyError } from "@/lib/feedback";
 import { FileToMatterPicker } from "./file-to-matter-picker";
 
 const options = [
-  { id: "m1", name: "Smith v. Jones", color: "#123456", area: "Civil", isPinned: false },
+  {
+    id: "m1",
+    name: "Smith v. Jones",
+    color: "#123456",
+    area: "Civil",
+    isPinned: false,
+  },
 ] as unknown as FilingMatterOption[];
 const current = {
   id: "m1",
@@ -47,7 +53,7 @@ const current = {
 const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
 
 beforeEach(() => {
-  setEmailThreadMatter.mockReset();
+  setEmailThreadRecord.mockReset();
 });
 
 describe("without communication.file_email", () => {
@@ -58,7 +64,7 @@ describe("without communication.file_email", () => {
         currentMatter={current}
         options={options}
         canFile={false}
-      />
+      />,
     );
     expect(screen.getByRole("link")).toHaveAttribute("href", "/matters/m1");
     expect(screen.queryByRole("button")).toBeNull();
@@ -71,7 +77,7 @@ describe("without communication.file_email", () => {
         currentMatter={null}
         options={options}
         canFile={false}
-      />
+      />,
     );
     expect(screen.getByText("Unfiled")).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
@@ -80,7 +86,7 @@ describe("without communication.file_email", () => {
 
 describe("a thrown action", () => {
   test("toasts instead of throwing out of the transition", async () => {
-    setEmailThreadMatter.mockImplementation(async () => {
+    setEmailThreadRecord.mockImplementation(async () => {
       throw new Error("db down");
     });
     const user = setupUser();
@@ -89,16 +95,18 @@ describe("a thrown action", () => {
         threadId="t1"
         currentMatter={null}
         options={options}
-      />
+      />,
     );
 
     await user.click(screen.getByRole("button", { name: /file to matter/i }));
-    await user.click(await screen.findByRole("button", { name: /Smith v\. Jones/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /Smith v\. Jones/ }),
+    );
 
     await waitFor(() =>
       expect(notifyError).toHaveBeenCalledWith(
-        expect.stringMatching(/try again/i)
-      )
+        expect.stringMatching(/try again/i),
+      ),
     );
   });
 });

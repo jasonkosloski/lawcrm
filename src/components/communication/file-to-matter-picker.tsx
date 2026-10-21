@@ -31,7 +31,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { setEmailThreadMatter } from "@/app/actions/email-filing";
+import { setEmailThreadRecord } from "@/app/actions/email-filing";
 import type { FilingMatterOption } from "@/lib/queries/communication";
 
 export function FileToMatterPicker({
@@ -41,7 +41,12 @@ export function FileToMatterPicker({
   canFile = true,
 }: {
   threadId: string;
-  currentMatter: { id: string; name: string; color: string; area: string } | null;
+  currentMatter: {
+    id: string;
+    name: string;
+    color: string;
+    area: string;
+  } | null;
   options: FilingMatterOption[];
   /** `communication.file_email` - false renders the read-only pill. */
   canFile?: boolean;
@@ -55,7 +60,7 @@ export function FileToMatterPicker({
     if (!q) return options;
     return options.filter(
       (m) =>
-        m.name.toLowerCase().includes(q) || m.area.toLowerCase().includes(q)
+        m.name.toLowerCase().includes(q) || m.area.toLowerCase().includes(q),
     );
   }, [query, options]);
 
@@ -64,7 +69,10 @@ export function FileToMatterPicker({
     setQuery("");
     startTransition(async () => {
       try {
-        const res = await setEmailThreadMatter(threadId, matterId);
+        const res = await setEmailThreadRecord(
+          threadId,
+          matterId ? { kind: "matter", matterId } : null,
+        );
         if (!res.ok && res.error) notifyError(res.error);
       } catch {
         // A thrown action must not swap the page for the error boundary.
@@ -129,7 +137,7 @@ export function FileToMatterPicker({
             "inline-flex items-center gap-1 h-6 px-2 text-2xs font-medium rounded-md border transition-colors",
             "bg-warn-soft text-warn border-warn-border",
             "hover:border-warn",
-            "disabled:opacity-50 disabled:cursor-not-allowed"
+            "disabled:opacity-50 disabled:cursor-not-allowed",
           )}
         >
           <Briefcase size={11} />
@@ -144,9 +152,7 @@ export function FileToMatterPicker({
       {trigger}
       <PopoverContent align="start" className="w-72">
         <div className="flex flex-col gap-2">
-          <div className="text-2xs font-medium text-ink-3">
-            File to matter
-          </div>
+          <div className="text-2xs font-medium text-ink-3">File to matter</div>
           <div className="relative">
             <Search
               size={12}
@@ -189,7 +195,7 @@ export function FileToMatterPicker({
                         "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors text-left",
                         active
                           ? "bg-brand-soft text-brand-700"
-                          : "text-ink hover:bg-paper-2"
+                          : "text-ink hover:bg-paper-2",
                       )}
                     >
                       <span

@@ -1,9 +1,11 @@
 /**
- * File-to-matter actions for email threads.
+ * File-to-record actions for email threads (matter or intake lead).
  *
- * Today's surface: a single "set the matter for this thread"
+ * Today's surface: a single "set the record for this thread"
  * action. The thread-reader header uses a picker that calls this
- * with either a matter id (file) or null (unfile back to the inbox).
+ * with a matter / lead scope (file) or null (unfile back to the inbox).
+ * The work lives in `fileEmailThread` (src/lib/email-filing.ts), shared
+ * with file-on-reply.
  *
  * When auto-filing rules land (subject keywords / sender ↔ matter
  * party / etc.) they'll write to the same FK; this action becomes
@@ -20,91 +22,41 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { assertOptionalMatterAccess } from "@/lib/matter-access";
-import { logActivity } from "@/lib/activity-log";
 import { requirePermission } from "@/lib/permission-check";
+import { prisma } from "@/lib/prisma";
+import {
+  fileEmailThread,
+  revalidationPathsFor,
+  sameScope,
+} from "@/lib/email-filing";
+import { optionalScopeOf, type RecordScope } from "@/lib/record-scope";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 
-export async function setEmailThreadMatter(
+export async function setEmailThreadRecord(
   threadId: string,
-  /** Matter to assign — pass null to unfile. */
-  matterId: string | null
+  /** Record to file to - pass null to unfile. */
+  scope: RecordScope | null,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("communication.file_email");
 
-  const thread = await prisma.emailThread.findFirst({
+  // Remember where the thread was so the record it leaves refreshes too.
+  const before = await prisma.emailThread.findFirst({
     where: { id: threadId, ...visibleEmailThreadWhere(userId) },
-    select: { id: true, subject: true, matterId: true },
+    select: { matterId: true, leadId: true },
   });
-  if (!thread) return { ok: false, error: "Thread not found" };
-  await assertOptionalMatterAccess(thread.matterId);
-  await assertOptionalMatterAccess(matterId);
 
-  // Verify the target matter exists when filing — defends against
-  // stale picker values + makes the activity log honest.
-  if (matterId) {
-    const matter = await prisma.matter.findUnique({
-      where: { id: matterId },
-      select: { id: true, name: true },
-    });
-    if (!matter) return { ok: false, error: "Matter not found" };
+  const res = await fileEmailThread(userId, threadId, scope);
+  if (!res.ok) return res;
 
-    // Already filed to this matter (the picker lets the user click the
-    // active one) - nothing changes, so nothing is written or logged.
-    if (thread.matterId === matterId) return { ok: true };
-
-    // Owner-scoped write (defense in depth: the lookup above already
-    // proved ownership).
-    await prisma.emailThread.updateMany({
-      where: { id: threadId, ...visibleEmailThreadWhere(userId) },
-      data: { matterId },
-    });
-
-    // A move A -> B must be as auditable as an unfile: record the
-    // departure on the matter the email left, then the arrival.
-    if (thread.matterId) {
-      await logActivity({
-        matterId: thread.matterId,
-        userId,
-        type: "email",
-        title: "Email removed from matter",
-        detail: thread.subject,
-      });
-    }
-    await logActivity({
-      matterId,
-      userId,
-      type: "email",
-      title: "Email filed to matter",
-      detail: thread.subject,
-    });
-  } else {
-    // Unfile — leave the previous matter's revalidation paths in
-    // place so the moved-out side updates too.
-    await prisma.emailThread.updateMany({
-      where: { id: threadId, ...visibleEmailThreadWhere(userId) },
-      data: { matterId: null },
-    });
-
-    // Removing an email from a matter's record must be as auditable
-    // as adding one — log against the matter it's leaving. Skip when
-    // the thread was already unfiled (nothing left the record).
-    if (thread.matterId) {
-      await logActivity({
-        matterId: thread.matterId,
-        userId,
-        type: "email",
-        title: "Email removed from matter",
-        detail: thread.subject,
-      });
-    }
-  }
+  const previous = before ? optionalScopeOf(before) : null;
+  // Re-selecting the current record changed nothing - nothing to refresh.
+  if (sameScope(previous, scope)) return { ok: true };
 
   revalidatePath("/communication");
-  if (matterId) revalidatePath(`/matters/${matterId}/communication`);
-  if (thread.matterId && thread.matterId !== matterId) {
-    revalidatePath(`/matters/${thread.matterId}/communication`);
-  }
+  const paths = [
+    ...revalidationPathsFor(scope),
+    ...revalidationPathsFor(previous),
+  ];
+  for (const p of new Set(paths)) revalidatePath(p);
   return { ok: true };
 }
