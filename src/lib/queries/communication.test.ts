@@ -165,6 +165,18 @@ describe("mailbox scoping (security boundary)", () => {
   });
 });
 
+describe("thread list rows carry the filed lead", () => {
+  test("a lead-filed thread exposes lead {id, name} and no matter", async () => {
+    const { leadId } = await seedLead();
+    await seedFlagged({ accountId, subject: "On a lead", leadId });
+    const { rows } = await listThreads("all");
+    const row = rows.find((r) => r.subject === "On a lead");
+    expect(row?.matter).toBeNull();
+    expect(row?.lead).toMatchObject({ id: leadId });
+    expect(typeof row?.lead?.name).toBe("string");
+  });
+});
+
 describe("listThreads filters + counts agree", () => {
   const NOW = Date.now();
   const FUTURE = new Date(NOW + 7 * 86_400_000);

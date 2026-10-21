@@ -23,14 +23,12 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/permission-check";
-import { prisma } from "@/lib/prisma";
 import {
   fileEmailThread,
   revalidationPathsFor,
   sameScope,
 } from "@/lib/email-filing";
-import { optionalScopeOf, type RecordScope } from "@/lib/record-scope";
-import { visibleEmailThreadWhere } from "@/lib/email-visibility";
+import type { RecordScope } from "@/lib/record-scope";
 
 export async function setEmailThreadRecord(
   threadId: string,
@@ -39,23 +37,16 @@ export async function setEmailThreadRecord(
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("communication.file_email");
 
-  // Remember where the thread was so the record it leaves refreshes too.
-  const before = await prisma.emailThread.findFirst({
-    where: { id: threadId, ...visibleEmailThreadWhere(userId) },
-    select: { matterId: true, leadId: true },
-  });
-
   const res = await fileEmailThread(userId, threadId, scope);
   if (!res.ok) return res;
 
-  const previous = before ? optionalScopeOf(before) : null;
   // Re-selecting the current record changed nothing - nothing to refresh.
-  if (sameScope(previous, scope)) return { ok: true };
+  if (sameScope(res.previous, res.scope)) return { ok: true };
 
   revalidatePath("/communication");
   const paths = [
-    ...revalidationPathsFor(scope),
-    ...revalidationPathsFor(previous),
+    ...revalidationPathsFor(res.scope),
+    ...revalidationPathsFor(res.previous),
   ];
   for (const p of new Set(paths)) revalidatePath(p);
   return { ok: true };

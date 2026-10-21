@@ -176,7 +176,7 @@ export async function createTaskFromEmail(
   if (!ctx) {
     return {
       status: "error",
-      errors: { title: ["Email thread isn't filed to a matter — file it first."] },
+      errors: { title: ["This action needs a thread filed to a matter."] },
     };
   }
   await prisma.task.create({
@@ -218,7 +218,7 @@ export async function createDeadlineFromEmail(
   if (!ctx) {
     return {
       status: "error",
-      errors: { title: ["Email thread isn't filed to a matter — file it first."] },
+      errors: { title: ["This action needs a thread filed to a matter."] },
     };
   }
   await prisma.deadline.create({
@@ -264,7 +264,7 @@ export async function createNoteFromEmail(
   if (!ctx) {
     return {
       status: "error",
-      errors: { content: ["Email thread isn't filed to a matter — file it first."] },
+      errors: { content: ["This action needs a thread filed to a matter."] },
     };
   }
   // Note + the author's own read marker commit together (same as

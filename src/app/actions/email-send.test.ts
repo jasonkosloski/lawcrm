@@ -1082,6 +1082,45 @@ describe("replyToThread — file on reply", () => {
     expect(t.leadId).toBe(leadId);
   });
 
+  test("filed by another tab between read and file: reply lands on that record", async () => {
+    const { userId, threadId } = await unfiled();
+    const { areaId, stageId } = await seedPracticeArea();
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    const { leadId } = await seedLead();
+    const real = prisma.emailThread.findFirst.bind(prisma.emailThread);
+    // The reply's own read sees the thread unfiled; the filing re-read
+    // happens after another tab filed it to the matter.
+    const spy = vi
+      .spyOn(prisma.emailThread, "findFirst")
+      .mockImplementationOnce((async (args: never) => {
+        const stale = await real(args);
+        await prisma.emailThread.update({
+          where: { id: threadId },
+          data: { matterId },
+        });
+        return stale;
+      }) as never);
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-2", "gt-1"));
+    const result = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      scope: { kind: "lead", leadId },
+    });
+    spy.mockRestore();
+    expect(result.ok).toBe(true);
+    const t = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: threadId },
+    });
+    expect(t).toMatchObject({ matterId, leadId: null });
+    const removed = await prisma.activityLog.count({
+      where: { title: { startsWith: "Email removed" } },
+    });
+    expect(removed).toBe(0);
+  });
+
   test("a filed thread ignores a posted scope", async () => {
     const { userId } = await seedActor();
     const { areaId, stageId } = await seedPracticeArea();

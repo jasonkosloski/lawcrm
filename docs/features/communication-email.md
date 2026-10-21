@@ -29,6 +29,7 @@ Follow-up queue from the old P0 entry (P1-and-below altitude now):
 - [x] **Matter / lead Communication tabs** — Email threads filed to the record via `EmailThread.matterId` / `leadId`; embeds the thread reader; Email | Phone channel toggle (phone side in [communication-calls.md](communication-calls.md)). The lead tab lists only threads filed to the lead; matching by contact address was removed and is deferred to a future categorizer.
 
 ## Notes
+- Known edges of record filing: (a) a send/file racing a lead conversion can land on the converted lead; move it in the reader. (b) Email search hides lead-walled hits entirely, while matter-walled hits keep the name withheld (intentional). (c) `CHILD_RESOLVERS.emailThread` in `src/lib/matter-access.ts` selects only `matterId`; it must learn `leadId` before anything new uses it.
 - Email reads and mutations are owner-scoped: the inbox shows only the viewer's own mailbox; filing a thread to a matter or lead (`setEmailThreadRecord`), create-from-email and log-time-on-email are owner-only.
 - Unread filter, rail count and tab badge exclude archived threads; the pinned-matter drilldown lists archived threads (default filter all).
 - Operations: `CRON_SECRET` required in production; Google Cloud project needs BOTH Gmail and Calendar APIs enabled.

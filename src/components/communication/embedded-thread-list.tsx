@@ -114,7 +114,15 @@ export function EmbeddedThreadList({
                       {t.matter.name}
                     </span>
                   )}
-                  {showMatterChip && !t.matter && (
+                  {showMatterChip && t.lead && !t.matter && (
+                    <span className="inline-flex items-center gap-1 text-2xs text-ink-3">
+                      <span className="px-1 rounded border border-line text-ink-4">
+                        Lead
+                      </span>
+                      {t.lead.name}
+                    </span>
+                  )}
+                  {showMatterChip && !t.matter && !t.lead && (
                     <span className="text-2xs font-medium text-warn">
                       Unfiled
                     </span>

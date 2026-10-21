@@ -43,6 +43,7 @@ function row(over: Partial<ThreadListRow> = {}): ThreadListRow {
     followUpAt: null,
     fromDisplay: "Alice",
     matter: null,
+    lead: null,
     ...over,
   };
 }
@@ -98,6 +99,21 @@ describe("rowHref", () => {
       "/communication?filter=all&thread=a",
       "/communication?filter=all&thread=b",
     ]);
+  });
+});
+
+describe("filing chip", () => {
+  test("a lead-filed row shows a Lead chip and is not Unfiled", () => {
+    render(
+      <ThreadList
+        threads={[row({ lead: { id: "l1", name: "Pat Prospect" } })]}
+        filter="all"
+        selectedThreadId={null}
+      />
+    );
+    expect(screen.getByText("Pat Prospect")).toBeInTheDocument();
+    expect(screen.getByText("Lead")).toBeInTheDocument();
+    expect(screen.queryByText("Unfiled")).not.toBeInTheDocument();
   });
 });
 

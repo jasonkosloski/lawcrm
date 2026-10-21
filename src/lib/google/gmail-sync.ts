@@ -80,9 +80,9 @@
  *   thread: subject, snippet, lastMessageAt, messageCount,
  *           hasAttachments, isRead, isStarred, isArchived
  *   message: from*, to/cc recipients, body, sentAt
- * App-owned state survives every resync: `matterId` (filing),
+ * App-owned state survives every resync: `matterId` / `leadId` (filing),
  * `followUpAt`, spawned notes/tasks/deadlines relations,
- * `EmailMessage.isPrivileged`, and app-vocabulary EmailLabel rows
+ * `EmailMessage.isPrivileged` / `sentFromApp`, and app-vocabulary EmailLabel rows
  * (privileged, opposing_counsel, …). Gmail user labels live in the
  * `custom:*` namespace, which the sync engine owns and reconciles.
  * isRead/isStarred/isArchived stay PROVIDER-DERIVED here — and
@@ -1027,7 +1027,7 @@ export async function upsertThread(
   const parsed = messages.map(parseGmailMessage);
   const hasAttachments = parsed.some((p) => p.attachments.length > 0);
 
-  // Provider-owned thread columns only — matterId / followUpAt /
+  // Provider-owned thread columns only — matterId / leadId / followUpAt /
   // spawned* relations are app-owned and preserved by omission.
   const providerThreadFields = {
     subject,

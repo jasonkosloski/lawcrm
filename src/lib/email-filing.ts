@@ -51,7 +51,21 @@ export async function fileEmailThread(
   threadId: string,
   /** Record to file to - null unfiles. */
   scope: RecordScope | null,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+  /**
+   * `onlyIfUnfiled` (file-on-reply): never move a thread that is already
+   * filed - the thread's record wins. Returns that record, writes nothing.
+   */
+  options: { onlyIfUnfiled?: boolean } = {},
+): Promise<
+  | {
+      ok: true;
+      /** The thread's record after the call. */
+      scope: RecordScope | null;
+      /** Its record before the call. */
+      previous: RecordScope | null;
+    }
+  | { ok: false; error: string }
+> {
   const thread = await prisma.emailThread.findFirst({
     where: { id: threadId, ...visibleEmailThreadWhere(userId) },
     select: { id: true, subject: true, matterId: true, leadId: true },
@@ -60,6 +74,9 @@ export async function fileEmailThread(
 
   const current = optionalScopeOf(thread);
   if (current) await assertScopeAccess(current);
+  if (options.onlyIfUnfiled && current) {
+    return { ok: true, scope: current, previous: current };
+  }
   if (scope) await assertScopeAccess(scope);
 
   // Verify the target exists - defends against stale picker values and
@@ -85,28 +102,47 @@ export async function fileEmailThread(
 
   // Already there (the picker lets the user click the active record) -
   // nothing changes, so nothing is written or logged.
-  if (sameScope(current, scope)) return { ok: true };
+  if (sameScope(current, scope)) {
+    return { ok: true, scope: current, previous: current };
+  }
 
   if (scope) {
     const blocked = await assertScopeWritable(scope);
     if (blocked) return { ok: false, error: blocked };
-  } else if (current) {
-    // Every app-sent email is filed: it can move, never go back to the inbox.
-    const appSent = await prisma.emailMessage.count({
-      where: { threadId, sentFromApp: true },
-    });
-    if (appSent > 0) return { ok: false, error: APP_SENT_UNFILE_ERROR };
   }
 
   // Owner-scoped write (defense in depth), both FKs in one update so a
-  // thread is never on a matter and a lead at once.
-  await prisma.emailThread.updateMany({
-    where: { id: threadId, ...visibleEmailThreadWhere(userId) },
+  // thread is never on a matter and a lead at once. The where re-checks
+  // what this call read, so a racing tab can't be overwritten:
+  //  - unfile: no app-sent mail (every app-sent email stays filed);
+  //  - onlyIfUnfiled: still unfiled.
+  const written = await prisma.emailThread.updateMany({
+    where: {
+      id: threadId,
+      ...visibleEmailThreadWhere(userId),
+      ...(!scope && current
+        ? { messages: { none: { sentFromApp: true } } }
+        : {}),
+      ...(options.onlyIfUnfiled ? { matterId: null, leadId: null } : {}),
+    },
     data: {
       matterId: scope?.kind === "matter" ? scope.matterId : null,
       leadId: scope?.kind === "lead" ? scope.leadId : null,
     },
   });
+  if (written.count === 0) {
+    const fresh = await prisma.emailThread.findFirst({
+      where: { id: threadId, ...visibleEmailThreadWhere(userId) },
+      select: { matterId: true, leadId: true },
+    });
+    if (!fresh) return { ok: false, error: "Thread not found" };
+    const now = optionalScopeOf(fresh);
+    if (options.onlyIfUnfiled && now) {
+      return { ok: true, scope: now, previous: now };
+    }
+    if (!scope) return { ok: false, error: APP_SENT_UNFILE_ERROR };
+    return { ok: false, error: "Thread changed - try again." };
+  }
 
   // A move must be as auditable as an unfile: record the departure on
   // the record the email left, then the arrival.
@@ -128,5 +164,5 @@ export async function fileEmailThread(
       detail: thread.subject,
     });
   }
-  return { ok: true };
+  return { ok: true, scope, previous: current };
 }

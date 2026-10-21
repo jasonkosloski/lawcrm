@@ -105,6 +105,7 @@ export type ThreadListRow = {
   /** First sender in the thread — typically "who's emailing me". */
   fromDisplay: string;
   matter: { id: string; name: string; color: string } | null;
+  lead: { id: string; name: string } | null;
 };
 
 /** Landing filter when the URL carries none: the working Inbox, except
@@ -120,6 +121,7 @@ export function defaultEmailFilter(
 /** Shared include for every thread-list query. */
 const threadListInclude = {
   matter: { select: { id: true, name: true, color: true } },
+  lead: { select: { id: true, name: true } },
   // First message only - just for fromDisplay.
   messages: {
     orderBy: { sentAt: "asc" },
@@ -147,6 +149,7 @@ function toThreadListRow(t: ThreadListRecord): ThreadListRow {
     fromDisplay:
       t.messages[0]?.fromName ?? t.messages[0]?.fromEmail ?? "Unknown",
     matter: t.matter,
+    lead: t.lead,
   };
 }
 

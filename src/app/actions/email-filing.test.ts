@@ -43,7 +43,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
-import { APP_SENT_UNFILE_ERROR } from "@/lib/email-filing";
+import { APP_SENT_UNFILE_ERROR, fileEmailThread } from "@/lib/email-filing";
 import { setEmailThreadRecord } from "@/app/actions/email-filing";
 import {
   resetDb,
@@ -454,5 +454,60 @@ describe("unfiling app-sent threads", () => {
     expect(
       await setEmailThreadRecord(threadId, { kind: "lead", leadId }),
     ).toEqual({ ok: true });
+  });
+});
+
+describe("fileEmailThread onlyIfUnfiled (file-on-reply)", () => {
+  test("a filed thread keeps its record: returns it, writes and logs nothing", async () => {
+    const { leadId } = await seedLead();
+    const threadId = await seedThread({ matterId });
+    const res = await fileEmailThread(
+      userId,
+      threadId,
+      { kind: "lead", leadId },
+      { onlyIfUnfiled: true },
+    );
+    expect(res).toEqual({
+      ok: true,
+      scope: { kind: "matter", matterId },
+      previous: { kind: "matter", matterId },
+    });
+    const t = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: threadId },
+    });
+    expect(t).toMatchObject({ matterId, leadId: null });
+    expect(await prisma.activityLog.count()).toBe(0);
+  });
+
+  test("filed by a racing tab after the read: conditional write is a no-op", async () => {
+    const { leadId } = await seedLead();
+    const threadId = await seedThread();
+    const real = prisma.emailThread.findFirst.bind(prisma.emailThread);
+    const spy = vi
+      .spyOn(prisma.emailThread, "findFirst")
+      .mockImplementationOnce((async (args: never) => {
+        const stale = await real(args);
+        await prisma.emailThread.update({
+          where: { id: threadId },
+          data: { matterId },
+        });
+        return stale;
+      }) as never);
+    const res = await fileEmailThread(
+      userId,
+      threadId,
+      { kind: "lead", leadId },
+      { onlyIfUnfiled: true },
+    );
+    spy.mockRestore();
+    expect(res).toMatchObject({
+      ok: true,
+      scope: { kind: "matter", matterId },
+    });
+    const t = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: threadId },
+    });
+    expect(t).toMatchObject({ matterId, leadId: null });
+    expect(await prisma.activityLog.count()).toBe(0);
   });
 });

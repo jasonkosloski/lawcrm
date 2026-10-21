@@ -449,10 +449,14 @@ export async function replyToThread(
   // File first (everything else is validated, nothing sent yet). If the
   // send then fails the thread stays filed: the user chose the record.
   if (fileTo) {
-    const filed = await fileEmailThread(userId, thread.id, fileTo);
+    // onlyIfUnfiled: if another tab filed it since the read above, the
+    // thread's record wins and the reply lands there.
+    const filed = await fileEmailThread(userId, thread.id, fileTo, {
+      onlyIfUnfiled: true,
+    });
     if (!filed.ok) return { ok: false, error: filed.error };
-    threadScope = fileTo;
-    revalidateSendSurfaces(fileTo);
+    threadScope = filed.scope;
+    revalidateSendSurfaces(filed.scope);
   }
 
   const payload: { raw: string; threadId?: string } = { raw: raw.raw };

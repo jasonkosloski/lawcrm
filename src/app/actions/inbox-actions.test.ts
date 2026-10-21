@@ -242,7 +242,7 @@ describe("email promotions", () => {
       deadlineForm()
     );
     expect(res.status).toBe("error");
-    expect(res.errors?.title?.[0]).toMatch(/isn't filed/i);
+    expect(res.errors?.title?.[0]).toMatch(/needs a thread filed to a matter/i);
     expect(await prisma.deadline.count()).toBe(0);
   });
 
