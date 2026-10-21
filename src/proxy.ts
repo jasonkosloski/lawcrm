@@ -63,6 +63,7 @@ const PUBLIC_PATH_PREFIXES = [
 const SELF_AUTHENTICATED_PATHS = new Set([
   "/api/email-sync",
   "/api/notification-sweep",
+  "/api/notification-email",
   "/api/matter-draft-sweep",
   "/api/documents/upload/blob",
   "/api/webhooks/clerk",
