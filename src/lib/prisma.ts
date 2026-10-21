@@ -25,7 +25,17 @@
  * it). The integration tests set it so concurrent transactions really
  * overlap on separate connections (see src/test/integration-setup.ts).
  * `connectionTimeoutMillis` makes a saturated pool fail fast instead
- * of waiting forever; idle connections are released after 30 s.
+ * of waiting forever.
+ *
+ * **Release idle connections fast:** Postgres caps connections per
+ * role, and during a deploy the outgoing deployment's warm instances
+ * still hold their pools while the new one opens fresh ones. With a
+ * 30 s idle timeout that overlap exhausted the cap in production
+ * ("too many connections for role", surfacing as React error #441 on
+ * whichever page lost the race). So idle connections close after 5 s,
+ * and `attachDatabasePool` keeps a suspending Fluid instance alive
+ * just long enough to drain them instead of leaving them open on a
+ * frozen instance.
  *
  * **Cache to globalThis in every env:** the legacy "dev only"
  * Prisma cookbook pattern was about hot-module reloads in `next
@@ -42,6 +52,8 @@
 // `--conditions=react-server` (see docs/DEPLOY_BACKFILLS.md).
 import "server-only";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { attachDatabasePool } from "@vercel/functions";
+import { Pool, type PoolConfig } from "pg";
 import { PrismaClient } from "@/generated/prisma/client";
 import { emailTokenEncryption } from "@/lib/email-token-encryption";
 
@@ -55,6 +67,19 @@ export function resolvePoolMax(raw: string | undefined): number {
     : DEFAULT_POOL_MAX;
 }
 
+/** pg pool settings - see file header for the sizing and idle reasoning. */
+export function poolConfig(
+  connectionString: string,
+  rawPoolMax: string | undefined
+): PoolConfig {
+  return {
+    connectionString,
+    max: resolvePoolMax(rawPoolMax),
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 5_000,
+  };
+}
+
 const createClient = () => {
   // DATABASE_URL is required. We deliberately don't fall back to a
   // default — a missing DATABASE_URL in production should fail
@@ -66,13 +91,10 @@ const createClient = () => {
         "production: Vercel project env vars)."
     );
   }
-  // Bounded pool - see file header for the sizing reasoning.
-  const adapter = new PrismaPg({
-    connectionString,
-    max: resolvePoolMax(process.env.DATABASE_POOL_MAX),
-    connectionTimeoutMillis: 10_000,
-    idleTimeoutMillis: 30_000,
-  });
+  const pool = new Pool(poolConfig(connectionString, process.env.DATABASE_POOL_MAX));
+  // No-op outside Vercel (local dev, tests).
+  attachDatabasePool(pool);
+  const adapter = new PrismaPg(pool);
   // OAuth token fields encrypt-at-rest via a query extension — see
   // src/lib/email-token-encryption.ts.
   return new PrismaClient({ adapter }).$extends(emailTokenEncryption);

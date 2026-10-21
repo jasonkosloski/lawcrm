@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolvePoolMax } from "./prisma";
+import { poolConfig, resolvePoolMax } from "./prisma";
 
 describe("resolvePoolMax", () => {
   it("defaults to a pool larger than 1 (Fluid compute shares the pool)", () => {
@@ -16,6 +16,19 @@ describe("resolvePoolMax", () => {
     for (const raw of ["", "abc", "0", "-3", "2.5", "NaN"]) {
       expect(resolvePoolMax(raw)).toBe(5);
     }
+  });
+});
+
+describe("poolConfig", () => {
+  it("releases idle connections quickly so overlapping deploys stay under the cap", () => {
+    const cfg = poolConfig("postgres://x", undefined);
+    expect(cfg.idleTimeoutMillis).toBeLessThanOrEqual(5_000);
+    expect(cfg.max).toBe(5);
+    expect(cfg.connectionTimeoutMillis).toBe(10_000);
+  });
+
+  it("passes the pool-size override through", () => {
+    expect(poolConfig("postgres://x", "3").max).toBe(3);
   });
 });
 
