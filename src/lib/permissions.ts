@@ -208,7 +208,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "billing.send_invoice",
         label: "Mark invoices sent",
         description:
-          "Record that an approved invoice was sent and move it to sent. Nothing is emailed from the app yet; the gate stays the same when real email lands.",
+          "Record that an approved invoice was sent and move it to sent. The Client portal method also emails the billed client a notice; email and mail are recorded only, not sent.",
       },
       {
         key: "billing.delete_draft",

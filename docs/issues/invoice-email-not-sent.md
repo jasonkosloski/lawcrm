@@ -1,10 +1,10 @@
-# Invoice email delivery is logged-only
+# Invoice email and mail delivery is logged-only
 
 ## Problem
-"Send invoice" and "Send updated invoice" only record intent. `markInvoiceSent` writes an activity row titled "Invoice N marked sent via <method> (not emailed)" and the updated-invoice copy path logs "Updated invoice N copy requested for <email> (not emailed)". Nothing is sent to the client (`src/app/actions/billing/payments.ts`, comments near the "Send updated invoice" checkbox say NOTHING is emailed today).
+The "Send invoice" methods `email` and `mail`, and "Send updated invoice", only record intent. `markInvoiceSent` writes an activity row titled "Invoice N marked sent via <method> (not emailed)" and the updated-invoice copy path logs "Updated invoice N copy requested for <email> (not emailed)" (`src/app/actions/billing/payments.ts`). The **Client portal** method is not affected: it posts the invoice to the portal and emails the billed client a notice ([client-portal-billing](../features/client-portal-billing.md)).
 
 ## Why it matters
-Users could believe a client received an invoice when they did not. Mitigated 2026-10-18: the UI now reads "Mark as sent" / "Client needs an updated invoice" and says nothing is emailed. Real delivery is still missing.
+Users could believe a client received an invoice by email when they did not. Mitigated: the UI reads "Mark as sent" / "Client needs an updated invoice" and says nothing is emailed for those methods.
 
 ## Options or fix
 - Wire the existing Gmail send path (`src/app/actions/email-send.ts`) to attach the printed invoice PDF/link and send from the user's connected mailbox; log the real send.

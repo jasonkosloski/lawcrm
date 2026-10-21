@@ -27,7 +27,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [~] **Notification delivery channels**: email/SMS/push fan-out from `createNotification`; per-matter preferences. → [notifications](features/notifications.md)
 - [~] **Phone / SMS / voicemail**: manual call logging shipped; SMS send and voicemail transcription need providers. → [calls](features/communication-calls.md)
 - [~] **`/matters/new` v2**: conflict check, team, venues, name template, dates, required fields, drafts and originating-document gate shipped; long-tail follow-ups left. → [matters](features/matters.md)
-- [~] **Client portal**: foundation, documents, case status and messages shipped; invoices next. → [client-portal](features/client-portal.md)
+- [x] **Client portal**: all five sub-projects shipped (foundation, case status, documents, messages, invoices and trust); online payment later. → [client-portal](features/client-portal.md)
 - [ ] **Calendar: recurring events**: blocked on an RRULE data-model ADR (series vs materialized). → [calendar](features/calendar.md)
 - [ ] **Email: attachments on send**: receive side shipped. → [email](features/communication-email.md)
 - [ ] **Email: per-user signatures**: `getEmailSignature()` seam ready; needs lookup + sanitizing. → [email](features/communication-email.md)
@@ -58,7 +58,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [ ] **Email polish**: load-remote-images opt-in, store Message-ID/References, archive/star in reader header + touch affordances, attachment FK on Document + bulk file-all, thread-wide star writeback. → [email](features/communication-email.md)
 
 **Time, billing, money**
-- [ ] **Invoice email delivery**: "send" is logged only. → [issue](issues/invoice-email-not-sent.md)
+- [ ] **Invoice email delivery**: email/mail "send" is logged only (the Client portal method emails a notice). → [issue](issues/invoice-email-not-sent.md)
 - [ ] **Settings: Billing & rates**: default rate, UTBMS library, invoice templates, payment terms. → [time-and-billing](features/time-and-billing.md)
 - [ ] **`updateExpense` edit dialog**: action exists, no UI. → [time-and-billing](features/time-and-billing.md)
 - [ ] **Time follow-ups**: auto-capture, idle detection, admin user picker on `/time`, editable reconciliation lanes. → [time-and-billing](features/time-and-billing.md)

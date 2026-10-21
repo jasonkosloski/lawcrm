@@ -1,6 +1,6 @@
 # Client portal
 
-Clients follow their case, exchange documents, message the matter team and view invoices. Delivered as five sub-projects; **0 (foundation)**, **1 (case status)**, **2 (documents)** and **3 (messages)** are built.
+Clients follow their case, exchange documents, message the matter team and view invoices. Delivered as five sub-projects; all five sub-projects (**0** foundation, **1** case status, **2** documents, **3** messages, **4** invoices and trust) are built; online payment is later.
 
 | # | Sub-project | State |
 |---|---|---|
@@ -8,7 +8,7 @@ Clients follow their case, exchange documents, message the matter team and view 
 | 1 | Case status (staff-written updates, shared calendar events): [client-portal-status](client-portal-status.md) | Shipped (off until the firm switch is on) |
 | 2 | Documents (shared downloads, client uploads, document requests): [client-portal-documents](client-portal-documents.md) | Shipped (off until the firm switch is on) |
 | 3 | Messages (two-way, per matter) | Shipped (off until the firm switch is on) |
-| 4 | Invoices and trust (view first; online payment later) | Not started |
+| 4 | Invoices and trust (view only; online payment later): [client-portal-billing](client-portal-billing.md) | Shipped (off until the firm switch and the matter's billing switch are on) |
 
 Why identity is separate from staff auth: [ADR-051](../decisions/051-client-portal-identity-is-separate-from-staff-auth.md).
 
@@ -91,7 +91,7 @@ Steps marked **(you)** need the user; the rest is code that is already shipped.
 1. **(you)** Provision Resend (Vercel Marketplace); set `RESEND_API_KEY` and `EMAIL_FROM`; set up SPF/DKIM first or invites land in spam.
 2. **(you)** Add `portal.<domain>` to the Vercel project and DNS.
 3. **(you)** Set `PORTAL_HOST` for the **Production** environment only (uploads return 503 without it; a preview with it set would hand Blob a callback to the production portal).
-4. **(you)** Ensure the five portal migrations are applied (the third, `20261019183859_portal_documents`, grants the document keys; the fourth, `20261021130000_portal_case_status`, the status keys; the fifth, `20261021140000_portal_messages`, the message keys; prod builds auto-apply migrations per ADR-058) (see [DEPLOY_BACKFILLS](../DEPLOY_BACKFILLS.md); mind the `DIRECT_DATABASE_URL` gotcha there).
+4. **(you)** Ensure the six portal migrations are applied (the third, `20261019183859_portal_documents`, grants the document keys; the fourth, `20261021130000_portal_case_status`, the status keys; the fifth, `20261021140000_portal_messages`, the message keys; the sixth, `20261021150000_portal_billing`, the billing switch and key; prod builds auto-apply migrations per ADR-058) (see [DEPLOY_BACKFILLS](../DEPLOY_BACKFILLS.md); mind the `DIRECT_DATABASE_URL` gotcha there).
 5. **(you)** Turn on Settings, Firm, "Client portal enabled".
 6. `src/lib/env-check.ts` reports missing `PORTAL_HOST` / `RESEND_API_KEY` / `EMAIL_FROM` at startup as degraded (logged, not blocking).
 
