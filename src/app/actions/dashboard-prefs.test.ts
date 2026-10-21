@@ -93,7 +93,7 @@ describe("saveDashboardLayout", () => {
     const blob = await storedPrefs();
     expect(blob).toEqual(res);
     expect(res.v).toBe(3);
-    expect(res.band).toEqual(["agenda", "kpis"]);
+    expect(res.band).toEqual(["agenda", "kpis", "triage"]);
     expect(JSON.stringify(blob)).not.toContain("bogus");
     expect(res.hidden).toEqual(["pulse"]);
   });

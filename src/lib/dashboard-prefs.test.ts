@@ -236,7 +236,7 @@ describe("mergeLayout", () => {
     const l = mergeLayout({
       order: ["kpis", "tasks", "agenda", "followUps", "activity", "records", "deadlines", "pulse"],
     });
-    expect(l.band).toEqual(["kpis"]);
+    expect(l.band).toEqual(["kpis", "triage"]);
     expect(l.columns).toEqual([
       ["tasks", "agenda", "followUps", "activity"],
       ["records", "deadlines", "pulse"],
@@ -247,14 +247,14 @@ describe("mergeLayout", () => {
     const l = mergeLayout({
       order: ["agenda", "kpis", "tasks", "followUps", "activity", "deadlines", "pulse", "records"],
     });
-    expect(l.band).toEqual([]);
+    expect(l.band).toEqual(["triage"]);
     expect(l.columns[0]).toEqual(["agenda", "kpis", "tasks", "followUps", "activity"]);
   });
 
   test("v2: visible:false → hidden, removed from zones", () => {
     const l = mergeLayout({ visible: { pulse: false, kpis: false } });
     expect([...l.hidden].sort()).toEqual(["kpis", "pulse"]);
-    expect(l.band).toEqual([]);
+    expect(l.band).toEqual(["triage"]);
     expect(l.columns[1]).toEqual(["deadlines", "records"]);
   });
 
@@ -268,7 +268,7 @@ describe("mergeLayout", () => {
     });
     // agenda keeps its band slot; kpis (missing) is appended to the band
     // by its default placement.
-    expect(l.band).toEqual(["agenda", "kpis"]);
+    expect(l.band).toEqual(["agenda", "kpis", "triage"]);
     expect(l.columns[0][0]).toBe("tasks");
     expect(keysIn(l)).toEqual(ALL);
   });
@@ -281,7 +281,7 @@ describe("mergeLayout", () => {
 
   test("v3: missing keys land in their default zone (column index clamped)", () => {
     const l = mergeLayout({ v: 3, split: "12", band: [], columns: [["agenda"]], hidden: [] });
-    expect(l.band).toEqual(["kpis"]);
+    expect(l.band).toEqual(["kpis", "triage"]);
     expect(l.columns).toHaveLength(1);
     expect(l.columns[0].slice(-3)).toEqual(["deadlines", "pulse", "records"]);
   });
@@ -304,12 +304,12 @@ describe("mergeLayout", () => {
 describe("moveCard", () => {
   test("column → band at position, hidden, and back", () => {
     let l = moveCard(DEFAULT_LAYOUT, "deadlines", { zone: "band" }, 0);
-    expect(l.band).toEqual(["deadlines", "kpis"]);
+    expect(l.band).toEqual(["deadlines", "kpis", "triage"]);
     l = moveCard(l, "deadlines", { zone: "hidden" });
     expect(l.hidden).toEqual(["deadlines"]);
     l = moveCard(l, "deadlines", { zone: "column", index: 9 });
     expect(l.columns[1].at(-1)).toBe("deadlines");
-    expect(DEFAULT_LAYOUT.band).toEqual(["kpis"]); // no mutation
+    expect(DEFAULT_LAYOUT.band).toEqual(["kpis", "triage"]); // no mutation
   });
 
   test("keeps every card exactly once", () => {
@@ -324,6 +324,44 @@ describe("setSplit", () => {
     const l = setSplit(setSplit(setSplit(DEFAULT_LAYOUT, "4/4/4"), "12"), "8/4");
     expect(keysIn(l)).toEqual(ALL);
     expect(l.columns).toHaveLength(2);
+  });
+});
+
+describe("triage card pickup", () => {
+  const v3WithoutTriage = {
+    v: 3,
+    split: "8/4",
+    band: ["kpis"],
+    columns: [["agenda", "tasks"], ["deadlines"]],
+    hidden: ["pulse"],
+  };
+
+  test("a stored v3 layout without triage gets it in the band", () => {
+    const l = mergeLayout(v3WithoutTriage);
+    expect(l.band).toEqual(["kpis", "triage"]);
+    expect(l.columns[0]).toContain("agenda");
+    expect(l.hidden).toEqual(["pulse"]);
+  });
+
+  test("a stored hidden triage stays hidden", () => {
+    const l = mergeLayout({ ...v3WithoutTriage, hidden: ["triage"] });
+    expect(l.hidden).toEqual(["triage"]);
+    expect(l.band).not.toContain("triage");
+  });
+
+  test("a v2 blob without triage gets it in the band, not a column", () => {
+    const l = mergeLayout({
+      visible: { pulse: false },
+      order: ["kpis", "agenda", "tasks", "deadlines", "pulse", "records"],
+    });
+    expect(l.band).toEqual(["kpis", "triage"]);
+    expect(l.columns.flat()).not.toContain("triage");
+  });
+
+  test("is registered with its label and default band placement", () => {
+    expect(DASHBOARD_CARD_KEYS).toContain("triage");
+    expect(DASHBOARD_CARDS.triage.label).toBe("Needs me now");
+    expect(DASHBOARD_CARDS.triage.defaultPlacement).toEqual({ zone: "band" });
   });
 });
 
