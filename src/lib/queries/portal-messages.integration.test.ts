@@ -166,6 +166,16 @@ describe("getPortalConversation", () => {
     expect((await getPortalConversation(m))!.unread).toBe(2);
   });
 
+  test("hasLiveAccess is true when a client has live access to the matter", async () => {
+    const m = await mkMatter("M");
+    await seedThread(m, [{ from: "client", body: "hi" }]);
+    await prisma.portalMatterAccess.create({
+      data: { identityId, matterId: m, invitedById: leadId },
+    });
+    as(viewerA);
+    expect((await getPortalConversation(m))!.hasLiveAccess).toBe(true);
+  });
+
   test("a revoked client keeps their name on past messages", async () => {
     const m = await mkMatter("M");
     await seedThread(m, [{ from: "client", body: "hi" }]);

@@ -159,4 +159,27 @@ describe("latestStageLabels", () => {
     expect(m.get(matterA)).toBe("Newest");
     expect(m.has(matterB)).toBe(false);
   });
+
+  describe("returns no labels when the identity has lost live access", () => {
+    beforeEach(async () => {
+      await mkUpdate(matterA, "Discovery", new Date("2026-03-01T00:00:00Z"));
+      // Sanity: the label is visible before the access is taken away.
+      expect((await latestStageLabels(identityId, [matterA])).get(matterA)).toBe("Discovery");
+    });
+
+    test("access revoked", async () => {
+      await prisma.portalMatterAccess.updateMany({ where: { identityId }, data: { revokedAt: new Date() } });
+      expect((await latestStageLabels(identityId, [matterA])).size).toBe(0);
+    });
+
+    test("portal switched off", async () => {
+      await prisma.firm.update({ where: { id: firmId }, data: { portalEnabled: false } });
+      expect((await latestStageLabels(identityId, [matterA])).size).toBe(0);
+    });
+
+    test("identity disabled", async () => {
+      await prisma.portalIdentity.update({ where: { id: identityId }, data: { disabledAt: new Date() } });
+      expect((await latestStageLabels(identityId, [matterA])).size).toBe(0);
+    });
+  });
 });
