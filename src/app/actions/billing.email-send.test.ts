@@ -201,6 +201,30 @@ describe("recordInvoicePayment notifyClient", () => {
     }
   });
 
+  test("permission lookup throwing after commit: payment stays ok with warning, no email", async () => {
+    const { contactId } = await seedContact({ name: "Pat", email: "pat@example.com" });
+    await prisma.matter.update({ where: { id: matterId }, data: { clientId: contactId } });
+    const id = await makeInvoice("sent", 100);
+    vi.mocked(currentUserHasPermission).mockImplementation(async (key: string) => {
+      if (key === "billing.send_invoice") throw new Error("db blip");
+      return true;
+    });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const res = await recordInvoicePayment(id, billingInitialState, fd({ amount: "25", source: "check", notifyClient: "true" }));
+      expect(res.status).toBe("ok");
+      expect(res.warning).toBe(
+        "Payment recorded, but the updated invoice couldn't be emailed. Use Re-send email to retry."
+      );
+      expect(cap.sent).toHaveLength(0);
+      expect(await prisma.invoicePayment.count({ where: { invoiceId: id } })).toBe(1);
+    } finally {
+      errSpy.mockRestore();
+      vi.mocked(currentUserHasPermission).mockReset();
+      vi.mocked(currentUserHasPermission).mockResolvedValue(true);
+    }
+  });
+
   test("no client email: no email, payment still recorded", async () => {
     const id = await makeInvoice("sent", 100);
     const res = await recordInvoicePayment(id, billingInitialState, fd({ amount: "25", source: "check", notifyClient: "true" }));

@@ -388,37 +388,37 @@ function RecordPaymentForm({
           billing.send_invoice). The hidden input mirrors the boolean
           so the server reads "true" / "" cleanly. */}
       {canSendInvoice && (
-      <label
-        className={cn(
-          "flex items-start gap-2 px-3 py-2 rounded-md border text-xs",
-          clientEmail
-            ? "cursor-pointer border-line bg-paper-2/40 hover:bg-paper-2/60"
-            : "border-line bg-paper-2/30 cursor-not-allowed opacity-70"
-        )}
-      >
-        <input
-          type="checkbox"
-          checked={notifyClient && !!clientEmail}
-          disabled={!clientEmail}
-          onChange={(e) => setNotifyClient(e.target.checked)}
-          className="mt-0.5"
-        />
-        <input
-          type="hidden"
-          name="notifyClient"
-          value={notifyClient && clientEmail ? "true" : ""}
-        />
-        <div>
-          <div className="text-ink font-medium">
-            Client needs an updated invoice
+        <label
+          className={cn(
+            "flex items-start gap-2 px-3 py-2 rounded-md border text-xs",
+            clientEmail
+              ? "cursor-pointer border-line bg-paper-2/40 hover:bg-paper-2/60"
+              : "border-line bg-paper-2/30 cursor-not-allowed opacity-70"
+          )}
+        >
+          <input
+            type="checkbox"
+            checked={notifyClient && !!clientEmail}
+            disabled={!clientEmail}
+            onChange={(e) => setNotifyClient(e.target.checked)}
+            className="mt-0.5"
+          />
+          <input
+            type="hidden"
+            name="notifyClient"
+            value={notifyClient && clientEmail ? "true" : ""}
+          />
+          <div>
+            <div className="text-ink font-medium">
+              Client needs an updated invoice
+            </div>
+            <div className="text-2xs text-ink-4 mt-0.5">
+              {clientEmail
+                ? `Emails the refreshed invoice PDF to ${clientEmail}.`
+                : "No email on file for the client — add one on the client record to enable this."}
+            </div>
           </div>
-          <div className="text-2xs text-ink-4 mt-0.5">
-            {clientEmail
-              ? `Emails the refreshed invoice PDF to ${clientEmail}.`
-              : "No email on file for the client — add one on the client record to enable this."}
-          </div>
-        </div>
-      </label>
+        </label>
       )}
 
       {state.status === "error" && state.error && (

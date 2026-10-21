@@ -254,19 +254,28 @@ export async function recordInvoicePayment(
     // failure only becomes a warning on the result.
     let warning: string | undefined;
     if (data.notifyClient && result.clientEmail) {
-      // Emailing an invoice is part of billing.send_invoice. Without it
-      // the payment still stands; only the delivery is skipped.
-      if (!(await currentUserHasPermission("billing.send_invoice"))) {
+      // The payment has already committed, so nothing in this block may
+      // turn it into an error result (the user would resubmit and record
+      // the payment twice).
+      try {
+        // Emailing an invoice is part of billing.send_invoice. Without it
+        // the payment still stands; only the delivery is skipped.
+        if (!(await currentUserHasPermission("billing.send_invoice"))) {
+          warning =
+            "Payment recorded. You don't have permission to email invoices, so no updated copy was sent.";
+        } else {
+          const delivery = await deliverInvoiceEmail({
+            invoiceId: result.invoiceId,
+            to: result.clientEmail,
+            userId,
+            kind: "updated",
+          });
+          if (!delivery.ok) warning = `Payment recorded. ${delivery.warning}`;
+        }
+      } catch (err) {
+        console.error("[billing.recordInvoicePayment] updated invoice email", err);
         warning =
-          "Payment recorded. You don't have permission to email invoices, so no updated copy was sent.";
-      } else {
-      const delivery = await deliverInvoiceEmail({
-        invoiceId: result.invoiceId,
-        to: result.clientEmail,
-        userId,
-        kind: "updated",
-      });
-      if (!delivery.ok) warning = `Payment recorded. ${delivery.warning}`;
+          "Payment recorded, but the updated invoice couldn't be emailed. Use Re-send email to retry.";
       }
     }
 
