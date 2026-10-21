@@ -37,8 +37,9 @@ still needs a cron) and Vercel Queues (unneeded at this volume).
   `Notification.emailedAt DateTime?`.
 - `NotificationPreference { id, userId, category String, emailMode
   String, updatedAt }`, `@@unique([userId, category])`. No row = Instant.
-- `NotificationMatterMute { id, userId, matterId, createdAt }`,
-  `@@unique([userId, matterId])`, cascades on user/matter delete.
+- `NotificationMatterMute { userId, matterId, createdAt }`,
+  `@@id([userId, matterId])` (like `UserMatterPin`), cascades on
+  user/matter delete.
 - `User.notificationDigestSentOn DateTime? @db.Date`: the local calendar
   day (ADR-012 UTC-midnight) the last digest went out.
 
@@ -105,13 +106,14 @@ and whether matter mute applies (`deadlines`: no).
   control (Deadlines shows Instant / Daily digest plus a one-line note on
   why). Copy explains the 07:00 digest in the profile time zone.
   "Muted matters" section lists mutes with Unmute buttons.
-- Matter header: "Mute email notifications" / "Unmute" toggle in the
-  existing overflow/actions menu.
+- Matter header: a Bell/BellOff icon toggle beside `PinToggle` (the
+  header has no actions menu), "Mute email notifications for this matter".
 - Actions in `src/app/actions/notification-preferences.ts`:
   `setNotificationEmailMode(category, mode)` (validates category and
   allowed mode with zod), `setMatterEmailMute(matterId, muted)`
-  (`assertMatterAccess` first). Both log via `logActivity`,
-  `revalidatePath` the settings page (and the matter for mute).
+  (`assertMatterAccess` first). Not activity-logged: private per-user
+  view state, same precedent as matter pins. Both `revalidatePath` the
+  settings page (and the matter for mute).
 
 ## Testing
 - Unit: category map completeness, allowed modes, `decideEmail` table.
