@@ -7,12 +7,16 @@ vi.mock("@/lib/feedback", () => ({
   notifyError: vi.fn(),
   notifySuccess: vi.fn(),
 }));
+vi.mock("@/app/actions/portal-billing", () => ({
+  setPortalBilling: vi.fn(),
+}));
 vi.mock("@/app/actions/portal-access", () => ({
   invitePortalUser: vi.fn(),
   revokePortalAccess: vi.fn(),
 }));
 
 import { invitePortalUser, revokePortalAccess } from "@/app/actions/portal-access";
+import { setPortalBilling } from "@/app/actions/portal-billing";
 import { confirmAction } from "@/lib/feedback";
 import { PortalCard } from "./portal-card";
 import type { PortalAccessRow } from "@/lib/queries/portal-access";
@@ -158,5 +162,71 @@ describe("PortalCard", () => {
     unmount();
     renderCard({ rows: [row({ revokedAt: new Date() })] });
     expect(screen.queryByRole("button", { name: "Revoke" })).toBeNull();
+  });
+
+  describe("billing switch", () => {
+    const billing = {
+      portalBillingEnabled: false,
+      billedPortalContacts: [] as string[],
+      canShareBilling: true,
+    };
+
+    test("hidden when the loader omitted billing data (no billing.view)", () => {
+      renderCard();
+      expect(screen.queryByText("Show billing in the portal")).toBeNull();
+    });
+
+    test("disabled without portal.share_billing", () => {
+      renderCard({ ...billing, canShareBilling: false });
+      expect(
+        screen.getByRole("switch", { name: /Show billing in the portal/ })
+      ).toBeDisabled();
+    });
+
+    test("toggling calls the action", async () => {
+      vi.mocked(setPortalBilling).mockResolvedValue({ ok: true });
+      renderCard(billing);
+      await userEvent.click(
+        screen.getByRole("switch", { name: /Show billing in the portal/ })
+      );
+      await waitFor(() =>
+        expect(setPortalBilling).toHaveBeenCalledWith("m1", true)
+      );
+    });
+
+    test("an error reverts the switch and is shown", async () => {
+      vi.mocked(setPortalBilling).mockResolvedValue({
+        ok: false,
+        error: "Nope.",
+      });
+      renderCard(billing);
+      const sw = screen.getByRole("switch", {
+        name: /Show billing in the portal/,
+      });
+      await userEvent.click(sw);
+      expect(await screen.findByText("Nope.")).toBeTruthy();
+      expect(sw).not.toBeChecked();
+    });
+
+    test("when on, lists billed contacts or the empty line", () => {
+      const { unmount } = renderCard({
+        ...billing,
+        portalBillingEnabled: true,
+        billedPortalContacts: ["Amy", "Zed"],
+      });
+      expect(screen.getByText(/Amy, Zed/)).toBeTruthy();
+      unmount();
+      renderCard({ ...billing, portalBillingEnabled: true });
+      expect(
+        screen.getByText("No billed contact has portal access yet.")
+      ).toBeTruthy();
+    });
+
+    test("when off, no contact list", () => {
+      renderCard(billing);
+      expect(
+        screen.queryByText("No billed contact has portal access yet.")
+      ).toBeNull();
+    });
   });
 });

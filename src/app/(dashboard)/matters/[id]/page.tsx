@@ -87,6 +87,7 @@ export default async function MatterOverviewPage({
     canViewPortal,
     canInvitePortal,
     canRevokePortal,
+    canShareBilling,
     canAddRequests,
     canEditRequests,
     canDeleteRequests,
@@ -135,6 +136,7 @@ export default async function MatterOverviewPage({
     currentUserHasPermission("portal.view"),
     currentUserHasPermission("portal.invite"),
     currentUserHasPermission("portal.revoke"),
+    currentUserHasPermission("portal.share_billing"),
     currentUserHasPermission("portal.add_requests"),
     currentUserHasPermission("portal.edit_requests"),
     currentUserHasPermission("portal.delete_requests"),
@@ -516,6 +518,9 @@ export default async function MatterOverviewPage({
               canInvite={canInvitePortal}
               canRevoke={canRevokePortal}
               portalEnabled={portal.portalEnabled}
+              portalBillingEnabled={portal.portalBillingEnabled}
+              billedPortalContacts={portal.billedPortalContacts}
+              canShareBilling={canShareBilling}
               tz={tz}
             />
           )}

@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { invitePortalUser, revokePortalAccess } from "@/app/actions/portal-access";
+import { setPortalBilling } from "@/app/actions/portal-billing";
 import { formatDate } from "@/lib/format-date";
 import type { PortalAccessRow } from "@/lib/queries/portal-access";
 import { confirmAction } from "@/lib/feedback";
@@ -55,6 +56,9 @@ export function PortalCard({
   canInvite,
   canRevoke,
   portalEnabled,
+  portalBillingEnabled,
+  billedPortalContacts = [],
+  canShareBilling = false,
   tz,
 }: {
   matterId: string;
@@ -63,8 +67,28 @@ export function PortalCard({
   canInvite: boolean;
   canRevoke: boolean;
   portalEnabled: boolean;
+  /** Undefined when the viewer lacks billing.view: no billing section. */
+  portalBillingEnabled?: boolean;
+  billedPortalContacts?: string[];
+  canShareBilling?: boolean;
   tz: string;
 }) {
+  const [billingOn, setBillingOn] = useState(portalBillingEnabled ?? false);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingPending, startBilling] = useTransition();
+
+  const toggleBilling = (next: boolean) => {
+    setBillingOn(next);
+    setBillingError(null);
+    startBilling(async () => {
+      const result = await setPortalBilling(matterId, next);
+      if (!result.ok) {
+        setBillingOn(!next);
+        setBillingError(result.error ?? "Couldn't save.");
+      }
+    });
+  };
+
   const [inviteOpen, setInviteOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [revokeError, setRevokeError] = useState<string | null>(null);
@@ -150,6 +174,47 @@ export function PortalCard({
               </li>
             ))}
           </ul>
+        )}
+        {portalBillingEnabled !== undefined && (
+          <div className="mt-3 border-t border-line pt-3">
+            <label
+              className="flex items-start gap-2 text-xs select-none"
+              title={
+                canShareBilling
+                  ? undefined
+                  : "You need permission to share billing in the portal."
+              }
+            >
+              <input
+                type="checkbox"
+                role="switch"
+                checked={billingOn}
+                disabled={!canShareBilling || billingPending}
+                onChange={(e) => toggleBilling(e.target.checked)}
+                className="h-3.5 w-3.5 mt-0.5 rounded border-line"
+              />
+              <span className="text-ink font-medium">
+                Show billing in the portal
+              </span>
+            </label>
+            {!canShareBilling && (
+              <div className="mt-1 text-2xs text-ink-4">
+                You need permission to share billing in the portal.
+              </div>
+            )}
+            {billingError && (
+              <div role="alert" className="mt-1 text-2xs text-warn">
+                {billingError}
+              </div>
+            )}
+            {billingOn && (
+              <div className="mt-1 text-2xs text-ink-3">
+                {billedPortalContacts.length > 0
+                  ? `Visible to: ${billedPortalContacts.join(", ")}`
+                  : "No billed contact has portal access yet."}
+              </div>
+            )}
+          </div>
         )}
       </CardContent>
       {canInvite && (

@@ -27,7 +27,14 @@ import { todayKey } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
-export function TrustTransactionForm({ matterId }: { matterId: string }) {
+export function TrustTransactionForm({
+  matterId,
+  portalBillingEnabled = false,
+}: {
+  matterId: string;
+  /** When the client sees billing in the portal, descriptions are client-visible. */
+  portalBillingEnabled?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [type, setType] = useState<TrustTxnType>("deposit");
   // Date input default: the viewer's today (their profile zone),
@@ -170,6 +177,11 @@ export function TrustTransactionForm({ matterId }: { matterId: string }) {
           />
           {errs.description && (
             <span className="text-2xs text-warn">{errs.description[0]}</span>
+          )}
+          {portalBillingEnabled && (
+            <span className="text-2xs text-ink-3">
+              Descriptions are visible to the client in the portal.
+            </span>
           )}
         </div>
         <div className="flex flex-col gap-1">

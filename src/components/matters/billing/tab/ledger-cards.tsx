@@ -113,11 +113,13 @@ export function TrustLedgerCard({
   matterId,
   billing,
   permissions,
+  portalBillingEnabled,
   invoiceHref,
 }: {
   matterId: string;
   billing: MatterBilling;
   permissions: BillingPermissions;
+  portalBillingEnabled: boolean;
   invoiceHref: (invId: string) => string;
 }) {
   return (
@@ -132,7 +134,10 @@ export function TrustLedgerCard({
       </CardHeader>
       <CardContent className="px-4 pb-4 flex flex-col gap-3">
         {permissions.recordTrustTransaction && (
-          <TrustTransactionForm matterId={matterId} />
+          <TrustTransactionForm
+            matterId={matterId}
+            portalBillingEnabled={portalBillingEnabled}
+          />
         )}
         {billing.trust.transactions.length === 0 ? (
           <div className="text-2xs text-ink-4 italic">

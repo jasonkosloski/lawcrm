@@ -17,6 +17,7 @@ import {
   portalSendAvailability,
   type PortalSendAvailability,
 } from "@/lib/queries/portal-billing";
+import { prisma } from "@/lib/prisma";
 import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -57,6 +58,7 @@ export async function loadBillingTab(
     canRecordTrustTransaction,
     currentUserId,
     requestedInvoice,
+    portalBillingMatter,
   ] = await Promise.all([
     getMatterBilling(id),
     getCurrentFirm(),
@@ -90,6 +92,12 @@ export async function loadBillingTab(
     // only USED if the invoice belongs to this matter (below), so an
     // id from another matter is read and discarded, never rendered.
     requestedInvoiceId ? getInvoiceById(requestedInvoiceId) : null,
+    // Page already asserted matter access and billing.view; this only
+    // drives the client-visibility hint on the trust form.
+    prisma.matter.findUnique({
+      where: { id },
+      select: { portalBillingEnabled: true },
+    }),
   ]);
 
   const permissions: BillingPermissions = {
@@ -140,5 +148,6 @@ export async function loadBillingTab(
     selectedInvoice,
     selectedInvoiceId,
     portalSend,
+    portalBillingEnabled: portalBillingMatter?.portalBillingEnabled ?? false,
   };
 }

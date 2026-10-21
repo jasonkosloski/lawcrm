@@ -42,6 +42,7 @@ export function MainColumn({
   billing,
   unbilledExpenses,
   permissions,
+  portalBillingEnabled,
   timeZone,
   settlement,
   canViewSettlement,
@@ -57,6 +58,8 @@ export function MainColumn({
    *  sweep these along with the time in `billing.wip`. */
   unbilledExpenses: UnbilledExpenseSummary;
   permissions: BillingPermissions;
+  /** Billing is visible to the client in the portal. */
+  portalBillingEnabled: boolean;
   /** Viewer's profile zone, for the invoice issue / due instants. */
   timeZone: string;
   settlement: MatterSettlement | null;
@@ -272,6 +275,7 @@ export function MainColumn({
         matterId={matterId}
         billing={billing}
         permissions={permissions}
+        portalBillingEnabled={portalBillingEnabled}
         invoiceHref={invoiceHref}
       />
 

@@ -168,3 +168,29 @@ describe("TrustTransactionForm — labels and date default", () => {
     }
   });
 });
+
+describe("TrustTransactionForm — portal visibility warning", () => {
+  const WARNING = "Descriptions are visible to the client in the portal.";
+  const open = async (portalBillingEnabled?: boolean) => {
+    render(
+      <UserTimeZoneProvider timeZone="America/Denver">
+        <TrustTransactionForm
+          matterId="m1"
+          portalBillingEnabled={portalBillingEnabled}
+        />
+      </UserTimeZoneProvider>
+    );
+    await userEvent.click(screen.getByText("Add transaction"));
+  };
+
+  test("shown when billing is visible in the portal", async () => {
+    await open(true);
+    expect(screen.getByText(WARNING)).toBeTruthy();
+  });
+
+  test("hidden otherwise", async () => {
+    await open(false);
+    expect(screen.queryByText(WARNING)).toBeNull();
+  });
+});
+
