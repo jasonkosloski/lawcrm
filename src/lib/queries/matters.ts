@@ -398,7 +398,7 @@ export type MattersFilterOptions = {
 /**
  * Returns the active practice areas + the union of their stage names
  * (de-duplicated, sorted by the canonical order they appear across
- * areas). Fee structures are the distinct values in use; lead options
+ * areas). Billing types are the distinct derived values in use; lead options
  * are the ACTIVE leads of active users (what the lead filter matches).
  */
 export async function getMattersFilterOptions(

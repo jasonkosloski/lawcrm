@@ -85,6 +85,11 @@ describe("MattersTable", () => {
 });
 
 describe("MattersKanban", () => {
+  test("card label shows Court-appointed for a court_voucher matter", () => {
+    render(<MattersKanban matters={[row({ billingType: "court_appointed" })]} />);
+    expect(screen.getByText("Court-appointed")).toBeTruthy();
+  });
+
   test("trust uses the shared two-decimal formatter", () => {
     render(<MattersKanban matters={[row({ trustBalance: 1234.5 })]} />);
     expect(screen.getByText("$1,234.50")).toBeInTheDocument();

@@ -36,17 +36,10 @@ import {
   MATTER_CREATE_PERMISSION,
 } from "@/lib/matter-create-types";
 import { requireUser } from "@/lib/current-user";
+import { BILLING_TYPE_LABEL, billingTypeOf } from "@/lib/billing-type";
 import { isMatterEmailMuted } from "@/lib/queries/notification-preferences";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { RestrictedBadge } from "@/components/shared/restricted-badge";
-
-const FEE_LABEL: Record<string, string> = {
-  contingent: "Contingent",
-  hourly: "Hourly",
-  flat: "Flat fee",
-  hybrid: "Hybrid",
-  pro_bono: "Pro bono",
-};
 
 export default async function MatterDetailLayout({
   children,
@@ -152,7 +145,7 @@ export default async function MatterDetailLayout({
         <span>
           Fee:{" "}
           <span className="text-ink">
-            {FEE_LABEL[matter.feeStructure] ?? matter.feeStructure}
+            {BILLING_TYPE_LABEL[billingTypeOf(matter)]}
           </span>
         </span>
         {leadMember && (
