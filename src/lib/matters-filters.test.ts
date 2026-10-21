@@ -134,7 +134,7 @@ describe("isFilterActive", () => {
     ["areas", { areas: ["§1983"] }],
     ["stages", { stages: ["Discovery"] }],
     ["leadIds", { leadIds: ["u1"] }],
-    ["feeStructures", { feeStructures: ["contingent"] }],
+    ["billingTypes", { billingTypes: ["contingent"] }],
     ["trust", { trust: "has" }],
     ["deadline", { deadline: "overdue" }],
     ["includeArchived", { includeArchived: true }],

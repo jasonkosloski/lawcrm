@@ -26,7 +26,7 @@ function row(over: Partial<MatterListRow> = {}): MatterListRow {
     stage: "Discovery",
     stageOrder: 3,
     stageIsTerminal: false,
-    feeStructure: "contingency",
+    billingType: "contingent",
     trustBalance: 0,
     color: "#123456",
     leadInitials: "PL",
@@ -41,6 +41,16 @@ function row(over: Partial<MatterListRow> = {}): MatterListRow {
 }
 
 describe("MattersTable", () => {
+  test("shows the billing type label, Court-appointed included", () => {
+    render(
+      <MattersTable
+        matters={[row({ billingType: "court_appointed" })]}
+        showTrust
+      />
+    );
+    expect(screen.getByText("Court-appointed")).toBeTruthy();
+  });
+
   test("trust balances show two decimals, thousands separators and a leading minus", () => {
     render(
       <MattersTable

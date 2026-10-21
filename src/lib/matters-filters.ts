@@ -35,7 +35,8 @@ export type MattersFilter = {
   areas: string[];
   stages: string[];
   leadIds: string[];
-  feeStructures: string[];
+  /** Billing-type values (URL param stays `fee` so saved links work). */
+  billingTypes: string[];
   trust: TrustFilter;
   deadline: DeadlineFilter;
   includeArchived: boolean;
@@ -66,15 +67,6 @@ export type MattersSort = { field: SortField; dir: SortDir };
  *  later — add when we need it without breaking URL contract. */
 export type ViewMode = "table" | "kanban";
 export const DEFAULT_VIEW: ViewMode = "table";
-
-/** Human-friendly labels for fee structure values. */
-export const FEE_LABELS: Record<string, string> = {
-  contingent: "Contingent",
-  hourly: "Hourly",
-  flat: "Flat fee",
-  hybrid: "Hybrid",
-  pro_bono: "Pro bono",
-};
 
 /** Default sort — applied when the user hasn't clicked a sortable header.
  *  The server always sorts PINNED matters first, ahead of the chosen
@@ -113,7 +105,7 @@ export const EMPTY_FILTER: MattersFilter = {
   areas: [],
   stages: [],
   leadIds: [],
-  feeStructures: [],
+  billingTypes: [],
   trust: "any",
   deadline: "any",
   includeArchived: false,
@@ -156,7 +148,7 @@ export function parseMattersParams(
       areas: getAll(sp, "area"),
       stages: getAll(sp, "stage"),
       leadIds: getAll(sp, "lead"),
-      feeStructures: getAll(sp, "fee"),
+      billingTypes: getAll(sp, "fee"),
       trust: isTrust(trust) ? trust : "any",
       deadline: isDeadline(deadline) ? deadline : "any",
       includeArchived: getOne(sp, "archived") === "1",
@@ -194,7 +186,7 @@ export function isFilterActive(f: MattersFilter): boolean {
     f.areas.length > 0 ||
     f.stages.length > 0 ||
     f.leadIds.length > 0 ||
-    f.feeStructures.length > 0 ||
+    f.billingTypes.length > 0 ||
     f.trust !== "any" ||
     f.deadline !== "any" ||
     f.includeArchived ||
@@ -213,7 +205,7 @@ export function buildMattersSearchParams(
   for (const a of filter.areas) p.append("area", a);
   for (const s of filter.stages) p.append("stage", s);
   for (const l of filter.leadIds) p.append("lead", l);
-  for (const f of filter.feeStructures) p.append("fee", f);
+  for (const f of filter.billingTypes) p.append("fee", f);
   if (filter.trust !== "any") p.set("trust", filter.trust);
   if (filter.deadline !== "any") p.set("deadline", filter.deadline);
   if (filter.includeArchived) p.set("archived", "1");

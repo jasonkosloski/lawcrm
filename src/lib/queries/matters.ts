@@ -29,6 +29,11 @@ import {
   todayKey,
 } from "@/lib/format-date";
 import {
+  BILLING_TYPE_LABEL,
+  billingTypeOf,
+  type BillingTypeOrLegacy,
+} from "@/lib/billing-type";
+import {
   EMPTY_FILTER,
   type MattersFilter,
   type MattersSort,
@@ -44,7 +49,7 @@ export type MatterListRow = {
   stageOrder: number;
   /** True when the stage is a closing state (Settled/Closed-equivalent). */
   stageIsTerminal: boolean;
-  feeStructure: string;
+  billingType: BillingTypeOrLegacy;
   /** Null when the viewer lacks `billing.view` (ADR-038): trust
    *  balances are billing data and are never sent to them. */
   trustBalance: number | null;
@@ -104,8 +109,19 @@ function buildWhere(
   if (stageConds.length === 1) where.stage = stageConds[0];
   else if (stageConds.length > 1) where.stage = { AND: stageConds };
 
-  if (filter.feeStructures.length > 0)
-    where.feeStructure = { in: filter.feeStructures };
+  if (filter.billingTypes.length > 0) {
+    // AND-ed in (not assigned to where.OR) so the text search's OR survives.
+    const clauses: Array<Record<string, unknown>> = [];
+    if (filter.billingTypes.includes("court_appointed"))
+      clauses.push({ billingMode: "court_voucher" });
+    const rest = filter.billingTypes.filter((t) => t !== "court_appointed");
+    if (rest.length > 0)
+      clauses.push({
+        feeStructure: { in: rest },
+        billingMode: { not: "court_voucher" },
+      });
+    where.AND = [...((where.AND as unknown[] | undefined) ?? []), { OR: clauses }];
+  }
 
   if (filter.leadIds.length > 0) {
     where.teamMembers = {
@@ -218,7 +234,9 @@ function makeComparator(sort: MattersSort) {
         diff = a.stageOrder - b.stageOrder;
         break;
       case "fee":
-        diff = a.feeStructure.localeCompare(b.feeStructure);
+        diff = BILLING_TYPE_LABEL[a.billingType].localeCompare(
+          BILLING_TYPE_LABEL[b.billingType]
+        );
         break;
       case "trust":
         diff = (a.trustBalance ?? 0) - (b.trustBalance ?? 0);
@@ -322,7 +340,7 @@ export async function listMatters(
     stage: m.stage.name,
     stageOrder: m.stage.order,
     stageIsTerminal: m.stage.isTerminal,
-    feeStructure: m.feeStructure,
+    billingType: billingTypeOf(m),
     // Decimal → number at the API boundary so the row shape stays
     // primitive-only (matches comparator + display helpers). The DB
     // keeps Decimal precision; UI doesn't need it.
@@ -373,7 +391,7 @@ export async function countMatters(
 export type MattersFilterOptions = {
   areas: string[];
   stages: string[];
-  feeStructures: string[];
+  billingTypes: string[];
   leads: Array<{ id: string; name: string; initials: string }>;
 };
 
@@ -401,8 +419,8 @@ export async function getMattersFilterOptions(
     }),
     prisma.matter.findMany({
       where: access,
-      distinct: ["feeStructure"],
-      select: { feeStructure: true },
+      distinct: ["feeStructure", "billingMode"],
+      select: { feeStructure: true, billingMode: true },
     }),
     prisma.matterTeamMember.findMany({
       // Same predicate as buildWhere's lead filter (active lead rows).
@@ -433,8 +451,8 @@ export async function getMattersFilterOptions(
     .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
     .map(([name]) => name);
 
-  const feeStructures = Array.from(
-    new Set(matters.map((m) => m.feeStructure))
+  const billingTypes = Array.from(
+    new Set(matters.map((m) => billingTypeOf(m)))
   ).sort();
   const leads = leadAssignments.map((a) => ({
     id: a.user.id,
@@ -445,7 +463,7 @@ export async function getMattersFilterOptions(
   return {
     areas: areas.map((a) => a.name),
     stages: orderedStageNames,
-    feeStructures,
+    billingTypes,
     leads,
   };
 }

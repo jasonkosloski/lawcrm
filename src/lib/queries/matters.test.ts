@@ -413,15 +413,64 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
   });
 });
 
-describe("getMattersFilterOptions (F762/F788/F849)", () => {
-  test("fee structures are the distinct values in use, sorted", async () => {
-    for (const fee of ["hourly", "contingent", "hourly", "hourly"]) {
+describe("listMatters billing-type filter", () => {
+  const byCreated = { field: "created", dir: "desc" } as const;
+  async function seed() {
+    for (const [name, feeStructure, billingMode] of [
+      ["court", "hourly", "court_voucher"],
+      ["hourly", "hourly", "client"],
+      ["contingent", "contingent", "client"],
+    ] as const) {
       await prisma.matter.create({
-        data: { name: "m", practiceAreaId: areaId, stageId, feeStructure: fee },
+        data: { name, practiceAreaId: areaId, stageId, feeStructure, billingMode },
+      });
+    }
+  }
+  const names = async (billingTypes: string[], q = "") =>
+    (
+      await listMatters({ ...EMPTY_FILTER, billingTypes, q }, byCreated, userId, "UTC")
+    ).rows
+      .map((r) => r.name)
+      .sort();
+
+  test("court_appointed returns only court_voucher matters", async () => {
+    await seed();
+    expect(await names(["court_appointed"])).toEqual(["court"]);
+  });
+  test("hourly excludes court_voucher matters", async () => {
+    await seed();
+    expect(await names(["hourly"])).toEqual(["hourly"]);
+  });
+  test("both together return both", async () => {
+    await seed();
+    expect(await names(["hourly", "court_appointed"])).toEqual(["court", "hourly"]);
+  });
+  test("composes with the text search OR", async () => {
+    await seed();
+    expect(await names(["hourly", "court_appointed"], "cour")).toEqual(["court"]);
+  });
+  test("rows expose the derived billing type", async () => {
+    await seed();
+    const { rows } = await listMatters(EMPTY_FILTER, byCreated, userId, "UTC");
+    expect(rows.find((r) => r.name === "court")!.billingType).toBe("court_appointed");
+  });
+});
+
+describe("getMattersFilterOptions (F762/F788/F849)", () => {
+  test("billing types are the distinct derived values in use, sorted", async () => {
+    const combos: Array<[string, string]> = [
+      ["hourly", "client"],
+      ["contingent", "client"],
+      ["hourly", "client"],
+      ["hourly", "court_voucher"],
+    ];
+    for (const [feeStructure, billingMode] of combos) {
+      await prisma.matter.create({
+        data: { name: "m", practiceAreaId: areaId, stageId, feeStructure, billingMode },
       });
     }
     const opts = await getMattersFilterOptions(userId);
-    expect(opts.feeStructures).toEqual(["contingent", "hourly"]);
+    expect(opts.billingTypes).toEqual(["contingent", "court_appointed", "hourly"]);
   });
 
   test("leads: only active leads of active users", async () => {

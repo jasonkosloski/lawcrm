@@ -17,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SortableHead } from "@/components/matters/sortable-header";
-import { FEE_LABELS } from "@/lib/matters-filters";
+import { BILLING_TYPE_LABEL } from "@/lib/billing-type";
 import { DueLabel } from "@/components/shared/due-label";
 
 /** Zero trust reads grey; a shortfall reads danger. */
@@ -142,7 +142,7 @@ export function MattersTable({
                   </TableCell>
                 )}
                 <TableCell className="text-xs text-ink-3">
-                  {FEE_LABELS[m.feeStructure] ?? m.feeStructure}
+                  {BILLING_TYPE_LABEL[m.billingType]}
                 </TableCell>
                 <TableCell className="text-right pr-4">
                   {m.nextDeadlineDays === null ? (

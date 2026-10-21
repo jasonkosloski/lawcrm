@@ -23,8 +23,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn, plural } from "@/lib/utils";
+import { BILLING_TYPE_LABEL, type BillingTypeOrLegacy } from "@/lib/billing-type";
 import {
-  FEE_LABELS,
   FILTER_PARAM_KEYS,
   isFilterActive,
   type DeadlineFilter,
@@ -41,7 +41,7 @@ type Lead = { id: string; name: string; initials: string };
 type FilterOptions = {
   areas: string[];
   stages: string[];
-  feeStructures: string[];
+  billingTypes: string[];
   leads: Lead[];
 };
 
@@ -216,12 +216,12 @@ export function MattersToolbar({
           onClear={() => setParams((p) => p.delete("lead"))}
         />
         <MultiSelectFilter
-          label="Fee"
-          options={options.feeStructures.map((f) => ({
+          label="Billing"
+          options={options.billingTypes.map((f) => ({
             value: f,
-            label: FEE_LABELS[f] ?? f,
+            label: BILLING_TYPE_LABEL[f as BillingTypeOrLegacy] ?? f,
           }))}
-          selected={filter.feeStructures}
+          selected={filter.billingTypes}
           onToggle={(v) => toggleInList("fee", v)}
           onClear={() => setParams((p) => p.delete("fee"))}
         />

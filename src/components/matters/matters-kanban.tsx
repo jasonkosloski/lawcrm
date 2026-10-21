@@ -16,7 +16,7 @@
  */
 
 import Link from "next/link";
-import { FEE_LABELS } from "@/lib/matters-filters";
+import { BILLING_TYPE_LABEL } from "@/lib/billing-type";
 import { DueLabel } from "@/components/shared/due-label";
 import { formatMoney } from "@/lib/format-money";
 import type { MatterListRow } from "@/lib/queries/matters";
@@ -117,7 +117,7 @@ function KanbanCard({
       <div className="flex items-center gap-2 text-2xs text-ink-3">
         <span>{matter.area}</span>
         <span className="text-ink-4">·</span>
-        <span>{FEE_LABELS[matter.feeStructure] ?? matter.feeStructure}</span>
+        <span>{BILLING_TYPE_LABEL[matter.billingType]}</span>
       </div>
 
       <div className="flex items-center gap-2 justify-between pt-1 border-t border-line">

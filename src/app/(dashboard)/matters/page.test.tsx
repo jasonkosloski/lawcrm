@@ -115,7 +115,7 @@ beforeEach(() => {
   optionsMock.mockResolvedValue({
     areas: [],
     stages: [],
-    feeStructures: [],
+    billingTypes: [],
     leads: [],
   });
 });

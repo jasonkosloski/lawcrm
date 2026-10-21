@@ -40,7 +40,7 @@ import {
 const options = {
   areas: ["§1983", "Housing/FHA"],
   stages: ["Intake", "Discovery"],
-  feeStructures: ["contingency"],
+  billingTypes: ["contingent"],
   leads: [{ id: "u1", name: "Pat Lee", initials: "PL" }],
 };
 
