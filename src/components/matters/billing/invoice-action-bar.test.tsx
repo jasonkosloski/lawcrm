@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, test, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/app/actions/billing", () => ({
@@ -312,31 +312,41 @@ describe("InvoiceActionBar — Re-send email", () => {
 });
 
 describe("InvoiceActionBar — warning toast survives the revalidation", () => {
-  test("send: warning fires once even after props flip to sent", async () => {
+  // The action result and the revalidated props must commit in the
+  // SAME batch: that is what unmounts a conditionally mounted dialog
+  // before its success effect can run. Resolving a deferred action
+  // and rerendering inside one act() reproduces it.
+  type Result = { status: "ok"; warning: string };
+  const deferred = () => {
+    let resolve!: (r: Result) => void;
+    const promise = new Promise<Result>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+
+  test("send: warning fires once when props flip to sent with the result", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     vi.mocked(notifyWarning).mockReset();
-    vi.mocked(sendInvoice).mockImplementation(async () => ({
-      status: "ok" as const,
-      warning: "W",
-    }));
+    const d = deferred();
+    vi.mocked(sendInvoice).mockImplementation(() => d.promise);
     const { rerender } = render(
       <InvoiceActionBar {...baseProps} {...ALL} currentStatus="approved" />
     );
     await user.click(screen.getByRole("button", { name: /mark as sent/i }));
     await user.click(await screen.findByRole("button", { name: /^mark as sent$/i }));
-    rerender(<InvoiceActionBar {...baseProps} {...ALL} currentStatus="sent" />);
-    await waitFor(() => expect(notifyWarning).toHaveBeenCalledWith("W"));
+    await act(async () => {
+      d.resolve({ status: "ok", warning: "W" });
+      rerender(<InvoiceActionBar {...baseProps} {...ALL} currentStatus="sent" />);
+    });
     expect(notifyWarning).toHaveBeenCalledTimes(1);
+    expect(notifyWarning).toHaveBeenCalledWith("W");
     expect(button(/mark as sent/i)).not.toBeInTheDocument();
   });
 
-  test("record payment: warning fires once even after the balance hits 0", async () => {
+  test("record payment: warning fires once when the balance hits 0 with the result", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     vi.mocked(notifyWarning).mockReset();
-    vi.mocked(recordInvoicePayment).mockImplementation(async () => ({
-      status: "ok" as const,
-      warning: "W",
-    }));
+    const d = deferred();
+    vi.mocked(recordInvoicePayment).mockImplementation(() => d.promise);
     const { rerender } = render(
       <InvoiceActionBar {...baseProps} {...ALL} currentStatus="sent" />
     );
@@ -344,16 +354,20 @@ describe("InvoiceActionBar — warning toast survives the revalidation", () => {
     await user.click(
       await screen.findByRole("button", { name: /^record \$300\.00/i })
     );
-    rerender(
-      <InvoiceActionBar
-        {...baseProps}
-        {...ALL}
-        currentStatus="paid"
-        invoiceBalance={0}
-        paidAmount={300}
-      />
-    );
-    await waitFor(() => expect(notifyWarning).toHaveBeenCalledWith("W"));
+    await act(async () => {
+      d.resolve({ status: "ok", warning: "W" });
+      rerender(
+        <InvoiceActionBar
+          {...baseProps}
+          {...ALL}
+          canSendInvoice={false}
+          currentStatus="paid"
+          invoiceBalance={0}
+          paidAmount={300}
+        />
+      );
+    });
     expect(notifyWarning).toHaveBeenCalledTimes(1);
+    expect(notifyWarning).toHaveBeenCalledWith("W");
   });
 });

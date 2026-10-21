@@ -62,7 +62,11 @@ import {
   invoiceStatusTransitions,
   type InvoiceKind,
 } from "@/lib/billing-form";
-import { confirmAction, notifyError, type ConfirmOptions } from "@/lib/feedback";
+import {
+  confirmAction,
+  notifyError,
+  type ConfirmOptions,
+} from "@/lib/feedback";
 import { ApplyTrustDialog } from "./apply-trust-dialog";
 import { RecordPaymentDialog } from "./record-payment-dialog";
 import { ResendInvoiceDialog } from "./resend-invoice-dialog";
@@ -153,8 +157,7 @@ export function InvoiceActionBar({
   // states as Record payment, plus the trust > 0 condition. The
   // generic Record payment path still includes Trust as a method,
   // but this button is the one-click "earn out the retainer" flow.
-  const showApplyTrust =
-    canApplyTrust && canRecordPayment && trustBalance > 0;
+  const showApplyTrust = canApplyTrust && canRecordPayment && trustBalance > 0;
   const canMarkRecorded =
     canApproveInvoice &&
     kind === "internal_record" &&
@@ -212,8 +215,6 @@ export function InvoiceActionBar({
     </>
   );
 
-  if (nothingToDo) return dialogs;
-
   const transitionTo = async (next: string, confirmCopy?: ConfirmOptions) => {
     if (confirmCopy && !(await confirmAction(confirmCopy))) return;
     startTransition(async () => {
@@ -253,151 +254,147 @@ export function InvoiceActionBar({
   const primaryButtonClass = cn(
     "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
     "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-    "disabled:opacity-60 disabled:cursor-not-allowed"
+    "disabled:opacity-60 disabled:cursor-not-allowed",
   );
 
   return (
-    <div className="flex items-center gap-1.5">
-      {canApprove && (
-        <button
-          type="button"
-          onClick={approve}
-          disabled={pending}
-          className={primaryButtonClass}
-          title="Approve this draft so it can be sent."
-        >
-          <CheckCircle2 size={11} />
-          Approve
-        </button>
-      )}
-
-      {canSend && (
-        <button
-          type="button"
-          onClick={() => setSendOpen(true)}
-          disabled={pending}
-          className={primaryButtonClass}
-          title="Email the invoice to the client, or post it to the client portal."
-        >
-          <Send size={11} />
-          Mark as sent
-        </button>
-      )}
-
-      {canRecordPayment && (
-        <button
-          type="button"
-          onClick={() => setRecordOpen(true)}
-          disabled={pending}
-          className={cn(
-            "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
-            // Promote Apply-trust to primary when it's available —
-            // it's the more decisive one-click action. Record payment
-            // becomes secondary in that case.
-            showApplyTrust
-              ? "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700"
-              : "bg-brand-700 text-white hover:bg-brand-900",
-            "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+    // The button row is conditional but the dialogs below are always a
+    // sibling at the same position, so they keep their action state
+    // when the last action goes away.
+    <>
+      {!nothingToDo && (
+        <div className="flex items-center gap-1.5">
+          {" "}
+          {canApprove && (
+            <button
+              type="button"
+              onClick={approve}
+              disabled={pending}
+              className={primaryButtonClass}
+              title="Approve this draft so it can be sent."
+            >
+              <CheckCircle2 size={11} />
+              Approve
+            </button>
           )}
-          title="Log a payment received against this invoice (check, ACH, cash, card, trust, etc.)"
-        >
-          <Receipt size={11} />
-          Record payment
-        </button>
-      )}
-
-      {showApplyTrust && (
-        <button
-          type="button"
-          onClick={() => setApplyTrustOpen(true)}
-          disabled={pending}
-          className={primaryButtonClass}
-          title={`Apply funds from the matter trust account (avail $${trustBalance.toFixed(2)}) toward this invoice's balance.`}
-        >
-          <Landmark size={11} />
-          Apply trust
-        </button>
-      )}
-
-      {canMarkRecorded && (
-        <button
-          type="button"
-          onClick={() =>
-            transitionTo(
-              "paid",
-              {
-                title: `Lock internal record ${invoiceNumber}?`,
-                description:
-                  "Linked time entries stay linked; void unlinks them back to WIP.",
-                confirmLabel: "Mark recorded",
+          {canSend && (
+            <button
+              type="button"
+              onClick={() => setSendOpen(true)}
+              disabled={pending}
+              className={primaryButtonClass}
+              title="Email the invoice to the client, or post it to the client portal."
+            >
+              <Send size={11} />
+              Mark as sent
+            </button>
+          )}
+          {canRecordPayment && (
+            <button
+              type="button"
+              onClick={() => setRecordOpen(true)}
+              disabled={pending}
+              className={cn(
+                "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
+                // Promote Apply-trust to primary when it's available —
+                // it's the more decisive one-click action. Record payment
+                // becomes secondary in that case.
+                showApplyTrust
+                  ? "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700"
+                  : "bg-brand-700 text-white hover:bg-brand-900",
+                "transition-colors disabled:opacity-60 disabled:cursor-not-allowed",
+              )}
+              title="Log a payment received against this invoice (check, ACH, cash, card, trust, etc.)"
+            >
+              <Receipt size={11} />
+              Record payment
+            </button>
+          )}
+          {showApplyTrust && (
+            <button
+              type="button"
+              onClick={() => setApplyTrustOpen(true)}
+              disabled={pending}
+              className={primaryButtonClass}
+              title={`Apply funds from the matter trust account (avail $${trustBalance.toFixed(2)}) toward this invoice's balance.`}
+            >
+              <Landmark size={11} />
+              Apply trust
+            </button>
+          )}
+          {canMarkRecorded && (
+            <button
+              type="button"
+              onClick={() =>
+                transitionTo("paid", {
+                  title: `Lock internal record ${invoiceNumber}?`,
+                  description:
+                    "Linked time entries stay linked; void unlinks them back to WIP.",
+                  confirmLabel: "Mark recorded",
+                })
               }
-            )
-          }
-          disabled={pending}
-          className={primaryButtonClass}
-        >
-          <Check size={11} />
-          Mark recorded
-        </button>
-      )}
-
-      {(deleteAllowed || voidAllowed || canResend) && (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                aria-label="More invoice actions"
-                disabled={pending}
-                className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:bg-paper-2 hover:text-ink disabled:opacity-50"
-              >
-                <MoreHorizontal size={14} />
-              </button>
-            }
-          />
-          <DropdownMenuContent align="end" className="min-w-44">
-            {/* Drafts: hard delete (no audit trail needed — no one
+              disabled={pending}
+              className={primaryButtonClass}
+            >
+              <Check size={11} />
+              Mark recorded
+            </button>
+          )}
+          {(deleteAllowed || voidAllowed || canResend) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="More invoice actions"
+                    disabled={pending}
+                    className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:bg-paper-2 hover:text-ink disabled:opacity-50"
+                  >
+                    <MoreHorizontal size={14} />
+                  </button>
+                }
+              />
+              <DropdownMenuContent align="end" className="min-w-44">
+                {/* Drafts: hard delete (no audit trail needed — no one
                 has seen the doc). Approved/sent: void (preserves
                 the row + invoice number for audit). */}
-            {canResend && (
-              <DropdownMenuItem onClick={() => setResendOpen(true)}>
-                <Mail />
-                Re-send email…
-              </DropdownMenuItem>
-            )}
-            {deleteAllowed && (
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={handleDelete}
-              >
-                <Trash2 />
-                Delete draft
-              </DropdownMenuItem>
-            )}
-            {voidAllowed && (
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() =>
-                  transitionTo(
-                    "void",
-                    {
-                      title: `Void invoice ${invoiceNumber}?`,
-                      description:
-                        "Linked time entries return to billable WIP.",
-                      confirmLabel: "Void invoice",
-                      destructive: true,
+                {canResend && (
+                  <DropdownMenuItem onClick={() => setResendOpen(true)}>
+                    <Mail />
+                    Re-send email…
+                  </DropdownMenuItem>
+                )}
+                {deleteAllowed && (
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={handleDelete}
+                  >
+                    <Trash2 />
+                    Delete draft
+                  </DropdownMenuItem>
+                )}
+                {voidAllowed && (
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() =>
+                      transitionTo("void", {
+                        title: `Void invoice ${invoiceNumber}?`,
+                        description:
+                          "Linked time entries return to billable WIP.",
+                        confirmLabel: "Void invoice",
+                        destructive: true,
+                      })
                     }
-                  )
-                }
-              >
-                <Trash2 />
-                Void invoice
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                  >
+                    <Trash2 />
+                    Void invoice
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       )}
-
       {dialogs}
       {showApplyTrust && (
         <ApplyTrustDialog
@@ -410,6 +407,6 @@ export function InvoiceActionBar({
           clientEmail={clientEmail}
         />
       )}
-    </div>
+    </>
   );
 }
