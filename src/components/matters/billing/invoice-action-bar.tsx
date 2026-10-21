@@ -70,6 +70,7 @@ import {
 import { ApplyTrustDialog } from "./apply-trust-dialog";
 import { RecordPaymentDialog } from "./record-payment-dialog";
 import { ResendInvoiceDialog } from "./resend-invoice-dialog";
+import { VoidInvoiceDialog } from "./void-invoice-dialog";
 import { SendInvoiceDialog, type PortalSend } from "./send-invoice-dialog";
 
 export function InvoiceActionBar({
@@ -135,6 +136,7 @@ export function InvoiceActionBar({
   const [sendOpen, setSendOpen] = useState(false);
   const [recordOpen, setRecordOpen] = useState(false);
   const [resendOpen, setResendOpen] = useState(false);
+  const [voidOpen, setVoidOpen] = useState(false);
   const [applyTrustOpen, setApplyTrustOpen] = useState(false);
 
   const canApprove =
@@ -176,7 +178,7 @@ export function InvoiceActionBar({
     !canMarkRecorded &&
     !deleteAllowed &&
     !voidAllowed;
-  // The Send, Record payment and Re-send dialogs stay mounted
+  // The Send, Record payment, Re-send and Void dialogs stay mounted
   // whatever the capability flags say (only their triggers are
   // gated): a successful action revalidates props, which can flip
   // canSend / canRecordPayment in the same commit as the new action
@@ -201,6 +203,14 @@ export function InvoiceActionBar({
         trustBalance={trustBalance}
         canApplyTrust={canApplyTrust}
         portalSend={portalSend}
+      />
+      <VoidInvoiceDialog
+        open={voidOpen}
+        onOpenChange={setVoidOpen}
+        invoiceId={invoiceId}
+        invoiceNumber={invoiceNumber}
+        clientEmail={clientEmail}
+        canSendInvoice={canSendInvoice}
       />
       <RecordPaymentDialog
         open={recordOpen}
@@ -377,13 +387,18 @@ export function InvoiceActionBar({
                   <DropdownMenuItem
                     variant="destructive"
                     onClick={() =>
-                      transitionTo("void", {
-                        title: `Void invoice ${invoiceNumber}?`,
-                        description:
-                          "Linked time entries return to billable WIP.",
-                        confirmLabel: "Void invoice",
-                        destructive: true,
-                      })
+                      // Sent client invoices void through the dialog
+                      // (stamp + optional client notice); everything
+                      // else keeps the plain confirm.
+                      kind === "client" && currentStatus === "sent"
+                        ? setVoidOpen(true)
+                        : transitionTo("void", {
+                            title: `Void invoice ${invoiceNumber}?`,
+                            description:
+                              "Linked time entries return to billable WIP.",
+                            confirmLabel: "Void invoice",
+                            destructive: true,
+                          })
                     }
                   >
                     <Trash2 />

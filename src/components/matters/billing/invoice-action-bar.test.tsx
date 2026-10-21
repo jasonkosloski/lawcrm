@@ -22,6 +22,7 @@ vi.mock("@/app/actions/billing", () => ({
   recordInvoicePayment: vi.fn(),
   sendInvoice: vi.fn(),
   resendInvoiceEmail: vi.fn(),
+  voidInvoice: vi.fn(),
 }));
 
 vi.mock("@/lib/feedback", () => ({
@@ -35,8 +36,10 @@ import {
   approveInvoice,
   recordInvoicePayment,
   sendInvoice,
+  setInvoiceStatus,
+  voidInvoice,
 } from "@/app/actions/billing";
-import { notifyWarning } from "@/lib/feedback";
+import { confirmAction, notifyWarning } from "@/lib/feedback";
 import { InvoiceActionBar } from "./invoice-action-bar";
 
 const baseProps = {
@@ -311,6 +314,33 @@ describe("InvoiceActionBar — Re-send email", () => {
   });
 });
 
+describe("InvoiceActionBar — Void", () => {
+  const openVoid = async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    await user.click(screen.getByRole("button", { name: /more invoice actions/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /void invoice/i }));
+  };
+
+  test("sent client invoice opens the void dialog, no confirmAction", async () => {
+    vi.mocked(confirmAction).mockReset();
+    render(<InvoiceActionBar {...baseProps} {...ALL} currentStatus="sent" />);
+    await openVoid();
+    expect(await screen.findByText("Void invoice 2026-001")).toBeInTheDocument();
+    expect(confirmAction).not.toHaveBeenCalled();
+  });
+
+  test("approved invoice still confirms and sets the status", async () => {
+    vi.mocked(confirmAction).mockReset();
+    vi.mocked(confirmAction).mockResolvedValue(true);
+    vi.mocked(setInvoiceStatus).mockReset();
+    vi.mocked(setInvoiceStatus).mockResolvedValue({ ok: true });
+    render(<InvoiceActionBar {...baseProps} {...ALL} currentStatus="approved" />);
+    await openVoid();
+    await waitFor(() => expect(setInvoiceStatus).toHaveBeenCalledWith("inv1", "void"));
+    expect(confirmAction).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("InvoiceActionBar — warning toast survives the revalidation", () => {
   // The action result and the revalidated props must commit in the
   // SAME batch: that is what unmounts a conditionally mounted dialog
@@ -364,6 +394,31 @@ describe("InvoiceActionBar — warning toast survives the revalidation", () => {
           currentStatus="paid"
           invoiceBalance={0}
           paidAmount={300}
+        />
+      );
+    });
+    expect(notifyWarning).toHaveBeenCalledTimes(1);
+    expect(notifyWarning).toHaveBeenCalledWith("W");
+  });
+  test("void: warning fires once when props flip to void with the result", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    vi.mocked(notifyWarning).mockReset();
+    const d = deferred();
+    vi.mocked(voidInvoice).mockImplementation(() => d.promise);
+    const { rerender } = render(
+      <InvoiceActionBar {...baseProps} {...ALL} currentStatus="sent" />
+    );
+    await user.click(screen.getByRole("button", { name: /more invoice actions/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /void invoice/i }));
+    await user.click(await screen.findByRole("button", { name: /^void invoice$/i }));
+    await act(async () => {
+      d.resolve({ status: "ok", warning: "W" });
+      rerender(
+        <InvoiceActionBar
+          {...baseProps}
+          {...ALL}
+          currentStatus="void"
+          invoiceBalance={0}
         />
       );
     });
