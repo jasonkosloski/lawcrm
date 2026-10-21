@@ -383,7 +383,9 @@ describe("ComposeEmailButton - required record", () => {
     render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
 
     await openAndFill(user);
-    expect(screen.getByLabelText("Matter or lead")).toHaveTextContent("Smith v. Jones");
+    expect(screen.getByText("Matter or lead")).toBeVisible();
+    expect(screen.getByRole("group", { name: "Matter or lead" })).toBeInTheDocument();
+    expect(screen.getByTestId("compose-record")).toHaveTextContent("Smith v. Jones");
     await user.click(screen.getByRole("button", { name: /change/i }));
     await user.click(screen.getByRole("button", { name: /estate of doe/i }));
     await user.click(screen.getByRole("button", { name: /^send$/i }));
@@ -417,6 +419,6 @@ describe("ComposeEmailButton - required record", () => {
     await user.click(screen.getByRole("button", { name: /compose/i }));
     await screen.findByText("New email");
     expect(field("to").value).toBe("");
-    expect(screen.getByLabelText("Matter or lead")).toHaveTextContent("Smith v. Jones");
+    expect(screen.getByTestId("compose-record")).toHaveTextContent("Smith v. Jones");
   });
 });

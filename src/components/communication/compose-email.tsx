@@ -247,12 +247,22 @@ export function ComposeEmailButton({
             onKeyDown={blockEnterSubmit}
             className="flex flex-col gap-3"
           >
-            <LabeledField label="Record">
+            <div
+              role="group"
+              aria-labelledby="compose-record-label"
+              className="flex flex-col gap-1"
+            >
+              <span
+                id="compose-record-label"
+                className="text-2xs font-medium text-ink-3"
+              >
+                Matter or lead
+              </span>
               {scope && !changingRecord ? (
                 <div className="flex items-center gap-2 min-w-0">
                   <span
+                    data-testid="compose-record"
                     className="flex-1 truncate text-xs text-ink"
-                    aria-label="Matter or lead"
                   >
                     {scopeLabel}
                   </span>
@@ -279,7 +289,7 @@ export function ComposeEmailButton({
                   }}
                 />
               )}
-            </LabeledField>
+            </div>
 
             {accounts.length > 1 && (
               <div className="flex items-center gap-2">
