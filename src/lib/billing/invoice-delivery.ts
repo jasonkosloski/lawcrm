@@ -101,6 +101,7 @@ async function deliver(input: {
     const day = await todayDateOnly();
     await fileInvoicePdf({
       matterId: invoice.matterId,
+      invoiceId,
       invoiceNumber: invoice.invoiceNumber,
       kind,
       bytes,

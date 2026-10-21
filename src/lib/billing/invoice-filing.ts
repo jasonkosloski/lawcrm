@@ -7,10 +7,11 @@ import type { InvoiceEmailKind } from "@/lib/billing/invoice-email";
 
 const INVOICES_FOLDER_NAME = "Invoices";
 
-const KIND_WORD: Record<InvoiceEmailKind, string> = {
+const KIND_WORD: Record<InvoiceEmailKind | "void", string> = {
   initial: "sent",
   updated: "updated",
   resend: "resent",
+  void: "void",
 };
 
 async function invoicesFolder(matterId: string): Promise<string> {
@@ -44,8 +45,9 @@ async function invoicesFolder(matterId: string): Promise<string> {
  *  is removed if the row write fails). */
 export async function fileInvoicePdf(input: {
   matterId: string;
+  invoiceId: string;
   invoiceNumber: string;
-  kind: InvoiceEmailKind;
+  kind: InvoiceEmailKind | "void";
   bytes: Buffer;
   userId: string;
   day: Date;
@@ -59,6 +61,7 @@ export async function fileInvoicePdf(input: {
     const doc = await prisma.document.create({
       data: {
         matterId: input.matterId,
+        invoiceId: input.invoiceId,
         folderId,
         name,
         category: "correspondence",

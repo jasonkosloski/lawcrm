@@ -927,8 +927,12 @@ model Document {
   documentRequestId      String?
   /// The portal client's "What is this?" note on their upload (max 500).
   clientNote             String?
+  /// The invoice this filed PDF copy belongs to (source "invoice"), so a
+  /// void can stamp every filed copy. SetNull keeps the file.
+  invoiceId              String?
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
+  invoice                Invoice?         @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   portalUploader         PortalIdentity?  @relation(fields: [portalUploaderId], references: [id], onDelete: Restrict)
   documentRequest        DocumentRequest? @relation(fields: [documentRequestId], references: [id], onDelete: SetNull)
   recordsRequest         RecordsRequest?  @relation("RecordsRequestDocuments", fields: [recordsRequestId], references: [id], onDelete: SetNull)
@@ -953,6 +957,7 @@ model Document {
   @@index([parentDocumentId])
   @@index([portalUploaderId, createdAt])
   @@index([documentRequestId])
+  @@index([invoiceId])
   @@map("documents")
 }
 
@@ -1467,6 +1472,8 @@ model Invoice {
   /// double-write here AND to TrustTransaction (the trust ledger
   /// remains the source of truth for the trust account itself).
   payments         InvoicePayment[]
+  /// Filed PDF copies of this invoice (Document.invoiceId).
+  documents        Document[]
 
   @@index([matterId])
   @@index([status])
