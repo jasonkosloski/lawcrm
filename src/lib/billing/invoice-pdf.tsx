@@ -36,10 +36,9 @@ export function invoicePdfFilename(invoiceNumber: string): string {
 }
 
 // Built-in Helvetica is WinAnsi only, which garbles names like "Łukasz".
-// Liberation Sans 1.07.4 (from pdfjs-dist; GPL v2 + font exception; see
-// fonts/LICENSE.txt) covers Latin-1, Latin Extended-A (Polish, Czech,
-// Turkish), Greek and Cyrillic, but not stacked Vietnamese diacritics or
-// CJK. Shipped to Vercel via outputFileTracingIncludes.
+// Liberation Sans 2.1.5 (SIL OFL 1.1, see fonts/LICENSE.txt) covers Latin
+// incl. Vietnamese, Greek and Cyrillic, but not CJK. Shipped to Vercel via
+// outputFileTracingIncludes.
 const fontPath = (file: string) =>
   path.join(process.cwd(), "src/lib/billing/fonts", file);
 Font.register({

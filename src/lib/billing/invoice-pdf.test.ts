@@ -133,10 +133,9 @@ describe("renderInvoicePdf", () => {
 
 describe("renderInvoicePdf fonts", () => {
   it("round-trips non-WinAnsi text (Latin Extended) exactly", async () => {
-    // Beyond WinAnsi (Ł, Đ, đ, ć) so built-in Helvetica would garble it.
-    // Note: the bundled Liberation Sans 1.07.4 has no Vietnamese stacked
-    // diacritics (e.g. U+1EC5), so those names still can't render.
-    const name = "Łukasz Đorđević — Ödön";
+    // Beyond WinAnsi (Ł, Đ, ć, stacked Vietnamese ễ) so built-in Helvetica
+    // would garble it.
+    const name = "Nguyễn Łukasz Đorđević — Ödön";
     const buf = await renderInvoicePdf(
       { ...invoice, clientName: name },
       firm,
