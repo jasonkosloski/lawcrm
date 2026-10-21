@@ -57,3 +57,12 @@ export function statusUpdateEmail(link: string): Body {
     html: `<p>Your legal team posted an update on your case. Sign in to the client portal to read it:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
   };
 }
+
+/** Names no matter and carries no message text. */
+export function portalMessageEmail(link: string): Body {
+  return {
+    subject: "You have a new message from your legal team",
+    text: `You have a new message from your legal team. Sign in to the client portal to read it:\n\n${link}`,
+    html: `<p>You have a new message from your legal team. Sign in to the client portal to read it:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
+  };
+}
