@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { PERMISSION_DENIED_MESSAGE } from "@/lib/permission-check";
 import {
   resetDb,
+  seedCalendarEvent,
   seedContact,
   seedFirm,
   seedMatter,
@@ -19,7 +20,14 @@ import {
 } from "@/test/integration-helpers";
 import { __setDriverForTests } from "@/lib/email/send";
 import { captureEmails } from "@/test/email-capture";
-import { deleteStatusUpdate, editStatusUpdate, postStatusUpdate } from "./portal-status";
+import {
+  deleteStatusUpdate,
+  editStatusUpdate,
+  postStatusUpdate,
+  shareEventWithClient,
+  stopSharingEvent,
+  updateEventShare,
+} from "./portal-status";
 
 beforeAll(() => {
   expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
@@ -214,5 +222,135 @@ describe("editStatusUpdate and deleteStatusUpdate", () => {
     expect(await prisma.portalStatusUpdate.count()).toBe(0);
     expect(await activity("Deleted client status update")).toBe(1);
     expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}`);
+  });
+});
+
+describe("event sharing", () => {
+  const share = { clientTitle: "Mediation", clientNote: "Bring ID" };
+  const sharePerms = ["portal.share_events"];
+  const eventActivity = (m: string, title: string) =>
+    prisma.activityLog.count({ where: { matterId: m, title: { startsWith: title } } });
+
+  async function otherMatter() {
+    const { areaId, stageId } = await seedPracticeArea();
+    return (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: admin, name: "Other" }))
+      .matterId;
+  }
+
+  test("denied without the key, nothing written", async () => {
+    const { eventId } = await seedCalendarEvent({ matterId, createdById: admin });
+    sessionUser = await userWith([]);
+    const denied = { ok: false, error: PERMISSION_DENIED_MESSAGE };
+    expect(await shareEventWithClient(eventId, share)).toEqual(denied);
+    expect(await updateEventShare(eventId, share)).toEqual(denied);
+    expect(await stopSharingEvent(eventId)).toEqual(denied);
+    expect(await prisma.portalSharedEvent.count()).toBe(0);
+  });
+
+  test("a lead event is refused and nothing is written", async () => {
+    const { eventId } = await seedCalendarEvent({ matterId: null, createdById: admin });
+    const err = { ok: false, error: "Only events on a matter can be shared." };
+    expect(await shareEventWithClient(eventId, share)).toEqual(err);
+    expect(await updateEventShare(eventId, share)).toEqual(err);
+    expect(await stopSharingEvent(eventId)).toEqual(err);
+    expect(await prisma.portalSharedEvent.count()).toBe(0);
+  });
+
+  test("an unknown event is reported", async () => {
+    expect(await shareEventWithClient("nope", share)).toEqual({
+      ok: false,
+      error: "Event not found.",
+    });
+  });
+
+  test("a walled user gets not-found and nothing changes", async () => {
+    const { eventId } = await seedCalendarEvent({ matterId, createdById: admin });
+    await shareEventWithClient(eventId, share);
+    await prisma.firm.update({ where: { id: firmId }, data: { matterVisibility: "TEAM" } });
+    sessionUser = await userWith(sharePerms);
+    const notFound = { digest: expect.stringContaining("404") };
+    await expect(shareEventWithClient(eventId, share)).rejects.toMatchObject(notFound);
+    await expect(updateEventShare(eventId, { clientTitle: "X" })).rejects.toMatchObject(notFound);
+    await expect(stopSharingEvent(eventId)).rejects.toMatchObject(notFound);
+    expect((await prisma.portalSharedEvent.findFirstOrThrow()).clientTitle).toBe("Mediation");
+  });
+
+  test("share, update and stop round-trip with activity and revalidation", async () => {
+    const { eventId } = await seedCalendarEvent({ matterId, createdById: admin, title: "Internal" });
+    expect(await shareEventWithClient(eventId, share)).toEqual({ ok: true });
+    const row = await prisma.portalSharedEvent.findUniqueOrThrow({ where: { eventId } });
+    expect(row).toMatchObject({
+      matterId,
+      clientTitle: "Mediation",
+      clientNote: "Bring ID",
+      sharedById: admin,
+    });
+    expect(await eventActivity(matterId, "Shared event with client: Mediation")).toBe(1);
+    for (const path of [`/matters/${matterId}`, `/matters/${matterId}/events`, "/calendar"]) {
+      expect(revalidatePath).toHaveBeenCalledWith(path);
+    }
+
+    expect(await updateEventShare(eventId, { clientTitle: "Mediation 2", clientNote: "" })).toEqual({
+      ok: true,
+    });
+    const after = await prisma.portalSharedEvent.findUniqueOrThrow({ where: { eventId } });
+    expect(after.clientTitle).toBe("Mediation 2");
+    expect(after.clientNote).toBeNull();
+    expect(await eventActivity(matterId, "Edited client event share")).toBe(1);
+
+    expect(await stopSharingEvent(eventId)).toEqual({ ok: true });
+    expect(await prisma.portalSharedEvent.count()).toBe(0);
+    expect(await eventActivity(matterId, "Stopped sharing event with client")).toBe(1);
+    expect(await stopSharingEvent(eventId)).toEqual({ ok: false, error: "This event isn't shared." });
+    expect(await updateEventShare(eventId, share)).toEqual({ ok: false, error: "This event isn't shared." });
+  });
+
+  test("sharing twice upserts a single row", async () => {
+    const { eventId } = await seedCalendarEvent({ matterId, createdById: admin });
+    await shareEventWithClient(eventId, share);
+    await shareEventWithClient(eventId, { clientTitle: "Again" });
+    const rows = await prisma.portalSharedEvent.findMany();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].clientTitle).toBe("Again");
+    expect(rows[0].clientNote).toBeNull();
+  });
+
+  test("after a re-file the old share is not editable; re-sharing moves it", async () => {
+    const { eventId } = await seedCalendarEvent({ matterId, createdById: admin });
+    await shareEventWithClient(eventId, share);
+    const other = await otherMatter();
+    await prisma.calendarEvent.update({ where: { id: eventId }, data: { matterId: other } });
+
+    const notShared = { ok: false, error: "This event isn't shared." };
+    expect(await updateEventShare(eventId, share)).toEqual(notShared);
+    expect(await stopSharingEvent(eventId)).toEqual(notShared);
+    expect((await prisma.portalSharedEvent.findUniqueOrThrow({ where: { eventId } })).matterId).toBe(
+      matterId
+    );
+
+    expect(await shareEventWithClient(eventId, share)).toEqual({ ok: true });
+    expect((await prisma.portalSharedEvent.findUniqueOrThrow({ where: { eventId } })).matterId).toBe(
+      other
+    );
+    expect(await eventActivity(other, "Shared event with client")).toBe(1);
+  });
+
+  test("validation limits", async () => {
+    const { eventId } = await seedCalendarEvent({ matterId, createdById: admin });
+    expect((await shareEventWithClient(eventId, { clientTitle: "  " })).ok).toBe(false);
+    expect((await shareEventWithClient(eventId, { clientTitle: "x".repeat(201) })).ok).toBe(false);
+    expect(
+      (await shareEventWithClient(eventId, { clientTitle: "ok", clientNote: "y".repeat(2001) })).ok
+    ).toBe(false);
+    expect(await prisma.portalSharedEvent.count()).toBe(0);
+    expect(
+      await shareEventWithClient(eventId, {
+        clientTitle: ` ${"x".repeat(200)} `,
+        clientNote: ` ${"y".repeat(2000)} `,
+      })
+    ).toEqual({ ok: true });
+    const row = await prisma.portalSharedEvent.findFirstOrThrow();
+    expect(row.clientTitle).toHaveLength(200);
+    expect(row.clientNote).toHaveLength(2000);
   });
 });

@@ -152,3 +152,116 @@ export async function deleteStatusUpdate(id: string): Promise<Result> {
   });
   return done(row.matterId);
 }
+
+// ---------------------------------------------------------------------
+// Event sharing
+// ---------------------------------------------------------------------
+
+const EVENT_NOT_FOUND = "Event not found.";
+const NOT_SHARED = "This event isn't shared.";
+
+const shareSchema = z.object({
+  clientTitle: z
+    .string()
+    .trim()
+    .min(1, "Enter a title for the client.")
+    .max(200, "That title is too long (200 characters max)."),
+  clientNote: z
+    .string()
+    .trim()
+    .max(2000, "That note is too long (2,000 characters max).")
+    .optional()
+    .transform((v) => (v ? v : null)),
+});
+
+function doneEvent(matterId: string): Result {
+  revalidatePath(`/matters/${matterId}`);
+  revalidatePath(`/matters/${matterId}/events`);
+  revalidatePath("/calendar");
+  return { ok: true };
+}
+
+/** Permission, event load, lead-event refusal, then matter access. */
+async function gateEvent(permission: string, eventId: string) {
+  const gate = await requirePermissionResult(permission);
+  if (!gate.ok) return { ok: false as const, error: gate.error };
+  const event = await prisma.calendarEvent.findUnique({
+    where: { id: eventId },
+    select: { id: true, matterId: true },
+  });
+  if (!event) return { ok: false as const, error: EVENT_NOT_FOUND };
+  if (!event.matterId) {
+    return { ok: false as const, error: "Only events on a matter can be shared." };
+  }
+  await assertMatterAccess(event.matterId);
+  return { ok: true as const, userId: gate.userId, eventId: event.id, matterId: event.matterId };
+}
+
+export async function shareEventWithClient(
+  eventId: string,
+  input: { clientTitle: string; clientNote?: string }
+): Promise<Result> {
+  const g = await gateEvent("portal.share_events", eventId);
+  if (!g.ok) return g;
+  const parsed = shareSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid event share." };
+  }
+  const { clientTitle, clientNote } = parsed.data;
+
+  await prisma.portalSharedEvent.upsert({
+    where: { eventId },
+    create: { eventId, matterId: g.matterId, clientTitle, clientNote, sharedById: g.userId },
+    update: { matterId: g.matterId, clientTitle, clientNote },
+  });
+  await logActivity({
+    matterId: g.matterId,
+    userId: g.userId,
+    type: "note",
+    title: `Shared event with client: ${clientTitle}`,
+  });
+  return doneEvent(g.matterId);
+}
+
+export async function updateEventShare(
+  eventId: string,
+  input: { clientTitle: string; clientNote?: string }
+): Promise<Result> {
+  const g = await gateEvent("portal.share_events", eventId);
+  if (!g.ok) return g;
+  const parsed = shareSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid event share." };
+  }
+  const { clientTitle, clientNote } = parsed.data;
+
+  const res = await prisma.portalSharedEvent.updateMany({
+    where: { eventId, matterId: g.matterId },
+    data: { clientTitle, clientNote },
+  });
+  if (res.count === 0) return { ok: false, error: NOT_SHARED };
+  await logActivity({
+    matterId: g.matterId,
+    userId: g.userId,
+    type: "note",
+    title: "Edited client event share",
+  });
+  return doneEvent(g.matterId);
+}
+
+export async function stopSharingEvent(eventId: string): Promise<Result> {
+  const g = await gateEvent("portal.share_events", eventId);
+  if (!g.ok) return g;
+
+  const res = await prisma.portalSharedEvent.deleteMany({
+    where: { eventId, matterId: g.matterId },
+  });
+  if (res.count === 0) return { ok: false, error: NOT_SHARED };
+  await logActivity({
+    matterId: g.matterId,
+    userId: g.userId,
+    type: "note",
+    title: "Stopped sharing event with client",
+  });
+  return doneEvent(g.matterId);
+}
