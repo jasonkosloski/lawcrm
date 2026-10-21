@@ -15,9 +15,11 @@ import {
   listPortalUploads,
 } from "@/lib/portal/document-visibility.server";
 import { listPortalRequests } from "@/lib/portal/requests";
+import { getPortalMessages } from "@/lib/portal/messages";
 import { getPortalMatterStatus } from "@/lib/portal/status";
 import { MatterStatus } from "../../matter-status";
 import { EventsSection } from "./events-section";
+import { MessagesSection } from "./messages-section";
 import { RequestsSection } from "./requests-section";
 import { SharedSection } from "./shared-section";
 import { StatusSection } from "./status-section";
@@ -38,11 +40,13 @@ export default async function PortalMatterPage({
   });
   if (!matter) notFound();
 
-  const [requests, shared, uploads, status] = await Promise.all([
+  const [requests, shared, uploads, status, messages, firm] = await Promise.all([
     listPortalRequests(identityId, id),
     listPortalSharedDocuments(identityId, id),
     listPortalUploads(identityId, id),
     getPortalMatterStatus(identityId, id),
+    getPortalMessages(identityId, id),
+    prisma.firm.findFirst({ select: { phone: true, email: true } }),
   ]);
   const storageDriver = activeStorageDriver();
 
@@ -65,6 +69,13 @@ export default async function PortalMatterPage({
 
       <StatusSection updates={status.updates} />
       <EventsSection upcoming={status.upcoming} past={status.past} />
+      <MessagesSection
+        messages={messages}
+        matterId={matter.id}
+        closed={matter.isArchived}
+        firmPhone={firm?.phone ?? null}
+        firmEmail={firm?.email ?? null}
+      />
       <RequestsSection
         requests={requests}
         matterId={matter.id}

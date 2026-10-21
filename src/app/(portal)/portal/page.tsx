@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { portalMatterWhere, requirePortalIdentity } from "@/lib/portal-access";
 import { prisma } from "@/lib/prisma";
 import { countOpenRequestsByMatter } from "@/lib/portal/requests";
+import { unreadPortalMessageMatters } from "@/lib/portal/messages";
 import { latestStageLabels } from "@/lib/portal/status";
 import { MatterStatus } from "./matter-status";
 
@@ -25,10 +26,11 @@ export default async function PortalHome() {
     countOpenRequestsByMatter(identityId),
   ]);
 
-  const stageLabels = await latestStageLabels(
-    identityId,
-    matters.map((m) => m.id)
-  );
+  const matterIds = matters.map((m) => m.id);
+  const [stageLabels, unread] = await Promise.all([
+    latestStageLabels(identityId, matterIds),
+    unreadPortalMessageMatters(identityId, matterIds),
+  ]);
   const open = matters.filter((m) => !m.isArchived);
   const closed = matters.filter((m) => m.isArchived);
 
@@ -59,6 +61,7 @@ export default async function PortalHome() {
               matters={open}
               openCounts={openCounts}
               stageLabels={stageLabels}
+              unread={unread}
             />
           ) : null}
           {closed.length > 0 ? (
@@ -67,6 +70,7 @@ export default async function PortalHome() {
               matters={closed}
               openCounts={openCounts}
               stageLabels={stageLabels}
+              unread={unread}
             />
           ) : null}
         </>
@@ -80,10 +84,12 @@ function MatterList({
   matters,
   openCounts,
   stageLabels,
+  unread,
 }: {
   heading: string;
   openCounts: Map<string, number>;
   stageLabels: Map<string, string>;
+  unread: Set<string>;
   matters: { id: string; name: string; isArchived: boolean }[];
 }) {
   const id = `${heading.toLowerCase().replace(/\s+/g, "-")}-heading`;
@@ -107,6 +113,11 @@ function MatterList({
                   {openCounts.get(m.id) === 1
                     ? "1 item requested"
                     : `${openCounts.get(m.id)} items requested`}
+                </span>
+              ) : null}
+              {unread.has(m.id) ? (
+                <span className="shrink-0 rounded-full border border-brand-200 bg-brand-tint px-2.5 py-0.5 text-xs font-medium text-brand-700">
+                  New message
                 </span>
               ) : null}
               {stageLabels.get(m.id) ? (

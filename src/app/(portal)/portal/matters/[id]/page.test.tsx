@@ -11,6 +11,11 @@ vi.mock("next/navigation", () => ({
     throw new Error("NEXT_NOT_FOUND");
   }),
   redirect: vi.fn(),
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
+vi.mock("@/app/actions/portal-messages-client", () => ({
+  sendPortalMessage: vi.fn(),
+  markPortalMessagesRead: vi.fn(),
 }));
 vi.mock("./portal-uploader", () => ({
   PortalUploader: (p: { requestId?: string; label?: string }) => (

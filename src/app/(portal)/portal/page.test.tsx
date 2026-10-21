@@ -117,4 +117,27 @@ describe("portal home", () => {
     expect(screen.getByText("Discovery")).toBeTruthy();
     expect(screen.queryByText("Intake")).toBeNull();
   });
+
+  test("New message chip shows only for matters with unread staff messages", async () => {
+    await prisma.firm.updateMany({ data: { portalEnabled: true } });
+    const thread = await prisma.portalThread.create({
+      data: { matterId: openId, lastMessageAt: new Date(), lastFromClient: false },
+    });
+    await prisma.portalMessage.create({
+      data: {
+        threadId: thread.id,
+        body: "Hi",
+        authorKind: "staff",
+        authorUserId: userId0,
+      },
+    });
+    render(await PortalHome());
+    expect(screen.getAllByText("New message")).toHaveLength(1);
+    expect(
+      screen.getByText("Open Matter").closest("a")?.textContent,
+    ).toContain("New message");
+    expect(
+      screen.getByText("Closed Matter").closest("a")?.textContent,
+    ).not.toContain("New message");
+  });
 });
