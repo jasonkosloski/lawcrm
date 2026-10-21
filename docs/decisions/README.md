@@ -77,3 +77,4 @@ ADR true to the code are appended in place and dated.
 | [056](056-drafts-hold-intake-files-firm-can-require-originating-document.md) | Matter drafts hold intake files; a firm switch can require a signed originating document to open a matter |  |
 | [057](057-ui-system-v2-legibility-floor-and-colour-on-meaning.md) | UI system v2: an 11px legibility floor, contrast-safe greys, colour spent only on meaning |  |
 | [058](058-production-build-applies-expand-only-migrations.md) | The production build applies pending migrations; destructive ones need an `ALLOW_DESTRUCTIVE` marker |  |
+| [059](059-every-app-sent-email-is-filed.md) | Every app-sent email is filed to a matter or lead; threads file to either; unfiling app-sent mail is refused |  |
