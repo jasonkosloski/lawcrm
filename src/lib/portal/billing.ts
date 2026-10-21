@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { livePortalMatterWhere } from "@/lib/portal/status";
@@ -83,13 +84,11 @@ function isOverdue(status: string, dueDate: Date): boolean {
   return days !== null && days < 0;
 }
 
-export async function listPortalInvoices(
-  identityId: string,
+async function invoicesFor(
+  matterWhere: Prisma.MatterWhereInput,
+  contactId: string,
   matterId: string,
 ): Promise<PortalInvoiceRow[]> {
-  const matterWhere = await billingMatterWhere(identityId);
-  const contactId = await identityContactId(identityId);
-  if (!matterWhere || !contactId) return [];
   const rows = await prisma.invoice.findMany({
     where: {
       AND: [
@@ -115,8 +114,20 @@ export async function listPortalInvoices(
   });
 }
 
-/** One visibility query, then the staff detail so totals match exactly. */
-export async function getPortalInvoice(
+export async function listPortalInvoices(
+  identityId: string,
+  matterId: string,
+): Promise<PortalInvoiceRow[]> {
+  const matterWhere = await billingMatterWhere(identityId);
+  const contactId = await identityContactId(identityId);
+  if (!matterWhere || !contactId) return [];
+  return invoicesFor(matterWhere, contactId, matterId);
+}
+
+/** One visibility query, then the staff detail so totals match exactly.
+ *  Wrapped in React `cache()` below so `generateMetadata` and the page
+ *  share one lookup per request. */
+async function loadPortalInvoice(
   identityId: string,
   invoiceId: string,
 ): Promise<(InvoiceDetail & { matterId: string }) | null> {
@@ -132,14 +143,15 @@ export async function getPortalInvoice(
   return detail ? { ...detail, matterId: visible.matterId } : null;
 }
 
-/** Trust ledger for the matter's primary client only; null otherwise. */
-export async function getPortalTrust(
-  identityId: string,
+export const getPortalInvoice = cache(loadPortalInvoice);
+
+type PortalTrust = { balance: number; entries: PortalTrustEntry[] };
+
+async function trustFor(
+  matterWhere: Prisma.MatterWhereInput,
+  contactId: string,
   matterId: string,
-): Promise<{ balance: number; entries: PortalTrustEntry[] } | null> {
-  const matterWhere = await billingMatterWhere(identityId);
-  const contactId = await identityContactId(identityId);
-  if (!matterWhere || !contactId) return null;
+): Promise<PortalTrust | null> {
   const matter = await prisma.matter.findFirst({
     where: { AND: [matterWhere, { id: matterId, clientId: contactId }] },
     // Same source as the staff billing tab (`getMatterBilling`).
@@ -165,20 +177,45 @@ export async function getPortalTrust(
   return { balance: matter.trustBalance.toNumber(), entries: entries.reverse() };
 }
 
+/** Trust ledger for the matter's primary client only; null otherwise. */
+export async function getPortalTrust(
+  identityId: string,
+  matterId: string,
+): Promise<PortalTrust | null> {
+  const matterWhere = await billingMatterWhere(identityId);
+  const contactId = await identityContactId(identityId);
+  if (!matterWhere || !contactId) return null;
+  return trustFor(matterWhere, contactId, matterId);
+}
+
+/**
+ * Everything the identity may see about money on one matter, with the
+ * base gate and contact looked up once. Null means no money is visible
+ * (no trust ledger and no visible invoice), so the section stays hidden.
+ */
+export async function getPortalBillingForMatter(
+  identityId: string,
+  matterId: string,
+): Promise<{ invoices: PortalInvoiceRow[]; trust: PortalTrust | null } | null> {
+  const [matterWhere, contactId] = await Promise.all([
+    billingMatterWhere(identityId),
+    identityContactId(identityId),
+  ]);
+  if (!matterWhere || !contactId) return null;
+  const [invoices, trust] = await Promise.all([
+    invoicesFor(matterWhere, contactId, matterId),
+    trustFor(matterWhere, contactId, matterId),
+  ]);
+  if (!trust && invoices.length === 0) return null;
+  return { invoices, trust };
+}
+
 /** Can the identity see any money on this matter (trust or an invoice)? */
 export async function canSeePortalBilling(
   identityId: string,
   matterId: string,
 ): Promise<boolean> {
-  if (await getPortalTrust(identityId, matterId)) return true;
-  const matterWhere = await billingMatterWhere(identityId);
-  const contactId = await identityContactId(identityId);
-  if (!matterWhere || !contactId) return false;
-  const hit = await prisma.invoice.findFirst({
-    where: { AND: [visibleInvoiceWhere(contactId, matterWhere), { matterId }] },
-    select: { id: true },
-  });
-  return hit !== null;
+  return (await getPortalBillingForMatter(identityId, matterId)) !== null;
 }
 
 /** Unpaid visible-invoice balances per matter (only matters owing > 0). */

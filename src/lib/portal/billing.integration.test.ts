@@ -11,6 +11,7 @@ import {
 import { getInvoiceById } from "@/lib/queries/billing";
 import {
   canSeePortalBilling,
+  getPortalBillingForMatter,
   getPortalInvoice,
   getPortalTrust,
   listPortalInvoices,
@@ -241,6 +242,31 @@ describe("portalBalanceDueByMatter", () => {
   });
 });
 
+describe("getPortalBillingForMatter", () => {
+  test("returns invoices and trust together for the billed primary client", async () => {
+    const inv = await mkInvoice();
+    await mkTrust("50.00", "2026-01-01");
+    const billing = await getPortalBillingForMatter(identityId, matterId);
+    expect(billing!.invoices.map((r) => r.id)).toEqual([inv.id]);
+    expect(billing!.trust).toEqual(await getPortalTrust(identityId, matterId));
+  });
+
+  test("co-client with only an invoice gets invoices and null trust; one with nothing gets null", async () => {
+    const inv = await mkInvoice({ clientId: otherId });
+    const billing = await getPortalBillingForMatter(otherIdentityId, matterId);
+    expect(billing!.invoices.map((r) => r.id)).toEqual([inv.id]);
+    expect(billing!.trust).toBeNull();
+    await prisma.invoice.deleteMany({ where: { matterId } });
+    expect(await getPortalBillingForMatter(otherIdentityId, matterId)).toBeNull();
+  });
+
+  test("null when the matter switch is off", async () => {
+    await mkInvoice();
+    await prisma.matter.update({ where: { id: matterId }, data: { portalBillingEnabled: false } });
+    expect(await getPortalBillingForMatter(identityId, matterId)).toBeNull();
+  });
+});
+
 describe("trust", () => {
   test("primary client sees newest-first ledger with stable same-day running balance", async () => {
     const t0 = new Date("2026-01-01T10:00:00Z");
@@ -253,6 +279,9 @@ describe("trust", () => {
     expect(trust!.balance).toBe(85.5);
     expect(trust!.entries.map((e) => e.amount)).toEqual([10.5, -30, 100, 5]);
     expect(trust!.entries.map((e) => e.runningBalance)).toEqual([85.5, 75, 105, 5]);
+    // Balance is not coincidentally any single amount: it is the newest
+    // running balance of the ledger.
+    expect(trust!.balance).toBe(trust!.entries[0].runningBalance);
     expect(trust!.entries[0].runningBalance).toBe(trust!.entries.reduce((s, e) => s + e.amount, 0));
     expect(await canSeePortalBilling(identityId, matterId)).toBe(true);
   });

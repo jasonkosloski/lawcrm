@@ -16,11 +16,7 @@ import {
 } from "@/lib/portal/document-visibility.server";
 import { listPortalRequests } from "@/lib/portal/requests";
 import { getPortalMessages } from "@/lib/portal/messages";
-import {
-  canSeePortalBilling,
-  getPortalTrust,
-  listPortalInvoices,
-} from "@/lib/portal/billing";
+import { getPortalBillingForMatter } from "@/lib/portal/billing";
 import { getPortalMatterStatus } from "@/lib/portal/status";
 import { MatterStatus } from "../../matter-status";
 import { BillingSection } from "./billing-section";
@@ -46,21 +42,18 @@ export default async function PortalMatterPage({
   });
   if (!matter) notFound();
 
-  const [requests, shared, uploads, status, messages, firm] = await Promise.all([
+  const [requests, shared, uploads, status, messages, firm, billing] = await Promise.all([
     listPortalRequests(identityId, id),
     listPortalSharedDocuments(identityId, id),
     listPortalUploads(identityId, id),
     getPortalMatterStatus(identityId, id),
     getPortalMessages(identityId, id),
     prisma.firm.findFirst({ select: { phone: true, email: true } }),
+    getPortalBillingForMatter(identityId, id),
   ]);
   const storageDriver = activeStorageDriver();
-  const [invoices, trust] = (await canSeePortalBilling(identityId, id))
-    ? await Promise.all([
-        listPortalInvoices(identityId, id),
-        getPortalTrust(identityId, id),
-      ])
-    : [[], null];
+  const invoices = billing?.invoices ?? [];
+  const trust = billing?.trust ?? null;
 
   return (
     <div className="flex flex-col gap-6">
