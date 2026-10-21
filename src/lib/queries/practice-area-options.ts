@@ -8,12 +8,19 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import {
+  normalizeAreaBillingTypes,
+  type BillingType,
+} from "@/lib/billing-type";
 
 export type PracticeAreaOption = {
   id: string;
   name: string;
   /** Null/absent: the default "Fee agreement". */
   originatingDocLabel?: string | null;
+  /** Billing types the area offers and the one preselected. */
+  allowedBillingTypes: BillingType[];
+  defaultBillingType: BillingType;
   stages: Array<{
     id: string;
     name: string;
@@ -30,6 +37,8 @@ export async function getPracticeAreaOptions(): Promise<PracticeAreaOption[]> {
       id: true,
       name: true,
       originatingDocLabel: true,
+      allowedBillingTypes: true,
+      defaultBillingType: true,
       stages: {
         where: { isActive: true },
         select: {
@@ -42,5 +51,7 @@ export async function getPracticeAreaOptions(): Promise<PracticeAreaOption[]> {
       },
     },
   });
-  return areas.filter((a) => a.stages.length > 0);
+  return areas
+    .filter((a) => a.stages.length > 0)
+    .map((a) => ({ ...a, ...normalizeAreaBillingTypes(a) }));
 }

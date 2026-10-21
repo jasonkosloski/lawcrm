@@ -74,12 +74,20 @@ async function seedArea(opts: {
   stageActive?: boolean;
   hasSol?: boolean;
   periodDays?: number | null;
+  allowedBillingTypes?: string[];
+  defaultBillingType?: string;
 }): Promise<{ areaId: string; stageId: string }> {
   const area = await prisma.practiceArea.create({
     data: {
       name: `Area ${Math.random().toString(36).slice(2, 8)}`,
       isActive: opts.areaActive ?? true,
       hasStatuteOfLimitations: opts.hasSol ?? false,
+      ...(opts.allowedBillingTypes
+        ? { allowedBillingTypes: opts.allowedBillingTypes }
+        : {}),
+      ...(opts.defaultBillingType
+        ? { defaultBillingType: opts.defaultBillingType }
+        : {}),
       // opts.periodDays is a plain day count (ADR-035: DAYS unit).
       statutePeriodAmount: opts.periodDays ?? null,
       statutePeriodUnit: opts.periodDays ? "DAYS" : null,
@@ -121,7 +129,7 @@ function convertForm(opts: { areaId: string; stageId: string }): FormData {
   fd.set("practiceAreaId", opts.areaId);
   fd.set("stageId", opts.stageId);
   fd.set("name", "Patel v. Doe");
-  fd.set("feeStructure", "contingent");
+  fd.set("billingType", "contingent");
   return fd;
 }
 
@@ -1589,5 +1597,73 @@ describe("convertLeadToMatter — originating-document gate", () => {
       where: { matterId: matter.id, title: "Fee agreement signed 2020-01-02" },
     });
     expect(log).not.toBeNull();
+  });
+});
+
+describe("convertLeadToMatter — billing type", () => {
+  function withType(fd: FormData, t?: string): FormData {
+    if (t === undefined) fd.delete("billingType");
+    else fd.set("billingType", t);
+    return fd;
+  }
+
+  test("an allowed type writes both matter columns per the mapping", async () => {
+    const { areaId, stageId } = await seedArea({
+      allowedBillingTypes: ["hourly", "court_appointed"],
+      defaultBillingType: "hourly",
+    });
+    const { leadId } = await seedIntakeLead();
+
+    await convertLeadToMatter(
+      leadId,
+      { status: "idle" },
+      withType(convertForm({ areaId, stageId }), "court_appointed"),
+    ).catch(() => undefined); // success redirects
+    const m = await prisma.matter.findFirstOrThrow({
+      select: { feeStructure: true, billingMode: true },
+    });
+    expect(m).toEqual({ feeStructure: "hourly", billingMode: "court_voucher" });
+  });
+
+  test("omitted type uses the area default", async () => {
+    const { areaId, stageId } = await seedArea({
+      allowedBillingTypes: ["flat", "hourly"],
+      defaultBillingType: "flat",
+    });
+    const { leadId } = await seedIntakeLead();
+
+    await convertLeadToMatter(
+      leadId,
+      { status: "idle" },
+      withType(convertForm({ areaId, stageId })),
+    ).catch(() => undefined);
+    const m = await prisma.matter.findFirstOrThrow({
+      select: { feeStructure: true, billingMode: true },
+    });
+    expect(m).toEqual({ feeStructure: "flat", billingMode: "client" });
+  });
+
+  test("a type the area does not offer is rejected; lead unclaimed, no matter", async () => {
+    const { areaId, stageId } = await seedArea({
+      allowedBillingTypes: ["hourly"],
+      defaultBillingType: "hourly",
+    });
+    const { leadId } = await seedIntakeLead();
+
+    const res = await convertLeadToMatter(
+      leadId,
+      { status: "idle" },
+      withType(convertForm({ areaId, stageId }), "pro_bono"),
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.billingType).toEqual([
+      "Not offered for this practice area",
+    ]);
+    expect(await prisma.matter.count()).toBe(0);
+    const lead = await prisma.lead.findUniqueOrThrow({
+      where: { id: leadId },
+      select: { stage: true, convertedMatterId: true },
+    });
+    expect(lead).toEqual({ stage: "new", convertedMatterId: null });
   });
 });

@@ -67,7 +67,7 @@ import { normalize } from "@/lib/conflict-check";
 import {
   BILLING_TYPES,
   billingTypeFields,
-  isBillingType,
+  normalizeAreaBillingTypes,
   type BillingType,
 } from "@/lib/billing-type";
 import {
@@ -384,10 +384,8 @@ async function resolveAreaAndStage(
   if (!resolvedStageId) {
     return { ok: false, error: "This practice area has no active stages" };
   }
-  const allowedBillingTypes = area.allowedBillingTypes.filter(isBillingType);
-  const defaultBillingType = isBillingType(area.defaultBillingType)
-    ? area.defaultBillingType
-    : (allowedBillingTypes[0] ?? "contingent");
+  const { allowedBillingTypes, defaultBillingType } =
+    normalizeAreaBillingTypes(area);
   return {
     ok: true,
     practiceAreaId: area.id,

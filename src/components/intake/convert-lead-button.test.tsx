@@ -29,6 +29,8 @@ const AREAS: PracticeAreaOption[] = [
   {
     id: "pa-pi",
     name: "Personal Injury",
+    allowedBillingTypes: ["contingent", "hourly"],
+    defaultBillingType: "contingent",
     stages: [
       { id: "st-closed", name: "Closed", isTerminal: true, order: 0 },
       { id: "st-intake", name: "Intake", isTerminal: false, order: 1 },
@@ -38,6 +40,8 @@ const AREAS: PracticeAreaOption[] = [
   {
     id: "pa-fam",
     name: "Family",
+    allowedBillingTypes: ["flat", "hourly", "pro_bono"],
+    defaultBillingType: "flat",
     stages: [
       { id: "st-consult", name: "Consultation", isTerminal: false, order: 0 },
       { id: "st-done", name: "Resolved", isTerminal: true, order: 1 },
@@ -152,7 +156,7 @@ describe("ConvertLeadButton — server errors and live props", () => {
 
   test.each([
     ["practiceAreaId", "Practice area is not available"],
-    ["feeStructure", "Invalid fee structure"],
+    ["billingType", "Not offered for this practice area"],
   ] as const)("a %s error from the server is shown", async (field, message) => {
     const user = userEvent.setup();
     vi.mocked(convertLeadToMatter).mockResolvedValue({
@@ -396,5 +400,39 @@ describe("ConvertLeadButton — engagement block", () => {
     expect(
       await screen.findByText("Attach the signed Retainer agreement.")
     ).toBeInTheDocument();
+  });
+});
+
+describe("ConvertLeadButton — billing type", () => {
+  const billingSelect = () =>
+    screen.getByRole("combobox", { name: "Billing type" }) as HTMLSelectElement;
+  const optionLabels = () =>
+    Array.from(billingSelect().options).map((o) => o.textContent);
+
+  test("offers the chosen area's types and preselects its default", async () => {
+    const user = userEvent.setup();
+    renderButton();
+    await openDialog(user);
+    expect(optionLabels()).toEqual(["Hourly", "Contingency"]);
+    expect(billingSelect().value).toBe("contingent");
+
+    const areaSelect = screen
+      .getByRole("option", { name: "Personal Injury" })
+      .closest("select") as HTMLSelectElement;
+    await user.selectOptions(areaSelect, "pa-fam");
+    expect(optionLabels()).toEqual(["Hourly", "Flat fee", "Pro bono"]);
+    expect(billingSelect().value).toBe("flat");
+  });
+
+  test("keeps the pick when the new area also offers it", async () => {
+    const user = userEvent.setup();
+    renderButton();
+    await openDialog(user);
+    await user.selectOptions(billingSelect(), "hourly");
+    const areaSelect = screen
+      .getByRole("option", { name: "Personal Injury" })
+      .closest("select") as HTMLSelectElement;
+    await user.selectOptions(areaSelect, "pa-fam");
+    expect(billingSelect().value).toBe("hourly");
   });
 });

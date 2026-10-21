@@ -7,6 +7,7 @@ import {
   billingTypeFromLegacyMode,
   billingTypeOf,
   isBillingType,
+  normalizeAreaBillingTypes,
 } from "./billing-type";
 
 describe("billingTypeFields", () => {
@@ -94,5 +95,46 @@ describe("labels and options", () => {
     expect(BILLING_TYPE_OPTIONS.some((o) => o.value === ("hybrid" as never))).toBe(
       false,
     );
+  });
+});
+
+describe("normalizeAreaBillingTypes", () => {
+  it("keeps valid stored values", () => {
+    expect(
+      normalizeAreaBillingTypes({
+        allowedBillingTypes: ["hourly", "flat"],
+        defaultBillingType: "flat",
+      }),
+    ).toEqual({
+      allowedBillingTypes: ["hourly", "flat"],
+      defaultBillingType: "flat",
+    });
+  });
+
+  it("drops unknown allowed values (e.g. legacy hybrid)", () => {
+    expect(
+      normalizeAreaBillingTypes({
+        allowedBillingTypes: ["hybrid", "hourly", "bogus"],
+        defaultBillingType: "hourly",
+      }).allowedBillingTypes,
+    ).toEqual(["hourly"]);
+  });
+
+  it("falls back to the first allowed type when the default is invalid", () => {
+    expect(
+      normalizeAreaBillingTypes({
+        allowedBillingTypes: ["flat", "hourly"],
+        defaultBillingType: "hybrid",
+      }).defaultBillingType,
+    ).toBe("flat");
+  });
+
+  it("falls back to contingent when nothing valid is stored", () => {
+    expect(
+      normalizeAreaBillingTypes({
+        allowedBillingTypes: [],
+        defaultBillingType: "nope",
+      }),
+    ).toEqual({ allowedBillingTypes: [], defaultBillingType: "contingent" });
   });
 });

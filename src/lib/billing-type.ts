@@ -79,3 +79,17 @@ export function billingTypeFromLegacyMode(mode: string): BillingType {
   if (mode === "none") return "pro_bono";
   return "contingent";
 }
+
+/// A practice area's stored billing config (plain strings in the DB),
+/// narrowed to known types. An invalid default falls back to the first
+/// allowed type, then to contingent.
+export function normalizeAreaBillingTypes(area: {
+  allowedBillingTypes: string[];
+  defaultBillingType: string;
+}): { allowedBillingTypes: BillingType[]; defaultBillingType: BillingType } {
+  const allowedBillingTypes = area.allowedBillingTypes.filter(isBillingType);
+  const defaultBillingType = isBillingType(area.defaultBillingType)
+    ? area.defaultBillingType
+    : (allowedBillingTypes[0] ?? "contingent");
+  return { allowedBillingTypes, defaultBillingType };
+}

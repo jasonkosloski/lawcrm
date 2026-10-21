@@ -9,7 +9,7 @@
  * to the new matter's detail page.
  */
 
-import { isBillingType } from "@/lib/billing-type";
+import { normalizeAreaBillingTypes } from "@/lib/billing-type";
 import { TopBar } from "@/components/layout/topbar";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -159,13 +159,9 @@ export default async function NewMatterPage({
   const areas = areaRows.map(
     ({ statutePeriodAmount, statutePeriodUnit, ...a }) => {
       // Stored as plain strings; drop anything that isn't a known type.
-      const allowedBillingTypes = a.allowedBillingTypes.filter(isBillingType);
       return {
         ...a,
-        allowedBillingTypes,
-        defaultBillingType: isBillingType(a.defaultBillingType)
-          ? a.defaultBillingType
-          : (allowedBillingTypes[0] ?? ("contingent" as const)),
+        ...normalizeAreaBillingTypes(a),
         statutePeriod: toSolPeriod(statutePeriodAmount, statutePeriodUnit),
       };
     }

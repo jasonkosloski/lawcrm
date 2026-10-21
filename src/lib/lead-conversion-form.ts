@@ -9,7 +9,7 @@ export type ConvertLeadFormState = {
       | "practiceAreaId"
       | "stageId"
       | "name"
-      | "feeStructure"
+      | "billingType"
       | "originatingDocumentId"
       | "agreementStatus"
       | "agreementSignedDate"

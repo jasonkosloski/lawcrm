@@ -57,6 +57,11 @@ import {
 } from "@/lib/records-requests/fee-expense";
 import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
+import {
+  BILLING_TYPES,
+  billingTypeFields,
+  normalizeAreaBillingTypes,
+} from "@/lib/billing-type";
 import { plural } from "@/lib/utils";
 import type {
   ConvertLeadFormState,
@@ -85,6 +90,8 @@ const DECLINE_AFTER_CONVERT_ERROR =
  *  whole transaction rolls back and the caller maps it to a form
  *  error based on the lead's current stage. */
 class LeadClaimLostError extends Error {}
+/** The picked billing type is not offered by the practice area. */
+class BillingTypeNotOfferedError extends Error {}
 
 // ── Convert ─────────────────────────────────────────────────────────────
 
@@ -229,9 +236,8 @@ const convertSchema = z.object({
   practiceAreaId: z.string().trim().min(1, "Practice area is required"),
   stageId: z.string().trim().min(1, "Initial stage is required"),
   name: z.string().trim().min(1, "Matter name is required").max(200),
-  feeStructure: z
-    .enum(["contingent", "hourly", "flat", "hybrid", "pro_bono"])
-    .default("contingent"),
+  /** Omitted: the practice area's default. */
+  billingType: z.enum(BILLING_TYPES).optional(),
   agreementStatus: z.string().trim().optional().or(z.literal("")),
   agreementSignedDate: z.string().trim().optional().or(z.literal("")),
   /** A Document on THIS lead (not archived), marked as originating. */
@@ -311,14 +317,12 @@ export async function convertLeadToMatter(
   const [area, stage] = await Promise.all([
     prisma.practiceArea.findUnique({
       where: { id: parsed.data.practiceAreaId },
-      // defaultBillingMode snapshots onto the new Matter so the
-      // billing tab shows the right flow from day one. The SOL pair
-      // drives incidentDate / SOL-date carry-over from the lead.
+      // The SOL pair drives incidentDate / SOL-date carry-over from
+      // the lead.
       select: {
         id: true,
         color: true,
         isActive: true,
-        defaultBillingMode: true,
         hasStatuteOfLimitations: true,
         statutePeriodAmount: true,
         statutePeriodUnit: true,
@@ -462,6 +466,18 @@ export async function convertLeadToMatter(
 
   // Single transaction so a half-converted lead can't exist.
   const result = await prisma.$transaction(async (tx) => {
+    // Billing type must be one the area offers. Checked against a
+    // fresh read of the area and BEFORE the claim, so a rejection
+    // leaves the lead's stage untouched and creates nothing.
+    const billingArea = await tx.practiceArea.findUniqueOrThrow({
+      where: { id: area.id },
+      select: { allowedBillingTypes: true, defaultBillingType: true },
+    });
+    const offered = normalizeAreaBillingTypes(billingArea);
+    const billingType = parsed.data.billingType ?? offered.defaultBillingType;
+    if (!offered.allowedBillingTypes.includes(billingType)) {
+      throw new BillingTypeNotOfferedError();
+    }
     // Claim the lead FIRST, with a predicate on the exact stage we
     // read. That read is outside the transaction, so a double-click /
     // second tab / second attorney could pass the checks above; this
@@ -539,10 +555,9 @@ export async function convertLeadToMatter(
         name: parsed.data.name,
         practiceAreaId: area.id,
         stageId: stage.id,
-        feeStructure: parsed.data.feeStructure,
-        // Snapshot the area's default — same pattern as the direct
+        // One billing type writes both columns, same as the direct
         // matter-create path.
-        billingMode: area.defaultBillingMode,
+        ...billingTypeFields(billingType),
         color: area.color,
         description: description || null,
         clientId: clientContactId,
@@ -745,8 +760,15 @@ export async function convertLeadToMatter(
     // Lost the claim race — surfaced below as a form error. Anything
     // else is a real failure and must propagate.
     if (err instanceof LeadClaimLostError) return null;
+    if (err instanceof BillingTypeNotOfferedError) return "billing" as const;
     throw err;
   });
+  if (result === "billing") {
+    return {
+      status: "error",
+      errors: { billingType: ["Not offered for this practice area"] },
+    };
+  }
   if (!result) {
     const current = await prisma.lead.findUnique({
       where: { id: leadId },

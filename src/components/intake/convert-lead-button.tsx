@@ -3,7 +3,7 @@
  *
  * Replaces the disabled "Convert to matter" placeholder in the lead
  * detail topbar. Opens a dialog asking for practice area + initial
- * stage + matter name + fee structure, then calls the
+ * stage + matter name + billing type, then calls the
  * `convertLeadToMatter` server action which creates Matter + Contact
  * + team assignment + pin in one transaction and redirects to the
  * new matter.
@@ -50,15 +50,8 @@ import {
   agreementGateErrors,
   originatingDocLabel,
 } from "@/lib/originating-doc";
+import { BILLING_TYPE_OPTIONS } from "@/lib/billing-type";
 import type { PracticeAreaOption } from "@/lib/queries/practice-area-options";
-
-const FEE_OPTIONS = [
-  { value: "contingent", label: "Contingent" },
-  { value: "hourly", label: "Hourly" },
-  { value: "flat", label: "Flat fee" },
-  { value: "hybrid", label: "Hybrid" },
-  { value: "pro_bono", label: "Pro bono" },
-];
 
 // Default stage for a freshly converted matter: terminal stages
 // ("Closed", "Declined", …) make no sense as a starting point, so skip
@@ -107,7 +100,9 @@ export function ConvertLeadButton({
   const [stageId, setStageId] = useState(
     firstNonTerminalStage(areas[0])?.id ?? ""
   );
-  const [feeStructure, setFeeStructure] = useState("contingent");
+  const [billingType, setBillingType] = useState<string>(
+    areas[0]?.defaultBillingType ?? "contingent"
+  );
   const [warningsReviewed, setWarningsReviewed] = useState(false);
   const [agreementStatus, setAgreementStatus] = useState("not_sent");
   const [signedDate, setSignedDate] = useState("");
@@ -125,7 +120,7 @@ export function ConvertLeadButton({
     setName(defaultMatterName);
     setAreaId(areas[0]?.id ?? "");
     setStageId(firstNonTerminalStage(areas[0])?.id ?? "");
-    setFeeStructure("contingent");
+    setBillingType(areas[0]?.defaultBillingType ?? "contingent");
     setWarningsReviewed(false);
     setAgreementStatus("not_sent");
     setSignedDate("");
@@ -144,6 +139,15 @@ export function ConvertLeadButton({
     setAreaId(nextAreaId);
     const stage = firstNonTerminalStage(areas.find((a) => a.id === nextAreaId));
     if (stage) setStageId(stage.id);
+    // Keep the billing type only if the new area offers it; otherwise
+    // take that area's default.
+    const next = areas.find((a) => a.id === nextAreaId);
+    if (
+      next &&
+      !(next.allowedBillingTypes as string[]).includes(billingType)
+    ) {
+      setBillingType(next.defaultBillingType);
+    }
   };
 
   // Manual dispatch: <form action> resets the form after the action
@@ -173,7 +177,11 @@ export function ConvertLeadButton({
     startSubmit(() => formAction(fd));
   };
 
-  const stagesForArea = areas.find((a) => a.id === areaId)?.stages ?? [];
+  const selectedArea = areas.find((a) => a.id === areaId);
+  const stagesForArea = selectedArea?.stages ?? [];
+  const billingOptions = BILLING_TYPE_OPTIONS.filter((o) =>
+    selectedArea?.allowedBillingTypes.includes(o.value)
+  );
 
   const agreementLabel = originatingDocLabel({
     originatingDocLabel:
@@ -189,10 +197,10 @@ export function ConvertLeadButton({
   };
   const formError = errs._form?.[0];
   // The three selects have no inline error slot, so their server field
-  // errors (area/stage retired while the dialog was open, bad fee) are
+  // errors (area/stage retired while the dialog was open, billing type not offered) are
   // surfaced in one banner — otherwise the submit just silently stops.
   const fieldError =
-    errs.practiceAreaId?.[0] ?? errs.stageId?.[0] ?? errs.feeStructure?.[0];
+    errs.practiceAreaId?.[0] ?? errs.stageId?.[0] ?? errs.billingType?.[0];
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -252,10 +260,11 @@ export function ConvertLeadButton({
               </div>
 
               <SelectField
-                name="feeStructure"
-                value={feeStructure}
-                onChange={setFeeStructure}
-                options={FEE_OPTIONS}
+                name="billingType"
+                value={billingType}
+                onChange={setBillingType}
+                options={billingOptions}
+                ariaLabel="Billing type"
               />
 
               <Section title={agreementLabel}>
