@@ -181,7 +181,7 @@ function doneEvent(matterId: string): Result {
   return { ok: true };
 }
 
-/** Permission, event load, lead-event refusal, then matter access. */
+/** Permission, event load, lead-event refusal. Callers then assert matter access. */
 async function gateEvent(permission: string, eventId: string) {
   const gate = await requirePermissionResult(permission);
   if (!gate.ok) return { ok: false as const, error: gate.error };
@@ -193,7 +193,6 @@ async function gateEvent(permission: string, eventId: string) {
   if (!event.matterId) {
     return { ok: false as const, error: "Only events on a matter can be shared." };
   }
-  await assertMatterAccess(event.matterId);
   return { ok: true as const, userId: gate.userId, eventId: event.id, matterId: event.matterId };
 }
 
@@ -203,6 +202,7 @@ export async function shareEventWithClient(
 ): Promise<Result> {
   const g = await gateEvent("portal.share_events", eventId);
   if (!g.ok) return g;
+  await assertMatterAccess(g.matterId);
   const parsed = shareSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid event share." };
@@ -229,6 +229,7 @@ export async function updateEventShare(
 ): Promise<Result> {
   const g = await gateEvent("portal.share_events", eventId);
   if (!g.ok) return g;
+  await assertMatterAccess(g.matterId);
   const parsed = shareSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid event share." };
@@ -252,6 +253,7 @@ export async function updateEventShare(
 export async function stopSharingEvent(eventId: string): Promise<Result> {
   const g = await gateEvent("portal.share_events", eventId);
   if (!g.ok) return g;
+  await assertMatterAccess(g.matterId);
 
   const res = await prisma.portalSharedEvent.deleteMany({
     where: { eventId, matterId: g.matterId },
