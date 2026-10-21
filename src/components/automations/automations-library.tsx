@@ -64,7 +64,7 @@ export type AutomationPermissions = {
 
 const newBtnCls = cn(
   "inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium",
-  "rounded-md bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+  "rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors"
 );
 
 export function AutomationsLibrary({

@@ -69,17 +69,15 @@ export function EmbeddedThreadList({
                 className={cn(
                   "block px-4 py-3 transition-colors border-l-2",
                   isSelected
-                    ? "bg-brand-soft border-l-brand-500"
-                    : t.isRead
-                      ? "hover:bg-brand-tint border-l-transparent"
-                      : "bg-brand-tint/40 hover:bg-brand-tint border-l-brand-500"
+                    ? "bg-paper-2 border-l-ink"
+                    : "hover:bg-paper-2/60 border-l-transparent"
                 )}
               >
                 <div className="flex items-center gap-2 mb-1">
                   <span
                     className={cn(
-                      "text-xs truncate flex-1 min-w-0",
-                      t.isRead ? "text-ink-2" : "font-semibold text-ink"
+                      "text-sm truncate flex-1 min-w-0",
+                      t.isRead ? "font-normal text-ink-2" : "font-semibold text-ink"
                     )}
                   >
                     {t.fromDisplay}
@@ -96,7 +94,7 @@ export function EmbeddedThreadList({
                 <div
                   className={cn(
                     "text-xs leading-tight truncate mb-0.5",
-                    t.isRead ? "text-ink-3" : "text-ink font-medium"
+                    t.isRead ? "text-ink" : "text-ink font-medium"
                   )}
                 >
                   {t.subject}
@@ -108,7 +106,7 @@ export function EmbeddedThreadList({
                 )}
                 <div className="flex items-center gap-2 mt-1.5">
                   {showMatterChip && t.matter && (
-                    <span className="inline-flex items-center gap-1 text-2xs font-mono text-ink-3">
+                    <span className="inline-flex items-center gap-1 text-2xs text-ink-3">
                       <span
                         className="w-1.5 h-1.5 rounded-full"
                         style={{ background: t.matter.color }}

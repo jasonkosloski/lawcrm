@@ -102,7 +102,7 @@ export function GenerateInvoiceForm({
         onClick={() => setExpanded(true)}
         className={cn(
           "inline-flex items-center gap-2 h-9 px-3 text-xs font-medium",
-          "rounded-md bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+          "rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors"
         )}
       >
         <FilePlus2 size={13} />
@@ -125,7 +125,7 @@ export function GenerateInvoiceForm({
         <div className="flex flex-col gap-1">
           <label
             htmlFor={`${ids}-dueDays`}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Due in (days)
           </label>
@@ -142,7 +142,7 @@ export function GenerateInvoiceForm({
         <div className="flex flex-col gap-1">
           <label
             htmlFor={`${ids}-notes`}
-            className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+            className="text-2xs font-medium text-ink-3"
           >
             Notes to client (optional, printed on invoice)
           </label>
@@ -177,7 +177,7 @@ export function GenerateInvoiceForm({
           disabled={isPending}
           className={cn(
             "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium",
-            "bg-brand-500 text-white hover:bg-brand-600 transition-colors",
+            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
             "disabled:opacity-60 disabled:cursor-not-allowed"
           )}
         >

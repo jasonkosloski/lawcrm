@@ -80,7 +80,7 @@ export async function ThreadReader({
           renders nothing). */}
       <MarkThreadRead channel="email" threadId={thread.id} />
       {/* Subject header */}
-      <header className="sticky top-0 z-10 bg-paper-email/95 backdrop-blur-sm px-4 sm:px-6 py-3 sm:py-4 border-b border-line">
+      <header className="@container sticky top-0 z-10 bg-paper-email px-4 sm:px-6 py-3 sm:py-4 border-b border-line">
         {/* Subject + back button — always at the top so it doesn't
             compete with action buttons for horizontal space. */}
         <div className="min-w-0">
@@ -94,10 +94,12 @@ export async function ThreadReader({
             - Meta (file-to-matter picker, message count, labels) wraps
               freely on small screens.
             - Action buttons (follow-up + inbox shortcuts) sit BELOW the
-              meta on `<sm` so they're full-width tap targets, and
-              FLOAT to the right alongside the meta on sm+. */}
-        <div className="mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap text-2xs min-w-0">
+              meta until the READER (a container query, not the
+              viewport) is wide enough for both on one row; side by side
+              in a 640px pane the meta collapsed into a word-per-line
+              column. */}
+        <div className="mt-2 flex flex-col @3xl:flex-row @3xl:items-center @3xl:justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap text-2xs min-w-0 flex-1">
             <FileToMatterPicker
               threadId={thread.id}
               currentMatter={thread.matter}
@@ -105,7 +107,7 @@ export async function ThreadReader({
               canFile={perms.canFileEmail}
             />
             <span className="text-ink-4">·</span>
-            <span className="font-mono text-ink-4">
+            <span className="text-ink-4">
               {plural(thread.messageCount, "message")}
             </span>
             {thread.labels.length > 0 && (
@@ -125,7 +127,7 @@ export async function ThreadReader({
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
             <FollowUpButton
               threadId={thread.id}
               followUpAt={thread.followUpAt}
@@ -170,7 +172,7 @@ export async function ThreadReader({
                   <span className="text-sm font-medium text-ink truncate">
                     {m.fromName}
                   </span>
-                  <span className="text-2xs font-mono text-ink-4 truncate">
+                  <span className="text-2xs text-ink-4 truncate">
                     &lt;{m.fromEmail}&gt;
                   </span>
                   {m.isPrivileged && (
@@ -191,14 +193,14 @@ export async function ThreadReader({
                 <div className="text-2xs text-ink-4 mt-0.5 flex flex-col gap-0.5">
                   <div className="break-all">
                     <span>To: </span>
-                    <span className="font-mono">
+                    <span>
                       {formatRecipients(m.toRecipients)}
                     </span>
                   </div>
                   {m.ccRecipients.length > 0 && (
                     <div className="break-all">
                       <span>Cc: </span>
-                      <span className="font-mono">
+                      <span>
                         {formatRecipients(m.ccRecipients)}
                       </span>
                     </div>

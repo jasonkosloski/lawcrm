@@ -168,7 +168,7 @@ export function StatuteOfLimitationsCard({
     <Card className={cn("transition-colors", toneClasses)}>
       <CardContent className="px-4 py-3 flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <div className="text-2xs font-medium text-ink-3">
             Statute of limitations
           </div>
           {pending && (

@@ -56,32 +56,15 @@ const tasks = (over: Partial<MyTasksGrouped> = {}): MyTasksGrouped => ({
 const noViewAll = () => screen.queryByRole("link", { name: /view all/i });
 
 describe("KpisCard", () => {
-  test("tile grid uses container-query columns", () => {
-    const { container } = render(<KpisCard kpis={kpis} />);
-    const grid = container.querySelector(".\\@2xl\\:grid-cols-4");
-    expect(grid).toBeTruthy();
-    expect(grid!.className).toContain("@sm:grid-cols-2");
-  });
-
-  test("hours today progress bar", () => {
+  test("renders stats with v2 copy and links", () => {
     render(<KpisCard kpis={kpis} />);
-    const bar = screen.getByRole("progressbar");
-    expect(bar.getAttribute("aria-valuenow")).toBe("38");
-    expect(bar.getAttribute("aria-valuemin")).toBe("0");
-    expect(bar.getAttribute("aria-valuemax")).toBe("100");
-  });
-
-  test("progress caps at 100 and guards a zero goal", () => {
-    const { rerender } = render(
-      <KpisCard kpis={{ ...kpis, hoursToday: 20 }} />,
-    );
-    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
-      "100",
-    );
-    rerender(<KpisCard kpis={{ ...kpis, hoursGoal: 0 }} />);
-    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
-      "0",
-    );
+    expect(screen.getByText("Goal 8.0")).toBeTruthy();
+    expect(
+      screen.getByText("Hours today").closest("a")?.getAttribute("href"),
+    ).toBe("/time");
+    expect(
+      screen.getByText("Unread email").closest("a")?.getAttribute("href"),
+    ).toBe("/communication?filter=unread");
   });
 
   test("trust tile absent when trustBalance is null", () => {
@@ -131,7 +114,7 @@ describe("view-all links", () => {
 });
 
 describe("late treatment", () => {
-  test("deadline late label is warn", () => {
+  test("deadline late label is danger", () => {
     render(
       <DeadlinesCard
         data={{
@@ -143,21 +126,22 @@ describe("late treatment", () => {
               kind: "manual",
               matterId: "m1",
               matterName: "Smith",
+              dueDate: new Date("2026-10-14T00:00:00Z"),
             },
           ],
           overdueHidden: 0,
         }}
       />,
     );
-    expect(screen.getByText("2d late").closest(".text-warn")).toBeTruthy();
+    expect(screen.getByText("2d late").closest(".text-danger")).toBeTruthy();
   });
 
-  test("task late label is warn", () => {
+  test("task late label is danger", () => {
     render(<TasksCard tasks={tasks()} />);
-    expect(screen.getByText("1d late").closest(".text-warn")).toBeTruthy();
+    expect(screen.getByText("1d late").closest(".text-danger")).toBeTruthy();
   });
 
-  test("follow-up and records late labels are warn", () => {
+  test("follow-up and records late labels are danger", () => {
     render(
       <FollowUpsCard
         items={[
@@ -173,7 +157,7 @@ describe("late treatment", () => {
         ]}
       />,
     );
-    expect(screen.getByText(/Late/).closest(".text-warn")).toBeTruthy();
+    expect(screen.getByText(/Late/).closest(".text-danger")).toBeTruthy();
     render(
       <RecordsCard
         items={[
@@ -188,7 +172,7 @@ describe("late treatment", () => {
         ]}
       />,
     );
-    expect(screen.getByText("3d overdue").closest(".text-warn")).toBeTruthy();
+    expect(screen.getByText("3d overdue").closest(".text-danger")).toBeTruthy();
   });
 });
 

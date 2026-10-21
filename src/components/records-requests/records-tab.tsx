@@ -86,7 +86,7 @@ export async function RecordsTab({
       {groups.map((g) => (
         <section key={g.status}>
           <div className="flex items-center gap-2 mb-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+            <h2 className="text-xs font-semibold text-ink-2">
               {RECORDS_STATUS_LABEL[g.status]}
             </h2>
             <span className="text-2xs font-mono text-ink-4">{g.rows.length}</span>

@@ -50,7 +50,7 @@ export function TimeDayView({
   dailyHoursGoal: number;
 }) {
   return (
-    <div className="flex-1 overflow-y-auto p-3 sm:p-5 flex flex-col gap-4">
+    <div className="flex-1 overflow-y-auto p-3 sm:p-6 flex flex-col gap-4">
       <TargetLine
         totalHours={day.totalHours}
         billableHours={day.billableHours}
@@ -111,7 +111,7 @@ function TargetLine({
   return (
     <div className="rounded-md border border-line bg-card px-3 sm:px-4 py-3 flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-2xs font-semibold uppercase tracking-wider text-ink-3">
+        <span className="text-2xs font-medium text-ink-3">
           Day total
         </span>
         <span className="text-xs font-mono">
@@ -151,7 +151,7 @@ function Lane({
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+        <h2 className="text-xs font-medium text-ink-3">
           {title}
         </h2>
         <span className="text-2xs font-mono text-ink-4">{count}</span>

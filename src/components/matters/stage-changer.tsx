@@ -193,7 +193,7 @@ export function StageChanger({
       {/* ── Header row ─────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <div className="text-2xs font-medium text-ink-3">
             Stage
           </div>
           {pending && (
@@ -219,7 +219,7 @@ export function StageChanger({
               <ChevronDown size={13} />
             </PopoverTrigger>
             <PopoverContent align="end" className="w-60 p-1.5">
-              <div className="px-2 pt-1 pb-2 text-2xs font-mono uppercase tracking-wider text-ink-4 border-b border-line mb-1">
+              <div className="px-2 pt-1 pb-2 text-2xs font-medium text-ink-3 border-b border-line mb-1">
                 Move matter to…
               </div>
               <ul className="flex flex-col">
@@ -240,7 +240,7 @@ export function StageChanger({
                         className={cn(
                           "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-left transition-colors",
                           isCurrent
-                            ? "bg-brand-soft text-brand-700 cursor-default"
+                            ? "bg-paper-2 text-ink font-medium cursor-default"
                             : "text-ink hover:bg-paper-2"
                         )}
                       >

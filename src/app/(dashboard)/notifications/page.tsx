@@ -37,9 +37,9 @@ export default async function NotificationsPage({
 
   return (
     <>
-      <TopBar title="Notifications" crumbs="You · Notifications" />
+      <TopBar title="Notifications"  />
 
-      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 animate-page-enter">
         <div className="max-w-3xl mx-auto flex flex-col gap-3">
           <NotificationsFeed
             // Key on page so navigating resets the client component's

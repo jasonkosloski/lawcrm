@@ -27,6 +27,7 @@
 
 "use client";
 
+import { CalendarClock } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { formatHourLabel, HOUR_HEIGHT_PX, HOURS } from "@/lib/calendar-utils";
@@ -166,8 +167,8 @@ export function DayView({
           minHeight: 36,
         }}
       >
-        <div className="text-2xs font-mono text-ink-4 text-right pr-1.5 pt-1 border-r border-line">
-          all-day
+        <div className="text-2xs text-ink-4 text-right pr-1.5 pt-1 border-r border-line leading-tight">
+          All day
         </div>
         <WeekAllDayCell
           day={day}
@@ -235,10 +236,9 @@ export function DayView({
 function DayDeadlineRow({ deadline }: { deadline: CalendarDeadlineRow }) {
   const cls =
     deadline.deadlineKind === "critical"
-      ? "bg-warn-soft text-warn border-warn-border"
-      : deadline.deadlineKind === "auto_rule"
-        ? "bg-brand-soft text-brand-700 border-brand-200"
-        : "bg-paper-2 text-ink-3 border-line";
+      ? "bg-danger-soft text-danger border-danger/30"
+      : "bg-white text-ink-2 border-warn/40";
+  const critical = deadline.deadlineKind === "critical";
   return (
     <Link
       href={`/matters/${deadline.matterId}/deadlines`}
@@ -248,10 +248,15 @@ function DayDeadlineRow({ deadline }: { deadline: CalendarDeadlineRow }) {
       )}
       title={`${deadline.title} — ${deadline.matterName}`}
     >
-      <span className="shrink-0">⚠</span>
+      <CalendarClock
+        size={11}
+        strokeWidth={2}
+        aria-label="Due"
+        className={cn("shrink-0", critical ? "text-danger" : "text-warn")}
+      />
       <span className="truncate">{deadline.title}</span>
       {deadline.deadlineKind === "critical" && (
-        <span className="shrink-0 text-3xs font-mono uppercase tracking-wider opacity-80">
+        <span className="shrink-0 text-3xs font-mono opacity-80">
           critical
         </span>
       )}

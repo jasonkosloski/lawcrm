@@ -27,7 +27,7 @@ export default async function NewIntakePage() {
   return (
     <>
       <TopBar title="New intake" crumbs="Intake / New" />
-      <div className="flex-1 overflow-y-auto p-5 animate-page-enter">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 animate-page-enter">
         <div className="max-w-2xl flex flex-col gap-3">
           <Card>
             <CardContent className="p-4 sm:p-5">

@@ -334,7 +334,7 @@ export function InlineSelect({
         setEditing(true);
       }}
       aria-label={`Edit ${ariaLabel}`}
-      className={cn(cellHover, "uppercase tracking-wider")}
+      className={cellHover}
     >
       {label}
     </button>
@@ -492,7 +492,7 @@ export function InlineTimeEditor({
         <button
           type="button"
           onClick={save}
-          className="inline-flex items-center gap-1 text-2xs font-medium px-2 h-6 rounded-md bg-brand-500 text-white hover:bg-brand-600"
+          className="inline-flex items-center gap-1 text-2xs font-medium px-2 h-6 rounded-md bg-brand-700 text-white hover:bg-brand-900"
         >
           <Check size={11} />
           Save

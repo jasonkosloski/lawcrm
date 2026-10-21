@@ -87,7 +87,7 @@ function Section({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+      <div className="text-2xs font-medium text-ink-3">
         {label}
       </div>
       <dl className="grid grid-cols-1 sm:grid-cols-[12rem_1fr] gap-y-0.5 sm:gap-y-1.5 text-xs">

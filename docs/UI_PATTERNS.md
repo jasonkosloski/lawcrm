@@ -1,60 +1,76 @@
 # UI Patterns & Component Conventions
 
-Reusable patterns extracted from the design handoff and applied consistently across the app. Reference this when building new screens.
+Reusable patterns applied across the app. Reference this when building new screens.
+The system is v2 ([ADR-057](decisions/057-ui-system-v2-legibility-floor-and-colour-on-meaning.md)):
+a legibility floor, and colour spent only on meaning.
 
 ---
 
-## Brand Identity
+## Identity
 
-The visual identity is **warm paper + saturated navy blue**. This is not a generic SaaS gray app.
+**Warm paper, ink chrome, the firm's navy.** People read this app all day, so it is quiet
+by default and loud only where something needs a decision.
 
-- Canvas: `#faf9f5` (warm paper)
-- Cards: `#ffffff` with `1px solid #e5e4de` border
-- Email reader: `#faf8f3` (slightly warmer than canvas — document feel)
-- Primary: `#2563a8` (brand blue)
-- All active/selected states, focus rings, primary buttons use the brand blue
+- Ground `paper` #f7f6f2; cards white with a 1px `line` border; email reader `paper-email`.
+- Sidebar on the ground behind one hairline. No gradients, glows or tinted tiles anywhere.
+- **Colour goes on meaning:** urgency (`danger` overdue, `warn` due soon), status (pale pill
+  pairs), money that moved, practice-area and matter colours (data from the DB), and the
+  one primary action. Chrome (nav, tabs, selection, headers) is ink and neutral.
+- Primary action: `Button` default, the deep navy `brand-700`. `brand-500` is for links,
+  the focus ring and small selection marks only.
 
-**Do not drift toward cold grays or generic Tailwind slate palette.**
+## Type
 
----
+Inter for all UI; Fraunces for page titles (`TopBar` h1), the brand mark and email reading.
+`font-mono` renders **Inter with tabular figures** (use it, or `tabular-nums`, for times,
+money and counts); `font-code` (JetBrains Mono) is for code only.
 
-## Typography
+| Token | Size | Use |
+|---|---|---|
+| `text-3xs` | 11px | The floor. Dense chips only |
+| `text-2xs` | 11.5px | Meta: timestamps, counts, secondary lines, table headers, section labels |
+| `text-xs` | 12.5px | Body: table cells, row titles, form text |
+| `text-sm` | 13.5px | Nav, lead rows, card body where there's room |
+| `text-[15px] font-semibold` | 15px | Card titles (`CardTitle`) |
+| Fraunces `text-xl` | 20px | Page title |
 
-| Usage | Font | Size | Weight | Extra |
-|---|---|---|---|---|
-| UI body text | Inter | 12.5px–13px | 400 | `line-height: 1.4–1.55` |
-| Section labels | Inter | 10px | 600 | `uppercase`, `tracking-[0.08em]`, `text-ink-4` |
-| Nav items | Inter | 12.5px | 400 (500 active) | |
-| Badges/counts | JetBrains Mono | 10px | 500 | |
-| Timestamps/meta | JetBrains Mono | 10–11px | 400 | `text-ink-3` or `text-ink-4` |
-| Page titles | Fraunces | 20–26px | 500 | `tracking-tight`, color `#0f1b2e` |
-| Email subjects | Fraunces | 22px | 500 | `letter-spacing: -0.01em` |
-| Email body | Fraunces | 13.5px | 400 | `line-height: 1.62`, `white-space: pre-wrap` |
-| Chips/pills | Inter | 10–11px | 500–600 | |
-
-**Rule:** Fraunces is for display and email bodies only. All UI chrome is Inter.
+- **Nothing under 11px**: no `text-[9px]`/`[10px]`.
+- **No uppercase or letter-spaced labels.** Section labels, field labels and table headers
+  are sentence case. (Exception: keyboard hints and initials.)
+- **Ink tiers:** `ink` identity and values · `ink-2` body · `ink-3` labels · `ink-4` meta.
+  All four are ≥4.5:1. `ink-5` only for placeholders and decorative icons. A row's identity
+  (name, subject, title) is never `ink-4`.
 
 ---
 
 ## Component Patterns
 
-### KPI Tile
+### Headline figures (`StatStrip`)
 ```
-Card with gradient overlay (kpi-accent class) + absolute-positioned icon badge (top-right).
-- Label: 10px uppercase tracking, text-ink-3
-- Value: 24px font-display (Fraunces)
-- Subtitle: 11px text-ink-4
-- Variants: accent (blue), critical (warm), ok (green)
+src/components/shared/stat-strip.tsx — one bordered card split by hairlines.
+- Label 11.5px ink-3 above a 24px value; optional 11.5px ink-4 detail line.
+- Columns follow the item count (no orphan cells); 2-up on phones, odd last cell spans.
+- No icons, no tints. `tone` colours a value only when it needs attention.
+- `href` makes a cell a link (to the list that explains the figure).
 ```
 
-### Status Chip
+### Due dates (`DueLabel`)
 ```
-Pill-shaped: 10–11px, font-medium, border-radius: 999px
-- Filled: bg-brand-500, white text (active stages)
-- Accent: bg-brand-soft, text-brand-700, border-brand-200 (default matter chips)
-- Ok: bg-[#ecf6f1], text-ok, border-[#a4d4bc] (filed, completed)
-- Warn: bg-[#fbf0ea], text-warn, border-[#e2c0ad] (unfiled, overdue)
-- Ghost: dashed border, transparent bg, text-ink-3 (unfiled pill)
+src/components/shared/due-label.tsx — "Oct 25 · 5d", "Today", "Tomorrow", "Oct 18 · 2d late".
+- Overdue: danger. Due within 2 days: warn. Otherwise grey.
+- dueDate is date-only (ADR-012); days is computed on the server against the viewer's today.
+- Every due date or countdown in the app renders through it.
+```
+
+### Status chip
+```
+Pale tint + dark text of the same hue, 12px, h-5, rounded-full, never squeezed (shrink-0).
+- ok:     bg-ok-soft text-ok         (filed, paid, done, converted)
+- warn:   bg-warn-soft text-warn     (due soon, unfiled, needs review)
+- danger: bg-danger-soft text-danger (overdue, failed, conflict)
+- brand:  bg-brand-soft text-brand-700 (new, an applied filter)
+- neutral: bg-paper-2 text-ink-3     (everything else)
+One status mark per row.
 ```
 
 ### Empty State
@@ -71,39 +87,38 @@ Shared component: src/components/shared/empty-state.tsx
   src/lib/utils.ts — never hardcode "N matters".
 ```
 
-### Nav Item (Sidebar)
+### Navigation and selection
 ```
-Active: bg-brand-500, text-white, inner highlight shadow
-Hover (inactive): bg-[#eaf0f5], text-brand-700
-Badge: mono 10px, bg-brand-50, text-brand-700, border-brand-100
-Badge (active): bg-white/18%, text-white
+Sidebar item: 30px tall, 13.5px, 16px outline icon (ink-4; ink when active).
+  Active: bg-sidebar-accent (neutral pill), ink label, font-medium. Hover: bg-paper-2.
+  Counts: 12px tabular grey; queues that need action (unread email, new leads) in ink semibold.
+Selected list row (inbox, mailbox, settings nav): bg-paper-2 / bg-sidebar-accent, never a brand fill.
+Underline tabs: active text-ink + 2px ink underline; inactive ink-3.
+Segmented control: bg-paper-2 track, white active option with shadow-sm.
 ```
 
-### Card Hover
+### Card
 ```
-Transition: box-shadow 0.16s, border-color 0.16s
-Hover: border-brand-300, shadow with blue tint
-Class: card-hover
+Card: rounded-lg, 1px line border, no shadow. CardTitle 15px semibold ink, with an optional
+12px grey count and a right-aligned action.
+Clickable card: `card-hover` (the edge darkens; no lift, no blue glow).
 ```
 
 ### Table
 ```
-- Header: bg-[#edf1f3], text-brand-700, 10px uppercase tracking
-- Row hover: bg-brand-tint (#f6faff)
-- Clickable rows: cursor-pointer
-- Cell padding: 8px 10px
-- Border: 1px solid line between rows
+- Header: 11.5px ink-4 sentence case, medium; no fill band.
+- Rows: h-10, 12.5px, border line-2 between rows, hover bg-paper/70. No zebra.
+- Numbers right-aligned and tabular; zero money in ink-4; missing values "—".
+- Shared primitives: src/components/ui/table.tsx.
 ```
 
-### Button Hierarchy
+### Button hierarchy
 ```
-Primary: bg-brand-500, text-white, blue shadow (main actions)
-Secondary: bg-white, border-line, text-ink (supporting actions)
-Ghost: transparent bg, text-ink-2 (tertiary/icon buttons)
-Small: padding 3px 7px, text 11px
-
-Hover (non-primary): border-brand-300, text-brand-700
-Active: translateY(0.5px)
+Primary (default): brand-700 fill, white text, hover brand-900. One per screen.
+Outline: white, border-input, ink-2 text. Secondary actions.
+Ghost: transparent; tertiary and icon buttons.
+Destructive: white with danger text and a danger/30 border.
+Heights: h-9 default, h-8 sm, h-7 xs.
 ```
 
 ### Dropdowns (`NativeSelect`)
@@ -139,11 +154,11 @@ src/lib/feedback.ts — never window.alert/confirm/prompt (ESLint no-alert).
 
 ### Dashboard cards
 Every dashboard card renders on the shared frame in `src/components/dashboard/dashboard-card.tsx`:
-- `DashboardCard`: title, optional "View all" link (only when a destination page exists), body.
-- `DashboardRow`: one list row inside a card.
-- `LatePill`: the overdue marker used in rows.
+- `DashboardCard`: title (CardTitle style, not Fraunces; count in grey tabular figures), optional "View all" link (only when a destination page exists), body.
+- `DashboardRow`: one list row inside a card (`border-line-2` rules, `hover:bg-paper`).
+- `LatePill`: the overdue pill (`danger-soft`/`danger`, no border). Due dates in rows use `DueLabel`.
 
-Cards size by container query (`@container` on the card, `@sm:`/`@2xl:` variants inside), not viewport breakpoints, because the same card renders in the full-width band and in 4-, 6- or 8-column slots. Exception: `KpisCard`'s tiles are their own cards, not wrapped in `DashboardCard`.
+Cards size by container query (`@container` on the card, `@sm:`/`@2xl:` variants inside), not viewport breakpoints, because the same card renders in the full-width band and in 4-, 6- or 8-column slots. Exception: `KpisCard` renders a `StatStrip` (see Headline figures), not a `DashboardCard`.
 
 ### Split Pane (Intake, Email)
 ```
@@ -351,17 +366,20 @@ The portal (`src/app/(portal)/portal/`) is for clients, not staff: often stresse
 ## Interaction Patterns
 
 ### Transitions
-- Page enter: `fadeIn 0.22s ease-out` (opacity 0→1, translateY 4px→0)
-- Button active: `translateY(0.5px)`
-- Nav/button hover: `transition 0.12s ease`
-- Card hover: `transition 0.16s ease`
+- Motion is feedback only: hover/press 0.12s, page enter `fadeIn 0.22s`.
+- `prefers-reduced-motion` is honoured globally (globals.css); loops use `motion-safe:`.
 
 ### Focus
-- All focus-visible: `outline: 2px solid brand-500, offset 1px`
+- All focus-visible: `outline: 2px solid brand-500, offset 2px` (global base style;
+  components with their own ring keep it).
 
 ### Scrollbars
-- Thin custom scrollbar: 8px width, #c9ced4 thumb, transparent track
+- Thin custom scrollbar: 8px width, warm grey thumb, transparent track
 - Apply `.scrollbar-thin` class to scrollable containers
+
+### Floating layers
+- Only things that float get a shadow: menus, popovers, dialogs, the Create dock and the
+  timer. The idle timer is a 36px icon button so it covers as little as possible.
 
 ### Long lists: paginate, never truncate
 - A list that can outgrow one screen never cuts rows silently. Default: offset paging by `?page=N` (the URL is the source of truth, ADR-007). Helpers in `src/lib/pagination.ts`: `parsePageParam` for the param, `paginate(page, size, count, fetch)` for a Prisma read (count and fetch share ONE `where`, so matter-access clauses filter the total too), `paginateArray` when rows must be sorted in JS first (matters list). Junk or out-of-range pages clamp, never 404.
@@ -388,9 +406,9 @@ Area and matter colours are data, not design tokens: `PracticeArea.color` and
 ### Semantic
 | Meaning | Color | Var |
 |---|---|---|
-| Positive / filed / ok | `#2d8a5f` | `--color-ok` |
-| Warning / unfiled | `#b6623d` | `--color-warn` |
-| Danger / opposing | `#c13c3c` | `--color-danger` |
+| Positive / filed / paid | `#23744d` | `--color-ok` (+ `ok-soft`) |
+| Warning / due soon / unfiled | `#9a4a26` | `--color-warn` (+ `warn-soft`) |
+| Danger / overdue / failed | `#b02a2a` | `--color-danger` (+ `danger-soft`) |
 | Highlight / amber | `#fff1bd` | `--color-highlight` |
 
 ---

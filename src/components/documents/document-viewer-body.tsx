@@ -232,11 +232,11 @@ export async function DocumentViewerBody({
               <h1 className="min-w-0 truncate text-sm font-semibold text-ink">
                 {doc.name}
               </h1>
-              <span className="inline-block rounded-full border border-line bg-paper-2 px-2 py-0.5 text-2xs font-medium text-ink-3">
+              <span className="inline-block rounded-full bg-paper-2 px-2 py-0.5 text-2xs font-medium text-ink-3">
                 {documentCategoryLabel(doc.category)}
               </span>
               <span
-                className={`inline-block rounded-full border px-2 py-0.5 text-2xs font-medium ${status.className}`}
+                className={`inline-block rounded-full px-2 py-0.5 text-2xs font-medium ${status.className}`}
               >
                 {status.label}
               </span>

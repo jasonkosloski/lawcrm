@@ -49,7 +49,6 @@ export default async function ContactsPage({
     <>
       <TopBar
         title="Contacts"
-        crumbs="Directory"
         actions={
           canCreate ? (
             <Button size="sm" render={<Link href="/contacts/new" />}>
@@ -60,7 +59,7 @@ export default async function ContactsPage({
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-3 sm:p-5 animate-page-enter flex flex-col gap-4">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 animate-page-enter flex flex-col gap-4">
         {/* Search + filter pills */}
         <form className="flex items-center gap-2">
           <input
@@ -216,7 +215,7 @@ function FilterPill({
       className={
         "inline-flex items-center gap-1.5 text-2xs px-2.5 h-7 rounded-full border transition-colors " +
         (active
-          ? "bg-brand-500 text-white border-brand-500"
+          ? "bg-paper-2 text-ink font-medium border-line"
           : "bg-white text-ink-3 border-line hover:border-brand-300 hover:text-brand-700")
       }
     >
@@ -224,7 +223,7 @@ function FilterPill({
       <span
         className={
           "font-mono " +
-          (active ? "text-white/80" : "text-ink-4")
+          (active ? "text-ink-3" : "text-ink-4")
         }
       >
         {count}

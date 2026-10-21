@@ -17,6 +17,7 @@
  */
 
 import Link from "next/link";
+import { Paperclip } from "lucide-react";
 // Entry/expense dates are date-only values (ADR-012): formatDateOnly
 // reads them in UTC, so they never shift with any zone.
 import { dateOnlyKey, formatDateOnly } from "@/lib/format-date";
@@ -183,7 +184,7 @@ export default async function MatterTimePage({
       {/* Time entries table */}
       <section>
         <div className="flex items-center gap-2 mb-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+          <h2 className="text-2xs font-medium text-ink-3">
             Time entries
           </h2>
           <span className="text-2xs font-mono text-ink-4">
@@ -246,7 +247,7 @@ function SummaryCard({
 }) {
   return (
     <Card className="p-3">
-      <div className="text-2xs font-semibold uppercase tracking-wider text-ink-3 mb-1">
+      <div className="text-2xs font-medium text-ink-3 mb-1">
         {label}
       </div>
       <div className="text-xl font-display font-medium tracking-tight text-ink">
@@ -398,7 +399,7 @@ function ExpensesSection({
     <section className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between">
         <div className="flex items-center gap-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+          <h2 className="text-2xs font-medium text-ink-3">
             Expenses
           </h2>
           <span className="text-2xs font-mono text-ink-4">{rows.length}</span>
@@ -496,22 +497,22 @@ function ExpenseTableRow({
             expense.invoiceId && expense.invoiceNumber ? (
               <Link
                 href={`/matters/${matterId}/billing?invoice=${expense.invoiceId}`}
-                className="inline-flex w-fit text-2xs px-1.5 py-0.5 rounded-full border bg-ok-soft text-ok border-line hover:underline"
+                className="inline-flex w-fit items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full border bg-ok-soft text-ok border-line hover:underline"
               >
                 Billed · {expense.invoiceNumber}
               </Link>
             ) : (
-              <span className="inline-flex w-fit text-2xs px-1.5 py-0.5 rounded-full border bg-brand-soft text-brand-700 border-brand-200">
+              <span className="inline-flex w-fit items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full border bg-brand-soft text-brand-700 border-brand-200">
                 Billable
               </span>
             )
           ) : (
-            <span className="inline-flex w-fit text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line">
+            <span className="inline-flex w-fit items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line">
               Non-billable
             </span>
           )}
           {expense.clientAdvanced && (
-            <span className="inline-flex w-fit text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line">
+            <span className="inline-flex w-fit items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line">
               Client-advanced
             </span>
           )}
@@ -531,16 +532,16 @@ function ExpenseTableRow({
                     : "Receipt attached"
                 }
               >
-                📎 Receipt
+                <Paperclip size={11} /> Receipt
               </a>
             ) : (
               <span
-                className="inline-flex w-fit text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line"
+                className="inline-flex w-fit items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line"
                 title={
                   expense.receiptDocumentName ?? "Receipt attached (no file)"
                 }
               >
-                📎 Receipt (no file)
+                <Paperclip size={11} /> Receipt (no file)
               </span>
             )
           )}

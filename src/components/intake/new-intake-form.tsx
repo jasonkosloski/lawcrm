@@ -26,7 +26,7 @@ import { LEAD_SOURCES, LEAD_SOURCE_LABEL } from "@/lib/constants/lead-stage";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 const MAX_SUGGESTIONS = 6;
-const labelCls = "text-2xs font-mono uppercase tracking-wider text-ink-4";
+const labelCls = "text-xs font-medium text-ink-2";
 const inputCls = (err?: boolean) =>
   cn(
     "h-9 px-3 rounded-md border bg-white text-xs text-ink placeholder:text-ink-4",
@@ -229,7 +229,7 @@ export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] })
         <button
           type="submit"
           disabled={isPending}
-          className="inline-flex items-center h-9 px-4 rounded-md text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 transition-colors disabled:opacity-60"
+          className="inline-flex items-center h-9 px-4 rounded-md text-sm font-medium bg-brand-700 text-white hover:bg-brand-900 transition-colors disabled:opacity-60"
         >
           {isPending ? "Saving…" : "Save intake"}
         </button>
@@ -242,7 +242,7 @@ export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] })
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-3">{title}</h2>
+      <h2 className="text-xs font-semibold text-ink-2">{title}</h2>
       {children}
     </section>
   );

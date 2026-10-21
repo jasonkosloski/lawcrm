@@ -557,7 +557,7 @@ function DropZone({
         overZone === zone ? "border-brand-300 bg-paper-2" : "border-line-2"
       }`}
     >
-      <div className="px-1 text-2xs font-semibold uppercase tracking-wider text-ink-3">
+      <div className="px-1 text-2xs font-medium text-ink-3">
         {zoneName(zone)}
       </div>
       <SortableContext
@@ -675,7 +675,7 @@ function ListEditor({
             aria-label={zoneName(zone)}
             className="flex flex-col gap-2 rounded-xl border border-dashed border-line-2 p-2"
           >
-            <div className="px-1 text-2xs font-semibold uppercase tracking-wider text-ink-3">
+            <div className="px-1 text-2xs font-medium text-ink-3">
               {zoneName(zone)}
             </div>
             {keys.length === 0 && (

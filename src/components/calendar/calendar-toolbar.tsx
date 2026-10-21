@@ -130,7 +130,7 @@ export async function CalendarToolbar({
         {/* Item-kind filter — segmented control matching the view
             switcher's idiom. "Deadlines" collapses week/day to the
             deadline strips and strips event pills from month. */}
-        <div className="inline-flex items-center rounded-md border border-line bg-white p-0.5">
+        <div className="inline-flex items-center rounded-md bg-paper-2 p-0.5">
           {(["all", "deadlines"] as CalendarShow[]).map((s) => {
             const active = s === show;
             return (
@@ -139,10 +139,10 @@ export async function CalendarToolbar({
                 href={buildCalendarHref(view, focal, { show: s }, show)}
                 aria-current={active ? "true" : undefined}
                 className={cn(
-                  "h-6 px-2.5 rounded text-2xs font-medium transition-colors inline-flex items-center",
+                  "h-6 px-2.5 rounded-[5px] text-xs font-medium transition-colors inline-flex items-center",
                   active
-                    ? "bg-brand-soft text-brand-700"
-                    : "text-ink-3 hover:text-brand-700"
+                    ? "bg-white text-ink shadow-sm"
+                    : "text-ink-3 hover:text-ink"
                 )}
               >
                 {SHOW_LABEL[s]}
@@ -151,7 +151,7 @@ export async function CalendarToolbar({
           })}
         </div>
 
-        <div className="inline-flex items-center rounded-md border border-line bg-white p-0.5">
+        <div className="inline-flex items-center rounded-md bg-paper-2 p-0.5">
           {(["day", "week", "month"] as CalendarView[]).map((v) => {
             const active = v === view;
             return (
@@ -159,10 +159,10 @@ export async function CalendarToolbar({
                 key={v}
                 href={buildCalendarHref(view, focal, { view: v }, show)}
                 className={cn(
-                  "h-6 px-2.5 rounded text-2xs font-medium capitalize transition-colors",
+                  "h-6 px-2.5 rounded-[5px] text-xs font-medium capitalize transition-colors",
                   active
-                    ? "bg-brand-soft text-brand-700"
-                    : "text-ink-3 hover:text-brand-700"
+                    ? "bg-white text-ink shadow-sm"
+                    : "text-ink-3 hover:text-ink"
                 )}
               >
                 {v}

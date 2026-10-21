@@ -143,7 +143,7 @@ export function CascadeConfirm({
           name="cascadeDecision"
           value="apply"
           disabled={isPending || n === 0}
-          className="h-8 px-3 rounded-md text-xs font-medium bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-60"
+          className="h-8 px-3 rounded-md text-xs font-medium bg-brand-700 text-white hover:bg-brand-900 disabled:opacity-60"
         >
           {isPending ? "Saving…" : `Save and update ${n} deadline${n === 1 ? "" : "s"}`}
         </button>

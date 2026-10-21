@@ -41,7 +41,7 @@ export function CommunicationTabs({
   };
 
   return (
-    <div className="flex items-center gap-1 px-4 pt-2 pb-2 border-t border-line">
+    <div className="flex items-center gap-4 px-4 border-t border-line">
       <Tab
         active={view === "email"}
         href={buildHref("email")}
@@ -78,10 +78,10 @@ function Tab({
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium transition-colors",
+        "inline-flex items-center gap-1.5 h-9 -mb-px border-b-2 text-sm transition-colors",
         active
-          ? "bg-brand-500 text-white"
-          : "text-ink-3 hover:bg-paper-2 hover:text-ink"
+          ? "text-ink border-ink font-medium"
+          : "text-ink-3 border-transparent hover:text-ink"
       )}
     >
       {icon}
@@ -90,7 +90,7 @@ function Tab({
         <span
           className={cn(
             "text-2xs font-mono px-1.5 rounded-full",
-            active ? "bg-white/20 text-white" : "bg-brand-50 text-brand-700"
+            "bg-brand-50 text-brand-700"
           )}
         >
           {unread}

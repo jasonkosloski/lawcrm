@@ -144,7 +144,7 @@ export function FileToMatterPicker({
       {trigger}
       <PopoverContent align="start" className="w-72">
         <div className="flex flex-col gap-2">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-3">
+          <div className="text-2xs font-medium text-ink-3">
             File to matter
           </div>
           <div className="relative">

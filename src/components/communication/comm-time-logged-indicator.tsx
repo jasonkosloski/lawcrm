@@ -123,7 +123,7 @@ export function CommTimeLoggedIndicator({
               className="flex items-center gap-2 text-2xs"
             >
               <span
-                className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-50 text-[10px] font-mono font-medium text-brand-700 border border-brand-100 shrink-0"
+                className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-50 text-3xs font-mono font-medium text-brand-700 border border-brand-100 shrink-0"
                 title={e.userName}
               >
                 {e.userInitials}
@@ -140,7 +140,7 @@ export function CommTimeLoggedIndicator({
               {!e.billable && (
                 <span
                   title="Non-billable"
-                  className="text-[10px] text-ink-4"
+                  className="text-3xs text-ink-4"
                 >
                   nb
                 </span>

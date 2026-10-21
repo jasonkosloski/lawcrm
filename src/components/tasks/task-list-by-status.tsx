@@ -12,6 +12,7 @@
  * attached notes (the page also turns off the matter-only row actions).
  */
 
+import { DueLabel } from "@/components/shared/due-label";
 import { Card } from "@/components/ui/card";
 import {
   TaskRowMenu,
@@ -103,7 +104,7 @@ export function TaskListByStatus({
       return (
         <section key={status}>
           <div className="flex items-center gap-2 mb-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-ink-3">
+            <h2 className="text-xs font-medium text-ink-3">
               {STATUS_LABEL[status] ?? status}
             </h2>
             <span className="text-2xs font-mono text-ink-4">
@@ -191,16 +192,18 @@ function TaskItem({
       >
         {priority.label}
       </span>
-      <span className="text-2xs font-mono text-ink-4 w-16 text-right shrink-0">
-        {task.dueDate && daysLeft !== null
-          ? daysLeft <= 7 && !done
-            ? daysLeft < 0
-              ? `${Math.abs(daysLeft)}d late`
-              : daysLeft === 0
-                ? "Today"
-                : `${daysLeft}d`
-            : formatDateOnly(task.dueDate, "short")
-          : "—"}
+      <span className="w-28 text-right shrink-0">
+        {task.dueDate && daysLeft !== null ? (
+          done ? (
+            <span className="text-2xs text-ink-4">
+              {formatDateOnly(task.dueDate, "short")}
+            </span>
+          ) : (
+            <DueLabel dueDate={task.dueDate} days={daysLeft} />
+          )
+        ) : (
+          <span className="text-2xs text-ink-4">—</span>
+        )}
       </span>
       <span className="w-6 shrink-0 text-right">
         {task.ownerInitials ? (

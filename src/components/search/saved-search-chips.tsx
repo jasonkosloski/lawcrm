@@ -54,7 +54,7 @@ export function SavedSearchChips({
 }) {
   return (
     <section aria-label="Saved searches" className="flex flex-col gap-1.5">
-      <div className="text-2xs font-mono uppercase tracking-wider text-ink-4 px-1">
+      <div className="text-2xs font-medium text-ink-3 px-1">
         Saved
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -220,7 +220,7 @@ function RenameDialog({
             <button
               type="submit"
               disabled={pending}
-              className="h-8 px-3 rounded-md bg-brand-500 text-xs text-white hover:bg-brand-600 disabled:opacity-50 transition-colors"
+              className="h-8 px-3 rounded-md bg-brand-700 text-xs text-white hover:bg-brand-900 disabled:opacity-50 transition-colors"
             >
               Save
             </button>

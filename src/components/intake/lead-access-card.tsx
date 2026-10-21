@@ -160,7 +160,7 @@ export function LeadAccessCard({
           <div className="flex flex-col gap-1 flex-1 min-w-36">
             <label
               htmlFor={userSelectId}
-              className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+              className="text-2xs font-medium text-ink-3"
             >
               Add member
             </label>
@@ -183,7 +183,7 @@ export function LeadAccessCard({
           <div className="flex flex-col gap-1 w-32">
             <label
               htmlFor={roleSelectId}
-              className="text-2xs font-mono uppercase tracking-wider text-ink-4"
+              className="text-2xs font-medium text-ink-3"
             >
               Role
             </label>

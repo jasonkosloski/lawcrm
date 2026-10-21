@@ -204,9 +204,9 @@ export async function DocumentsBrowser({
             </div>
           )}
         </TableCell>
-        <TableCell className="text-2xs font-mono text-ink-4">{documentCategoryLabel(d.category)}</TableCell>
+        <TableCell className="text-xs text-ink-3">{documentCategoryLabel(d.category)}</TableCell>
         <TableCell>
-          <span className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${status.className}`}>
+          <span className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full ${status.className}`}>
             {status.label}
           </span>
         </TableCell>

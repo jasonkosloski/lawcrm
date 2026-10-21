@@ -57,12 +57,12 @@ export function UtilizationCard({ report }: { report: UtilizationReport }) {
                 <div className="relative flex-1 h-2 bg-paper-2 rounded-full overflow-hidden">
                   {/* Total hours (non-billable share, faded) */}
                   <div
-                    className="absolute inset-y-0 left-0 bg-brand-500/30 rounded-full"
+                    className="absolute inset-y-0 left-0 bg-brand-700/30 rounded-full"
                     style={{ width: `${(u.totalHours / scale) * 100}%` }}
                   />
                   {/* Billable hours (solid) */}
                   <div
-                    className="absolute inset-y-0 left-0 bg-brand-500 rounded-full"
+                    className="absolute inset-y-0 left-0 bg-brand-700 rounded-full"
                     style={{ width: `${(u.billableHours / scale) * 100}%` }}
                   />
                   {/* Capacity tick — dailyHoursGoal × business days so far */}
@@ -105,7 +105,7 @@ export function UtilizationCard({ report }: { report: UtilizationReport }) {
           </div>
           <div className="h-1.5 bg-paper-2 rounded-full overflow-hidden">
             <div
-              className="h-full bg-brand-500 rounded-full"
+              className="h-full bg-brand-700 rounded-full"
               style={{ width: `${goalPct}%` }}
             />
           </div>

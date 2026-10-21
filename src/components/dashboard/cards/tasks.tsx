@@ -32,19 +32,19 @@ function TaskGroup({
   if (tasks.length === 0) return null;
   const labelClass =
     tone === "warn"
-      ? "text-warn"
+      ? "text-danger"
       : tone === "brand"
-        ? "text-brand-700"
+        ? "text-ink"
         : "text-ink-3";
   return (
     <div>
       <div className="mb-1 flex items-center gap-2">
         <span
-          className={`text-2xs font-semibold uppercase tracking-wider ${labelClass}`}
+          className={`text-xs font-semibold ${labelClass}`}
         >
           {label}
         </span>
-        <span className="font-mono text-2xs text-ink-4">{tasks.length}</span>
+        <span className="text-2xs text-ink-4 tabular-nums">{tasks.length}</span>
       </div>
       <div className="flex flex-col">
         {tasks.map((t) => (
@@ -57,6 +57,7 @@ function TaskGroup({
             leadId={t.leadId}
             matterName={t.matterName}
             daysUntilDue={t.daysUntilDue}
+            dueDate={t.dueDate}
             dueLabel={formatTaskDue(t)}
           />
         ))}

@@ -136,7 +136,7 @@ export default async function LeadOverviewPage({
       : null;
 
   return (
-    <div className="p-3 sm:p-5">
+    <div className="p-3 sm:p-6">
       {/* Two-pane on lg+, stacked below — case summary first, then
           the contact / status / conflict rail. */}
       <div className="max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -315,7 +315,7 @@ export default async function LeadOverviewPage({
                       {formatPhone(p.number)}
                     </span>
                     {p.isPrimary && lead.contact!.phones.length > 1 && (
-                      <span className="text-[9px] text-brand-700">
+                      <span className="text-3xs text-brand-700">
                         primary
                       </span>
                     )}

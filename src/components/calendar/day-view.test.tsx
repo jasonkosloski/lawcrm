@@ -252,7 +252,7 @@ describe("DayView render", () => {
     expect(screen.getByText("critical")).toBeTruthy();
 
     // Section labels.
-    expect(screen.getByText("all-day")).toBeTruthy();
+    expect(screen.getByText("All day")).toBeTruthy();
     expect(screen.getByText("due")).toBeTruthy();
   });
 

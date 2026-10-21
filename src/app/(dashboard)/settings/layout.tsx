@@ -29,7 +29,7 @@ export default async function SettingsLayout({
   const { isAdmin, granted } = await getCurrentUserPermissions();
   return (
     <>
-      <TopBar title="Settings" crumbs="Settings" />
+      <TopBar title="Settings" />
       <div className="flex-1 overflow-y-auto animate-page-enter">
         {/* Vertical stack below `lg` (nav strip on top, then content);
             two-pane (rail + content) at lg+. */}

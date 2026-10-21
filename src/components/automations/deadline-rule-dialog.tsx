@@ -39,7 +39,7 @@ import {
 } from "@/lib/automations/deadline-plan";
 import type { DeadlineRuleRow } from "@/lib/queries/automations";
 
-const labelCls = "text-2xs font-mono uppercase tracking-wider text-ink-4";
+const labelCls = "text-xs font-medium text-ink-2";
 const inputCls =
   "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
 
@@ -153,7 +153,7 @@ export function DeadlineRuleDialog({
           </div>
 
           {anchor === "incident_date" && (
-            <p className="text-[10px] text-ink-4 -mt-1.5">
+            <p className="text-3xs text-ink-4 -mt-1.5">
               Only resolves on matters in practice areas that track a statute
               of limitations (that&apos;s where the incident date is recorded).
               Otherwise the rule asks for a date, or becomes a &ldquo;Set
@@ -239,7 +239,7 @@ function Field({
     <label className="flex flex-col gap-1">
       <span className={labelCls}>{label}</span>
       {children}
-      {hint && !error && <span className="text-[10px] text-ink-4">{hint}</span>}
+      {hint && !error && <span className="text-3xs text-ink-4">{hint}</span>}
       {error && <span className="text-2xs text-warn">{error}</span>}
     </label>
   );

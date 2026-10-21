@@ -237,7 +237,7 @@ export function NewEventForm({
             (visibility resolver treats them as the creator's);
             picking a matter scopes the event to the matter team. */}
         <div className="flex flex-col gap-1.5">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <div className="text-2xs font-medium text-ink-3">
             Matter
           </div>
           <MatterSelect
@@ -256,7 +256,7 @@ export function NewEventForm({
             YOU as an attendee if the list doesn't include you, so
             leaving this empty is fine. */}
         <div className="flex flex-col gap-1.5">
-          <div className="text-2xs font-mono uppercase tracking-wider text-ink-4">
+          <div className="text-2xs font-medium text-ink-3">
             Attendees
           </div>
           <AttendeePicker value={attendees} onCommit={setAttendees} />

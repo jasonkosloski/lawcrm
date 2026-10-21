@@ -457,7 +457,7 @@ function AttendeeAutocomplete({
                     : `${CONTACT_TYPE_LABEL[r.type] ?? r.type}${r.organization ? ` · ${r.organization}` : ""}${r.email ? ` · ${r.email}` : ""}`}
                 </span>
               </div>
-              <span className="text-3xs uppercase tracking-wider text-ink-4 font-mono shrink-0">
+              <span className="text-3xs text-ink-4 shrink-0">
                 {r.kind === "user" ? "user" : "contact"}
               </span>
             </li>

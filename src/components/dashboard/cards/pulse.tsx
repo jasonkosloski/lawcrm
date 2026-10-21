@@ -10,28 +10,28 @@ export function PulseCard({ pulse }: { pulse: FirmPulse | null }) {
     <DashboardCard title="Firm pulse">
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <span className="text-2xs text-ink-3">Billable hours (MTD)</span>
-          <span className="font-mono text-xs font-medium text-ink">
+          <span className="text-xs text-ink-3">Billable hours this month</span>
+          <span className="text-sm font-medium text-ink tabular-nums">
             {pulse.billableMtd.toFixed(1)}h
           </span>
         </div>
         <div className="h-1.5 overflow-hidden rounded-full bg-paper-2">
           <div
-            className="h-full rounded-full bg-brand-500"
+            className="h-full rounded-full bg-brand-700"
             style={{ width: `${mtdPct}%` }}
           />
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-2xs text-ink-3">Collection rate</span>
-          <span className="font-mono text-xs font-medium text-ok">
+          <span className="text-xs text-ink-3">Collection rate</span>
+          <span className="text-sm font-medium text-ink tabular-nums">
             {pulse.collectionRate > 0
               ? `${pulse.collectionRate.toFixed(1)}%`
               : "—"}
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-2xs text-ink-3">A/R outstanding</span>
-          <span className="font-mono text-xs font-medium text-ink">
+          <span className="text-xs text-ink-3">A/R outstanding</span>
+          <span className="text-sm font-medium text-ink tabular-nums">
             {pulse.arOutstanding > 0 ? formatMoney(pulse.arOutstanding) : "—"}
           </span>
         </div>
