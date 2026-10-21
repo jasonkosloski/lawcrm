@@ -44,7 +44,9 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { assertOptionalMatterAccess } from "@/lib/matter-access";
+import { assertScopeAccess, assertScopeWritable } from "@/lib/scope-access";
+import { optionalScopeOf, scopeWhere, type RecordScope } from "@/lib/record-scope";
+import { revalidationPathsFor, sameScope } from "@/lib/email-filing";
 import { logActivity } from "@/lib/activity-log";
 import { requirePermission } from "@/lib/permission-check";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
@@ -70,6 +72,9 @@ export type SendEmailInput = {
   subject: string;
   bodyHtml: string;
   bodyText: string;
+  /** The matter or lead the sent email is filed to. Required: every
+   *  app-sent email is filed. */
+  scope: RecordScope;
 };
 
 export type ReplyToThreadInput = {
@@ -97,6 +102,9 @@ export type SendEmailResult =
        *  failed. The send is final - the composer must clear the draft
        *  and must not offer a resend. */
       warning?: string;
+      /** Set when Gmail added the send to an existing thread that is
+       *  already filed to a different record (its filing is kept). */
+      notice?: string;
     }
   | {
       ok: false;
@@ -151,6 +159,38 @@ export async function sendEmail(
     return { ok: false, error: NOT_CONNECTED_ERROR };
   }
 
+  // Record the email is filed to. Validated BEFORE Gmail so a stale or
+  // walled record sends nothing. The guards throw notFound for a
+  // missing / walled record (never try/catch them).
+  const scope = input.scope as RecordScope | undefined;
+  if (
+    !scope ||
+    (scope.kind === "matter" && !scope.matterId) ||
+    (scope.kind === "lead" && !scope.leadId) ||
+    (scope.kind !== "matter" && scope.kind !== "lead")
+  ) {
+    return { ok: false, error: "Choose a matter or lead." };
+  }
+  await assertScopeAccess(scope);
+  const blocked = await assertScopeWritable(scope);
+  if (blocked) return { ok: false, error: blocked };
+  const recordExists =
+    scope.kind === "matter"
+      ? await prisma.matter.findUnique({
+          where: { id: scope.matterId },
+          select: { id: true },
+        })
+      : await prisma.lead.findUnique({
+          where: { id: scope.leadId },
+          select: { id: true },
+        });
+  if (!recordExists) {
+    return {
+      ok: false,
+      error: scope.kind === "matter" ? "Matter not found" : "Lead not found",
+    };
+  }
+
   const to = validateAddresses(input.to);
   if (!to.ok) return to;
   const cc = validateAddresses(input.cc ?? [], { allowEmpty: true });
@@ -203,19 +243,27 @@ export async function sendEmail(
       bodyHtml,
       bodyText: input.bodyText,
       sentAt,
+      scope,
     });
 
-    if (persisted.matterId) {
+    if (persisted.matterId || persisted.leadId) {
       await logActivity({
         matterId: persisted.matterId,
+        leadId: persisted.leadId,
         userId,
         type: "email",
         title: "Email sent",
         detail: subject || "(no subject)",
       });
     }
-    revalidateSendSurfaces(persisted.matterId);
-    return { ok: true, threadId: persisted.threadId };
+    revalidateSendSurfaces(
+      optionalScopeOf({ matterId: persisted.matterId, leadId: persisted.leadId })
+    );
+    return {
+      ok: true,
+      threadId: persisted.threadId,
+      ...(persisted.notice ? { notice: persisted.notice } : {}),
+    };
   } catch (err) {
     console.error("[email-send] sent but local save failed", sent.id, err);
     return { ok: true, threadId: sent.threadId, warning: SAVED_LOCALLY_WARNING };
@@ -237,6 +285,7 @@ export async function replyToThread(
       subject: true,
       externalId: true,
       matterId: true,
+      leadId: true,
       account: {
         select: {
           id: true,
@@ -257,7 +306,8 @@ export async function replyToThread(
     },
   });
   if (!thread) return { ok: false, error: "Thread not found." };
-  await assertOptionalMatterAccess(thread.matterId);
+  const threadScope = optionalScopeOf(thread);
+  if (threadScope) await assertScopeAccess(threadScope);
   if (!isSendableStatus(thread.account.syncStatus)) {
     return { ok: false, error: NOT_CONNECTED_ERROR };
   }
@@ -387,18 +437,24 @@ export async function replyToThread(
       // Prefer appending to the thread the user replied from when
       // Gmail's threadId isn't locally known yet.
       localThreadId: thread.id,
+      // The thread's own record: files the new local thread if Gmail
+      // forks the reply into a different Gmail thread.
+      scope: threadScope,
     });
 
-    if (persisted.matterId) {
+    if (persisted.matterId || persisted.leadId) {
       await logActivity({
         matterId: persisted.matterId,
+        leadId: persisted.leadId,
         userId,
         type: "email",
         title: "Email reply sent",
         detail: subject,
       });
     }
-    revalidateSendSurfaces(persisted.matterId);
+    revalidateSendSurfaces(
+      optionalScopeOf({ matterId: persisted.matterId, leadId: persisted.leadId })
+    );
     return { ok: true, threadId: persisted.threadId };
   } catch (err) {
     console.error("[email-send] reply sent but local save failed", sent.id, err);
@@ -594,14 +650,23 @@ async function persistSentMessage(opts: {
   bodyText: string;
   sentAt: Date;
   localThreadId?: string;
-}): Promise<{ threadId: string; matterId: string | null }> {
+  /** Record to file a newly created or still-unfiled thread to. A
+   *  thread already filed elsewhere keeps its filing (see `notice`).
+   *  Null files nothing. */
+  scope: RecordScope | null;
+}): Promise<{
+  threadId: string;
+  matterId: string | null;
+  leadId: string | null;
+  notice?: string;
+}> {
   const byExternal = {
     accountId_externalId: {
       accountId: opts.accountId,
       externalId: opts.gmailThreadId,
     },
   } as const;
-  const threadSelect = { id: true, matterId: true } as const;
+  const threadSelect = { id: true, matterId: true, leadId: true } as const;
 
   let thread = await prisma.emailThread.findUnique({
     where: byExternal,
@@ -644,6 +709,7 @@ async function persistSentMessage(opts: {
           isRead: true, // the sender has read their own send
           lastMessageAt: opts.sentAt,
           messageCount: 1,
+          ...(opts.scope ? scopeWhere(opts.scope) : {}),
         },
         select: threadSelect,
       });
@@ -654,6 +720,36 @@ async function persistSentMessage(opts: {
       });
       if (!existing) throw new Error("Failed to persist sent thread");
       thread = existing;
+    }
+  }
+
+  // File an unfiled thread (an existing Gmail thread the send landed
+  // in, or one the create raced with sync); never move a filed one.
+  let notice: string | undefined;
+  if (opts.scope) {
+    const current = optionalScopeOf(thread);
+    if (!current) {
+      await prisma.emailThread.updateMany({
+        where: { id: thread.id, matterId: null, leadId: null },
+        data: scopeWhere(opts.scope),
+      });
+      const fresh = await prisma.emailThread.findUniqueOrThrow({
+        where: { id: thread.id },
+        select: threadSelect,
+      });
+      thread = fresh;
+    } else if (!sameScope(current, opts.scope)) {
+      const record =
+        current.kind === "matter"
+          ? await prisma.matter.findUnique({
+              where: { id: current.matterId },
+              select: { name: true },
+            })
+          : await prisma.lead.findUnique({
+              where: { id: current.leadId },
+              select: { name: true },
+            });
+      notice = `Added to an existing thread filed to ${record?.name ?? `another ${current.kind}`}.`;
     }
   }
 
@@ -673,10 +769,12 @@ async function persistSentMessage(opts: {
       ccRecipients: opts.cc.length > 0 ? serializeRecipients(opts.cc) : null,
       body: opts.bodyHtml,
       sentAt: opts.sentAt,
+      sentFromApp: true,
     },
     // Sync may later enrich this row (clean headers, HTML body);
-    // never clobber on a repeat of our own write.
-    update: {},
+    // never clobber on a repeat of our own write - but a row sync
+    // created first is still ours: mark it app-sent.
+    update: { sentFromApp: true },
   });
 
   // Converging rollups — computed from rows, not incremented.
@@ -692,7 +790,12 @@ async function persistSentMessage(opts: {
     },
   });
 
-  return { threadId: thread.id, matterId: thread.matterId };
+  return {
+    threadId: thread.id,
+    matterId: thread.matterId,
+    leadId: thread.leadId,
+    ...(notice ? { notice } : {}),
+  };
 }
 
 function makeSnippet(bodyText: string): string {
@@ -701,8 +804,8 @@ function makeSnippet(bodyText: string): string {
 
 /** Every surface that lists threads / renders the reader — same set
  *  as thread-read's revalidation. */
-function revalidateSendSurfaces(matterId: string | null): void {
+function revalidateSendSurfaces(scope: RecordScope | null): void {
   revalidatePath("/communication");
-  if (matterId) revalidatePath(`/matters/${matterId}/communication`);
+  for (const path of revalidationPathsFor(scope)) revalidatePath(path);
   revalidatePath("/intake/[id]/communication", "page");
 }

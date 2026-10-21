@@ -43,6 +43,7 @@ import { parseAddressList } from "@/lib/google/mime";
 import { htmlToText } from "@/lib/html-to-text";
 import { getEmailSignature } from "@/lib/email-signature";
 import { sendEmail } from "@/app/actions/email-send";
+import type { RecordScope } from "@/lib/record-scope";
 import { blockEnterSubmit, LabeledField } from "./labeled-field";
 
 /** Shown when the action call itself rejects - the send may or may
@@ -57,7 +58,10 @@ export type SendableEmailAccount = {
 
 export function ComposeEmailButton({
   accounts,
+  initialScope,
 }: {
+  /** Record the email is filed to. Task 7 replaces this with a picker. */
+  initialScope?: RecordScope;
   /** The current user's connected Gmail accounts. Empty = show the
    *  connect affordance instead of the composer. */
   accounts: SendableEmailAccount[];
@@ -126,6 +130,10 @@ export function ComposeEmailButton({
       setError(`Invalid Cc address: ${ccParsed.invalid.join(", ")}`);
       return;
     }
+    if (!initialScope) {
+      setError("Choose a matter or lead.");
+      return;
+    }
     setError(null);
 
     startTransition(async () => {
@@ -138,6 +146,7 @@ export function ComposeEmailButton({
           // (note profile) before it reaches the MIME builder.
           bodyText,
           bodyHtml: body,
+          scope: initialScope,
         });
         if (result.ok) {
           resetDraft();
