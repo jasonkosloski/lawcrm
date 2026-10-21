@@ -264,3 +264,16 @@ describe("permission keys used in code", () => {
     expect(used).toEqual([]);
   });
 });
+
+describe("portal case-status permissions", () => {
+  test.each([
+    "portal.add_updates",
+    "portal.edit_updates",
+    "portal.delete_updates",
+    "portal.share_events",
+  ])("%s is catalogued in the portal category", (key) => {
+    expect(isKnownPermission(key)).toBe(true);
+    const cat = PERMISSION_CATEGORIES.find((c) => c.id === "portal");
+    expect(cat?.permissions.some((p) => p.key === key)).toBe(true);
+  });
+});

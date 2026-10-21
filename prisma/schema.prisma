@@ -48,6 +48,8 @@ enum MatterVisibility {
 model User {
   id                      String                   @id @default(cuid())
   documentRequestsCreated DocumentRequest[]        @relation("DocumentRequestCreator")
+  portalStatusUpdatesPosted PortalStatusUpdate[]   @relation("PortalStatusUpdatePoster")
+  portalEventsShared      PortalSharedEvent[]      @relation("PortalSharedEventSharer")
   email                   String                   @unique
   /// Clerk user id; null until first Google sign-in links this row (src/lib/staff-auth.ts)
   clerkUserId             String?                  @unique
@@ -501,6 +503,8 @@ model Matter {
   documentFolders         DocumentFolder[]
   portalAccess            PortalMatterAccess[]
   documentRequests        DocumentRequest[]
+  portalStatusUpdates     PortalStatusUpdate[]
+  portalSharedEvents      PortalSharedEvent[]
 
   @@index([stageId])
   @@index([practiceAreaId])
@@ -1167,6 +1171,7 @@ model CalendarEvent {
   timeEntries      TimeEntry[]         @relation("CalendarEventTimeEntries")
   spawnedTasks     Task[]              @relation("EventSpawnedTasks")
   spawnedDeadlines Deadline[]          @relation("EventSpawnedDeadlines")
+  portalShare      PortalSharedEvent?
 
   @@index([startTime])
   @@index([matterId])
@@ -2540,6 +2545,45 @@ model PortalMatterAccess {
   @@unique([identityId, matterId])
   @@index([matterId])
   @@map("portal_matter_access")
+}
+
+/// A dated, staff-written status update shown to clients on the portal
+/// matter page. `emailedAt` is set when clients were notified by email.
+model PortalStatusUpdate {
+  id         String    @id @default(cuid())
+  matterId   String
+  stageLabel String
+  body       String
+  postedById String
+  postedAt   DateTime  @default(now())
+  editedAt   DateTime?
+  emailedAt  DateTime?
+
+  matter   Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  postedBy User   @relation("PortalStatusUpdatePoster", fields: [postedById], references: [id], onDelete: Restrict)
+
+  @@index([matterId, postedAt])
+  @@map("portal_status_updates")
+}
+
+/// A calendar event staff chose to show clients, with a client-facing
+/// title. Time and location come from the event itself.
+model PortalSharedEvent {
+  id          String   @id @default(cuid())
+  eventId     String   @unique
+  matterId    String
+  clientTitle String
+  clientNote  String?
+  sharedById  String
+  sharedAt    DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event    CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  matter   Matter        @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  sharedBy User          @relation("PortalSharedEventSharer", fields: [sharedById], references: [id], onDelete: Restrict)
+
+  @@index([matterId])
+  @@map("portal_shared_events")
 }
 
 /// One-time sign-in / invite token. Only the SHA-256 hex is stored; the

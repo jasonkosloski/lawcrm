@@ -359,6 +359,28 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         description:
           "Delete a document request. Files the client already uploaded are kept.",
       },
+      {
+        key: "portal.add_updates",
+        label: "Post client status updates",
+        description:
+          "Post a dated status update clients see on the portal matter page; optionally emails them.",
+      },
+      {
+        key: "portal.edit_updates",
+        label: "Edit client status updates",
+        description: "Edit the stage label and text of a posted client status update.",
+      },
+      {
+        key: "portal.delete_updates",
+        label: "Delete client status updates",
+        description: "Delete a posted client status update so clients no longer see it.",
+      },
+      {
+        key: "portal.share_events",
+        label: "Share events with clients",
+        description:
+          "Show a calendar event to the matter's clients with a client-facing title; time and location come from the event.",
+      },
     ],
   },
   {

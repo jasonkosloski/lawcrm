@@ -39,6 +39,8 @@ export const TABLES_IN_DELETE_ORDER = [
   "matter_draft_files",
   "matter_drafts",
   // Client portal — before matters/contacts (Restrict FKs)
+  "portal_shared_events",
+  "portal_status_updates",
   "portal_login_tokens",
   "portal_sessions",
   "portal_matter_access",
