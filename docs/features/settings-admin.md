@@ -1,6 +1,6 @@
 # Settings and Firm Admin
 
-The `/settings` area, grouped in the side nav as You (Profile, Security), Firm (Firm info, Team, Roles), Practice (Practice areas, Document templates, Records request types) and Admin (Integrations, Activity log). Automations lives at `/settings/automations` but is reached from the main sidebar. Notifications and Billing and rates are unlinked placeholders until they ship: only pages that do something are in the nav. Auth internals are in [auth.md](auth.md).
+The `/settings` area, grouped in the side nav as You (Profile, Security, Notifications), Firm (Firm info, Team, Roles), Practice (Practice areas, Document templates, Records request types) and Admin (Integrations, Activity log). Automations lives at `/settings/automations` but is reached from the main sidebar. Billing and rates is an unlinked placeholder until it ships: only pages that do something are in the nav. Auth internals are in [auth.md](auth.md).
 Related: [PERMISSIONS.md](../PERMISSIONS.md), [deadlines-and-tasks.md](deadlines-and-tasks.md) (Automations), [documents.md](documents.md) (templates)
 
 ## Open work

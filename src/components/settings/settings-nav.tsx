@@ -32,15 +32,16 @@ interface NavSection {
   items: NavItem[];
 }
 
-// Only pages that do something are linked. /settings/notifications and
-// /settings/billing are placeholders and stay unlinked until they ship;
-// /settings/automations is reached from the main sidebar instead.
+// Only pages that do something are linked. /settings/billing is a
+// placeholder and stays unlinked until it ships; /settings/automations
+// is reached from the main sidebar instead.
 const SECTIONS: NavSection[] = [
   {
     label: "You",
     items: [
       { href: "/settings/profile", label: "Profile" },
       { href: "/settings/security", label: "Security" },
+      { href: "/settings/notifications", label: "Notifications" },
     ],
   },
   {

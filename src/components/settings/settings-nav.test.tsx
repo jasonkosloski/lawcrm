@@ -19,3 +19,11 @@ describe("SettingsNav requiresAny", () => {
     expect(screen.getAllByText("Venues").length).toBeGreaterThan(0);
   });
 });
+
+describe("SettingsNav You section", () => {
+  test("Notifications is linked for every user", () => {
+    render(<SettingsNav isAdmin={false} grantedPermissions={[]} />);
+    const links = screen.getAllByRole("link", { name: "Notifications" });
+    expect(links[0].getAttribute("href")).toBe("/settings/notifications");
+  });
+});
