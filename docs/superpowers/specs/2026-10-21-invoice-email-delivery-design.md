@@ -55,7 +55,8 @@ bounce/delivery webhooks, a delivery-status column, automatic retries.
 - Subject: `Invoice <n> from <firm>`; `kind: "updated"` →
   `Updated invoice <n> from <firm>`. `"resend"` uses the initial subject.
 - Body: short cover note: invoice number, matter name, amount due and due
-  date (date-only, formatted as a UTC calendar date per ADR-012), "The
+  date (an instant, formatted `formatDate(d, "long", tz)` in the sender's
+  profile zone, matching `InvoicePreview`), "The
   invoice is attached as a PDF." Balance ≤ 0 → "This invoice is paid in
   full. Thank you." instead of amount/due.
 - Portal paragraph only when `portalUrl` is set: "You can also view this
@@ -73,7 +74,9 @@ bounce/delivery webhooks, a delivery-status column, automatic retries.
   issue / due dates, time and expense lines, subtotal / tax / total,
   payments received, balance due.
 - Renders stored money values verbatim; never re-derives totals.
-- Date-only fields formatted in UTC (ADR-012).
+- Issue/due dates are instants: `formatDate(d, "long", tz)` with the
+  sender's zone, as `InvoicePreview` does; any date-only fields (payment
+  dates) via `formatDateOnly` (ADR-012).
 - Built-in Helvetica (no runtime font fetch).
 - Add `@react-pdf/renderer` to `serverExternalPackages` if the bundled
   Next docs (`node_modules/next/dist/docs/`) call for it.
