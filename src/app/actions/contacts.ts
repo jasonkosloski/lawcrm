@@ -858,6 +858,42 @@ export async function mergeContacts(
           where: { authorIdentityId: loserIdentity.id },
           data: { authorIdentityId: survivorIdentity.id },
         });
+        // Read state would cascade away with the loser identity; fold it
+        // onto the survivor keeping the later read and email times, so
+        // merged contacts don't see old messages as unread again.
+        const laterOf = (a: Date | null, b: Date | null) =>
+          a && b ? (a > b ? a : b) : (a ?? b);
+        const loserStates = await tx.portalReadState.findMany({
+          where: { identityId: loserIdentity.id },
+        });
+        for (const st of loserStates) {
+          const existing = await tx.portalReadState.findUnique({
+            where: {
+              threadId_identityId: {
+                threadId: st.threadId,
+                identityId: survivorIdentity.id,
+              },
+            },
+          });
+          if (!existing) {
+            await tx.portalReadState.create({
+              data: {
+                threadId: st.threadId,
+                identityId: survivorIdentity.id,
+                lastReadAt: st.lastReadAt,
+                lastEmailedAt: st.lastEmailedAt,
+              },
+            });
+            continue;
+          }
+          await tx.portalReadState.update({
+            where: { id: existing.id },
+            data: {
+              lastReadAt: laterOf(existing.lastReadAt, st.lastReadAt) as Date,
+              lastEmailedAt: laterOf(existing.lastEmailedAt, st.lastEmailedAt),
+            },
+          });
+        }
         await tx.portalIdentity.delete({ where: { id: loserIdentity.id } });
       }
 

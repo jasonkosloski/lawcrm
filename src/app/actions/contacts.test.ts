@@ -1792,6 +1792,53 @@ describe("mergeContacts carries the portal identity", () => {
     expect(after.portalUploaderId).toBe(sIdent.id);
   });
 
+  test("merge carries portal read state, keeping the later read and email times", async () => {
+    const { areaId, stageId } = await seedPracticeArea();
+    const mk = async (name: string) =>
+      (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name })).matterId;
+    const [mA, mB, mC] = [await mk("RS A"), await mk("RS B"), await mk("RS C")];
+    const { contactId: loserId } = await seedContact({ name: "Loser" });
+    const { contactId: survivorId } = await seedContact({ name: "Survivor" });
+    const sIdent = await prisma.portalIdentity.create({
+      data: { contactId: survivorId, email: "survivor@example.com" },
+    });
+    const lIdent = await prisma.portalIdentity.create({
+      data: { contactId: loserId, email: "loser@example.com" },
+    });
+    const t = (n: number) => new Date(Date.UTC(2026, 0, n));
+    const thread = async (matterId: string) =>
+      (
+        await prisma.portalThread.create({
+          data: { matterId, lastMessageAt: t(20), lastFromClient: false },
+        })
+      ).id;
+    const [tA, tB, tC] = [await thread(mA), await thread(mB), await thread(mC)];
+    const state = (threadId: string, identityId: string, read: Date, emailed: Date | null) =>
+      prisma.portalReadState.create({
+        data: { threadId, identityId, lastReadAt: read, lastEmailedAt: emailed },
+      });
+    // A: only the loser has a state -> survivor gets it.
+    await state(tA, lIdent.id, t(5), t(6));
+    // B: survivor older read, loser newer read; survivor has no email time.
+    await state(tB, sIdent.id, t(2), null);
+    await state(tB, lIdent.id, t(9), t(8));
+    // C: survivor newer read and email time -> keeps them.
+    await state(tC, sIdent.id, t(12), t(13));
+    await state(tC, lIdent.id, t(3), t(4));
+
+    expect(await mergeContacts(loserId, survivorId)).toEqual({ ok: true });
+
+    const get = (threadId: string) =>
+      prisma.portalReadState.findUniqueOrThrow({
+        where: { threadId_identityId: { threadId, identityId: sIdent.id } },
+      });
+    expect(await get(tA)).toMatchObject({ lastReadAt: t(5), lastEmailedAt: t(6) });
+    expect(await get(tB)).toMatchObject({ lastReadAt: t(9), lastEmailedAt: t(8) });
+    expect(await get(tC)).toMatchObject({ lastReadAt: t(12), lastEmailedAt: t(13) });
+    expect(await prisma.portalReadState.count({ where: { identityId: lIdent.id } })).toBe(0);
+    expect(await prisma.portalReadState.count({ where: { identityId: sIdent.id } })).toBe(3);
+  });
+
   test("merge moves portal message authorship from the loser identity to the survivor identity", async () => {
     const { m1 } = await twoMatters();
     const { contactId: loserId } = await seedContact({ name: "Loser" });
