@@ -366,12 +366,15 @@ model PracticeArea {
   /// etc. Surfaced on the SOL card so the lawyer can verify the
   /// firm's configuration against the actual statute.
   statuteSourceCitation   String?
-  /// Default billing flow new matters in this area inherit on
-  /// create. See `Matter.billingMode` for the per-matter override
-  /// + the full enum of values. iteration 1: schema only — every
-  /// mode currently routes through the traditional UX with a
-  /// "flow not implemented" hint.
+  /// DEPRECATED (expand/contract): replaced by defaultBillingType; no
+  /// code reads it. Drop in a later migration.
   defaultBillingMode      String         @default("client")
+  /// Billing types a matter in this area may be created with.
+  /// Subset of BILLING_TYPES (src/lib/billing-type.ts).
+  allowedBillingTypes     String[]       @default(["hourly", "flat", "contingent", "court_appointed", "pro_bono"])
+  /// Billing type preselected on new matters in this area. Must be
+  /// one of allowedBillingTypes.
+  defaultBillingType      String         @default("contingent")
   createdAt               DateTime       @default(now())
   updatedAt               DateTime       @updatedAt
 

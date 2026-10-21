@@ -68,7 +68,13 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "matters.edit",
         label: "Edit matter details",
         description:
-          "Change name, practice area, stage, fee structure, opposing party, summary, and other matter fields.",
+          "Change name, practice area, stage, opposing party, summary, and other matter fields.",
+      },
+      {
+        key: "matters.billing_type.edit",
+        label: "Change billing type",
+        description:
+          "Change a matter's billing type after it is created (hourly, flat fee, contingency, court-appointed, pro bono). Set at creation from the practice area's allowed types otherwise. Logged.",
       },
       {
         key: "matters.agreement.edit",
