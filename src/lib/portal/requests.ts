@@ -2,10 +2,9 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { portalMatterWhere } from "@/lib/portal-access";
+import { PORTAL_TIME_ZONE } from "@/lib/portal/time-zone";
 import { dateOnlyKey, daysUntilDateOnly } from "@/lib/format-date";
 
-/** Same default zone as staff profiles (current-user-tz.ts, which pulls in auth). */
-const PORTAL_DUE_TIME_ZONE = "America/Denver";
 
 export type PortalRequest = {
   id: string;
@@ -55,7 +54,7 @@ export async function listPortalRequests(
     ],
   });
   // Clients have no profile zone; "today" is the firm's default zone.
-  const tz = PORTAL_DUE_TIME_ZONE;
+  const tz = PORTAL_TIME_ZONE;
   for (const r of rows) {
     const req: PortalRequest = {
       id: r.id,

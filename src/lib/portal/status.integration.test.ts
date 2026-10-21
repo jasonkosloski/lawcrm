@@ -90,6 +90,14 @@ describe("getPortalMatterStatus", () => {
     expect((await getPortalMatterStatus(identityId, matterB)).upcoming).toEqual([]);
   });
 
+  test("hides a shared event whose matter is cleared", async () => {
+    const { eventId } = await seedCalendarEvent({ matterId: matterA, startTime: new Date("2999-01-01T15:00:00Z") });
+    await share(eventId, matterA);
+    expect((await getPortalMatterStatus(identityId, matterA)).upcoming).toHaveLength(1);
+    await prisma.calendarEvent.update({ where: { id: eventId }, data: { matterId: null } });
+    expect((await getPortalMatterStatus(identityId, matterA)).upcoming).toEqual([]);
+  });
+
   test("never exposes the internal event title or description", async () => {
     const { eventId } = await seedCalendarEvent({ matterId: matterA, title: "INTERNAL-TITLE-XYZ", startTime: new Date("2999-01-01T15:00:00Z") });
     await prisma.calendarEvent.update({ where: { id: eventId }, data: { description: "INTERNAL-DESC-XYZ", location: "Courtroom 4" } });

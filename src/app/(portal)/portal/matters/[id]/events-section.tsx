@@ -2,10 +2,8 @@
 
 import { CalendarDays, MapPin } from "lucide-react";
 import { dateKeyInTz, formatDate } from "@/lib/format-date";
+import { PORTAL_TIME_ZONE } from "@/lib/portal/time-zone";
 import type { PortalSharedEventView } from "@/lib/portal/status";
-
-/** Same default zone as the rest of the portal (clients have no profile zone). */
-const PORTAL_TIME_ZONE = "America/Denver";
 
 /**
  * All-day events are date-only values (ADR-012): read them in UTC so the

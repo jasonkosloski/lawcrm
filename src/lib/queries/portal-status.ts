@@ -35,7 +35,7 @@ export async function getClientStatusCardData(
   const [rows, hasLiveAccess] = await Promise.all([
     prisma.portalStatusUpdate.findMany({
       where: { matterId },
-      orderBy: { postedAt: "desc" },
+      orderBy: [{ postedAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
         stageLabel: true,

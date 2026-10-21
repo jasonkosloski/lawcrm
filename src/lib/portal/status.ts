@@ -3,10 +3,8 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { portalMatterWhere } from "@/lib/portal-access";
+import { PORTAL_TIME_ZONE } from "@/lib/portal/time-zone";
 import { dateKeyInTz, dateOnlyKey, todayKey } from "@/lib/format-date";
-
-/** Same default zone as the rest of the portal (clients have no profile zone). */
-const PORTAL_TIME_ZONE = "America/Denver";
 
 export type PortalStatusUpdateView = {
   id: string;
@@ -78,7 +76,7 @@ export async function getPortalMatterStatus(
         postedAt: true,
         editedAt: true,
       },
-      orderBy: { postedAt: "desc" },
+      orderBy: [{ postedAt: "desc" }, { id: "desc" }],
     }),
     // `event.matterId` (not the snapshot) so an event re-filed to another
     // matter disappears from both.
@@ -148,7 +146,7 @@ export async function latestStageLabels(
   const rows = await prisma.portalStatusUpdate.findMany({
     where: { matterId: { in: matterIds }, matter: where },
     select: { matterId: true, stageLabel: true },
-    orderBy: { postedAt: "desc" },
+    orderBy: [{ postedAt: "desc" }, { id: "desc" }],
     distinct: ["matterId"],
   });
   for (const r of rows) out.set(r.matterId, r.stageLabel);

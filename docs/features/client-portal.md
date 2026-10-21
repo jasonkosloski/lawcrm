@@ -76,6 +76,7 @@ Posting with the box ticked and the portal on sends `statusUpdateEmail` through 
 - Portal time zone is America/Denver (clients have no zone), so "upcoming" and displayed times suit a Denver firm only.
 - Sharing an event sends no email; no reminders for shared events.
 - Re-sharing keeps the original `sharedById`.
+- A share stays live if the event is later made private (the explicit share wins). Sharing requires the sharer to see the event's details; private or "Busy" events read as not found.
 - Deadlines and matter dates cannot be shared; no rich text, attachments or read receipts.
 
 ## Publishing rule (binding on sub-projects 1-4)

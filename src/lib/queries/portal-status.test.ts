@@ -72,7 +72,7 @@ describe("getClientStatusCardData", () => {
     expect(prisma.portalStatusUpdate.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { matterId: "m1" },
-        orderBy: { postedAt: "desc" },
+        orderBy: [{ postedAt: "desc" }, { id: "desc" }],
       })
     );
   });

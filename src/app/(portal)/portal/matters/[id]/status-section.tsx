@@ -2,11 +2,9 @@
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { formatDate } from "@/lib/format-date";
+import { PORTAL_TIME_ZONE } from "@/lib/portal/time-zone";
 import type { PortalStatusUpdateView } from "@/lib/portal/status";
 import { MessageSquareText } from "lucide-react";
-
-/** Same default zone as the rest of the portal (clients have no profile zone). */
-const PORTAL_TIME_ZONE = "America/Denver";
 
 function postedLabel(u: PortalStatusUpdateView): string {
   return formatDate(u.postedAt, "medium", PORTAL_TIME_ZONE);

@@ -247,13 +247,29 @@ describe("event sharing", () => {
     expect(await prisma.portalSharedEvent.count()).toBe(0);
   });
 
-  test("a lead event is refused and nothing is written", async () => {
+  test("a lead event reads as unknown and nothing is written", async () => {
     const { eventId } = await seedCalendarEvent({ matterId: null, createdById: admin });
-    const err = { ok: false, error: "Only events on a matter can be shared." };
+    const err = { ok: false, error: "Event not found." };
     expect(await shareEventWithClient(eventId, share)).toEqual(err);
     expect(await updateEventShare(eventId, share)).toEqual(err);
     expect(await stopSharingEvent(eventId)).toEqual(err);
     expect(await prisma.portalSharedEvent.count()).toBe(0);
+  });
+
+  test("another user's private event cannot be shared, nothing is written", async () => {
+    const { eventId } = await seedCalendarEvent({
+      matterId,
+      createdById: admin,
+      visibility: "private",
+      title: "Secret deposition prep",
+    });
+    sessionUser = await userWith(sharePerms);
+    const err = { ok: false, error: "Event not found." };
+    expect(await shareEventWithClient(eventId, share)).toEqual(err);
+    expect(await updateEventShare(eventId, share)).toEqual(err);
+    expect(await stopSharingEvent(eventId)).toEqual(err);
+    expect(await prisma.portalSharedEvent.count()).toBe(0);
+    expect(await prisma.activityLog.count({ where: { matterId, type: "note" } })).toBe(0);
   });
 
   test("an unknown event is reported", async () => {
@@ -273,6 +289,9 @@ describe("event sharing", () => {
     await expect(updateEventShare(eventId, { clientTitle: "X" })).rejects.toMatchObject(notFound);
     await expect(stopSharingEvent(eventId)).rejects.toMatchObject(notFound);
     expect((await prisma.portalSharedEvent.findFirstOrThrow()).clientTitle).toBe("Mediation");
+    expect(await eventActivity(matterId, "Edited client event share")).toBe(0);
+    expect(await eventActivity(matterId, "Stopped sharing event with client")).toBe(0);
+    expect(await eventActivity(matterId, "Shared event with client")).toBe(1);
   });
 
   test("share, update and stop round-trip with activity and revalidation", async () => {

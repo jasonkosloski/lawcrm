@@ -15,6 +15,7 @@ import { assertMatterAccess } from "@/lib/matter-access";
 import { requirePermissionResult } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { statusUpdateEmail } from "@/lib/portal/emails";
+import { getCalendarEventById } from "@/lib/queries/calendar";
 import { portalHomeUrl } from "@/lib/portal/link-url";
 import { emailLivePortalUsers } from "@/lib/portal/notify-clients";
 
@@ -123,10 +124,11 @@ export async function editStatusUpdate(
   const parsed = parseUpdate(input);
   if (!parsed.ok) return parsed;
 
-  await prisma.portalStatusUpdate.update({
-    where: { id },
+  const res = await prisma.portalStatusUpdate.updateMany({
+    where: { id, matterId: row.matterId },
     data: { stageLabel: parsed.stageLabel, body: parsed.body, editedAt: new Date() },
   });
+  if (res.count === 0) return { ok: false, error: NOT_FOUND };
   await logActivity({
     matterId: row.matterId,
     userId: gate.userId,
@@ -143,7 +145,10 @@ export async function deleteStatusUpdate(id: string): Promise<Result> {
   if (!row) return { ok: false, error: NOT_FOUND };
   await assertMatterAccess(row.matterId);
 
-  await prisma.portalStatusUpdate.delete({ where: { id } });
+  const res = await prisma.portalStatusUpdate.deleteMany({
+    where: { id, matterId: row.matterId },
+  });
+  if (res.count === 0) return { ok: false, error: NOT_FOUND };
   await logActivity({
     matterId: row.matterId,
     userId: gate.userId,
@@ -181,7 +186,7 @@ function doneEvent(matterId: string): Result {
   return { ok: true };
 }
 
-/** Permission, event load, lead-event refusal. Callers then assert matter access. */
+/** Permission and event load. Lead events read as unknown (no existence leak). Callers then assert matter access, then `requireVisibleEvent`. */
 async function gateEvent(permission: string, eventId: string) {
   const gate = await requirePermissionResult(permission);
   if (!gate.ok) return { ok: false as const, error: gate.error };
@@ -189,11 +194,21 @@ async function gateEvent(permission: string, eventId: string) {
     where: { id: eventId },
     select: { id: true, matterId: true },
   });
-  if (!event) return { ok: false as const, error: EVENT_NOT_FOUND };
-  if (!event.matterId) {
-    return { ok: false as const, error: "Only events on a matter can be shared." };
-  }
+  if (!event || !event.matterId) return { ok: false as const, error: EVENT_NOT_FOUND };
   return { ok: true as const, userId: gate.userId, eventId: event.id, matterId: event.matterId };
+}
+
+/**
+ * Sharing publishes an event's time and location to the client, so the
+ * sharer must be able to see its details (private / "Busy" events are
+ * refused). Reuses the calendar visibility resolver.
+ */
+async function requireVisibleEvent(eventId: string) {
+  const detail = await getCalendarEventById(eventId);
+  if (!detail || !detail.viewerCanSeeDetails || !detail.matter) {
+    return { ok: false as const, error: EVENT_NOT_FOUND };
+  }
+  return { ok: true as const };
 }
 
 export async function shareEventWithClient(
@@ -203,6 +218,8 @@ export async function shareEventWithClient(
   const g = await gateEvent("portal.share_events", eventId);
   if (!g.ok) return g;
   await assertMatterAccess(g.matterId);
+  const visible = await requireVisibleEvent(g.eventId);
+  if (!visible.ok) return visible;
   const parsed = shareSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid event share." };
@@ -230,6 +247,8 @@ export async function updateEventShare(
   const g = await gateEvent("portal.share_events", eventId);
   if (!g.ok) return g;
   await assertMatterAccess(g.matterId);
+  const visible = await requireVisibleEvent(g.eventId);
+  if (!visible.ok) return visible;
   const parsed = shareSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid event share." };
@@ -254,6 +273,8 @@ export async function stopSharingEvent(eventId: string): Promise<Result> {
   const g = await gateEvent("portal.share_events", eventId);
   if (!g.ok) return g;
   await assertMatterAccess(g.matterId);
+  const visible = await requireVisibleEvent(g.eventId);
+  if (!visible.ok) return visible;
 
   const res = await prisma.portalSharedEvent.deleteMany({
     where: { eventId, matterId: g.matterId },
