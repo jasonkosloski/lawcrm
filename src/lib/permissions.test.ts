@@ -129,6 +129,7 @@ describe("expected-key invariants", () => {
     "firm.view_activity",
     "firm.manage_team_directory",
     "documents.upload",
+    "documents.edit",
     "documents.delete_any",
     "intake.conflict_check.run",
     "intake.conflict_check.override",

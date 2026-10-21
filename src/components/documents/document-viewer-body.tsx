@@ -49,6 +49,7 @@ import { DocumentFileTree } from "@/components/documents-viewer/document-file-tr
 import { getDocumentFlaggedMoments } from "@/lib/queries/evidence";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
+import { EditDocumentButton } from "@/components/matters/documents/edit-document-dialog";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { MAX_MEDIA_SECONDS } from "@/lib/media-time";
 import { formatDate } from "@/lib/format-date";
@@ -96,12 +97,13 @@ export async function DocumentViewerBody({
   searchParams: { [key: string]: string | string[] | undefined };
 }) {
   const basePath = scopeBasePath(scope);
-  const [doc, tz, folders, canOrganize, canUpload] = await Promise.all([
+  const [doc, tz, folders, canOrganize, canUpload, canEdit] = await Promise.all([
     getDocumentForViewer(scope, documentId),
     getCurrentUserTimeZone(),
     getDocumentFolders(scope),
     currentUserHasPermission("documents.organize"),
     currentUserHasPermission("documents.upload"),
+    currentUserHasPermission("documents.edit"),
   ]);
   if (!doc) notFound();
   // Left-hand file tree: the record's folders + files (lightweight).
@@ -277,6 +279,13 @@ export async function DocumentViewerBody({
               label="Next document in folder"
               icon={<ChevronRight className="h-4 w-4" aria-hidden />}
             />
+            {canEdit && (
+              <EditDocumentButton
+                documentId={doc.id}
+                name={doc.name}
+                category={doc.category}
+              />
+            )}
             {doc.fileUrl && (
               <a
                 href={`${downloadHref}?download=1`}

@@ -3,7 +3,7 @@
  *
  * Pins (1) that every write asks for the right permission key —
  * create/edit/delete for the library, `documents.upload` for
- * generation — and that PREVIEW asks for none; (2) the CRUD happy
+ * generation and preview alike; (2) the CRUD happy
  * paths against real Postgres; (3) generation end-to-end: merged
  * text handed to file storage, Document row + activity entry on the
  * matter, unresolved/missing reporting surfaced to the caller.
@@ -86,6 +86,8 @@ beforeAll(() => {
 beforeEach(async () => {
   await resetDb();
   vi.clearAllMocks();
+  vi.mocked(currentUserHasPermission).mockReset();
+  vi.mocked(currentUserHasPermission).mockResolvedValue(true);
   const { firmId } = await seedFirm();
   const u = await seedUser({ firmId, name: "Test Attorney" });
   userId = u.userId;
@@ -162,17 +164,26 @@ describe("permission gates", () => {
     );
   });
 
-  test("generate asks for documents.upload; preview asks for nothing", async () => {
+  test("generate and preview share the documents.upload key", async () => {
     const t = await seedTemplate();
     await generateDocumentFromTemplate(t.id, M);
     expect(requirePermission).toHaveBeenCalledWith("documents.upload");
 
-    vi.mocked(requirePermission).mockClear();
     const res = await previewDocumentFromTemplate(t.id, M);
     expect(res.ok).toBe(true);
-    // Preview is deliberately ungated — session only (see the
-    // action file header for the preview/generate split).
-    expect(requirePermission).not.toHaveBeenCalled();
+    expect(currentUserHasPermission).toHaveBeenCalledWith("documents.upload");
+  });
+
+  test("preview without documents.upload is refused and merges nothing", async () => {
+    const t = await seedTemplate();
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key) => key !== "documents.upload"
+    );
+    const res = await previewDocumentFromTemplate(t.id, M);
+    expect(res).toEqual({
+      ok: false,
+      error: "You don't have permission to generate documents from templates.",
+    });
   });
 });
 
@@ -639,7 +650,9 @@ describe("records request letters", () => {
   test("preview with a request needs records.view", async () => {
     const t = await seedTemplate({ body: "{{custodian.name}}" });
     const r = await seedRecordsRequest();
-    vi.mocked(currentUserHasPermission).mockResolvedValueOnce(false);
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key) => key !== "records.view"
+    );
     const res = await previewDocumentFromTemplate(t.id, M, {
       recordsRequestId: r.id,
     });

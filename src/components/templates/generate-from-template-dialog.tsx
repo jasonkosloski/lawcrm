@@ -3,11 +3,12 @@
  *
  * Pick an active template (grouped by category) → the dialog fetches
  * a live preview merged against the REAL matter context via the
- * ungated `previewDocumentFromTemplate` action, surfacing
+ * `documents.upload`-gated `previewDocumentFromTemplate` action, surfacing
  * missing-data placeholders and unknown-token warnings. From there:
  *
- *   - "Copy text" — clipboard, available to everyone (preview is
- *     ungated; nothing is written).
+ *   - "Copy text" — clipboard (nothing is written). The dialog is
+ *     only rendered for holders of `documents.upload`, which the
+ *     preview action requires.
  *   - "Save to documents" — calls the `documents.upload`-gated
  *     generate action, which stores the text as a .md file and
  *     creates the Document row. The button renders only when the
@@ -56,7 +57,8 @@ export function GenerateFromTemplateDialog({
   /** Active templates only — the picker never offers archived ones. */
   templates: TemplateOption[];
   /** Whether the viewer holds `documents.upload` (gates the save
-   *  affordance; preview + copy stay available to everyone). */
+   *  affordance; callers only render the dialog for holders, since
+   *  the preview action needs the same key). */
   canUpload: boolean;
   /** Merge against, and file the saved letter on, this records request. */
   recordsRequestId?: string;

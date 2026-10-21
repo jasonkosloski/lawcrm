@@ -19,6 +19,9 @@
  *     `documents.delete_any`. Other members have to ask. This keeps
  *     "I uploaded the wrong PDF" recoverable without making delete a
  *     free-for-all.
+ *   - Edit details (rename / re-categorize): `documents.edit`, on top
+ *     of the matter/lead wall. Metadata only; the stored bytes are
+ *     never touched (ADR-034).
  *   - A document carrying flagged moments from OTHER reviewers can
  *     only be deleted by a holder of `evidence.flag.delete_any` —
  *     the row delete cascades every flag, and removing someone
@@ -33,7 +36,9 @@ import { revalidateDocumentScope } from "@/lib/scope-access";
 import { SAME_SCOPE_ERROR, scopeOf, scopeWhere } from "@/lib/record-scope";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
-import { logActivity } from "@/lib/activity-log";
+import { logActivity, logActivityTx } from "@/lib/activity-log";
+import { DOCUMENT_CATEGORIES, DOCUMENT_CATEGORY_LABEL, type DocumentCategory } from "@/lib/document-form";
+import { MAX_DOCUMENT_NAME_LENGTH } from "@/app/api/documents/upload/upload-config";
 import { deleteFile } from "@/lib/file-storage";
 import { extractEmailAttachments } from "@/lib/email-attachment-extract";
 
@@ -343,4 +348,76 @@ export async function copyDocumentToFolder(
   });
   revalidateDocumentScope(scope);
   return { ok: true, id: copy.id };
+}
+
+// ── Edit details ──────────────────────────────────────────────────────
+
+/**
+ * Rename a document and/or change its category. Gated on
+ * `documents.edit` and the matter/lead wall (the document's scope is
+ * loaded by id, then asserted). Name is trimmed, 1..255 chars (the
+ * upload rules); category must be one of DOCUMENT_CATEGORIES. A call
+ * that changes nothing is a no-op: no write, no activity row.
+ */
+export async function updateDocumentMetadata(
+  documentId: string,
+  input: { name: string; category: string }
+): Promise<{ ok: boolean; error?: string; changed?: boolean }> {
+  const userId = await requirePermission("documents.edit");
+  await assertChildMatterAccess("document", documentId);
+
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  if (!name) return { ok: false, error: "Name can't be empty." };
+  if (name.length > MAX_DOCUMENT_NAME_LENGTH) {
+    return {
+      ok: false,
+      error: `Name must be ${MAX_DOCUMENT_NAME_LENGTH} characters or fewer.`,
+    };
+  }
+  if (!(DOCUMENT_CATEGORIES as readonly string[]).includes(input.category)) {
+    return { ok: false, error: "Pick a valid category." };
+  }
+  const category = input.category as DocumentCategory;
+
+  const doc = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: { id: true, matterId: true, leadId: true, name: true, category: true },
+  });
+  if (!doc) return { ok: false, error: "Document not found." };
+
+  const renamed = name !== doc.name;
+  const recategorized = category !== doc.category;
+  if (!renamed && !recategorized) return { ok: true, changed: false };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.document.update({
+      where: { id: doc.id },
+      data: { name, category },
+    });
+    const label = (c: string) =>
+      DOCUMENT_CATEGORY_LABEL[c as DocumentCategory] ?? c;
+    await logActivityTx(tx, {
+      matterId: doc.matterId,
+      leadId: doc.leadId,
+      userId,
+      type: "document",
+      title:
+        renamed && recategorized
+          ? "Edited document details"
+          : renamed
+            ? "Renamed document"
+            : "Changed document category",
+      detail: [
+        renamed ? `${doc.name} → ${name}` : null,
+        recategorized
+          ? `${renamed ? "" : `${doc.name}: `}${label(doc.category)} → ${label(category)}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join("; "),
+    });
+  });
+
+  revalidateDocumentScope(scopeOf(doc), doc.id);
+  return { ok: true, changed: true };
 }

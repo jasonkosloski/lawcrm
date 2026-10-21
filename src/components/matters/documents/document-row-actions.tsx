@@ -6,7 +6,8 @@
  * (documents.organize — re-files the document via the shared folder
  * picker; not offered for email attachments, which live under their
  * email) + "Copy to…" (documents.organize — an independent copy in
- * another folder that shares the stored file, ADR-043) + Delete
+ * another folder that shares the stored file, ADR-043) + "Edit
+ * details…" (documents.edit — rename / re-categorize) + Delete
  * (uploader or documents.delete_any holder; emails with attachments
  * get a prompt about them).
  */
@@ -14,7 +15,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Copy, Download, Eye, EyeOff, FolderInput, MoreHorizontal, Trash2 } from "lucide-react";
+import { Copy, Download, Eye, EyeOff, FolderInput, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +32,7 @@ import type { FlatFolder } from "@/lib/folder-tree";
 import { confirmAction, notifyError } from "@/lib/feedback";
 import { MoveToFolderDialog } from "./move-to-folder-dialog";
 import { DeleteDocumentDialog } from "./delete-document-dialog";
+import { EditDocumentDialog } from "./edit-document-dialog";
 
 export function DocumentRowActions({
   documentId,
@@ -55,6 +57,9 @@ export function DocumentRowActions({
   unsavedAttachments = [],
   savedAttachments = [],
   canShare = false,
+  /** `documents.edit` flag — shows "Edit details…". */
+  canEdit = false,
+  category = "other",
   isShared = false,
   clientShare = null,
   status,
@@ -73,6 +78,9 @@ export function DocumentRowActions({
   savedAttachments?: string[];
   /** portal.share_documents on a matter document (never leads). */
   canShare?: boolean;
+  canEdit?: boolean;
+  /** Current category (prefills the edit dialog). */
+  category?: string;
   /** Effectively visible to the client right now. */
   isShared?: boolean;
   /** The document's own override, for the move warning. */
@@ -90,6 +98,7 @@ export function DocumentRowActions({
   const [moveOpen, setMoveOpen] = useState(false);
   const [fileOpen, setFileOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const hasAttachments = unsavedAttachments.length + savedAttachments.length > 0;
 
   const onDelete = async () => {
@@ -123,7 +132,7 @@ export function DocumentRowActions({
     });
   };
 
-  if (!hasFile && !canMove && !canDelete && !canShare) return null;
+  if (!hasFile && !canMove && !canDelete && !canShare && !canEdit) return null;
   const canRelocate = canMove && !isAttachment;
 
   return (
@@ -155,6 +164,12 @@ export function DocumentRowActions({
               }
             />
           )}
+          {canEdit && (
+            <DropdownMenuItem onClick={() => setEditOpen(true)}>
+              <Pencil />
+              Edit details…
+            </DropdownMenuItem>
+          )}
           {canRelocate && (
             <DropdownMenuItem onClick={() => setMoveOpen(true)}>
               <FolderInput />
@@ -175,7 +190,7 @@ export function DocumentRowActions({
           )}
           {canDelete && (
             <>
-              {(hasFile || canMove || canShare) && <DropdownMenuSeparator />}
+              {(hasFile || canMove || canShare || canEdit) && <DropdownMenuSeparator />}
               <DropdownMenuItem variant="destructive" onClick={onDelete}>
                 <Trash2 />
                 Delete
@@ -185,6 +200,15 @@ export function DocumentRowActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {canEdit && (
+        <EditDocumentDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          documentId={documentId}
+          name={name}
+          category={category}
+        />
+      )}
       {canRelocate && (
         <MoveToFolderDialog
           open={moveOpen}

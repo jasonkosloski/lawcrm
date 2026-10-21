@@ -64,7 +64,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [ ] **Time follow-ups**: auto-capture, idle detection, admin user picker on `/time`, editable reconciliation lanes. → [time-and-billing](features/time-and-billing.md)
 
 **Documents**
-- [ ] **Document metadata edit**: rename/re-categorize needs a `documents.edit` key. → [issue](issues/document-metadata-edit.md)
+- [ ] **Expense receipt picker cap**: lists at most 200 documents; needs search-as-you-type. → [issue](issues/receipt-picker-cap.md)
 - [ ] **Document versioning** → [documents](features/documents.md)
 - [ ] **Firm-wide document library**: cross-matter folder tree, file grid, category filters. → [documents](features/documents.md)
 - [ ] **Export / print to PDF beyond invoices**: demand letters, trust reports. → [documents](features/documents.md)
@@ -80,7 +80,6 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [~] **Settings: Integrations**: Westlaw, e-sign, IOLTA bank feed, PACER. → [settings-admin](features/settings-admin.md)
 
 **Tech debt**
-- [ ] **Gate reads that only have session guards**: template preview (contacts export now needs `contacts.export`). → [issue](issues/ungated-reads.md)
 - [ ] **Server-side email validation** on contact/party/attendee schemas. → [platform-quality](features/platform-quality.md)
 - [ ] **Button size convention + one sweep** → [platform-quality](features/platform-quality.md)
 - [ ] **Opportunistic sweeps**: EmptyState, `plural()`, status-label maps as files are touched. → [platform-quality](features/platform-quality.md)

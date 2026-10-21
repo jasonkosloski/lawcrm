@@ -495,7 +495,7 @@ export function RequestDetail({
           <Section title={RECORDS_ROLE_INFO.request_letter.label}>
             {docList(letters, "No request documents yet.", "request_letter")}
             <div className="flex flex-wrap items-start gap-2">
-              {canEdit && (
+              {canEdit && can.upload && (
                 <GenerateFromTemplateDialog
                   scope={scope}
                   templates={templates}

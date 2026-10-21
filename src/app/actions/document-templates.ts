@@ -10,10 +10,11 @@
  *   - GENERATE onto a matter: `documents.upload` — generation writes
  *     a file + Document row, which is exactly what upload does, so
  *     it borrows upload's key rather than minting a parallel one.
- *   - PREVIEW a merge: ungated (session only). A preview reads data
- *     the user can already see on the matter page and writes
- *     nothing, so gating it would only break the "check the letter
- *     before you ask someone with upload rights to save it" flow.
+ *   - PREVIEW a merge: also `documents.upload` (plus `records.view`
+ *     for a records-request merge). A preview can merge more than a
+ *     matter page shows (custodian + request details), so it must
+ *     never show more than the user could generate. A denial returns
+ *     `{ ok: false, error }` (the dialog is hidden without the key).
  *
  * Generation mirrors `uploadDocument` (src/app/actions/documents.ts,
  * read-only reference): storeFile → Document row → activity log →
@@ -486,10 +487,9 @@ export type TemplatePreviewResult =
 
 /**
  * Merge a template against a real matter WITHOUT writing anything.
- * Deliberately ungated beyond sign-in (see file header): previews
- * read what the matter page already shows and persist nothing —
- * only `generateDocumentFromTemplate` (which writes a file + row)
- * requires `documents.upload`.
+ * Requires the same key as `generateDocumentFromTemplate`
+ * (`documents.upload`) so a preview never shows more than the user
+ * could produce.
  */
 export async function previewDocumentFromTemplate(
   templateId: string,
@@ -497,6 +497,12 @@ export async function previewDocumentFromTemplate(
   opts?: { recordsRequestId?: string }
 ): Promise<TemplatePreviewResult> {
   await assertScopeAccess(scope);
+  if (!(await currentUserHasPermission("documents.upload"))) {
+    return {
+      ok: false,
+      error: "You don't have permission to generate documents from templates.",
+    };
+  }
   // The merged text exposes custodian + request details.
   if (
     opts?.recordsRequestId &&

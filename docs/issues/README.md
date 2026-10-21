@@ -6,6 +6,5 @@ When an issue is fixed, delete its file and note the fix in the relevant `../fea
 Roadmap items (planned features) stay in `../features/`, not here.
 
 - [invoice-email-not-sent.md](invoice-email-not-sent.md) — invoice "send" is logged only; nothing is emailed to the client
-- [ungated-reads.md](ungated-reads.md) — template preview needs a key
-- [document-metadata-edit.md](document-metadata-edit.md) — no rename/re-categorize after upload; receipt picker capped at 200
+- [receipt-picker-cap.md](receipt-picker-cap.md) — expense receipt picker lists at most 200 documents
 - [google-sync-origin-and-backfill-anchor.md](google-sync-origin-and-backfill-anchor.md) — `CalendarEvent.origin` and `EmailAccount.backfillBefore` needed
