@@ -64,9 +64,12 @@ describe("ResendInvoiceDialog", () => {
       status: "ok" as const,
       warning: "W",
     }));
-    render(<ResendInvoiceDialog {...props} open onOpenChange={vi.fn()} />);
+    const ui = <ResendInvoiceDialog {...props} open onOpenChange={vi.fn()} />;
+    const { rerender } = render(ui);
     await user.click(screen.getByRole("button", { name: /^send$/i }));
     await waitFor(() => expect(notifyWarning).toHaveBeenCalledWith("W"));
+    rerender(ui);
+    expect(notifyWarning).toHaveBeenCalledTimes(1);
     expect(notifySuccess).not.toHaveBeenCalled();
   });
 

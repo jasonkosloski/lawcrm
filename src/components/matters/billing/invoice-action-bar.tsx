@@ -173,7 +173,46 @@ export function InvoiceActionBar({
     !canMarkRecorded &&
     !deleteAllowed &&
     !voidAllowed;
-  if (nothingToDo) return null;
+  // The Send, Record payment and Re-send dialogs stay mounted
+  // whatever the capability flags say (only their triggers are
+  // gated): a successful action revalidates props, which can flip
+  // canSend / canRecordPayment in the same commit as the new action
+  // state, and an unmounted dialog would never run its success /
+  // warning effect. Closed and trigger-less, they cannot reopen.
+  const dialogs = (
+    <>
+      <ResendInvoiceDialog
+        open={resendOpen}
+        onOpenChange={setResendOpen}
+        invoiceId={invoiceId}
+        invoiceNumber={invoiceNumber}
+        clientEmail={clientEmail}
+      />
+      <SendInvoiceDialog
+        open={sendOpen}
+        onOpenChange={setSendOpen}
+        invoiceId={invoiceId}
+        invoiceNumber={invoiceNumber}
+        invoiceBalance={invoiceBalance}
+        clientEmail={clientEmail}
+        trustBalance={trustBalance}
+        canApplyTrust={canApplyTrust}
+        portalSend={portalSend}
+      />
+      <RecordPaymentDialog
+        open={recordOpen}
+        onOpenChange={setRecordOpen}
+        invoiceId={invoiceId}
+        invoiceNumber={invoiceNumber}
+        invoiceBalance={invoiceBalance}
+        trustBalance={trustBalance}
+        clientEmail={clientEmail}
+        canApplyTrust={canApplyTrust}
+      />
+    </>
+  );
+
+  if (nothingToDo) return dialogs;
 
   const transitionTo = async (next: string, confirmCopy?: ConfirmOptions) => {
     if (confirmCopy && !(await confirmAction(confirmCopy))) return;
@@ -359,40 +398,7 @@ export function InvoiceActionBar({
         </DropdownMenu>
       )}
 
-      {canResend && (
-        <ResendInvoiceDialog
-          open={resendOpen}
-          onOpenChange={setResendOpen}
-          invoiceId={invoiceId}
-          invoiceNumber={invoiceNumber}
-          clientEmail={clientEmail}
-        />
-      )}
-      {canSend && (
-        <SendInvoiceDialog
-          open={sendOpen}
-          onOpenChange={setSendOpen}
-          invoiceId={invoiceId}
-          invoiceNumber={invoiceNumber}
-          invoiceBalance={invoiceBalance}
-          clientEmail={clientEmail}
-          trustBalance={trustBalance}
-          canApplyTrust={canApplyTrust}
-          portalSend={portalSend}
-        />
-      )}
-      {canRecordPayment && (
-        <RecordPaymentDialog
-          open={recordOpen}
-          onOpenChange={setRecordOpen}
-          invoiceId={invoiceId}
-          invoiceNumber={invoiceNumber}
-          invoiceBalance={invoiceBalance}
-          trustBalance={trustBalance}
-          clientEmail={clientEmail}
-          canApplyTrust={canApplyTrust}
-        />
-      )}
+      {dialogs}
       {showApplyTrust && (
         <ApplyTrustDialog
           open={applyTrustOpen}

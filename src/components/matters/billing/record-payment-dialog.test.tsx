@@ -85,9 +85,12 @@ describe("RecordPaymentDialog — email copy", () => {
       status: "ok" as const,
       warning: "W",
     }));
-    render(<RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />);
+    const ui = <RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />;
+    const { rerender } = render(ui);
     await user.click(screen.getByRole("button", { name: /record payment|^save|record/i }));
     await waitFor(() => expect(notifyWarning).toHaveBeenCalledWith("W"));
+    rerender(ui);
+    expect(notifyWarning).toHaveBeenCalledTimes(1);
   });
 });
 

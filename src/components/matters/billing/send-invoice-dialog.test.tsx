@@ -62,9 +62,12 @@ describe("SendInvoiceDialog", () => {
       status: "ok" as const,
       warning: "W",
     }));
-    render(<SendInvoiceDialog {...baseProps} open onOpenChange={vi.fn()} />);
+    const ui = <SendInvoiceDialog {...baseProps} open onOpenChange={vi.fn()} />;
+    const { rerender } = render(ui);
     await user.click(screen.getByRole("button", { name: /^mark as sent$/i }));
     await waitFor(() => expect(notifyWarning).toHaveBeenCalledWith("W"));
+    rerender(ui);
+    expect(notifyWarning).toHaveBeenCalledTimes(1);
   });
 
   test("pre-fills the recipient (labelled) and sends with the posted fields, then closes", async () => {

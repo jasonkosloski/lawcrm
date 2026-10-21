@@ -24,7 +24,19 @@ vi.mock("@/app/actions/billing", () => ({
   resendInvoiceEmail: vi.fn(),
 }));
 
-import { approveInvoice } from "@/app/actions/billing";
+vi.mock("@/lib/feedback", () => ({
+  confirmAction: vi.fn(),
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+  notifyWarning: vi.fn(),
+}));
+
+import {
+  approveInvoice,
+  recordInvoicePayment,
+  sendInvoice,
+} from "@/app/actions/billing";
+import { notifyWarning } from "@/lib/feedback";
 import { InvoiceActionBar } from "./invoice-action-bar";
 
 const baseProps = {
@@ -296,5 +308,52 @@ describe("InvoiceActionBar — Re-send email", () => {
       "title",
       "Email the invoice to the client, or post it to the client portal."
     );
+  });
+});
+
+describe("InvoiceActionBar — warning toast survives the revalidation", () => {
+  test("send: warning fires once even after props flip to sent", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    vi.mocked(notifyWarning).mockReset();
+    vi.mocked(sendInvoice).mockImplementation(async () => ({
+      status: "ok" as const,
+      warning: "W",
+    }));
+    const { rerender } = render(
+      <InvoiceActionBar {...baseProps} {...ALL} currentStatus="approved" />
+    );
+    await user.click(screen.getByRole("button", { name: /mark as sent/i }));
+    await user.click(await screen.findByRole("button", { name: /^mark as sent$/i }));
+    rerender(<InvoiceActionBar {...baseProps} {...ALL} currentStatus="sent" />);
+    await waitFor(() => expect(notifyWarning).toHaveBeenCalledWith("W"));
+    expect(notifyWarning).toHaveBeenCalledTimes(1);
+    expect(button(/mark as sent/i)).not.toBeInTheDocument();
+  });
+
+  test("record payment: warning fires once even after the balance hits 0", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    vi.mocked(notifyWarning).mockReset();
+    vi.mocked(recordInvoicePayment).mockImplementation(async () => ({
+      status: "ok" as const,
+      warning: "W",
+    }));
+    const { rerender } = render(
+      <InvoiceActionBar {...baseProps} {...ALL} currentStatus="sent" />
+    );
+    await user.click(screen.getByRole("button", { name: /record payment/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /^record \$300\.00/i })
+    );
+    rerender(
+      <InvoiceActionBar
+        {...baseProps}
+        {...ALL}
+        currentStatus="paid"
+        invoiceBalance={0}
+        paidAmount={300}
+      />
+    );
+    await waitFor(() => expect(notifyWarning).toHaveBeenCalledWith("W"));
+    expect(notifyWarning).toHaveBeenCalledTimes(1);
   });
 });
