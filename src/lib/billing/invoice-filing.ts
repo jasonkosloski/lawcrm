@@ -14,25 +14,29 @@ const KIND_WORD: Record<InvoiceEmailKind, string> = {
 };
 
 async function invoicesFolder(matterId: string): Promise<string> {
-  const find = () =>
-    prisma.documentFolder.findFirst({
-      where: { matterId, systemKind: "invoices" },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      select: { id: true },
+  return prisma.$transaction(async (tx) => {
+    // Serialize creators per matter so two concurrent sends can't both
+    // create the folder (same handling as portal_uploads).
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`invoices:${matterId}`}))`;
+    const find = () =>
+      tx.documentFolder.findFirst({
+        where: { matterId, systemKind: "invoices" },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true },
+      });
+    const existing = await find();
+    if (existing) return existing.id;
+    await tx.documentFolder.create({
+      data: {
+        matterId,
+        parentId: null,
+        name: INVOICES_FOLDER_NAME,
+        systemKind: "invoices",
+        clientShared: false,
+      },
     });
-  const existing = await find();
-  if (existing) return existing.id;
-  await prisma.documentFolder.create({
-    data: {
-      matterId,
-      parentId: null,
-      name: INVOICES_FOLDER_NAME,
-      systemKind: "invoices",
-      clientShared: false,
-    },
+    return (await find())!.id;
   });
-  // Re-read so a racing creator converges on the oldest folder.
-  return (await find())!.id;
 }
 
 /** File the emailed invoice PDF into the matter's "Invoices" system

@@ -73,6 +73,18 @@ describe("fileInvoicePdf", () => {
     expect(doc.name).toBe("Invoice 2026-101 (updated 2026-10-21).pdf");
   });
 
+  test("concurrent first sends create exactly one folder", async () => {
+    const args = { matterId, invoiceNumber: "2026-101", bytes, userId, day };
+    await Promise.all([
+      fileInvoicePdf({ ...args, kind: "initial" }),
+      fileInvoicePdf({ ...args, kind: "updated" }),
+    ]);
+    expect(
+      await prisma.documentFolder.count({ where: { matterId, systemKind: "invoices" } })
+    ).toBe(1);
+    expect(await prisma.document.count({ where: { matterId } })).toBe(2);
+  });
+
   test("resend is named resent", async () => {
     const { documentId } = await fileInvoicePdf({
       matterId, invoiceNumber: "2026-101", kind: "resend", bytes, userId, day,
