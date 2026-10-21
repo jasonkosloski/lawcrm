@@ -34,3 +34,9 @@ Related: [ADR-013](../decisions/013-timer-sessions-are-pre-entries-ungated-to.md
 - **Email send, "Send updated invoice" after a payment, and "Re-send email…"** email the invoice PDF via Resend. From is the firm name on `EMAIL_FROM`'s address; Reply-To is the sender. The body carries a client-portal deep link when the portal is live for the matter. **Mail** still only records intent.
 - The PDF is rendered server-side with `@react-pdf/renderer` (layout mirrors `/print/invoices/[id]`) and filed into a protected "Invoices" system folder (`systemKind` `invoices`) on the matter.
 - **Failure handling:** an email failure after a committed send or payment returns ok plus a warning toast; the send or payment is never rolled back. A re-send that does not go out returns an error.
+
+## Void stamp and client notice
+- Voiding a **sent** client invoice opens a dialog: "Email the client a voided copy" (default on) and a recipient field, both shown only with `billing.send_invoice`. Approved-but-unsent invoices and internal records keep the plain confirm, with no stamp or email.
+- After the void commits, every PDF of the invoice filed in the matter's Invoices folder (linked by `Document.invoiceId`) has its bytes replaced in place with a VOID-stamped copy (pdf-lib overlay: red diagonal VOID plus "Voided <date>"); the old file is deleted unless another document shares it.
+- If nothing was filed, a stamped copy is rendered before the void and filed as "Invoice <n> (void YYYY-MM-DD).pdf". The client is emailed the stamped PDF.
+- Failures after the void never undo it; they surface as a warning.

@@ -59,6 +59,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 
 **Time, billing, money**
 - [x] **Invoice email delivery**: send, updated-invoice and re-send email the invoice PDF via Resend. → [time-and-billing](features/time-and-billing.md)
+- [x] **Void stamp + client notice**: voiding a sent invoice stamps filed PDFs VOID and can email the client. → [time-and-billing](features/time-and-billing.md)
 - [ ] **Settings: Billing & rates**: default rate, UTBMS library, invoice templates, payment terms. → [time-and-billing](features/time-and-billing.md)
 - [ ] **`updateExpense` edit dialog**: action exists, no UI. → [time-and-billing](features/time-and-billing.md)
 - [ ] **Time follow-ups**: auto-capture, idle detection, admin user picker on `/time`, editable reconciliation lanes. → [time-and-billing](features/time-and-billing.md)
