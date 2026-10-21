@@ -65,8 +65,15 @@ describe("document invoiceId backfill", () => {
     const otherMatter = await doc(m2, f2.id, "Invoice 2026-101 (sent 2026-10-21).pdf");
     const unrelated = await doc(m1, f1.id, "Invoice 2026-101.pdf");
 
+    // "_" and "%" in a number are literal, not LIKE wildcards.
+    const invU = await invoice(m1, "2026_1");
+    const hitU = await doc(m1, f1.id, "Invoice 2026_1 (sent 2026-10-21).pdf");
+    const wildcard = await doc(m1, f1.id, "Invoice 2026X1 (sent 2026-10-21).pdf");
+
     await prisma.$executeRawUnsafe(backfill);
 
+    expect(await linked(hitU.id)).toBe(invU.id);
+    expect(await linked(wildcard.id)).toBeNull();
     expect(await linked(hit.id)).toBe(inv.id);
     expect(await linked(hit1010.id)).toBe(inv1010.id);
     expect(await linked(nonSystem.id)).toBeNull();

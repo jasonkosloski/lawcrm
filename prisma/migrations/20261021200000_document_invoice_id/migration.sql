@@ -14,4 +14,4 @@ UPDATE "documents" d SET "invoiceId" = i."id"
 FROM "document_folders" f, "invoices" i
 WHERE d."folderId" = f."id" AND f."systemKind" = 'invoices'
   AND i."matterId" = d."matterId" AND d."invoiceId" IS NULL
-  AND d."name" LIKE 'Invoice ' || i."invoiceNumber" || ' (%';
+  AND starts_with(d."name", 'Invoice ' || i."invoiceNumber" || ' (');

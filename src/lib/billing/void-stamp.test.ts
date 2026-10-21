@@ -120,9 +120,6 @@ describe("stampVoid", () => {
     expect(text).toContain("2026-101");
     expect(text).toContain("VOID");
     expect(text).toContain("Voided October 21, 2026");
-    const fs = await import("node:fs");
-    const dir = process.env.VOID_SAMPLE_DIR;
-    if (dir) fs.writeFileSync(`${dir}/sample-void.pdf`, out);
   });
 
   it("rejects bytes that are not a PDF", async () => {
