@@ -33,6 +33,7 @@
     "@kenjiuno/msgreader": "1.28.0",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
+    "@react-pdf/renderer": "4.9.0",
     "@tiptap/pm": "^3.32.0",
     "@tiptap/react": "^3.32.0",
     "@tiptap/starter-kit": "^3.32.0",
