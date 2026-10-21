@@ -206,4 +206,43 @@ describe("SendInvoiceDialog", () => {
     render(<SendInvoiceDialog {...baseProps} open onOpenChange={vi.fn()} />);
     expect(screen.getByRole("button", { name: /us mail/i })).toBeDisabled();
   });
+
+  test("the portal option is disabled with the reason when unavailable", () => {
+    render(
+      <SendInvoiceDialog
+        {...baseProps}
+        portalSend={{
+          available: false,
+          reason: "The billed client doesn't have portal access to this matter.",
+        }}
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("button", { name: /client portal/i })).toBeDisabled();
+    expect(
+      screen.getByText(/billed client doesn't have portal access/i)
+    ).toBeInTheDocument();
+  });
+
+  test("the portal option submits method=portal without a recipient", async () => {
+    const user = setupUser();
+    render(
+      <SendInvoiceDialog
+        {...baseProps}
+        clientEmail={null}
+        portalSend={{ available: true, reason: null }}
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: /client portal/i }));
+    expect(screen.queryByLabelText(/sent to \(email\)/i)).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: /send via client portal/i })
+    );
+    await waitFor(() => expect(mockedAction).toHaveBeenCalled());
+    const fd = mockedAction.mock.calls[0][2] as FormData;
+    expect(fd.get("method")).toBe("portal");
+  });
 });

@@ -41,7 +41,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Mail, Stamp, TriangleAlert } from "lucide-react";
+import { Globe, Mail, Stamp, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sendInvoice } from "@/app/actions/billing";
 import {
@@ -53,6 +53,9 @@ import { parseMoneyInput } from "@/lib/parse-money-input";
 const formatMoney = (n: number): string =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+export type PortalSend = { available: boolean; reason: string | null };
+const NO_PORTAL_SEND: PortalSend = { available: false, reason: null };
+
 export function SendInvoiceDialog({
   open,
   onOpenChange,
@@ -62,6 +65,7 @@ export function SendInvoiceDialog({
   clientEmail,
   trustBalance,
   canApplyTrust = false,
+  portalSend = NO_PORTAL_SEND,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -74,6 +78,9 @@ export function SendInvoiceDialog({
    *  at send moves client money and the server refuses it without
    *  the key, so the option is hidden for everyone else. */
   canApplyTrust?: boolean;
+  /** Whether "Client portal" can be used, with the reason when not
+   *  (resolved server-side; the action re-checks it). */
+  portalSend?: PortalSend;
 }) {
   const action = sendInvoice.bind(null, invoiceId);
   // Wrapped useActionState: masks state left over from a previous
@@ -110,9 +117,10 @@ export function SendInvoiceDialog({
         <DialogHeader>
           <DialogTitle>Mark invoice {invoiceNumber} as sent</DialogTitle>
           <DialogDescription>
-            Nothing is emailed from here. Send the invoice to the client
-            yourself (print or save it as a PDF), then record how and to
-            whom you sent it.
+            Email and US mail only record the send: nothing is emailed from
+            here, so send the invoice yourself (print or save it as a PDF),
+            then record how and to whom. Client portal posts the invoice for
+            the client to view and emails them a notice.
           </DialogDescription>
         </DialogHeader>
 
@@ -129,6 +137,7 @@ export function SendInvoiceDialog({
           invoiceBalance={invoiceBalance}
           trustEligible={trustEligible}
           defaultTrustApply={defaultTrustApply}
+          portalSend={portalSend}
         />
       </DialogContent>
     </Dialog>
@@ -145,6 +154,7 @@ function SendInvoiceForm({
   invoiceBalance,
   trustEligible,
   defaultTrustApply,
+  portalSend,
 }: {
   state: BillingFormState;
   formAction: (payload: FormData) => void;
@@ -155,6 +165,7 @@ function SendInvoiceForm({
   invoiceBalance: number;
   trustEligible: boolean;
   defaultTrustApply: number;
+  portalSend: PortalSend;
 }) {
   const ids = useId();
   // Dispatch via onSubmit + startTransition instead of
@@ -170,7 +181,9 @@ function SendInvoiceForm({
     startSubmit(() => formAction(fd));
   };
   // Working copies, seeded when the form mounts (= on every open).
-  const [method, setMethod] = useState<"email" | "mail">("email");
+  const [method, setMethod] = useState<"email" | "mail" | "portal">(
+    "email"
+  );
   const [recipient, setRecipient] = useState(clientEmail ?? "");
   const [applyTrust, setApplyTrust] = useState(false);
   const [trustAmount, setTrustAmount] = useState(
@@ -211,7 +224,7 @@ function SendInvoiceForm({
         <div
           role="group"
           aria-labelledby={`${ids}-method`}
-          className="grid grid-cols-2 gap-2"
+          className="grid grid-cols-3 gap-2"
         >
           <button
             type="button"
@@ -232,6 +245,27 @@ function SendInvoiceForm({
           </button>
           <button
             type="button"
+            onClick={() => setMethod("portal")}
+            disabled={!portalSend.available}
+            aria-pressed={method === "portal"}
+            title={portalSend.reason ?? undefined}
+            className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-md border text-xs",
+              !portalSend.available
+                ? "border-line bg-paper-2/50 text-ink-4 cursor-not-allowed opacity-70"
+                : method === "portal"
+                  ? "border-brand-500 bg-brand-soft text-brand-700"
+                  : "border-line bg-white text-ink hover:border-brand-300"
+            )}
+          >
+            <Globe size={14} />
+            <div className="text-left">
+              <div className="font-medium">Client portal</div>
+              <div className="text-2xs text-ink-4">Posts and notifies</div>
+            </div>
+          </button>
+          <button
+            type="button"
             disabled
             title="US mail integration is on the roadmap."
             className="flex items-center gap-2 px-3 py-2 rounded-md border border-line bg-paper-2/50 text-xs text-ink-4 cursor-not-allowed opacity-70"
@@ -245,8 +279,18 @@ function SendInvoiceForm({
         </div>
       </div>
 
+      {!portalSend.available && portalSend.reason && (
+        <span className="text-2xs text-ink-4">{portalSend.reason}</span>
+      )}
+
       {/* Recipient — email today; mail will swap in a mailing
           address summary once the mail path lands. */}
+      {method === "portal" ? (
+        <p className="text-2xs text-ink-4">
+          The invoice is posted to the client portal and the billed
+          client is emailed a notice (no amount or matter details).
+        </p>
+      ) : (
       <div className="flex flex-col gap-1">
         <label
           htmlFor={`${ids}-recipient`}
@@ -281,6 +325,7 @@ function SendInvoiceForm({
           </span>
         )}
       </div>
+      )}
 
       {/* Apply trust — collapsed checkbox; expands amount field
           when ticked. The hidden input mirrors the boolean so the
@@ -375,12 +420,17 @@ function SendInvoiceForm({
         <Button
           type="submit"
           disabled={
-            isPending || method === "mail" || !recipient || !trustValid
+            isPending ||
+            method === "mail" ||
+            (method === "email" && !recipient) ||
+            !trustValid
           }
         >
           {isPending
             ? "Saving…"
-            : willMarkPaid
+            : method === "portal"
+              ? "Send via client portal"
+              : willMarkPaid
               ? "Mark sent + paid from trust"
               : applyTrust && trustValid
                 ? "Mark sent + apply trust"

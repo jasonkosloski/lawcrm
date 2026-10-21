@@ -21,6 +21,10 @@ import { logActivity } from "@/lib/activity-log";
 import { roundMoney } from "@/lib/money";
 import { UserFacingError, toUserMessage } from "@/lib/user-facing-error";
 import { createNotifications } from "@/lib/notifications";
+import { sendEmail } from "@/lib/email/send";
+import { invoicePostedEmail } from "@/lib/portal/emails";
+import { portalHomeUrl } from "@/lib/portal/link-url";
+import { resolvePortalSendTarget } from "@/lib/queries/portal-billing";
 import {
   INVOICE_PAYMENT_SOURCES,
   billingInitialState,
@@ -313,15 +317,18 @@ export async function recordInvoicePayment(
 // payment branch of recordInvoicePayment — and the resulting status
 // can be sent / partial / paid depending on coverage.
 
-const sendInvoiceSchema = z.object({
-  /** "email" today; "mail" is reserved for the future US-mail
-   *  workflow but rejected here so the dialog's disabled state is
-   *  enforced server-side too. */
-  method: z.enum(["email", "mail"]),
+const sendInvoiceSchema = z
+  .object({
+  /** "email" records a manual send; "portal" posts the invoice to the
+   *  client portal and emails the billed contact a notice; "mail" is
+   *  reserved for the future US-mail workflow but rejected here so the
+   *  dialog's disabled state is enforced server-side too. */
+  method: z.enum(["email", "mail", "portal"]),
   /** Recipient — for email, validated as an email address. For
    *  mail, will become the bill-to mailing address (pulled from
-   *  the client) once that path lands. */
-  recipient: z.string().trim().min(1, "Recipient is required").max(320),
+   *  the client) once that path lands. Ignored for portal (the
+   *  billed identity is resolved server-side). */
+  recipient: z.string().trim().max(320).default(""),
   /** "true" when the apply-trust checkbox was ticked. */
   applyTrust: z
     .string()
@@ -341,7 +348,16 @@ const sendInvoiceSchema = z.object({
       (v) => !v || /^\d+(\.\d{1,2})?$/.test(v),
       "Enter a valid amount"
     ),
-});
+  })
+  .superRefine((v, ctx) => {
+    if (v.method !== "portal" && v.recipient.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["recipient"],
+        message: "Recipient is required",
+      });
+    }
+  });
 
 export async function sendInvoice(
   invoiceId: string,
@@ -376,6 +392,16 @@ export async function sendInvoice(
       status: "error",
       errors: { recipient: ["Enter a valid email address."] },
     };
+  }
+
+  // Portal posting: resolve the billed identity before any write (never
+  // trust the client's view of availability). The notice goes out after
+  // the transaction commits.
+  let portalEmail: string | null = null;
+  if (data.method === "portal") {
+    const target = await resolvePortalSendTarget(invoiceId);
+    if (!target.available) return { status: "error", error: target.reason };
+    portalEmail = target.email;
   }
 
   // The trust leg's ledger/payment date: the user's calendar day,
@@ -507,13 +533,35 @@ export async function sendInvoice(
     // happened. Two log lines so audit reads cleanly. No email is
     // dispatched yet ("Logged-only for now" in the dialog), so the
     // entry records the invoice as marked sent — not as delivered.
-    await logActivity({
-      matterId: result.matterId,
-      userId,
-      type: "filing",
-      title: `Invoice ${result.invoiceNumber} marked sent via ${result.method} (not emailed)`,
-      detail: `to ${result.recipient}`,
-    });
+    if (result.method === "portal") {
+      // Delivery failure never undoes the send; it is noted on the row.
+      let emailFailed = false;
+      try {
+        const res = await sendEmail({
+          to: portalEmail!,
+          ...invoicePostedEmail(portalHomeUrl()),
+        });
+        emailFailed = !res.ok;
+      } catch (err) {
+        console.warn("[billing] portal invoice email failed", err);
+        emailFailed = true;
+      }
+      await logActivity({
+        matterId: result.matterId,
+        userId,
+        type: "filing",
+        title: `Invoice ${result.invoiceNumber} sent via client portal`,
+        detail: emailFailed ? "— email failed" : null,
+      });
+    } else {
+      await logActivity({
+        matterId: result.matterId,
+        userId,
+        type: "filing",
+        title: `Invoice ${result.invoiceNumber} marked sent via ${result.method} (not emailed)`,
+        detail: `to ${result.recipient}`,
+      });
+    }
     if (result.trustApplied) {
       await logActivity({
         matterId: result.matterId,

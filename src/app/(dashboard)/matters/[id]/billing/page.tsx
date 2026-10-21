@@ -73,6 +73,7 @@ export default async function MatterBillingPage({
     permissions,
     selectedInvoice,
     selectedInvoiceId,
+    portalSend,
   } = await loadBillingTab(id, requestedInvoiceId);
 
   const main = (
@@ -129,6 +130,7 @@ export default async function MatterBillingPage({
             paidAmount={selectedInvoice.paidAmount}
             clientEmail={selectedInvoice.clientEmail}
             canApplyTrust={permissions.applyTrust}
+            portalSend={portalSend ?? undefined}
             canApproveInvoice={permissions.approveInvoice}
             canSendInvoice={permissions.sendInvoice}
             canRecordInvoicePayment={permissions.recordPayment}

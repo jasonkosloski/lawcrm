@@ -66,3 +66,12 @@ export function portalMessageEmail(link: string): Body {
     html: `<p>You have a new message from your legal team. Sign in to the client portal to read it:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
   };
 }
+
+/** Names no matter or amount. */
+export function invoicePostedEmail(link: string): Body {
+  return {
+    subject: "A new invoice is available in your client portal",
+    text: `A new invoice is available in your client portal. Sign in to view it:\n\n${link}`,
+    html: `<p>A new invoice is available in your client portal. Sign in to view it:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
+  };
+}

@@ -64,7 +64,7 @@ import {
 import { confirmAction, notifyError, type ConfirmOptions } from "@/lib/feedback";
 import { ApplyTrustDialog } from "./apply-trust-dialog";
 import { RecordPaymentDialog } from "./record-payment-dialog";
-import { SendInvoiceDialog } from "./send-invoice-dialog";
+import { SendInvoiceDialog, type PortalSend } from "./send-invoice-dialog";
 
 export function InvoiceActionBar({
   invoiceId,
@@ -89,6 +89,8 @@ export function InvoiceActionBar({
    *  forgets it can't expose them; the server enforces the key
    *  regardless. */
   canApplyTrust = false,
+  /** Client-portal send availability for the Send dialog. */
+  portalSend,
   /** Per-action permission flags, resolved server-side by the page
    *  (`currentUserHasPermission`). Each defaults to false so a
    *  caller that forgets one can't offer a button the server would
@@ -109,6 +111,7 @@ export function InvoiceActionBar({
   paidAmount?: number;
   clientEmail?: string | null;
   canApplyTrust?: boolean;
+  portalSend?: PortalSend;
   /** billing.approve_invoice — also gates "Mark recorded" (the
    *  server maps the internal-record paid flip to the same key). */
   canApproveInvoice?: boolean;
@@ -350,6 +353,7 @@ export function InvoiceActionBar({
           clientEmail={clientEmail}
           trustBalance={trustBalance}
           canApplyTrust={canApplyTrust}
+          portalSend={portalSend}
         />
       )}
       {canRecordPayment && (

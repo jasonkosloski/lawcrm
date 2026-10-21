@@ -13,6 +13,10 @@ import {
 } from "@/lib/queries/billing";
 import { getUnbilledExpenseSummary } from "@/lib/queries/billing-expenses";
 import { getMatterSettlement } from "@/lib/queries/settlements";
+import {
+  portalSendAvailability,
+  type PortalSendAvailability,
+} from "@/lib/queries/portal-billing";
 import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -111,6 +115,14 @@ export async function loadBillingTab(
       ? requestedInvoice
       : null;
   const selectedInvoiceId = selectedInvoice?.id ?? null;
+  // Only an approved client invoice can be sent; skip the lookup otherwise.
+  const portalSend: PortalSendAvailability | null =
+    selectedInvoice &&
+    permissions.sendInvoice &&
+    selectedInvoice.kind === "client" &&
+    selectedInvoice.status === "approved"
+      ? await portalSendAvailability(selectedInvoice.id)
+      : null;
 
   return {
     billing,
@@ -127,5 +139,6 @@ export async function loadBillingTab(
     permissions,
     selectedInvoice,
     selectedInvoiceId,
+    portalSend,
   };
 }
