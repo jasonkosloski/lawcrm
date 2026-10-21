@@ -43,6 +43,8 @@ import { PortalCard } from "@/components/matters/portal-card";
 import { getPortalCardData } from "@/lib/queries/portal-access";
 import { ClientRequestsCard } from "@/components/matters/client-requests-card";
 import { getDocumentRequestsForMatter } from "@/lib/queries/document-requests";
+import { ClientStatusCard } from "@/components/matters/client-status-card";
+import { getClientStatusCardData } from "@/lib/queries/portal-status";
 import { NoteComposer } from "@/components/matters/notes/note-composer";
 import { NotesTabBody } from "@/components/matters/notes/notes-tab-body";
 
@@ -88,6 +90,9 @@ export default async function MatterOverviewPage({
     canAddRequests,
     canEditRequests,
     canDeleteRequests,
+    canAddUpdates,
+    canEditUpdates,
+    canDeleteUpdates,
     canEditAgreement,
   ] = await Promise.all([
     getMatterById(id),
@@ -133,6 +138,9 @@ export default async function MatterOverviewPage({
     currentUserHasPermission("portal.add_requests"),
     currentUserHasPermission("portal.edit_requests"),
     currentUserHasPermission("portal.delete_requests"),
+    currentUserHasPermission("portal.add_updates"),
+    currentUserHasPermission("portal.edit_updates"),
+    currentUserHasPermission("portal.delete_updates"),
     currentUserHasPermission("matters.agreement.edit"),
   ]);
   if (!matter) notFound();
@@ -158,9 +166,13 @@ export default async function MatterOverviewPage({
 
   // The loader needs portal.view (it returns nothing without it), so
   // it runs only for holders.
-  const [portal, clientRequests] = canViewPortal
-    ? await Promise.all([getPortalCardData(id), getDocumentRequestsForMatter(id)])
-    : [null, null];
+  const [portal, clientRequests, clientStatus] = canViewPortal
+    ? await Promise.all([
+        getPortalCardData(id),
+        getDocumentRequestsForMatter(id),
+        getClientStatusCardData(id),
+      ])
+    : [null, null, null];
 
   const stageOptions = await prisma.matterStage.findMany({
     // Active stages, plus the matter's own stage even if it was
@@ -504,6 +516,17 @@ export default async function MatterOverviewPage({
               canInvite={canInvitePortal}
               canRevoke={canRevokePortal}
               portalEnabled={portal.portalEnabled}
+              tz={tz}
+            />
+          )}
+
+          {clientStatus && (
+            <ClientStatusCard
+              matterId={matter.id}
+              data={clientStatus}
+              canAdd={canAddUpdates}
+              canEdit={canEditUpdates}
+              canDelete={canDeleteUpdates}
               tz={tz}
             />
           )}

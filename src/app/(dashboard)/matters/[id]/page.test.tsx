@@ -57,6 +57,12 @@ vi.mock("@/lib/queries/document-requests", () => ({
 vi.mock("@/components/matters/client-requests-card", () => ({
   ClientRequestsCard: () => <div data-testid="client-requests-card" />,
 }));
+vi.mock("@/lib/queries/portal-status", () => ({
+  getClientStatusCardData: vi.fn(async () => ({ updates: [], hasLiveAccess: true })),
+}));
+vi.mock("@/components/matters/client-status-card", () => ({
+  ClientStatusCard: () => <div data-testid="client-status-card" />,
+}));
 vi.mock("@/lib/queries/matters", () => ({ getMatterById: vi.fn() }));
 vi.mock("@/lib/queries/matter-detail", () => ({
   getMatterDeadlines: vi.fn(async () => []),
@@ -230,6 +236,7 @@ describe("MatterOverviewPage", () => {
     await renderPage();
     expect(screen.getByTestId("portal-card")).toBeTruthy();
     expect(screen.getByTestId("client-requests-card")).toBeTruthy();
+    expect(screen.getByTestId("client-status-card")).toBeTruthy();
 
     vi.mocked(getPortalCardData).mockClear();
     vi.mocked(currentUserHasPermission).mockImplementation(
@@ -239,6 +246,7 @@ describe("MatterOverviewPage", () => {
     await renderPage();
     expect(screen.queryByTestId("portal-card")).toBeNull();
     expect(screen.queryByTestId("client-requests-card")).toBeNull();
+    expect(screen.queryByTestId("client-status-card")).toBeNull();
     expect(getPortalCardData).not.toHaveBeenCalled();
     vi.mocked(currentUserHasPermission).mockImplementation(async () => true);
   });
