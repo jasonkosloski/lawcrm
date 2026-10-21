@@ -32,6 +32,7 @@ vi.mock("@/lib/current-user", () => ({
 }));
 vi.mock("@/lib/queries/communication", () => ({
   getFilingMatterOptions: vi.fn(),
+  getFilingLeadOptions: vi.fn(async () => []),
   getThreadById: vi.fn(),
   listThreadsForMatter: vi.fn(),
 }));

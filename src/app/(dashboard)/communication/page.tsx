@@ -37,6 +37,7 @@ import {
   getCommunicationCounts,
   getCommunicationPinnedMatters,
   getEmailUnreadCount,
+  getFilingLeadOptions,
   getFilingMatterOptions,
   getThreadById,
   listThreads,
@@ -283,6 +284,7 @@ export default async function CommunicationPage({
     selectedThread,
     pinnedMatters,
     filingOptions,
+    leadOptions,
     canViewPortal,
   ] = await Promise.all([
     getCommunicationCounts(),
@@ -296,6 +298,7 @@ export default async function CommunicationPage({
     // reader uses it, so skip the (unbounded) query until a thread is
     // open.
     threadId ? getFilingMatterOptions() : Promise.resolve([]),
+    threadId ? getFilingLeadOptions() : Promise.resolve([]),
     canViewPortalP,
   ]);
 
@@ -341,6 +344,7 @@ export default async function CommunicationPage({
         <ThreadReader
           thread={selectedThread}
           filingOptions={filingOptions}
+          leadOptions={leadOptions}
           tz={tz}
         />
       </div>

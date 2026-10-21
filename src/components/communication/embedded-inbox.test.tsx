@@ -32,6 +32,7 @@ function panes(selectedThread: ThreadDetail | null) {
       threads={threads}
       selectedThread={selectedThread}
       filingOptions={[]}
+      leadOptions={[]}
       basePath="/matters/m1/communication"
       emptyLabel="Nothing"
     />

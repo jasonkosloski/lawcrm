@@ -29,6 +29,7 @@ vi.mock("@/lib/queries/communication", async (importOriginal) => ({
   getCommunicationPinnedMatters: vi.fn(async () => []),
   getEmailUnreadCount: vi.fn(async () => 0),
   getFilingMatterOptions: vi.fn(async () => []),
+  getFilingLeadOptions: vi.fn(async () => []),
   getThreadById: vi.fn(),
   listThreads: vi.fn(async () => ({ rows: [], page: 1, pageCount: 1, total: 0, pageSize: 100 })),
 }));

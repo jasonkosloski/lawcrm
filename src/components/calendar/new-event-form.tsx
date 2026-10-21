@@ -345,7 +345,7 @@ export function NewEventForm({
 /**
  * Searchable matter combobox. Client-side filter over the
  * server-fetched open-matter options (same "small enough to
- * filter locally" call the email FileToMatterPicker makes),
+ * filter locally" call the email RecordPicker makes),
  * pinned matters first. Selection renders as a chip with a
  * clear button; the parent owns the value + hidden input.
  */

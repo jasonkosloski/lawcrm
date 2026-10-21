@@ -25,6 +25,7 @@ import { PortalConversation } from "@/components/communication/portal-conversati
 import { getPortalConversation } from "@/lib/queries/portal-messages";
 import { ChannelToggle } from "@/components/communication/channel-toggle";
 import {
+  getFilingLeadOptions,
   getFilingMatterOptions,
   getThreadById,
   listThreadsForMatter,
@@ -77,6 +78,7 @@ export default async function MatterCommunicationPage({
     phoneItems,
     threads,
     filingOptions,
+    leadOptions,
     requestedThread,
     canEditCall,
     canDeleteCall,
@@ -96,6 +98,7 @@ export default async function MatterCommunicationPage({
     channel === "phone" ? listMessengerItemsForMatter(id) : null,
     channel === "email" ? listThreadsForMatter(id, parsePageParam(sp.page)) : null,
     channel === "email" ? getFilingMatterOptions() : null,
+    channel === "email" ? getFilingLeadOptions() : null,
     channel === "email" && requestedThreadId
       ? getThreadById(requestedThreadId)
       : null,
@@ -193,6 +196,7 @@ export default async function MatterCommunicationPage({
         threads={threadList}
         selectedThread={selectedThread}
         filingOptions={filingOptions ?? []}
+        leadOptions={leadOptions ?? []}
         basePath={`/matters/${id}/communication`}
         emptyLabel="No communication filed to this matter"
         emptyHint="Emails and text messages filed to this matter will appear here. File a thread from the main inbox or let auto-filing catch it."

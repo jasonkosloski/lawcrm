@@ -26,6 +26,7 @@ import { Card } from "@/components/ui/card";
 import { EmailLink } from "@/components/ui/email-link";
 import { EmbeddedInbox } from "@/components/communication/embedded-inbox";
 import {
+  getFilingLeadOptions,
   getFilingMatterOptions,
   getThreadById,
   listThreadsForEmail,
@@ -119,9 +120,13 @@ export default async function LeadCommunicationPage({
 
   // The filing-matter list only feeds the open thread's reader, so
   // skip that (unbounded) query until a thread is selected.
-  const [selectedThread, filingOptions] = threadId
-    ? await Promise.all([getThreadById(threadId), getFilingMatterOptions()])
-    : [null, []];
+  const [selectedThread, filingOptions, leadOptions] = threadId
+    ? await Promise.all([
+        getThreadById(threadId),
+        getFilingMatterOptions(),
+        getFilingLeadOptions(),
+      ])
+    : [null, [], []];
 
   // Truly no contact info — show a single empty card. The composer
   // stays available (it accepts a typed phone number) so the first
@@ -175,6 +180,7 @@ export default async function LeadCommunicationPage({
             threads={emailThreads}
             selectedThread={selectedThread}
             filingOptions={filingOptions}
+            leadOptions={leadOptions}
             basePath={`/intake/${id}/communication`}
             emptyLabel="No emails yet"
             emptyHint={`Emails to or from ${email} will surface here.`}

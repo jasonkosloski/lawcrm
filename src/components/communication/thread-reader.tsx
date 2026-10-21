@@ -22,7 +22,7 @@ import { FollowUpButton } from "./follow-up-button";
 import { setEmailThreadFollowUp } from "@/app/actions/follow-ups";
 import { LogTimeOnCommButton } from "./log-time-on-comm-button";
 import { CommTimeLoggedIndicator } from "./comm-time-logged-indicator";
-import { FileToMatterPicker } from "./file-to-matter-picker";
+import { FileThreadPicker } from "./file-thread-picker";
 import { AttachmentChips } from "./attachment-chips";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { BackToListButton } from "./back-to-list-button";
@@ -32,7 +32,10 @@ import { isHtmlEmailBody } from "@/lib/email-body";
 import { getCommActionPermissions } from "./comm-action-permissions";
 import { noteSnippet } from "./note-snippet";
 import { sanitizeEmailHtml } from "@/lib/sanitize-html";
-import type { FilingMatterOption } from "@/lib/queries/communication";
+import type {
+  FilingLeadOption,
+  FilingMatterOption,
+} from "@/lib/queries/communication";
 
 const formatRecipients = (
   list: Array<{ name?: string; email: string }>
@@ -44,10 +47,13 @@ export async function ThreadReader({
   /** Open-matter list passed in from the page server component so the
    *  file-to-matter picker can render synchronously. */
   filingOptions,
+  leadOptions,
   tz = null,
 }: {
   thread: ThreadDetail | null;
   filingOptions: FilingMatterOption[];
+  /** Open-lead list for the same picker. */
+  leadOptions: FilingLeadOption[];
   /** Viewer's IANA zone — message timestamps are real instants. */
   tz?: string | null;
 }) {
@@ -100,11 +106,21 @@ export async function ThreadReader({
               column. */}
         <div className="mt-2 flex flex-col @3xl:flex-row @3xl:items-center @3xl:justify-between gap-2">
           <div className="flex items-center gap-2 flex-wrap text-2xs min-w-0 flex-1">
-            <FileToMatterPicker
+            <FileThreadPicker
               threadId={thread.id}
-              currentMatter={thread.matter}
-              options={filingOptions}
+              current={
+                thread.matter
+                  ? { kind: "matter", matterId: thread.matter.id }
+                  : thread.lead
+                    ? { kind: "lead", leadId: thread.lead.id }
+                    : null
+              }
+              currentLabel={thread.matter?.name ?? thread.lead?.name ?? null}
+              currentMeta={thread.matter}
+              matters={filingOptions}
+              leads={leadOptions}
               canFile={perms.canFileEmail}
+              canUnfile={!thread.hasAppSentMail}
             />
             <span className="text-ink-4">·</span>
             <span className="text-ink-4">

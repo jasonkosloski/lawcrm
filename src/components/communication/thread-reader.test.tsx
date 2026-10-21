@@ -28,9 +28,11 @@ vi.mock("./inbox-action-buttons", () => ({
     canCreateTask: boolean;
     canCreateNote: boolean;
     canCreateDeadline: boolean;
+    isFiled: boolean;
   }) => (
     <span
       data-testid="inbox-actions"
+      data-filed={String(props.isFiled)}
       data-snippet={props.source.snippet}
       data-task={String(props.canCreateTask)}
       data-note={String(props.canCreateNote)}
@@ -38,9 +40,25 @@ vi.mock("./inbox-action-buttons", () => ({
     />
   ),
 }));
-vi.mock("./file-to-matter-picker", () => ({
-  FileToMatterPicker: ({ canFile }: { canFile: boolean }) => (
-    <span data-testid="file-picker" data-can-file={String(canFile)} />
+vi.mock("./file-thread-picker", () => ({
+  FileThreadPicker: ({
+    canFile,
+    canUnfile,
+    current,
+    currentLabel,
+  }: {
+    canFile: boolean;
+    canUnfile: boolean;
+    current: unknown;
+    currentLabel: string | null;
+  }) => (
+    <span
+      data-testid="file-picker"
+      data-can-file={String(canFile)}
+      data-can-unfile={String(canUnfile)}
+      data-current={JSON.stringify(current)}
+      data-label={currentLabel ?? ""}
+    />
   ),
 }));
 vi.mock("./log-time-on-comm-button", () => ({
@@ -86,7 +104,7 @@ function thread(body: string): ThreadDetail {
 }
 
 async function renderReader(t: ThreadDetail) {
-  return render(await ThreadReader({ thread: t, filingOptions: [] }));
+  return render(await ThreadReader({ thread: t, filingOptions: [], leadOptions: [] }));
 }
 
 beforeEach(() => {
@@ -161,6 +179,25 @@ describe("permission-gated affordances", () => {
     expect(screen.getByTestId("inbox-actions")).toHaveAttribute(
       "data-task",
       "true"
+    );
+  });
+});
+
+describe("lead-filed threads", () => {
+  test("renders with the lead as the record and matter-only actions disabled", async () => {
+    await renderReader({
+      ...thread("hi"),
+      lead: { id: "l1", name: "Jane Lead" },
+      hasAppSentMail: true,
+    });
+    const picker = screen.getByTestId("file-picker");
+    expect(picker.dataset.current).toBe('{"kind":"lead","leadId":"l1"}');
+    expect(picker.dataset.label).toBe("Jane Lead");
+    // App-sent mail: no Unfile.
+    expect(picker).toHaveAttribute("data-can-unfile", "false");
+    expect(screen.getByTestId("inbox-actions")).toHaveAttribute(
+      "data-filed",
+      "false"
     );
   });
 });

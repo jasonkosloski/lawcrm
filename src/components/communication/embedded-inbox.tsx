@@ -22,6 +22,7 @@ import { Pager } from "@/components/shared/pager";
 import { EmbeddedThreadList } from "./embedded-thread-list";
 import { ThreadReader } from "./thread-reader";
 import type {
+  FilingLeadOption,
   FilingMatterOption,
   ThreadDetail,
   ThreadListRow,
@@ -31,6 +32,7 @@ export function EmbeddedInbox({
   threads,
   selectedThread,
   filingOptions,
+  leadOptions,
   basePath,
   emptyLabel,
   emptyHint,
@@ -43,6 +45,8 @@ export function EmbeddedInbox({
   /** Open-matter list for the file-to-matter picker on the embedded
    *  thread reader. Caller passes from getFilingMatterOptions(). */
   filingOptions: FilingMatterOption[];
+  /** Open-lead list for the same picker (getFilingLeadOptions()). */
+  leadOptions: FilingLeadOption[];
   /** Page URL used to build thread selection hrefs
    *  (e.g. "/matters/[id]/communication"). */
   basePath: string;
@@ -93,6 +97,7 @@ export function EmbeddedInbox({
           <ThreadReader
             thread={selectedThread}
             filingOptions={filingOptions}
+            leadOptions={leadOptions}
             tz={tz}
           />
         </div>

@@ -163,7 +163,7 @@ export function AttachmentChips({
 
 /**
  * "File to matter…" dialog. Matter list (search-filterable, pinned
- * first — same client-side filter idiom as FileToMatterPicker) +
+ * first — same client-side filter idiom as RecordPicker) +
  * a folder select fetched per chosen matter.
  */
 function FileAttachmentDialog({
