@@ -400,19 +400,21 @@ model MatterStage {
 
 /// A legal matter (case) — the central entity of the application.
 model Matter {
-  id             String       @id @default(cuid())
-  name           String /// Display name, e.g. "Alvarez v. City of Aurora et al."
-  caseNumber     String? /// Court docket number, e.g. "2026-CV-00481"
-  practiceAreaId String /// FK → practice_areas
-  practiceArea   PracticeArea @relation(fields: [practiceAreaId], references: [id])
-  stageId        String /// FK → matter_stages (must belong to the same practice area)
-  stage          MatterStage  @relation(fields: [stageId], references: [id])
-  court          String? /// Court and judge, e.g. "D. Colorado · Hon. L. Martinez"
-  filedDate      DateTime?
-  trialDate      DateTime?
-  venueId        String? /// FK → venues
-  venue          Venue?       @relation(fields: [venueId], references: [id], onDelete: Restrict)
-  feeStructure   String       @default("contingent") /// contingent | hourly | flat | hybrid | pro_bono
+  id                   String       @id @default(cuid())
+  name                 String /// Display name, e.g. "Alvarez v. City of Aurora et al."
+  caseNumber           String? /// Court docket number, e.g. "2026-CV-00481"
+  practiceAreaId       String /// FK → practice_areas
+  practiceArea         PracticeArea @relation(fields: [practiceAreaId], references: [id])
+  stageId              String /// FK → matter_stages (must belong to the same practice area)
+  stage                MatterStage  @relation(fields: [stageId], references: [id])
+  court                String? /// Court and judge, e.g. "D. Colorado · Hon. L. Martinez"
+  filedDate            DateTime?
+  trialDate            DateTime?
+  venueId              String? /// FK → venues
+  venue                Venue?       @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  /// Client portal shows this matter's invoices and trust ledger to the billed contacts.
+  portalBillingEnabled Boolean      @default(false)
+  feeStructure         String       @default("contingent") /// contingent | hourly | flat | hybrid | pro_bono
   /// Which billing flow the matter uses on the Billing tab —
   /// "client" (today's traditional invoicing), "court_voucher"
   /// (court-appointed, generate vouchers for agency reimbursement),
@@ -422,21 +424,21 @@ model Matter {
   /// `PracticeArea.defaultBillingMode` on create; can be overridden
   /// per-matter (a §1988-eligible case might swap from client →
   /// fee_petition mid-life). iteration 1: schema only.
-  billingMode    String       @default("client")
+  billingMode          String       @default("client")
   /// Ethical wall that holds even while the firm's matterVisibility is
   /// FIRM: a restricted matter is visible only to its active team,
   /// `matters.view_all` holders and Admins. Inherited from a restricted
   /// lead on conversion. See ADR-049.
-  restricted     Boolean      @default(false)
+  restricted           Boolean      @default(false)
   /// IOLTA trust balance for this matter. Decimal (not Float) for
   /// regulatory-grade precision — a $0.01 drift on real client trust
   /// money is a compliance violation.
-  trustBalance   Decimal      @default(0) @db.Decimal(14, 2) /// Current IOLTA trust balance for this matter
+  trustBalance         Decimal      @default(0) @db.Decimal(14, 2) /// Current IOLTA trust balance for this matter
   /// Work-in-progress total — same precision rationale as trustBalance.
-  wipAmount      Decimal      @default(0) @db.Decimal(14, 2) /// Work-in-progress (unbilled hours value)
-  description    String? /// Brief case summary
-  color          String       @default("#2563a8") /// Color dot for UI display — snapshot from practiceArea.color on create
-  isArchived     Boolean      @default(false)
+  wipAmount            Decimal      @default(0) @db.Decimal(14, 2) /// Work-in-progress (unbilled hours value)
+  description          String? /// Brief case summary
+  color                String       @default("#2563a8") /// Color dot for UI display — snapshot from practiceArea.color on create
+  isArchived           Boolean      @default(false)
 
   /// Date the underlying cause-of-action accrued — typically the
   /// date of the injury / arrest / discrimination event / contract

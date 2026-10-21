@@ -393,6 +393,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         description:
           "Post a message to the matter's clients in the portal; optionally emails them.",
       },
+      {
+        key: "portal.share_billing",
+        label: "Show billing in the client portal",
+        description:
+          "Turn on a matter's invoices and trust ledger in the client portal. Also needs billing access.",
+      },
     ],
   },
   {
