@@ -66,22 +66,32 @@ export async function unreadPortalMessageMatters(
   const threads = await prisma.portalThread.findMany({
     where: { matterId: { in: matterIds }, matter: where },
     select: {
+      id: true,
       matterId: true,
       readStates: { where: { identityId }, select: { lastReadAt: true } },
     },
   });
+  if (threads.length === 0) return new Set();
+  // One query for all threads: a staff message newer than that thread's
+  // read marker (any staff message when there is no marker).
+  const unreadRows = await prisma.portalMessage.findMany({
+    where: {
+      authorKind: "staff",
+      OR: threads.map((t) => {
+        const lastReadAt = t.readStates[0]?.lastReadAt;
+        return {
+          threadId: t.id,
+          ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {}),
+        };
+      }),
+    },
+    distinct: ["threadId"],
+    select: { threadId: true },
+  });
+  const unreadThreads = new Set(unreadRows.map((r) => r.threadId));
   const unread = new Set<string>();
   for (const t of threads) {
-    const lastReadAt = t.readStates[0]?.lastReadAt;
-    const newer = await prisma.portalMessage.findFirst({
-      where: {
-        thread: { matterId: t.matterId },
-        authorKind: "staff",
-        ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {}),
-      },
-      select: { id: true },
-    });
-    if (newer) unread.add(t.matterId);
+    if (unreadThreads.has(t.id)) unread.add(t.matterId);
   }
   return unread;
 }
