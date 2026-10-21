@@ -51,6 +51,42 @@ export type FirmProfile = {
  *  (updateFirmAction) must read the pre-edit row without seeding the
  *  request-level cache that the re-rendered page reads afterwards.
  *  Everything else should call the cached `getCurrentFirm`. */
+const FIRM_PROFILE_SELECT = {
+  id: true,
+  name: true,
+  shortName: true,
+  ein: true,
+  website: true,
+  phone: true,
+  email: true,
+  addressLine1: true,
+  addressLine2: true,
+  city: true,
+  state: true,
+  zip: true,
+  country: true,
+  establishedAt: true,
+  logoUrl: true,
+  matterNameTemplate: true,
+} as const;
+
+/** The firm a given user belongs to (no request/session needed, for
+ *  post-commit work). Falls back to the first firm row (by id) when the user
+ *  has none; null only when no firm exists at all. */
+export async function loadFirmProfileForUser(
+  userId: string
+): Promise<FirmProfile | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { firm: { select: FIRM_PROFILE_SELECT } },
+  });
+  if (user?.firm) return user.firm;
+  return prisma.firm.findFirst({
+    orderBy: { id: "asc" },
+    select: FIRM_PROFILE_SELECT,
+  });
+}
+
 export async function loadCurrentFirm(): Promise<FirmProfile> {
   const userId = await getCurrentUserId();
   const user = await prisma.user.findUnique({

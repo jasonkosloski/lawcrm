@@ -21,6 +21,7 @@ vi.mock("@/lib/file-storage", () => ({
   deleteFile: vi.fn(async (k: string) => void store.delete(k)),
 }));
 
+import * as pdf from "@/lib/billing/invoice-pdf";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
 import { deliverInvoiceEmail } from "@/lib/billing/invoice-delivery";
@@ -143,6 +144,22 @@ describe("deliverInvoiceEmail", () => {
     expect(cap.sent).toHaveLength(1);
     expect(r).toMatchObject({ ok: false, emailSent: true });
     if (!r.ok) expect(r.warning).toContain("Documents");
+  });
+
+  test("PDF render failure logs a failure, sends nothing, files nothing", async () => {
+    const spy = vi.spyOn(pdf, "renderInvoicePdf").mockRejectedValue(new Error("render boom"));
+    const r = await run();
+    spy.mockRestore();
+    expect(r).toEqual({
+      ok: false,
+      emailSent: false,
+      warning: "The email didn't go out: render boom. Use Re-send email to retry.",
+    });
+    expect(cap.sent).toHaveLength(0);
+    expect(await prisma.document.count({ where: { matterId } })).toBe(0);
+    const log = await prisma.activityLog.findFirstOrThrow({ where: { matterId } });
+    expect(log.title).toBe(`Invoice ${NUMBER} email failed: client@x.com`);
+    expect(log.detail).toBe("render boom");
   });
 
   test("missing invoice returns a warning without throwing or emailing", async () => {

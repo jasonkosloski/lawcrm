@@ -2,13 +2,13 @@ import "server-only";
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { loadFirmProfileForUser } from "@/lib/firm";
 import { logActivity } from "@/lib/activity-log";
 import { sendEmail } from "@/lib/email/send";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { todayDateOnly } from "@/app/actions/billing/helpers";
 import { getInvoiceById } from "@/lib/queries/billing";
 import { resolvePortalSendTarget } from "@/lib/queries/portal-billing";
-import type { FirmProfile } from "@/lib/firm";
 import {
   invoiceEmail,
   portalInvoiceUrl,
@@ -62,20 +62,37 @@ async function deliver(input: {
       emailSent: false,
     };
   }
-  const [firmRow, sender] = await Promise.all([
-    prisma.firm.findFirst(),
-    prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
-  ]);
-  if (!firmRow) {
+  const n = invoice.invoiceNumber;
+
+  // Any failure before the send is logged against the matter and
+  // reported as "didn't go out" (spec §5 step 2).
+  let firm: NonNullable<Awaited<ReturnType<typeof loadFirmProfileForUser>>>;
+  let sender: { email: string } | null;
+  let bytes: Buffer;
+  try {
+    const [f, u] = await Promise.all([
+      loadFirmProfileForUser(userId),
+      prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
+    ]);
+    if (!f) throw new Error("firm profile missing");
+    firm = f;
+    sender = u;
+    bytes = await renderInvoicePdf(invoice, firm, timeZone);
+  } catch (err) {
+    const reason = message(err);
+    await logActivity({
+      matterId: invoice.matterId,
+      userId,
+      type: "filing",
+      title: `Invoice ${n} email failed: ${to}`,
+      detail: reason,
+    });
     return {
       ok: false,
-      warning: "The email didn't go out: firm profile missing. Use Re-send email to retry.",
+      warning: `The email didn't go out: ${reason}. Use Re-send email to retry.`,
       emailSent: false,
     };
   }
-  const firm = firmRow as unknown as FirmProfile;
-
-  const bytes = await renderInvoicePdf(invoice, firm, timeZone);
 
   // File the PDF first; a filing failure must not block the email.
   let filingFailed = false;
@@ -128,7 +145,6 @@ async function deliver(input: {
     ],
   });
 
-  const n = invoice.invoiceNumber;
   if (result.ok) {
     await logActivity({
       matterId: invoice.matterId,

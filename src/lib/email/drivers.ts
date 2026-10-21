@@ -46,8 +46,9 @@ export function resendDriver(apiKey: string): EmailDriver {
     const from = process.env.EMAIL_FROM?.trim();
     if (!from) return { ok: false, error: "EMAIL_FROM is not set." };
     const address = /<([^>]+)>/.exec(from)?.[1]?.trim() ?? from;
-    const fromHeader = msg.fromName
-      ? `"${msg.fromName.replace(/[\\"]/g, "\\$&")}" <${address}>`
+    const displayName = msg.fromName?.replace(/[\r\n]+/g, " ").trim();
+    const fromHeader = displayName
+      ? `"${displayName.replace(/[\\"]/g, "\\$&")}" <${address}>`
       : from;
     try {
       const res = await fetch("https://api.resend.com/emails", {

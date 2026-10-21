@@ -55,6 +55,22 @@ describe("resendDriver", () => {
   });
 });
 
+describe("resendDriver From header", () => {
+  it("strips CR/LF from fromName", async () => {
+    vi.stubEnv("EMAIL_FROM", "Litgox <noreply@litgox.com>");
+    const fn = stubFetch();
+    await resendDriver("k")({ ...base, fromName: "Evil\r\nBcc: x@y.com" });
+    expect(bodyOf(fn).from).toBe('"Evil Bcc: x@y.com" <noreply@litgox.com>');
+  });
+
+  it("bare-address EMAIL_FROM plus fromName", async () => {
+    vi.stubEnv("EMAIL_FROM", "noreply@litgox.com");
+    const fn = stubFetch();
+    await resendDriver("k")({ ...base, fromName: "Kosloski Law" });
+    expect(bodyOf(fn).from).toBe('"Kosloski Law" <noreply@litgox.com>');
+  });
+});
+
 describe("consoleDriver", () => {
   it("console driver logs attachment names and sizes, not bytes", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
