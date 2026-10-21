@@ -206,6 +206,22 @@ describe("markStaffPortalThreadRead", () => {
     expect(theirs.lastReadAt.getTime()).toBe(0);
   });
 
+  test("advances to lastMessageAt and revalidates; a second call is a no-op", async () => {
+    await sendStaffPortalMessage(matterId, "hi");
+    const thread = await prisma.portalThread.findFirstOrThrow();
+    await prisma.portalReadState.updateMany({ data: { lastReadAt: new Date(0) } });
+    vi.mocked(revalidatePath).mockClear();
+    await markStaffPortalThreadRead(matterId);
+    const rs = await prisma.portalReadState.findFirstOrThrow({ where: { userId: admin } });
+    expect(rs.lastReadAt.getTime()).toBe(thread.lastMessageAt.getTime());
+    expect(revalidatePath).toHaveBeenCalled();
+    vi.mocked(revalidatePath).mockClear();
+    await markStaffPortalThreadRead(matterId);
+    const again = await prisma.portalReadState.findFirstOrThrow({ where: { userId: admin } });
+    expect(again.lastReadAt.getTime()).toBe(rs.lastReadAt.getTime());
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
   test("is a silent no-op without portal.view_messages", async () => {
     await sendStaffPortalMessage(matterId, "hi");
     await prisma.portalReadState.updateMany({ data: { lastReadAt: new Date(0) } });

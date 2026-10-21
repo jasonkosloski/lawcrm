@@ -107,17 +107,27 @@ export async function sendStaffPortalMessage(
   return emailFailed ? { ok: true, warning: EMAIL_WARNING } : { ok: true };
 }
 
-/** Silent no-op without the view key or when the matter has no thread. */
+/**
+ * Silent no-op without the view key, with no thread, or when nothing is
+ * unread (no write, no revalidation, so a mount-time call can't loop).
+ * Stamps the thread's lastMessageAt, not now, so a message that arrived
+ * after render stays unread.
+ */
 export async function markStaffPortalThreadRead(matterId: string): Promise<void> {
   const gate = await requirePermissionResult("portal.view_messages");
   if (!gate.ok) return;
   await assertMatterAccess(matterId);
   const thread = await prisma.portalThread.findUnique({
     where: { matterId },
-    select: { id: true },
+    select: { id: true, lastMessageAt: true },
   });
   if (!thread) return;
-  await advanceReadState(thread.id, { userId: gate.userId });
+  const state = await prisma.portalReadState.findUnique({
+    where: { threadId_userId: { threadId: thread.id, userId: gate.userId } },
+    select: { lastReadAt: true },
+  });
+  if (state && state.lastReadAt >= thread.lastMessageAt) return;
+  await advanceReadState(thread.id, { userId: gate.userId }, thread.lastMessageAt);
   revalidatePath(`/matters/${matterId}/communication`);
   revalidatePath("/communication");
 }
