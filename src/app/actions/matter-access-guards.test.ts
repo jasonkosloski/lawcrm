@@ -52,6 +52,10 @@ const ALLOWLIST: Record<string, string> = {
     "Mailbox-personal flag on the caller's OWN thread (owner-scoped query); writes no matter data.",
   "follow-ups.ts:setEmailThreadFollowUp":
     "Personal reminder on the caller's OWN thread; matterId is only read to revalidate paths.",
+  "portal-messages-client.ts:sendPortalMessage":
+    "Portal-client action, not staff: gated by the portal identity's live PortalMatterAccess (livePortalMatterWhere), not staff matter access.",
+  "portal-messages-client.ts:markPortalMessagesRead":
+    "Portal-client action, not staff: gated by the portal identity's live PortalMatterAccess (livePortalMatterWhere), not staff matter access.",
   "thread-read.ts:markEmailThreadRead":
     "Per-user read marker on the caller's OWN thread; writes no matter data.",
 };
