@@ -1008,7 +1008,7 @@ const updateMatterSchema = z.object({
   stageId: z.string().trim().min(1, "Stage is required"),
   /** Locked after creation: omitted leaves the stored type alone; a
    *  value that differs from it needs matters.billing_type.edit. */
-  billingType: z.enum(BILLING_TYPES).optional(),
+  billingType: z.enum([...BILLING_TYPES, "hybrid"]).optional(),
   caseNumber: z.string().trim().max(80).optional().or(z.literal("")),
   court: z.string().trim().max(200).optional().or(z.literal("")),
   clientId: z.string().trim().optional().or(z.literal("")),
@@ -1125,10 +1125,20 @@ export async function updateMatter(
   // stored type is a no-op (so legacy hybrid / fee_petition survive
   // ordinary edits); a change needs its own key.
   const storedBillingType = billingTypeOf(stored);
-  const nextBillingType =
+  const requestedBillingType =
     data.billingType && data.billingType !== storedBillingType
       ? data.billingType
       : null;
+  // Legacy "hybrid" is only valid as the unchanged stored value (the
+  // form posts it back for hybrid matters); it can't be a target.
+  if (requestedBillingType === "hybrid") {
+    return {
+      status: "error",
+      errors: { billingType: ["Hybrid can't be chosen as a billing type"] },
+      values: raw,
+    };
+  }
+  const nextBillingType = requestedBillingType;
   if (
     nextBillingType &&
     !(await currentUserHasPermission("matters.billing_type.edit"))
@@ -1416,6 +1426,7 @@ export async function updateMatter(
         name: data.name,
         practiceAreaId: resolved.practiceAreaId,
         stageId: resolved.stageId,
+        // Intentionally replaces any fee_petition billing mode.
         ...(nextBillingType ? billingTypeFields(nextBillingType) : {}),
         caseNumber: data.caseNumber || null,
         court: data.court || null,

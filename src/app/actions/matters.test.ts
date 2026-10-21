@@ -2316,4 +2316,23 @@ describe("updateMatter billing type lock", () => {
     await expect(run(id, { billingType: "pro_bono" })).rejects.toThrow(/__REDIRECT__/);
     expect(await stored(id)).toEqual({ feeStructure: "pro_bono", billingMode: "none" });
   });
+
+  test("permitted user can save other edits to a hybrid matter posting billingType=hybrid", async () => {
+    const id = await seed({ feeStructure: "hybrid", billingMode: "client" });
+    await expect(
+      run(id, { billingType: "hybrid", caseNumber: "H-1" })
+    ).rejects.toThrow(/__REDIRECT__/);
+    expect(await stored(id)).toEqual({ feeStructure: "hybrid", billingMode: "client" });
+    expect(
+      (await prisma.matter.findUniqueOrThrow({ where: { id } })).caseNumber
+    ).toBe("H-1");
+  });
+
+  test("hybrid cannot be chosen as a change target", async () => {
+    const id = await seed({ feeStructure: "hourly", billingMode: "client" });
+    const res = await run(id, { billingType: "hybrid" });
+    expect(res.status).toBe("error");
+    expect(res.errors?.billingType).toBeTruthy();
+    expect(await stored(id)).toEqual({ feeStructure: "hourly", billingMode: "client" });
+  });
 });
