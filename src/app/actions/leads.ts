@@ -864,7 +864,7 @@ export async function convertLeadToMatter(
       matterId,
       userId,
       type: "email",
-      title: `${plural(carriedEmailThreadCount, "email thread")} carried over`,
+      title: `${plural(carriedEmailThreadCount, "email thread")} carried forward`,
       detail: `Filed to the lead before conversion · ${lead.name}`,
     });
     revalidatePath(`/matters/${matterId}/communication`);

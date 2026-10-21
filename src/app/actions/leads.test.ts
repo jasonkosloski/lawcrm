@@ -603,7 +603,7 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
     const titles = (
       await prisma.activityLog.findMany({ where: { matterId: matter.id }, select: { title: true } })
     ).map((l) => l.title);
-    expect(titles).toContain("2 email threads carried over");
+    expect(titles).toContain("2 email threads carried forward");
   });
 
   test("no email threads: no carried-over timeline entry", async () => {
