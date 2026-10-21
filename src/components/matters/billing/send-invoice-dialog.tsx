@@ -1,11 +1,11 @@
 /**
- * Mark-as-Sent Dialog (sendInvoice)
+ * Send Invoice Dialog (sendInvoice)
  *
- * NOTHING is emailed from here (docs/issues/invoice-email-not-sent.md).
- * The lawyer delivers the invoice themselves; this records how and to
- * whom, plus an optional trust application, and transitions an
- * approved invoice to "sent". The copy says so plainly so nobody
- * assumes the client received it.
+ * Delivers an approved invoice and transitions it to "sent", with an
+ * optional trust application. Email sends the invoice as a PDF from
+ * the firm (replies go to the sender); Client portal posts it for the
+ * client to view and emails them a notice. If the send commits but the
+ * email fails, the action returns ok + `warning`, surfaced as a toast.
  *
  * Channels:
  *   - Email: recipient pre-fills from client.email and is editable.
@@ -48,6 +48,7 @@ import {
   billingInitialState,
   type BillingFormState,
 } from "@/lib/billing-form";
+import { notifyWarning } from "@/lib/feedback";
 import { parseMoneyInput } from "@/lib/parse-money-input";
 
 const formatMoney = (n: number): string =>
@@ -108,19 +109,21 @@ export function SendInvoiceDialog({
   // fresh object, so identity is the reliable "a submission just
   // finished" signal.
   useEffect(() => {
-    if (state.status === "ok") onOpenChange(false);
+    if (state.status === "ok") {
+      if (state.warning) notifyWarning(state.warning);
+      onOpenChange(false);
+    }
   }, [state, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Mark invoice {invoiceNumber} as sent</DialogTitle>
+          <DialogTitle>Send invoice {invoiceNumber}</DialogTitle>
           <DialogDescription>
-            Email and US mail only record the send: nothing is emailed from
-            here, so send the invoice yourself (print or save it as a PDF),
-            then record how and to whom. Client portal posts the invoice for
-            the client to view and emails them a notice.
+            Email sends the invoice as a PDF from the firm; replies come to
+            you. Client portal posts it for the client to view and emails
+            them a notice. US mail is coming soon.
           </DialogDescription>
         </DialogHeader>
 
@@ -240,7 +243,7 @@ function SendInvoiceForm({
             <Mail size={14} />
             <div className="text-left">
               <div className="font-medium">Email</div>
-              <div className="text-2xs text-ink-4">You emailed it</div>
+              <div className="text-2xs text-ink-4">Sends a PDF</div>
             </div>
           </button>
           <button

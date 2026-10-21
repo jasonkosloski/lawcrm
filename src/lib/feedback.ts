@@ -15,6 +15,11 @@ export function notifyError(message: string): void {
   toast.error(message);
 }
 
+/** Done, but part of it didn't go through (e.g. saved, email failed). */
+export function notifyWarning(message: string): void {
+  toast.warning(message);
+}
+
 /** An action worked and nothing else on screen shows it. */
 export function notifySuccess(message: string): void {
   toast.success(message);

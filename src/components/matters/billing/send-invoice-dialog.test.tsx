@@ -15,6 +15,12 @@ import userEvent from "@testing-library/user-event";
 vi.mock("@/app/actions/billing", () => ({
   sendInvoice: vi.fn(),
 }));
+vi.mock("@/lib/feedback", () => ({
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+  notifyWarning: vi.fn(),
+}));
+import { notifyWarning } from "@/lib/feedback";
 
 import { sendInvoice } from "@/app/actions/billing";
 import { SendInvoiceDialog } from "./send-invoice-dialog";
@@ -39,6 +45,28 @@ const trustCheckbox = () =>
   screen.queryByRole("checkbox", { name: /apply trust toward this invoice/i });
 
 describe("SendInvoiceDialog", () => {
+  test("shows the send copy and no longer claims nothing is emailed", () => {
+    render(<SendInvoiceDialog {...baseProps} open onOpenChange={vi.fn()} />);
+    expect(screen.getByText("Send invoice INV-001")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Email sends the invoice as a PDF from the firm; replies come to you. Client portal posts it for the client to view and emails them a notice. US mail is coming soon."
+      )
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/nothing is emailed/i);
+  });
+
+  test("a warning result toasts the warning", async () => {
+    const user = setupUser();
+    mockedAction.mockImplementation(async () => ({
+      status: "ok" as const,
+      warning: "W",
+    }));
+    render(<SendInvoiceDialog {...baseProps} open onOpenChange={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: /^mark as sent$/i }));
+    await waitFor(() => expect(notifyWarning).toHaveBeenCalledWith("W"));
+  });
+
   test("pre-fills the recipient (labelled) and sends with the posted fields, then closes", async () => {
     const user = setupUser();
     const onOpenChange = vi.fn();

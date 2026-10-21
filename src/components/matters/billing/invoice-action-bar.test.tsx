@@ -13,6 +13,7 @@
 
 import { describe, expect, test, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("@/app/actions/billing", () => ({
   approveInvoice: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock("@/app/actions/billing", () => ({
   setInvoiceStatus: vi.fn(),
   recordInvoicePayment: vi.fn(),
   sendInvoice: vi.fn(),
+  resendInvoiceEmail: vi.fn(),
 }));
 
 import { approveInvoice } from "@/app/actions/billing";
@@ -181,10 +183,10 @@ describe("InvoiceActionBar — status x kind x balance matrix (all permissions h
       hidden: [/^approve$/i, /mark as sent/i],
     },
     {
-      name: "client partial with a balance (no void: payment recorded)",
+      name: "client partial with a balance (no void; kebab holds Re-send)",
       props: { currentStatus: "partial", paidAmount: 100 },
-      shown: [/record payment/i],
-      hidden: [/more invoice actions/i, /mark as sent/i],
+      shown: [/record payment/i, /more invoice actions/i],
+      hidden: [/mark as sent/i],
     },
     {
       name: "client sent with zero balance",
@@ -193,10 +195,10 @@ describe("InvoiceActionBar — status x kind x balance matrix (all permissions h
       hidden: [/record payment/i, /apply trust/i],
     },
     {
-      name: "client paid (terminal)",
+      name: "client paid (kebab holds Re-send only)",
       props: { currentStatus: "paid", invoiceBalance: 0, paidAmount: 300 },
-      shown: [],
-      hidden: [/record payment/i, /more invoice actions/i, /^approve$/i],
+      shown: [/more invoice actions/i],
+      hidden: [/record payment/i, /^approve$/i],
     },
     {
       name: "client void (terminal)",
@@ -244,6 +246,55 @@ describe("InvoiceActionBar — Approve", () => {
     fireEvent.click(screen.getByRole("button", { name: /approve/i }));
     await waitFor(() =>
       expect(approveInvoice).toHaveBeenCalledWith("inv1", "1234.50")
+    );
+  });
+});
+
+describe("InvoiceActionBar — Re-send email", () => {
+  const openMenu = async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    await user.click(screen.getByRole("button", { name: /more invoice actions/i }));
+  };
+
+  test.each(["sent", "partial", "paid"])(
+    "offered for %s with billing.send_invoice",
+    async (currentStatus) => {
+      render(
+        <InvoiceActionBar
+          {...baseProps}
+          {...ALL}
+          currentStatus={currentStatus}
+          invoiceBalance={currentStatus === "paid" ? 0 : 300}
+        />
+      );
+      await openMenu();
+      expect(
+        await screen.findByRole("menuitem", { name: /re-send email/i })
+      ).toBeInTheDocument();
+    }
+  );
+
+  test("absent for approved invoices", async () => {
+    render(<InvoiceActionBar {...baseProps} {...ALL} currentStatus="approved" />);
+    await openMenu();
+    expect(screen.queryByText(/re-send email/i)).toBeNull();
+  });
+
+  test("absent without billing.send_invoice", async () => {
+    render(
+      <InvoiceActionBar {...baseProps} {...ALL} canSendInvoice={false} />
+    );
+    await openMenu();
+    expect(screen.queryByText(/re-send email/i)).toBeNull();
+  });
+
+  test("the send button tooltip describes email and portal", () => {
+    render(<InvoiceActionBar {...baseProps} {...ALL} currentStatus="approved" />);
+    expect(
+      screen.getByRole("button", { name: /mark as sent/i })
+    ).toHaveAttribute(
+      "title",
+      "Email the invoice to the client, or post it to the client portal."
     );
   });
 });

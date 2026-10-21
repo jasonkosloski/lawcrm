@@ -38,6 +38,7 @@ import {
   Check,
   CheckCircle2,
   Landmark,
+  Mail,
   MoreHorizontal,
   Receipt,
   Send,
@@ -64,6 +65,7 @@ import {
 import { confirmAction, notifyError, type ConfirmOptions } from "@/lib/feedback";
 import { ApplyTrustDialog } from "./apply-trust-dialog";
 import { RecordPaymentDialog } from "./record-payment-dialog";
+import { ResendInvoiceDialog } from "./resend-invoice-dialog";
 import { SendInvoiceDialog, type PortalSend } from "./send-invoice-dialog";
 
 export function InvoiceActionBar({
@@ -128,12 +130,19 @@ export function InvoiceActionBar({
   const [pending, startTransition] = useTransition();
   const [sendOpen, setSendOpen] = useState(false);
   const [recordOpen, setRecordOpen] = useState(false);
+  const [resendOpen, setResendOpen] = useState(false);
   const [applyTrustOpen, setApplyTrustOpen] = useState(false);
 
   const canApprove =
     canApproveInvoice && kind === "client" && currentStatus === "draft";
   const canSend =
     canSendInvoice && kind === "client" && currentStatus === "approved";
+  const canResend =
+    canSendInvoice &&
+    kind === "client" &&
+    (currentStatus === "sent" ||
+      currentStatus === "partial" ||
+      currentStatus === "paid");
   const canRecordPayment =
     canRecordInvoicePayment &&
     kind === "client" &&
@@ -158,6 +167,7 @@ export function InvoiceActionBar({
   const nothingToDo =
     !canApprove &&
     !canSend &&
+    !canResend &&
     !canRecordPayment &&
     !showApplyTrust &&
     !canMarkRecorded &&
@@ -228,7 +238,7 @@ export function InvoiceActionBar({
           onClick={() => setSendOpen(true)}
           disabled={pending}
           className={primaryButtonClass}
-          title="Record that you sent this invoice to the client (nothing is emailed from here)."
+          title="Email the invoice to the client, or post it to the client portal."
         >
           <Send size={11} />
           Mark as sent
@@ -292,7 +302,7 @@ export function InvoiceActionBar({
         </button>
       )}
 
-      {(deleteAllowed || voidAllowed) && (
+      {(deleteAllowed || voidAllowed || canResend) && (
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -310,6 +320,12 @@ export function InvoiceActionBar({
             {/* Drafts: hard delete (no audit trail needed — no one
                 has seen the doc). Approved/sent: void (preserves
                 the row + invoice number for audit). */}
+            {canResend && (
+              <DropdownMenuItem onClick={() => setResendOpen(true)}>
+                <Mail />
+                Re-send email…
+              </DropdownMenuItem>
+            )}
             {deleteAllowed && (
               <DropdownMenuItem
                 variant="destructive"
@@ -343,6 +359,15 @@ export function InvoiceActionBar({
         </DropdownMenu>
       )}
 
+      {canResend && (
+        <ResendInvoiceDialog
+          open={resendOpen}
+          onOpenChange={setResendOpen}
+          invoiceId={invoiceId}
+          invoiceNumber={invoiceNumber}
+          clientEmail={clientEmail}
+        />
+      )}
       {canSend && (
         <SendInvoiceDialog
           open={sendOpen}

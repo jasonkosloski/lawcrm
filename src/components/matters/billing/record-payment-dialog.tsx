@@ -22,6 +22,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState, useTransition } from "react";
+import { notifyWarning } from "@/lib/feedback";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
@@ -128,7 +129,10 @@ export function RecordPaymentDialog({
   // Each action invocation returns a new object, so identity is
   // the reliable "a submission just finished" signal.
   useEffect(() => {
-    if (state.status === "ok") onOpenChange(false);
+    if (state.status === "ok") {
+      if (state.warning) notifyWarning(state.warning);
+      onOpenChange(false);
+    }
   }, [state, onOpenChange]);
 
   return (
@@ -405,7 +409,7 @@ function RecordPaymentForm({
           </div>
           <div className="text-2xs text-ink-4 mt-0.5">
             {clientEmail
-              ? `Logs that ${clientEmail} should get a refreshed copy reflecting this payment. Nothing is emailed — send it yourself.`
+              ? `Emails the refreshed invoice PDF to ${clientEmail}.`
               : "No email on file for the client — add one on the client record to enable this."}
           </div>
         </div>

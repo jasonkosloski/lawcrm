@@ -27,6 +27,12 @@ import userEvent from "@testing-library/user-event";
 vi.mock("@/app/actions/billing", () => ({
   recordInvoicePayment: vi.fn(),
 }));
+vi.mock("@/lib/feedback", () => ({
+  notifyError: vi.fn(),
+  notifySuccess: vi.fn(),
+  notifyWarning: vi.fn(),
+}));
+import { notifyWarning } from "@/lib/feedback";
 
 import { recordInvoicePayment } from "@/app/actions/billing";
 import { RecordPaymentDialog } from "./record-payment-dialog";
@@ -56,6 +62,34 @@ const baseProps = {
 // userEvent's computed-style check trips over that in happy-dom,
 // so disable it — the elements are genuinely interactive.
 const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
+
+describe("RecordPaymentDialog — email copy", () => {
+  test("the checkbox hint says the refreshed PDF is emailed", () => {
+    render(
+      <RecordPaymentDialog
+        {...baseProps}
+        clientEmail="c@x.com"
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    expect(
+      screen.getByText("Emails the refreshed invoice PDF to c@x.com.")
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/logged-only|nothing is emailed/i);
+  });
+
+  test("a warning result toasts the warning", async () => {
+    const user = setupUser();
+    mockedAction.mockImplementation(async () => ({
+      status: "ok" as const,
+      warning: "W",
+    }));
+    render(<RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: /record payment|^save|record/i }));
+    await waitFor(() => expect(notifyWarning).toHaveBeenCalledWith("W"));
+  });
+});
 
 describe("RecordPaymentDialog — close on success", () => {
   test("closes the dialog after a successful payment", async () => {
