@@ -4,6 +4,8 @@
  * Unified inbox surface for the firm. Two views switched by URL:
  *   ?view=email     → email three-pane (existing)
  *   ?view=messages  → messenger three-pane (SMS + calls + voicemails)
+ *   ?view=portal    → firm-wide Client portal list (portal.view_messages;
+ *                     without the key it falls back to the email view)
  *
  * Both views share the same TopBar with a tab strip beneath it. URL
  * also carries the in-view filter (`?filter=…`) and the open thread
@@ -55,13 +57,18 @@ import { LogCallButton } from "@/components/communication/log-call-button";
 import { getCurrentUserId, requireUser } from "@/lib/current-user";
 import { maybeKickEmailSync } from "@/lib/google/gmail-sync";
 import { SyncNowButton } from "@/components/communication/sync-now-button";
-import { parsePageParam } from "@/lib/pagination";
+import { pageWindow, parsePageParam } from "@/lib/pagination";
+import {
+  listPortalThreadsForViewer,
+  PAGE_SIZE as PORTAL_PAGE_SIZE,
+} from "@/lib/queries/portal-messages";
+import { PortalThreadList } from "@/components/communication/portal-thread-list";
 
-type View = "email" | "messages";
+type View = "email" | "messages" | "portal";
 
 function parseView(raw: string | string[] | undefined): View {
   const v = Array.isArray(raw) ? raw[0] : raw;
-  return v === "messages" ? "messages" : "email";
+  return v === "messages" || v === "portal" ? v : "email";
 }
 
 function parseEmailFilter(
@@ -101,9 +108,54 @@ export default async function CommunicationPage({
 }: PageProps<"/communication">) {
   await requireUser();
   const sp = await searchParams;
-  const view = parseView(sp.view);
+  const canViewPortal = await currentUserHasPermission("portal.view_messages");
+  const parsedView = parseView(sp.view);
+  const view: View =
+    parsedView === "portal" && !canViewPortal ? "email" : parsedView;
   const rawThread = Array.isArray(sp.thread) ? sp.thread[0] : sp.thread;
   const threadId = typeof rawThread === "string" ? rawThread : null;
+
+  if (view === "portal") {
+    const [portal, emailUnread, messengerUnread, tz] = await Promise.all([
+      listPortalThreadsForViewer(parsePageParam(sp.page)),
+      getEmailUnreadCount(),
+      getMessengerUnreadCount(),
+      getCurrentUserTimeZone(),
+    ]);
+    const win = pageWindow(
+      portal.total,
+      parsePageParam(sp.page),
+      PORTAL_PAGE_SIZE
+    );
+    return (
+      <>
+        <TopBar
+          title="Communication"
+          crumbs={`${portal.total} portal ${portal.total === 1 ? "conversation" : "conversations"}`}
+          below={
+            <CommunicationTabs
+              view="portal"
+              emailUnread={emailUnread}
+              messengerUnread={messengerUnread}
+              showPortal
+            />
+          }
+        />
+        <div className="flex-1 flex min-h-0">
+          <PortalThreadList
+            rows={portal.rows}
+            paging={{
+              page: win.page,
+              pageCount: win.pageCount,
+              total: portal.total,
+              pageSize: PORTAL_PAGE_SIZE,
+            }}
+            tz={tz}
+          />
+        </div>
+      </>
+    );
+  }
 
   if (view === "messages") {
     const filter = parseMessengerFilter(sp.filter);
@@ -154,6 +206,7 @@ export default async function CommunicationPage({
               view="messages"
               emailUnread={emailUnread}
               messengerUnread={messengerCounts.unread}
+              showPortal={canViewPortal}
             />
           }
         />
@@ -251,6 +304,7 @@ export default async function CommunicationPage({
             view="email"
             emailUnread={emailCounts.unread}
             messengerUnread={messengerUnread}
+            showPortal={canViewPortal}
           />
         }
       />

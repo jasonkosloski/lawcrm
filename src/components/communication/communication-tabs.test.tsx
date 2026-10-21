@@ -48,4 +48,22 @@ describe("CommunicationTabs", () => {
     expect(params.get("filter")).toBe("sent");
     expect(params.has("thread")).toBe(false);
   });
+
+  test("Client portal tab only with showPortal, and it links view=portal", () => {
+    const { rerender } = render(
+      <CommunicationTabs view="email" emailUnread={0} messengerUnread={0} />
+    );
+    expect(screen.queryByRole("link", { name: /Client portal/ })).toBeNull();
+    rerender(
+      <CommunicationTabs
+        view="portal"
+        emailUnread={0}
+        messengerUnread={0}
+        showPortal
+      />
+    );
+    const link = screen.getByRole("link", { name: /Client portal/ });
+    expect(link).toHaveAttribute("aria-current", "page");
+    expect(new URLSearchParams(link.getAttribute("href")!.split("?")[1]).get("view")).toBe("portal");
+  });
 });

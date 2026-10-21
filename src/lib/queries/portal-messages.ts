@@ -7,7 +7,7 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 import { pageWindow } from "@/lib/pagination";
 import { matterHasLivePortalAccess } from "@/lib/queries/document-requests";
 
-const PAGE_SIZE = 100;
+export const PAGE_SIZE = 100;
 const SNIPPET_CHARS = 120;
 
 export type StaffPortalMessage = {

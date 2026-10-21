@@ -82,6 +82,13 @@ vi.mock("@/components/communication/messenger-mailbox-rail", () => ({
 vi.mock("@/components/communication/messenger-thread-list", () => ({
   MessengerThreadList: sel("msg-list"),
 }));
+vi.mock("@/lib/queries/portal-messages", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/queries/portal-messages")>()),
+  listPortalThreadsForViewer: vi.fn(async () => ({ rows: [], total: 0 })),
+}));
+vi.mock("@/components/communication/portal-thread-list", () => ({
+  PortalThreadList: () => <div data-testid="portal-list" />,
+}));
 vi.mock("@/components/communication/messenger-thread-reader", () => ({
   MessengerThreadReader: () => null,
 }));
@@ -91,6 +98,8 @@ import {
   getMessengerThread,
   listMessengerThreads,
 } from "@/lib/queries/messenger";
+import { listPortalThreadsForViewer } from "@/lib/queries/portal-messages";
+import { currentUserHasPermission } from "@/lib/permission-check";
 import CommunicationPage from "./page";
 
 const props = (sp: Record<string, string>) =>
@@ -149,5 +158,30 @@ describe("?page= is the list's page (ADR-007)", () => {
     vi.mocked(getThreadById).mockResolvedValue(null);
     render(await CommunicationPage(props({ page: "abc" })));
     expect(vi.mocked(listThreads)).toHaveBeenLastCalledWith("inbox", undefined, 1);
+  });
+});
+
+describe("?view=portal", () => {
+  test("with portal.view_messages: renders the list and pages the query", async () => {
+    vi.mocked(listPortalThreadsForViewer).mockClear();
+    render(await CommunicationPage(props({ view: "portal", page: "2" })));
+    expect(screen.getByTestId("portal-list")).toBeInTheDocument();
+    expect(vi.mocked(listPortalThreadsForViewer)).toHaveBeenLastCalledWith(2);
+  });
+
+  test("without the key: falls back to email and never queries", async () => {
+    vi.mocked(listPortalThreadsForViewer).mockClear();
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (k: string) => k !== "portal.view_messages"
+    );
+    vi.mocked(getThreadById).mockResolvedValue(null);
+    try {
+      render(await CommunicationPage(props({ view: "portal" })));
+      expect(screen.queryByTestId("portal-list")).toBeNull();
+      expect(screen.getByTestId("email-list")).toBeInTheDocument();
+      expect(vi.mocked(listPortalThreadsForViewer)).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(currentUserHasPermission).mockImplementation(async () => true);
+    }
   });
 });

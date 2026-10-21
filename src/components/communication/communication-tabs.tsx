@@ -2,7 +2,7 @@
  * Communication View Tabs
  *
  * Top-of-page segmented control on /communication. URL-driven via
- * `?view=email|messages` so refresh and back-button work, and so a
+ * `?view=email|messages|portal` so refresh and back-button work, and so a
  * deep-link pointing at a specific thread carries its view with it.
  *
  * Renders inside the TopBar's `below` slot so it scrolls with the
@@ -13,19 +13,22 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Mail, MessageSquare } from "lucide-react";
+import { Mail, MessageSquare, MessagesSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type CommunicationView = "email" | "messages";
+export type CommunicationView = "email" | "messages" | "portal";
 
 export function CommunicationTabs({
   view,
   emailUnread,
   messengerUnread,
+  showPortal = false,
 }: {
   view: CommunicationView;
   emailUnread: number;
   messengerUnread: number;
+  /** Viewer holds portal.view_messages: show the Client portal tab. */
+  showPortal?: boolean;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -56,6 +59,15 @@ export function CommunicationTabs({
         label="Messages"
         unread={messengerUnread}
       />
+      {showPortal && (
+        <Tab
+          active={view === "portal"}
+          href={buildHref("portal")}
+          icon={<MessagesSquare size={13} />}
+          label="Client portal"
+          unread={0}
+        />
+      )}
     </div>
   );
 }
