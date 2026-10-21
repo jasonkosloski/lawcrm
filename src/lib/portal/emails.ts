@@ -48,3 +48,12 @@ export function documentsSharedEmail(link: string): Body {
     html: `<p>Your legal team shared documents with you. Sign in to the client portal to view them:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
   };
 }
+
+/** Names no matter, stage, or update text. */
+export function statusUpdateEmail(link: string): Body {
+  return {
+    subject: "Your legal team posted an update",
+    text: `Your legal team posted an update on your case. Sign in to the client portal to read it:\n\n${link}`,
+    html: `<p>Your legal team posted an update on your case. Sign in to the client portal to read it:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
+  };
+}
