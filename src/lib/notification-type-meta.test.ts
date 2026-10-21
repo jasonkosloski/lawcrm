@@ -25,6 +25,12 @@ describe("notificationTypeMeta", () => {
     expect(notificationTypeMeta("portal_upload")).toBe(
       NOTIFICATION_TYPE_META.portal_upload
     );
+    expect(notificationTypeMeta("portal_message")).toBe(
+      NOTIFICATION_TYPE_META.portal_message
+    );
+    expect(notificationTypeMeta("portal_message")).not.toBe(
+      NOTIFICATION_TYPE_META.generic
+    );
   });
 
   test("unknown / legacy type strings fall back to generic", () => {

@@ -48,6 +48,7 @@ export const NOTIFICATION_TYPE_META: Record<
   note_mentioned: { icon: MessageSquare, tone: "text-ink-3" },
   matter_assigned: { icon: UserPlus, tone: "text-brand-700" },
   portal_upload: { icon: FileUp, tone: "text-brand-700" },
+  portal_message: { icon: MessageSquare, tone: "text-brand-700" },
   generic: { icon: Calendar, tone: "text-ink-3" },
 };
 

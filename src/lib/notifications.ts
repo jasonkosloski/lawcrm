@@ -38,6 +38,7 @@ export type NotificationType =
   /** A portal client uploaded files to a matter the recipient is on
    *  (one per upload batch). */
   | "portal_upload"
+  | "portal_message"
   /** Catch-all for callsites that don't fit a specific bucket. */
   | "generic";
 

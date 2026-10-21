@@ -46,24 +46,26 @@ enum MatterVisibility {
 }
 
 model User {
-  id                      String                   @id @default(cuid())
-  documentRequestsCreated DocumentRequest[]        @relation("DocumentRequestCreator")
-  portalStatusUpdatesPosted PortalStatusUpdate[]   @relation("PortalStatusUpdatePoster")
-  portalEventsShared      PortalSharedEvent[]      @relation("PortalSharedEventSharer")
-  email                   String                   @unique
+  id                        String                   @id @default(cuid())
+  documentRequestsCreated   DocumentRequest[]        @relation("DocumentRequestCreator")
+  portalStatusUpdatesPosted PortalStatusUpdate[]     @relation("PortalStatusUpdatePoster")
+  portalEventsShared        PortalSharedEvent[]      @relation("PortalSharedEventSharer")
+  portalMessagesAuthored    PortalMessage[]          @relation("PortalMessageStaffAuthor")
+  portalReadStates          PortalReadState[]        @relation("PortalReadStateUser")
+  email                     String                   @unique
   /// Clerk user id; null until first Google sign-in links this row (src/lib/staff-auth.ts)
-  clerkUserId             String?                  @unique
-  name                    String
-  initials                String /// Two-letter initials for avatar display (e.g. "JM")
+  clerkUserId               String?                  @unique
+  name                      String
+  initials                  String /// Two-letter initials for avatar display (e.g. "JM")
   /// Display-only job title — Managing / Partner / Counsel /
   /// Paralegal / Investigator / Intake. Orthogonal to permission
   /// roles (see UserRole). Renamed from `role` once permission
   /// roles became first-class so the two concepts don't collide
   /// in code or UI.
-  jobTitle                String
-  avatarUrl               String? /// Optional profile photo URL
-  phone                   String?
-  barNumber               String? /// State bar number (attorneys only)
+  jobTitle                  String
+  avatarUrl                 String? /// Optional profile photo URL
+  phone                     String?
+  barNumber                 String? /// State bar number (attorneys only)
   /// IANA time-zone name ("America/Denver", "America/New_York"
   /// etc). Drives date formatting on every page that renders a
   /// time — dashboard "today's agenda," deadlines countdown,
@@ -71,7 +73,7 @@ model User {
   /// since that's where the firm operates today; later we'll
   /// surface a picker on /settings/profile and infer a sensible
   /// default from the browser at invite time.
-  timeZone                String                   @default("America/Denver")
+  timeZone                  String                   @default("America/Denver")
   /// Default visibility for calendar events this user creates.
   /// `default` (the default-default — privacy first) applies
   /// the resolver's standard rules: only creator + attendees +
@@ -79,21 +81,21 @@ model User {
   /// `show_details` flips every event this user creates to
   /// publicly-visible-in-full unless overridden per-event. Set
   /// from /settings/profile.
-  defaultEventVisibility  String                   @default("default") /// default | show_details
-  isActive                Boolean                  @default(true)
+  defaultEventVisibility    String                   @default("default") /// default | show_details
+  isActive                  Boolean                  @default(true)
   /// FK to the firm this user belongs to. Nullable in the schema
   /// only because SQLite can't add a non-null column without a
   /// default; every code path treats it as required and the seed
   /// backfills every existing row. When we go multi-tenant this
   /// stays the canonical scoping column.
-  firmId                  String?
+  firmId                    String?
   /// Per-user dashboard preferences. Currently `{ visible: Record<cardKey, boolean> }`.
   /// Null = use defaults (everything visible). Shape may grow to include order, etc.
-  dashboardPrefs          Json?
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  ownedRecordsRequests    RecordsRequest[]         @relation("RecordsRequestOwner")
-  recordsRequestFollowUps RecordsRequestFollowUp[] @relation("RecordsRequestFollowUpUser")
+  dashboardPrefs            Json?
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
+  ownedRecordsRequests      RecordsRequest[]         @relation("RecordsRequestOwner")
+  recordsRequestFollowUps   RecordsRequestFollowUp[] @relation("RecordsRequestFollowUpUser")
 
   // Relationships
   matterAssignments     MatterTeamMember[]
@@ -505,6 +507,7 @@ model Matter {
   documentRequests        DocumentRequest[]
   portalStatusUpdates     PortalStatusUpdate[]
   portalSharedEvents      PortalSharedEvent[]
+  portalThread            PortalThread?
 
   @@index([stageId])
   @@index([practiceAreaId])
@@ -2519,11 +2522,13 @@ model PortalIdentity {
   disabledAt DateTime?
   createdAt  DateTime  @default(now())
 
-  contact  Contact              @relation(fields: [contactId], references: [id], onDelete: Restrict)
-  access   PortalMatterAccess[]
-  tokens   PortalLoginToken[]
-  sessions PortalSession[]
-  uploads  Document[]
+  contact          Contact              @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  access           PortalMatterAccess[]
+  tokens           PortalLoginToken[]
+  sessions         PortalSession[]
+  uploads          Document[]
+  messagesAuthored PortalMessage[]      @relation("PortalMessageClientAuthor")
+  readStates       PortalReadState[]    @relation("PortalReadStateIdentity")
 
   @@map("portal_identities")
 }
@@ -2681,4 +2686,63 @@ model MatterAgreement {
   updatedAt  DateTime  @updatedAt
 
   @@map("matter_agreements")
+}
+
+/// One conversation per matter, created on the first message from either
+/// side. The denormalized fields advance via a guarded updateMany so
+/// concurrent sends never move them backwards.
+model PortalThread {
+  id             String   @id @default(cuid())
+  matterId       String   @unique
+  lastMessageAt  DateTime
+  /// True when the newest message is from a client, i.e. the thread is
+  /// awaiting a firm reply. App-maintained.
+  lastFromClient Boolean
+  createdAt      DateTime @default(now())
+
+  matter     Matter            @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  messages   PortalMessage[]
+  readStates PortalReadState[]
+
+  @@map("portal_threads")
+}
+
+/// Permanent record: no update or delete action exists. Exactly one of
+/// authorIdentityId / authorUserId is set, matching authorKind
+/// ("client" | "staff"). App-enforced, not a DB constraint.
+model PortalMessage {
+  id               String   @id @default(cuid())
+  threadId         String
+  body             String
+  authorKind       String
+  authorIdentityId String?
+  authorUserId     String?
+  createdAt        DateTime @default(now())
+
+  thread         PortalThread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorIdentity PortalIdentity? @relation("PortalMessageClientAuthor", fields: [authorIdentityId], references: [id], onDelete: Restrict)
+  authorUser     User?           @relation("PortalMessageStaffAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@index([threadId, createdAt])
+  @@map("portal_messages")
+}
+
+/// Per-reader read marker. Exactly one of userId (staff) / identityId
+/// (client) is set; app-enforced. lastEmailedAt is used on client rows only.
+model PortalReadState {
+  id            String    @id @default(cuid())
+  threadId      String
+  userId        String?
+  identityId    String?
+  lastReadAt    DateTime
+  lastEmailedAt DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  thread   PortalThread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user     User?           @relation("PortalReadStateUser", fields: [userId], references: [id], onDelete: Cascade)
+  identity PortalIdentity? @relation("PortalReadStateIdentity", fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@unique([threadId, identityId])
+  @@map("portal_read_states")
 }

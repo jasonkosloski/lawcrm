@@ -271,6 +271,8 @@ describe("portal case-status permissions", () => {
     "portal.edit_updates",
     "portal.delete_updates",
     "portal.share_events",
+    "portal.view_messages",
+    "portal.send_messages",
   ])("%s is catalogued in the portal category", (key) => {
     expect(isKnownPermission(key)).toBe(true);
     const cat = PERMISSION_CATEGORIES.find((c) => c.id === "portal");

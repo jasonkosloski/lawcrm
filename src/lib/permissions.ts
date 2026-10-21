@@ -381,6 +381,18 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         description:
           "Show a calendar event to the matter's clients with a client-facing title; time and location come from the event.",
       },
+      {
+        key: "portal.view_messages",
+        label: "View client portal messages",
+        description:
+          "Read a matter's portal conversation with its clients, and see the firm-wide Client portal message list.",
+      },
+      {
+        key: "portal.send_messages",
+        label: "Send client portal messages",
+        description:
+          "Post a message to the matter's clients in the portal; optionally emails them.",
+      },
     ],
   },
   {
