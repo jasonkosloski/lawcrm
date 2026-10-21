@@ -1,11 +1,10 @@
 # Time & Billing
 
-Time tracking (week view, day reconciliation, timer widget, UTBMS-coded entries) plus the matter Billing tab (invoices, trust, payments), settlement waterfall, and matter expenses. Send invoice has a Client portal method that emails the billed client a notice (email/mail stay logged-only), and the firm-level billing settings page is not built.
+Time tracking (week view, day reconciliation, timer widget, UTBMS-coded entries) plus the matter Billing tab (invoices, trust, payments), settlement waterfall, and matter expenses. Invoices are emailed as a PDF (see Invoice email delivery), and the firm-level billing settings page is not built.
 Related: [ADR-013](../decisions/013-timer-sessions-are-pre-entries-ungated-to.md), [ADR-024](../decisions/024-invoice-line-items-are-draft-only-money.md), [ADR-030](../decisions/030-settlement-status-follows-the-approval-chain-amounts.md), [ADR-036](../decisions/036-money-is-decimal-14-2-one-settlement.md), [ADR-038](../decisions/038-billing-view-gates-the-billing-read-surface.md), [ADR-021](../decisions/021-matter-tabs-honour-calendar-visibility-and-money.md), [PERMISSIONS.md](../PERMISSIONS.md)
 
 ## Open work
 - [ ] **Settings — Billing & rates** (P2) — Default hourly rate, UTBMS code library, invoice templates, payment terms.
-- [ ] **Invoice email delivery** — email/mail not built (the Client portal send method does email the billed client a notice; see [client-portal-billing](client-portal-billing.md)). The UI says so: the action is "Mark as sent" (the user delivers the invoice themselves and records method + recipient), and the payment/trust dialogs offer "Client needs an updated invoice", which only logs. Needs a server-side invoice PDF first.
 - [ ] **`updateExpense` UI** — action exists server-side; the edit dialog is not built.
 - [ ] **Time follow-ups** — auto-capture from activity; idle-detection prompts; admin/manager user picker on `/time` (own permission key; today current-user only); read-only reconciliation lanes could become editable.
 - [ ] **Palette "Start timer" row** — now safe to add since `startTimer` returns `already_running` instead of replacing.
@@ -21,7 +20,7 @@ Related: [ADR-013](../decisions/013-timer-sessions-are-pre-entries-ungated-to.md
 - [x] **Matter Billing tab (v1)** — Gated by `billing.view` for the whole tab, the print route and Overview trust/WIP facts (ADR-038). Three-card KPI strip (WIP, Trust, Outstanding AR) + invoices table + WIP entries + trust ledger + matter-level Received-payments ledger. WIP includes billable expenses.
   - **Generate invoice from WIP** — auto YYYY-NNN numbering, 30-day terms. **Bundle as internal record** for contingency/pro-bono closes (`kind="internal_record"`, born paid, excluded from AR).
   - **State machine** — draft → approved → sent → partial → paid; void only with no payments; drafts deletable. Invoice `notes` is client-facing (printed on invoice + PDF) and labelled so.
-  - **Send invoice** dialog (channel + recipient + optional trust application) — email/mail are logged-only (see Open work); the **Client portal** method posts it to the portal and emails the client. **Apply trust** shortcut for outstanding-balance + trust-funded matters. **Record payment** (check/ACH/cash/card/other/trust) with default-checked "Send updated invoice to client"; **Trust** method needs `billing.apply_trust`. Trust composer prevents overdraw.
+  - **Send invoice** dialog (channel + recipient + optional trust application) — **Email** sends the PDF (see Invoice email delivery), **Mail** only records that the user mailed it; the **Client portal** method posts it to the portal and emails the client. **Apply trust** shortcut for outstanding-balance + trust-funded matters. **Record payment** (check/ACH/cash/card/other/trust) with default-checked "Send updated invoice to client" (emails the refreshed PDF); **Trust** method needs `billing.apply_trust`. Trust composer prevents overdraw.
   - **Line-item editing** (pencil on Services rows) — DRAFT invoices only (ADR-024; approved/sent are void-and-regenerate); needs `billing.generate_invoice` plus author-or-`time_entries.edit_any`; amounts rounded to cents; activity-logged.
   - Letterhead-style preview pane; **PDF export** via chrome-free `/print/invoices/[id]?autoprint=1` (titled "Invoice <number>", waits for fonts).
 - [x] **Billing types** (ADR-060) — the matter's billing type (Hourly, Flat fee, Contingency, Court-appointed, Pro bono) is derived from `feeStructure` + `billingMode`; court-appointed is hourly with `court_voucher`, pro bono is `none`. Non-`client` modes still use the traditional invoicing UX with a "flow not implemented" banner. Voucher submission and fee-petition flows are not built; fee petition is not selectable (existing values kept) and returns as its own matter switch. Selection and permissions: [matters](matters.md).
@@ -30,3 +29,8 @@ Related: [ADR-013](../decisions/013-timer-sessions-are-pre-entries-ungated-to.md
 
 ## Notes
 - Money columns are `DECIMAL(14,2)` (ADR-036, Quality sweep Batch 4, migration `20261017120000_quality_sweep`; run steps in `docs/DEPLOY_BACKFILLS.md`). Billing read surface gated by `billing.view` (ADR-038). The rest of Batch 4 (SOL periods, indexes, `Firm.matterVisibility`, private events) is documented under matters / calendar.
+
+## Invoice email delivery
+- **Email send, "Send updated invoice" after a payment, and "Re-send email…"** email the invoice PDF via Resend. From is the firm name on `EMAIL_FROM`'s address; Reply-To is the sender. The body carries a client-portal deep link when the portal is live for the matter. **Mail** still only records intent.
+- The PDF is rendered server-side with `@react-pdf/renderer` (layout mirrors `/print/invoices/[id]`) and filed into a protected "Invoices" system folder (`systemKind` `invoices`) on the matter.
+- **Failure handling:** an email failure after a committed send or payment returns ok plus a warning toast; the send or payment is never rolled back. A re-send that does not go out returns an error.

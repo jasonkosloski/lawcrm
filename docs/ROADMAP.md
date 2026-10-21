@@ -18,8 +18,7 @@ tech-debt sweeps. Everything shipped is listed per area in
 [`features/`](features/).
 
 Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
-"Everyone"; see [matter-access](features/matter-access.md)), and
-email/mail invoice "send" is logged only ([issue](issues/invoice-email-not-sent.md)).
+"Everyone"; see [matter-access](features/matter-access.md)).
 
 ## P1: next up
 
@@ -59,7 +58,7 @@ email/mail invoice "send" is logged only ([issue](issues/invoice-email-not-sent.
 - [ ] **Email polish**: load-remote-images opt-in, store Message-ID/References, archive/star in reader header + touch affordances, attachment FK on Document + bulk file-all, thread-wide star writeback. → [email](features/communication-email.md)
 
 **Time, billing, money**
-- [ ] **Invoice email delivery**: email/mail "send" is logged only (the Client portal method emails a notice). → [issue](issues/invoice-email-not-sent.md)
+- [x] **Invoice email delivery**: send, updated-invoice and re-send email the invoice PDF via Resend. → [time-and-billing](features/time-and-billing.md)
 - [ ] **Settings: Billing & rates**: default rate, UTBMS library, invoice templates, payment terms. → [time-and-billing](features/time-and-billing.md)
 - [ ] **`updateExpense` edit dialog**: action exists, no UI. → [time-and-billing](features/time-and-billing.md)
 - [ ] **Time follow-ups**: auto-capture, idle detection, admin user picker on `/time`, editable reconciliation lanes. → [time-and-billing](features/time-and-billing.md)

@@ -5,6 +5,5 @@ Open product decisions that used to live at the end of the old single-file DECIS
 When an issue is fixed, delete its file and note the fix in the relevant `../features/` file or in an ADR.
 Roadmap items (planned features) stay in `../features/`, not here.
 
-- [invoice-email-not-sent.md](invoice-email-not-sent.md) — invoice "send" is logged only; nothing is emailed to the client
 - [receipt-picker-cap.md](receipt-picker-cap.md) — expense receipt picker lists at most 200 documents
 - [google-sync-origin-and-backfill-anchor.md](google-sync-origin-and-backfill-anchor.md) — `CalendarEvent.origin` and `EmailAccount.backfillBefore` needed
