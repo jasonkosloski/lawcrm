@@ -27,7 +27,11 @@ import {
 import { GmailAuthError } from "@/lib/google/gmail-client";
 import { GoogleOAuthError } from "@/lib/google/oauth";
 import type { RecordScope } from "@/lib/record-scope";
-import { replyToThread, sendEmail } from "./email-send";
+import {
+  REPLY_NEEDS_FILER_ERROR,
+  replyToThread,
+  sendEmail,
+} from "./email-send";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // Matter-wall asserts are covered in matter-access-writes.test.ts; this
@@ -63,7 +67,10 @@ vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
   return { ...actual, gmailFetch: vi.fn() };
 });
 
-import { requirePermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
 import { getCurrentUserId } from "@/lib/current-user";
 import { canAccessMatter } from "@/lib/matter-access";
 import { gmailFetch } from "@/lib/google/gmail-client";
@@ -95,13 +102,22 @@ async function seedThread(opts: {
   subject?: string;
   externalId?: string | null;
   matterId?: string | null;
+  leadId?: string | null;
 }): Promise<{ threadId: string }> {
   const t = await prisma.emailThread.create({
     data: {
       accountId: opts.accountId,
       subject: opts.subject ?? "Case update",
       externalId: opts.externalId === undefined ? "gt-1" : opts.externalId,
-      matterId: opts.matterId ?? null,
+      // Default: filed to seedActor's matter (replies need a record).
+      // Pass matterId: null explicitly for an unfiled thread.
+      matterId:
+        opts.matterId === undefined && opts.leadId == null
+          ? BASE_SEND.scope.kind === "matter"
+            ? BASE_SEND.scope.matterId
+            : null
+          : (opts.matterId ?? null),
+      leadId: opts.leadId ?? null,
       lastMessageAt: new Date("2026-07-01T10:00:00Z"),
     },
     select: { id: true },
@@ -991,6 +1007,133 @@ describe("replyToThread — local persistence", () => {
     const result = await replyToThread(threadId, BASE_REPLY);
     expect(result.ok).toBe(false);
     expect(await prisma.emailMessage.count()).toBe(1); // nothing appended
+  });
+});
+
+describe("replyToThread — file on reply", () => {
+  async function unfiled() {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const { threadId } = await seedThread({
+      accountId,
+      matterId: null,
+      externalId: "gt-1",
+    });
+    await seedMessage({
+      threadId,
+      fromEmail: "alice@example.com",
+      to: [{ email: "me@firm.com" }],
+    });
+    return { userId, accountId, threadId };
+  }
+
+  test("unfiled thread + scope files then sends", async () => {
+    const { threadId } = await unfiled();
+    const { leadId } = await seedLead();
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-2", "gt-1"));
+    const result = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      scope: { kind: "lead", leadId },
+    });
+    expect(result.ok).toBe(true);
+    const thread = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: threadId },
+      include: { messages: { orderBy: { sentAt: "asc" } } },
+    });
+    expect(thread.leadId).toBe(leadId);
+    expect(thread.messages[1].sentFromApp).toBe(true);
+    expect(mockedGmailFetch).toHaveBeenCalledTimes(1);
+  });
+
+  test("unfiled thread without scope is refused before Gmail", async () => {
+    const { threadId } = await unfiled();
+    const result = await replyToThread(threadId, BASE_REPLY);
+    expect(result).toMatchObject({ ok: false });
+    expect(mockedGmailFetch).not.toHaveBeenCalled();
+  });
+
+  test("unfiled thread without communication.file_email is refused", async () => {
+    const { threadId } = await unfiled();
+    const { leadId } = await seedLead();
+    vi.mocked(currentUserHasPermission).mockResolvedValueOnce(false);
+    const result = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      scope: { kind: "lead", leadId },
+    });
+    expect(result).toEqual({ ok: false, error: REPLY_NEEDS_FILER_ERROR });
+    expect(mockedGmailFetch).not.toHaveBeenCalled();
+    const t = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: threadId },
+    });
+    expect(t.leadId).toBeNull();
+  });
+
+  test("filing succeeds, Gmail fails: thread stays filed", async () => {
+    const { accountId, threadId } = await unfiled();
+    const { leadId } = await seedLead();
+    mockedGmailFetch.mockRejectedValue(
+      new GmailAuthError("Reconnect.", accountId)
+    );
+    const result = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      scope: { kind: "lead", leadId },
+    });
+    expect(result.ok).toBe(false);
+    const t = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: threadId },
+    });
+    expect(t.leadId).toBe(leadId);
+  });
+
+  test("a filed thread ignores a posted scope", async () => {
+    const { userId } = await seedActor();
+    const { areaId, stageId } = await seedPracticeArea();
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    const { leadId } = await seedLead();
+    const { accountId } = await seedEmailAccount({ userId });
+    const { threadId } = await seedThread({ accountId, matterId });
+    await seedMessage({
+      threadId,
+      fromEmail: "alice@example.com",
+      to: [{ email: "me@firm.com" }],
+    });
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-2", "gt-1"));
+    const result = await replyToThread(threadId, {
+      ...BASE_REPLY,
+      scope: { kind: "lead", leadId },
+    });
+    expect(result.ok).toBe(true);
+    const t = await prisma.emailThread.findUniqueOrThrow({
+      where: { id: threadId },
+    });
+    expect(t).toMatchObject({ matterId, leadId: null });
+  });
+
+  test("reply activity logs on a lead-filed thread's lead", async () => {
+    const { userId, accountId } = await unfiled();
+    const { leadId } = await seedLead();
+    const { threadId } = await seedThread({
+      accountId,
+      leadId,
+      externalId: "gt-9",
+    });
+    await seedMessage({
+      threadId,
+      fromEmail: "alice@example.com",
+      to: [{ email: "me@firm.com" }],
+    });
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-3", "gt-9"));
+    const result = await replyToThread(threadId, BASE_REPLY);
+    expect(result.ok).toBe(true);
+    const log = await prisma.activityLog.findFirst({
+      where: { title: "Email reply sent" },
+    });
+    expect(log).toMatchObject({ leadId, matterId: null });
+    expect(userId).toBeTruthy();
   });
 });
 

@@ -48,9 +48,16 @@ import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
 import { assertScopeAccess, assertScopeWritable } from "@/lib/scope-access";
 import { optionalScopeOf, scopeWhere, type RecordScope } from "@/lib/record-scope";
-import { revalidationPathsFor, sameScope } from "@/lib/email-filing";
+import {
+  fileEmailThread,
+  revalidationPathsFor,
+  sameScope,
+} from "@/lib/email-filing";
 import { logActivity } from "@/lib/activity-log";
-import { requirePermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  requirePermission,
+} from "@/lib/permission-check";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import { isSendableStatus } from "@/lib/email-send-status";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
@@ -92,6 +99,9 @@ export type ReplyToThreadInput = {
    *  Otherwise `to`/`cc` are the render-time defaults and the send is
    *  refused if the thread now derives different recipients. */
   recipientsEdited?: boolean;
+  /** Required when the thread is unfiled: the record to file it to
+   *  before sending. Ignored on a filed thread (its record wins). */
+  scope?: RecordScope;
 };
 
 export type SendEmailResult =
@@ -131,6 +141,9 @@ const MAX_BODY_LENGTH = 1_000_000;
 
 const SAVED_LOCALLY_WARNING =
   "Sent, but the local copy could not be saved. It will appear after the next sync.";
+
+export const REPLY_NEEDS_FILER_ERROR =
+  "Ask someone who can file email to file this thread first.";
 
 const NOT_CONNECTED_ERROR =
   "This mailbox isn't connected. Reconnect it from Settings → Integrations.";
@@ -309,8 +322,27 @@ export async function replyToThread(
     },
   });
   if (!thread) return { ok: false, error: "Thread not found." };
-  const threadScope = optionalScopeOf(thread);
-  if (threadScope) await assertScopeAccess(threadScope);
+  let threadScope = optionalScopeOf(thread);
+  // Unfiled thread: the reply files it first, so it needs a record and
+  // the filing permission. A filed thread ignores any posted scope.
+  let fileTo: RecordScope | null = null;
+  if (threadScope) {
+    await assertScopeAccess(threadScope);
+  } else {
+    const posted = input.scope as RecordScope | undefined;
+    if (
+      !posted ||
+      (posted.kind === "matter" && !posted.matterId) ||
+      (posted.kind === "lead" && !posted.leadId) ||
+      (posted.kind !== "matter" && posted.kind !== "lead")
+    ) {
+      return { ok: false, error: "Choose a matter or lead." };
+    }
+    if (!(await currentUserHasPermission("communication.file_email"))) {
+      return { ok: false, error: REPLY_NEEDS_FILER_ERROR };
+    }
+    fileTo = posted;
+  }
   if (!isSendableStatus(thread.account.syncStatus)) {
     return { ok: false, error: NOT_CONNECTED_ERROR };
   }
@@ -417,6 +449,15 @@ export async function replyToThread(
   });
   if (!raw.ok) return raw;
 
+  // File first (everything else is validated, nothing sent yet). If the
+  // send then fails the thread stays filed: the user chose the record.
+  if (fileTo) {
+    const filed = await fileEmailThread(userId, thread.id, fileTo);
+    if (!filed.ok) return { ok: false, error: filed.error };
+    threadScope = fileTo;
+    revalidateSendSurfaces(fileTo);
+  }
+
   const payload: { raw: string; threadId?: string } = { raw: raw.raw };
   if (thread.externalId) payload.threadId = thread.externalId;
 
@@ -459,7 +500,11 @@ export async function replyToThread(
     revalidateSendSurfaces(
       optionalScopeOf({ matterId: persisted.matterId, leadId: persisted.leadId })
     );
-    return { ok: true, threadId: persisted.threadId };
+    return {
+      ok: true,
+      threadId: persisted.threadId,
+      ...(persisted.notice ? { notice: persisted.notice } : {}),
+    };
   } catch (err) {
     console.error("[email-send] reply sent but local save failed", sent.id, err);
     return { ok: true, threadId: thread.id, warning: SAVED_LOCALLY_WARNING };
