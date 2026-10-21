@@ -47,7 +47,7 @@ vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
 import { getSession } from "@/lib/session";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
 import { prisma } from "@/lib/prisma";
-import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
+import { resetDb, seedFirm, seedLead, seedUser } from "@/test/integration-helpers";
 
 const mockedAuth = vi.mocked(getSession);
 const mockedGmailFetch = vi.mocked(gmailFetch);
@@ -94,6 +94,7 @@ async function seedAttachment(opts?: {
   contentType?: string | null;
   filename?: string;
   externalId?: string | null;
+  leadId?: string;
 }): Promise<string> {
   const account = await prisma.emailAccount.create({
     data: {
@@ -107,6 +108,7 @@ async function seedAttachment(opts?: {
     data: {
       accountId: account.id,
       subject: "Discovery",
+      leadId: opts?.leadId ?? null,
       lastMessageAt: new Date(),
     },
     select: { id: true },
@@ -193,6 +195,20 @@ describe("auth + scoping", () => {
     expect(res.status).toBe(404);
     // Never even asks Gmail for something the viewer can't read.
     expect(mockedGmailFetch).not.toHaveBeenCalled();
+  });
+
+  test("attachment on a thread filed to a restricted lead: 404 for a non-member, served for a team member", async () => {
+    const { leadId } = await seedLead({ restricted: true });
+    // Cached bytes, so the only thing that can 404 it is the wall.
+    const stored = await storage.storeFile(new File(["x"], "w.pdf"));
+    const attachmentId = await seedAttachment({
+      leadId,
+      fileUrl: stored.key,
+      filename: "w.pdf",
+    });
+    expect((await download(attachmentId)).status).toBe(404);
+    await prisma.leadTeamMember.create({ data: { leadId, userId } });
+    expect((await download(attachmentId)).status).toBe(200);
   });
 
   test("attachment with no Gmail id on record (fileUrl null) → 404", async () => {

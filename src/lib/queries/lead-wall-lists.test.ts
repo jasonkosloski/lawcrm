@@ -29,7 +29,13 @@ import { logActivity } from "@/lib/activity-log";
 import { getLeadSummary, listLeads } from "@/lib/queries/leads";
 import { getPaletteData } from "@/lib/queries/command-palette";
 import { globalSearch } from "@/lib/queries/search";
-import { getMyOpenTasks, getTodayAgenda } from "@/lib/queries/dashboard";
+import {
+  getDashboardKpis,
+  getFollowUpsDueToday,
+  getMyOpenTasks,
+  getTodayAgenda,
+} from "@/lib/queries/dashboard";
+import { getSidebarData } from "@/lib/queries/sidebar";
 import { getFirmActivity } from "@/lib/queries/firm-activity";
 import { getCalendarItems } from "@/lib/queries/calendar";
 import { resetDb, seedFirm, seedLead, seedUser } from "@/test/integration-helpers";
@@ -168,5 +174,61 @@ describe("dashboard, calendar, activity", () => {
       "New intake: Zephyr Open",
       "New intake: Zephyr Walled",
     ]);
+  });
+});
+
+describe("email threads filed to a restricted lead", () => {
+  // The mailbox belongs to whoever is viewing: seed it for the current
+  // viewer, filed to the walled lead, then flip the viewer's team
+  // membership via who owns the mailbox.
+  async function seedWalledThread(ownerId: string) {
+    const account = await prisma.emailAccount.create({
+      data: { userId: ownerId, emailAddress: `m-${ownerId.slice(-6)}@firm.test` },
+    });
+    await prisma.emailThread.create({
+      data: {
+        accountId: account.id,
+        subject: "Zephyr walled thread",
+        leadId: walled,
+        isRead: false,
+        isStarred: true,
+        followUpAt: new Date(Date.now() - 86_400_000),
+        lastMessageAt: new Date(),
+        messages: {
+          create: [
+            {
+              fromName: "S",
+              fromEmail: "s@example.com",
+              toRecipients: "[]",
+              body: "Zephyr body text",
+              sentAt: new Date(),
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  test("KPIs, follow-ups, sidebar badge and search hide it from a non-member and show it to a member", async () => {
+    await seedWalledThread(bob);
+    await seedWalledThread(alice);
+
+    as(bob);
+    const kpi = await getDashboardKpis("UTC");
+    expect(kpi.unreadEmail).toBe(0);
+    expect(kpi.flaggedEmail).toBe(0);
+    expect(JSON.stringify(await getFollowUpsDueToday("UTC"))).not.toContain("Zephyr");
+    expect((await getSidebarData()).unreadEmailCount).toBe(0);
+    const bobHits = JSON.stringify((await globalSearch("Zephyr")).groups.filter((g) => g.type === "email"));
+    expect(bobHits).not.toContain("walled thread");
+
+    as(alice);
+    const kpiA = await getDashboardKpis("UTC");
+    expect(kpiA.unreadEmail).toBe(1);
+    expect(kpiA.flaggedEmail).toBe(1);
+    expect(JSON.stringify(await getFollowUpsDueToday("UTC"))).toContain("Zephyr walled thread");
+    expect((await getSidebarData()).unreadEmailCount).toBe(1);
+    const aliceHits = JSON.stringify((await globalSearch("Zephyr")).groups.filter((g) => g.type === "email"));
+    expect(aliceHits).toContain("walled thread");
   });
 });
