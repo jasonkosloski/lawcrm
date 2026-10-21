@@ -12,6 +12,7 @@ import {
   getMyRecordsToChase,
   type RecordsChaseItem,
 } from "@/lib/queries/records-requests";
+import { getTriage, type TriageData } from "@/lib/queries/dashboard-triage";
 import {
   getDashboardKpis,
   getFirmPulse,
@@ -40,6 +41,7 @@ export type DashboardData = {
   followUps: FollowUpItem[];
   records: RecordsChaseItem[];
   canViewRecords: boolean;
+  triage: TriageData;
 };
 
 const emptyTasks = (): MyTasksGrouped => ({
@@ -68,7 +70,17 @@ export async function loadDashboardData(
       : Promise.resolve(false),
   ]);
 
-  const [kpis, agenda, activity, deadlines, pulse, tasks, followUps, records] =
+  const [
+    kpis,
+    agenda,
+    activity,
+    deadlines,
+    pulse,
+    tasks,
+    followUps,
+    records,
+    triage,
+  ] =
     await Promise.all([
       shown("kpis") ? getDashboardKpis(tz) : Promise.resolve(null),
       shown("agenda") ? getTodayAgenda(tz) : Promise.resolve([]),
@@ -80,6 +92,9 @@ export async function loadDashboardData(
       shown("tasks") ? getMyOpenTasks(tz) : Promise.resolve(emptyTasks()),
       shown("followUps") ? getFollowUpsDueToday(tz) : Promise.resolve([]),
       canViewRecords ? getMyRecordsToChase(tz) : Promise.resolve([]),
+      shown("triage")
+        ? getTriage(tz)
+        : Promise.resolve({ groups: [] } as TriageData),
     ]);
 
   return {
@@ -93,6 +108,7 @@ export async function loadDashboardData(
     followUps,
     records,
     canViewRecords,
+    triage,
   };
 }
 

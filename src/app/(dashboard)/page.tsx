@@ -22,6 +22,7 @@ import { FollowUpsCard } from "@/components/dashboard/cards/follow-ups";
 import { ActivityCard } from "@/components/dashboard/cards/activity";
 import { DeadlinesCard } from "@/components/dashboard/cards/deadlines";
 import { PulseCard } from "@/components/dashboard/cards/pulse";
+import { TriageCard } from "@/components/dashboard/cards/triage";
 import { RecordsCard } from "@/components/dashboard/cards/records";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -73,6 +74,8 @@ export default async function DashboardPage() {
     ),
     deadlines: <DeadlinesCard data={data.deadlines} />,
   };
+  if (!layout.hidden.includes("triage"))
+    cards.triage = <TriageCard data={data.triage} />;
   if (data.kpis) cards.kpis = <KpisCard kpis={data.kpis} />;
   // Null without reports.view (or when hidden).
   if (data.pulse) cards.pulse = <PulseCard pulse={data.pulse} />;

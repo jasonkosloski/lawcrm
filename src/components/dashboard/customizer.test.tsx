@@ -73,7 +73,7 @@ beforeEach(() => {
 describe("applyDragEnd", () => {
   test("moves a card into the band at an index", () => {
     const out = applyDragEnd(fresh(), "deadlines", { zone: "band", index: 0 });
-    expect(out.band).toEqual(["deadlines", "kpis"]);
+    expect(out.band).toEqual(["deadlines", "kpis", "triage"]);
     expect(out.columns[1]).toEqual(["pulse", "records"]);
   });
 
@@ -99,7 +99,8 @@ describe("view mode", () => {
   });
 
   test("an empty band renders no wrapper", () => {
-    const layout = moveCard(fresh(), "kpis", { zone: "hidden" });
+    let layout = moveCard(fresh(), "kpis", { zone: "hidden" });
+    layout = moveCard(layout, "triage", { zone: "hidden" });
     const { container } = setup({ layout });
     expect(container.querySelector("[data-band]")).toBeNull();
   });
@@ -142,11 +143,11 @@ describe("edit mode", () => {
     await customize(user);
     for (const name of ["4 / 4 / 4", "12", "8 / 4"]) {
       await user.click(screen.getByRole("radio", { name }));
-      expect(within(arrange()).getAllByRole("listitem")).toHaveLength(8);
+      expect(within(arrange()).getAllByRole("listitem")).toHaveLength(DASHBOARD_CARD_KEYS.length);
       const keys = within(arrange())
         .getAllByRole("listitem")
         .map((li) => li.getAttribute("data-card"));
-      expect(new Set(keys).size).toBe(8);
+      expect(new Set(keys).size).toBe(DASHBOARD_CARD_KEYS.length);
     }
     expect(screen.getByRole("radio", { name: "8 / 4" }).getAttribute("aria-checked")).toBe("true");
   });
@@ -171,7 +172,7 @@ describe("edit mode", () => {
     setup({ layout: moveCard(fresh(), "tasks", { zone: "band" }) });
     await customize(user);
     await user.click(screen.getByRole("button", { name: "Reset to default" }));
-    expect(zoneKeys("Band")).toEqual(["kpis"]);
+    expect(zoneKeys("Band")).toEqual(["kpis", "triage"]);
   });
 
   test("zone select moves a card to the end of another zone", async () => {
@@ -182,7 +183,7 @@ describe("edit mode", () => {
       within(arrange()).getByLabelText(`Zone for ${label("tasks")}`),
       "Band"
     );
-    expect(zoneKeys("Band")).toEqual(["kpis", "tasks"]);
+    expect(zoneKeys("Band")).toEqual(["kpis", "triage", "tasks"]);
   });
 
   test("Done with no changes makes no call", async () => {

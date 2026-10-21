@@ -10,8 +10,11 @@ const m = vi.hoisted(() => ({
   getTodayAgenda: vi.fn(),
   getUpcomingDeadlines: vi.fn(),
   getMyRecordsToChase: vi.fn(),
+  getTriage: vi.fn(),
   currentUserHasPermission: vi.fn(),
 }));
+
+vi.mock("@/lib/queries/dashboard-triage", () => ({ getTriage: m.getTriage }));
 
 vi.mock("@/lib/queries/dashboard", () => ({
   getDashboardKpis: m.getDashboardKpis,
@@ -49,6 +52,7 @@ beforeEach(() => {
   m.getTodayAgenda.mockResolvedValue([]);
   m.getUpcomingDeadlines.mockResolvedValue({ items: [], overdueHidden: 0 });
   m.getMyRecordsToChase.mockResolvedValue([]);
+  m.getTriage.mockResolvedValue({ groups: [] });
   m.currentUserHasPermission.mockResolvedValue(true);
 });
 
@@ -68,6 +72,15 @@ describe("loadDashboardData", () => {
       expect(fn.mock.calls[0][0]).toBe("America/Chicago");
     }
     expect(m.getRecentActivity).toHaveBeenCalledWith("America/Chicago", 5);
+  });
+
+  it("loads triage with the viewer's tz, and skips it when hidden", async () => {
+    await loadDashboardData(layout(), "America/Chicago");
+    expect(m.getTriage).toHaveBeenCalledWith("America/Chicago");
+    m.getTriage.mockClear();
+    const d = await loadDashboardData(layout(["triage"]), "UTC");
+    expect(m.getTriage).not.toHaveBeenCalled();
+    expect(d.triage.groups).toEqual([]);
   });
 
   it("records needs records.view", async () => {

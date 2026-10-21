@@ -22,6 +22,7 @@
 /** Stable identifier for each toggleable surface on the dashboard. */
 export const DASHBOARD_CARD_KEYS = [
   "kpis",
+  "triage",
   "agenda",
   "tasks",
   "followUps",
@@ -48,6 +49,7 @@ export const DASHBOARD_CARDS: Record<
   { label: string; defaultPlacement: CardPlacement }
 > = {
   kpis: { label: "KPI tiles", defaultPlacement: { zone: "band" } },
+  triage: { label: "Needs me now", defaultPlacement: { zone: "band" } },
   agenda: {
     label: "Today's agenda",
     defaultPlacement: { zone: "column", index: 0 },
@@ -87,6 +89,7 @@ export type DashboardColumn = "main" | "rail";
 export const DASHBOARD_CARD_COLUMNS: Record<DashboardCardKey, DashboardColumn> =
   {
     kpis: "main",
+    triage: "main",
     agenda: "main",
     tasks: "main",
     followUps: "main",
@@ -100,6 +103,7 @@ export type DashboardVisibility = Record<DashboardCardKey, boolean>;
 
 const DEFAULT_VISIBILITY: DashboardVisibility = {
   kpis: true,
+  triage: true,
   agenda: true,
   tasks: true,
   followUps: true,
@@ -195,11 +199,11 @@ export type DashboardLayout = {
   hidden: DashboardCardKey[];
 };
 
-/** What a new user and "Reset" get — reproduces the v2 page. */
+/** What a new user and "Reset" get: the v2 page plus the triage card. */
 export const DEFAULT_LAYOUT: DashboardLayout = {
   v: 3,
   split: "8/4",
-  band: ["kpis"],
+  band: ["kpis", "triage"],
   columns: [
     ["agenda", "tasks", "followUps", "activity"],
     ["deadlines", "pulse", "records"],
@@ -230,8 +234,19 @@ const KNOWN_KEYS = new Set<string>(DASHBOARD_CARD_KEYS);
 
 /** Convert a legacy v2 blob (`visible` + `order`) to a v3 layout. */
 function layoutFromV2(stored: unknown): DashboardLayout {
-  const order = mergeOrder(stored);
+  const rawOrder = (stored as { order?: unknown }).order;
+  // A band-default card the stored blob never mentioned is left out so
+  // `mergeLayout` places it in the band (the triage card lands there,
+  // not at the foot of a column).
+  const mentioned = (k: DashboardCardKey) =>
+    Array.isArray(rawOrder) && rawOrder.includes(k);
   const visible = mergeVisibility(stored);
+  const order = mergeOrder(stored).filter(
+    (k) =>
+      mentioned(k) ||
+      !visible[k] ||
+      DASHBOARD_CARDS[k].defaultPlacement.zone !== "band"
+  );
   const main = order.filter((k) => DASHBOARD_CARD_COLUMNS[k] === "main");
   const rail = order.filter((k) => DASHBOARD_CARD_COLUMNS[k] === "rail");
   const kpisFirst = main[0] === "kpis";
