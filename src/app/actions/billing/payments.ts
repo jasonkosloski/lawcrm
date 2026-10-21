@@ -530,9 +530,10 @@ export async function sendInvoice(
     });
 
     // Log: send event + (separately) the trust application if it
-    // happened. Two log lines so audit reads cleanly. No email is
-    // dispatched yet ("Logged-only for now" in the dialog), so the
-    // entry records the invoice as marked sent — not as delivered.
+    // happened. Two log lines so audit reads cleanly. The email/mail
+    // methods dispatch nothing ("Logged-only for now" in the dialog), so
+    // their entry records the invoice as marked sent, not delivered; the
+    // portal method emails a notice and notes a delivery failure below.
     if (result.method === "portal") {
       // Delivery failure never undoes the send; it is noted on the row.
       let emailFailed = false;

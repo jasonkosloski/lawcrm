@@ -11,7 +11,7 @@ All client money reads live in `src/lib/portal/billing.ts` (server-only, identit
 - **Invoice**: `kind = client`, status `sent` / `partial` / `paid`, and the identity's contact is the billed contact (`Invoice.clientId ?? Matter.clientId`). Never draft, approved, void or `internal_record`.
 - **Trust**: only the identity whose contact is the matter's primary client (`Matter.clientId`). Balance plus the full ledger, descriptions included.
 - Co-clients who are neither see no money and no Billing section. A guessed invoice id (other matter, other client, hidden status) is a 404.
-- Amounts are the stored Decimal columns converted as the staff queries do (no new rounding, ADR-036). Overdue = sent/partial and due date before today in the portal zone.
+- Amounts are the stored Decimal columns converted as the staff queries do (no new rounding, ADR-036). Overdue = sent/partial and the due date's calendar day (it is an instant, not a date-only value) is before today in the portal zone, via the shared `invoiceDaysUntilDue`.
 
 Reader: `listPortalInvoices`, `getPortalInvoice` (returns the staff `InvoiceDetail`), `getPortalTrust` (newest first, running balance computed oldest to newest), `canSeePortalBilling`, `portalBalanceDueByMatter`. Staff-side send checks (`resolvePortalSendTarget`, `portalSendAvailability`) are in `src/lib/queries/portal-billing.ts`, deliberately outside the client reader.
 
@@ -29,6 +29,6 @@ The trust deposit and disbursement forms show "Descriptions are visible to the c
 ## Open risks and deferred
 - No online payment; no server-side PDF or email attachments (PDF is browser print); no automatic updated-invoice email after payments.
 - Portal time zone is America/Denver for dates and overdue.
-- Co-client bill-to: an invoice billed to a co-client shows the matter client's bill-to (staff print has the same quirk). Fix later by switching `InvoiceDetail` bill-to to `Invoice.clientId`, which also changes the staff print.
+- Co-client bill-to: an invoice billed to a co-client (or after the matter client changes) shows the matter client's bill-to (staff print has the same quirk). Fix later by switching `InvoiceDetail` bill-to to `Invoice.clientId`, which also changes the staff print.
 - Notes and payment reference show as printed. If that is too much for the portal, hide the reference in `InvoicePreview` via a prop.
 - Tiny window between the send availability check and the send in which a revoke can land; the invoice is still marked sent and the email goes to the identity resolved before the write.

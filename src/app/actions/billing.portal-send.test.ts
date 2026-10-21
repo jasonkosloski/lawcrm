@@ -215,6 +215,14 @@ describe("sendInvoice via portal", () => {
     __setDriverForTests(null);
   });
 
+  test("email method with an empty recipient is refused: status unchanged", async () => {
+    const id = await makeInvoice();
+    const res = await sendInvoice(id, billingInitialState, form({ method: "email", recipient: "" }));
+    expect(res.status).toBe("error");
+    expect(res.errors?.recipient).toEqual(["Recipient is required"]);
+    expect(await statusOf(id)).toBe("approved");
+  });
+
   test("email method is unchanged", async () => {
     const id = await makeInvoice();
     const res = await sendInvoice(id, billingInitialState, form({ method: "email", recipient: "x@example.com" }));

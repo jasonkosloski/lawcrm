@@ -19,6 +19,19 @@ import { PORTAL_TIME_ZONE } from "@/lib/portal/time-zone";
 import { prisma } from "@/lib/prisma";
 import { PrintButton } from "./print-button";
 
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string; invoiceId: string }>;
+}): Promise<{ title: string }> {
+  const { identityId } = await requirePortalIdentity();
+  const { id, invoiceId } = await params;
+  const invoice = await getPortalInvoice(identityId, invoiceId);
+  // Becomes the Save-as-PDF filename.
+  if (!invoice || invoice.matterId !== id) return { title: "Invoice" };
+  return { title: `Invoice ${invoice.invoiceNumber}` };
+}
+
 export default async function PortalInvoicePage({
   params,
 }: {

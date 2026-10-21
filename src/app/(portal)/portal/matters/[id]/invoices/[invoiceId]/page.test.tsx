@@ -25,7 +25,7 @@ import {
   seedPracticeArea,
   seedUser,
 } from "@/test/integration-helpers";
-import PortalInvoicePage from "./page";
+import PortalInvoicePage, { generateMetadata } from "./page";
 
 beforeAll(() => {
   expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
@@ -95,6 +95,20 @@ describe("portal invoice page", () => {
     const back = screen.getByRole("link", { name: /Smith Estate|Back/ });
     expect(back.getAttribute("href")).toBe(`/matters/${matterId}`);
     expect(back.className).toContain("print:hidden");
+  });
+
+  test("generateMetadata titles the page with the invoice number", async () => {
+    const meta = await generateMetadata({
+      params: Promise.resolve({ id: matterId, invoiceId }),
+    });
+    expect(meta.title).toBe("Invoice INV-77");
+  });
+
+  test("generateMetadata falls back to a generic title when not visible", async () => {
+    const meta = await generateMetadata({
+      params: Promise.resolve({ id: matterId, invoiceId: draftId }),
+    });
+    expect(meta.title).toBe("Invoice");
   });
 
   test("404s for a draft, an unknown id, and an invoice on another matter", async () => {

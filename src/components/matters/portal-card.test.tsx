@@ -194,6 +194,17 @@ describe("PortalCard", () => {
       );
     });
 
+    test("a thrown action reverts the switch and shows Couldn't save.", async () => {
+      vi.mocked(setPortalBilling).mockRejectedValue(new Error("network"));
+      renderCard(billing);
+      const sw = screen.getByRole("switch", {
+        name: /Show billing in the portal/,
+      });
+      await userEvent.click(sw);
+      expect(await screen.findByText("Couldn't save.")).toBeTruthy();
+      expect(sw).not.toBeChecked();
+    });
+
     test("an error reverts the switch and is shown", async () => {
       vi.mocked(setPortalBilling).mockResolvedValue({
         ok: false,

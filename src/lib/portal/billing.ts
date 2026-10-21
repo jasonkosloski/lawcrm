@@ -4,8 +4,11 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { livePortalMatterWhere } from "@/lib/portal/status";
 import { PORTAL_TIME_ZONE } from "@/lib/portal/time-zone";
-import { getInvoiceById, type InvoiceDetail } from "@/lib/queries/billing";
-import { dateOnlyKey, todayKey } from "@/lib/format-date";
+import {
+  getInvoiceById,
+  invoiceDaysUntilDue,
+  type InvoiceDetail,
+} from "@/lib/queries/billing";
 
 /**
  * Everything a portal client may see about money lives here (spec:
@@ -72,10 +75,12 @@ function visibleInvoiceWhere(
   };
 }
 
-function isOverdue(status: string, dueDate: Date, today: string): boolean {
-  return (
-    (status === "sent" || status === "partial") && dateOnlyKey(dueDate) < today
-  );
+/** `Invoice.dueDate` is an instant (now + terms), not a date-only value:
+ *  overdue is decided on its portal-zone calendar day, the same shared
+ *  rule staff use. */
+function isOverdue(status: string, dueDate: Date): boolean {
+  const days = invoiceDaysUntilDue(status, dueDate, PORTAL_TIME_ZONE);
+  return days !== null && days < 0;
 }
 
 export async function listPortalInvoices(
@@ -94,7 +99,6 @@ export async function listPortalInvoices(
     },
     orderBy: [{ issueDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
   });
-  const today = todayKey(PORTAL_TIME_ZONE);
   return rows.map((i) => {
     const balance = i.totalAmount.minus(i.paidAmount);
     return {
@@ -106,7 +110,7 @@ export async function listPortalInvoices(
       paidAmount: i.paidAmount.toNumber(),
       balance: balance.isNegative() ? 0 : balance.toNumber(),
       status: i.status as PortalInvoiceRow["status"],
-      overdue: isOverdue(i.status, i.dueDate, today),
+      overdue: isOverdue(i.status, i.dueDate),
     };
   });
 }

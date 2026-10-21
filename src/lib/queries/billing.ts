@@ -171,7 +171,7 @@ function roundToCents(n: number): number {
  *  due clock yet, and closed ones (`paid` / `void`) none any more —
  *  all of those are null. Day-key arithmetic in the viewer's zone, so
  *  DST shifts and the host's zone can't skew the count. */
-function invoiceDaysUntilDue(
+export function invoiceDaysUntilDue(
   status: string,
   dueDate: Date,
   tz: string,

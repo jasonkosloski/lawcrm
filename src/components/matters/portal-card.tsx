@@ -81,10 +81,15 @@ export function PortalCard({
     setBillingOn(next);
     setBillingError(null);
     startBilling(async () => {
-      const result = await setPortalBilling(matterId, next);
-      if (!result.ok) {
+      try {
+        const result = await setPortalBilling(matterId, next);
+        if (!result.ok) {
+          setBillingOn(!next);
+          setBillingError(result.error ?? "Couldn't save.");
+        }
+      } catch {
         setBillingOn(!next);
-        setBillingError(result.error ?? "Couldn't save.");
+        setBillingError("Couldn't save.");
       }
     });
   };

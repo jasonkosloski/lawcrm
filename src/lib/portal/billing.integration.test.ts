@@ -204,11 +204,12 @@ describe("amounts", () => {
   });
 });
 
-describe("overdue (date-only, Denver)", () => {
+describe("overdue (instant due date, Denver calendar day)", () => {
   test("flips at the Denver day boundary", async () => {
-    await mkInvoice({ dueDate: new Date("2026-06-10T00:00:00Z") });
+    // Due instant 2026-06-10 19:00 MDT: the Denver due day is Jun 10.
+    await mkInvoice({ dueDate: new Date("2026-06-11T01:00:00Z") });
     vi.useFakeTimers({ toFake: ["Date"] });
-    // 2026-06-10 23:30 MDT: still the due day.
+    // 2026-06-10 23:30 MDT: still the due day (UTC is already Jun 11).
     vi.setSystemTime(new Date("2026-06-11T05:30:00Z"));
     expect((await listPortalInvoices(identityId, matterId))[0].overdue).toBe(false);
     // 2026-06-11 00:30 MDT: past due.

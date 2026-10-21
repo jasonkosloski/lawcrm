@@ -18,8 +18,8 @@ tech-debt sweeps. Everything shipped is listed per area in
 [`features/`](features/).
 
 Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
-"Everyone"; see [matter-access](features/matter-access.md)), and invoice
-"send" is logged only ([issue](issues/invoice-email-not-sent.md)).
+"Everyone"; see [matter-access](features/matter-access.md)), and
+email/mail invoice "send" is logged only ([issue](issues/invoice-email-not-sent.md)).
 
 ## P1: next up
 

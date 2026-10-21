@@ -1,6 +1,6 @@
 # Client portal
 
-Clients follow their case, exchange documents, message the matter team and view invoices. Delivered as five sub-projects; all five sub-projects (**0** foundation, **1** case status, **2** documents, **3** messages, **4** invoices and trust) are built; online payment is later.
+Clients follow their case, exchange documents, message the matter team and view invoices. Built in five sub-projects (**0** foundation, **1** case status, **2** documents, **3** messages, **4** invoices and trust); online payment is later.
 
 | # | Sub-project | State |
 |---|---|---|
@@ -82,7 +82,7 @@ Migration `20261021140000_portal_messages` (expand-only; grants the two keys bel
 ## Publishing rule (binding on sub-projects 1-4)
 
 - Nothing from a matter reaches the portal by default. Each feature adds an explicit per-item share (a flag or a publish action) that staff control, plus its own permission keys.
-- Portal queries select explicit fields; they never spread a staff query's result.
+- Portal queries select explicit fields; they never spread a staff query's result. One named exception: `getPortalInvoice` returns the staff `InvoiceDetail` by design, rendered only through the server-component `InvoicePreview` and never passed to client components.
 
 ## Rollout checklist
 
