@@ -23,7 +23,6 @@ import {
 import { logActivity, logActivityTx } from "@/lib/activity-log";
 import { createNotification } from "@/lib/notifications";
 import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
-import { BILLING_MODES } from "@/lib/billing-mode-constants";
 import {
   SOL_SOURCE_TYPE,
   computeSolDate,
@@ -66,7 +65,9 @@ import {
 import { normalize } from "@/lib/conflict-check";
 import {
   BILLING_TYPES,
+  BILLING_TYPE_LABEL,
   billingTypeFields,
+  billingTypeOf,
   normalizeAreaBillingTypes,
   type BillingType,
 } from "@/lib/billing-type";
@@ -1005,17 +1006,9 @@ const updateMatterSchema = z.object({
     .max(200, "Name is too long"),
   practiceAreaId: z.string().trim().min(1, "Practice area is required"),
   stageId: z.string().trim().min(1, "Stage is required"),
-  feeStructure: z.enum([
-    "contingent",
-    "hourly",
-    "flat",
-    "hybrid",
-    "pro_bono",
-  ]),
-  /** Per-matter override of the practice area's defaultBillingMode.
-   *  Optional on the form so older clients without the field don't
-   *  reject; we just leave the existing value alone. */
-  billingMode: z.enum(BILLING_MODES).optional(),
+  /** Locked after creation: omitted leaves the stored type alone; a
+   *  value that differs from it needs matters.billing_type.edit. */
+  billingType: z.enum(BILLING_TYPES).optional(),
   caseNumber: z.string().trim().max(80).optional().or(z.literal("")),
   court: z.string().trim().max(200).optional().or(z.literal("")),
   clientId: z.string().trim().optional().or(z.literal("")),
@@ -1127,6 +1120,27 @@ export async function updateMatter(
   }
 
   const currentUserId = await getCurrentUserId();
+
+  // Billing type is locked after creation. Omitted or equal to the
+  // stored type is a no-op (so legacy hybrid / fee_petition survive
+  // ordinary edits); a change needs its own key.
+  const storedBillingType = billingTypeOf(stored);
+  const nextBillingType =
+    data.billingType && data.billingType !== storedBillingType
+      ? data.billingType
+      : null;
+  if (
+    nextBillingType &&
+    !(await currentUserHasPermission("matters.billing_type.edit"))
+  ) {
+    return {
+      status: "error",
+      errors: {
+        billingType: ["You don't have permission to change the billing type"],
+      },
+      values: raw,
+    };
+  }
 
   // Lead attorney. An unchanged (or omitted) lead is never re-validated:
   // a lead who has since been deactivated stays lead until someone
@@ -1402,10 +1416,7 @@ export async function updateMatter(
         name: data.name,
         practiceAreaId: resolved.practiceAreaId,
         stageId: resolved.stageId,
-        feeStructure: data.feeStructure,
-        // Only write when the form posted a value — keeps forward-
-        // compat with older clients that don't include the field.
-        ...(data.billingMode ? { billingMode: data.billingMode } : {}),
+        ...(nextBillingType ? billingTypeFields(nextBillingType) : {}),
         caseNumber: data.caseNumber || null,
         court: data.court || null,
         opposingParty: data.opposingParty || null,
@@ -1561,8 +1572,11 @@ export async function updateMatter(
   diff("name", stored.name, data.name);
   diff("case number", stored.caseNumber, data.caseNumber || null);
   diff("court", stored.court, data.court || null);
-  diff("fee structure", stored.feeStructure, data.feeStructure);
-  if (data.billingMode) diff("billing mode", stored.billingMode, data.billingMode);
+  if (nextBillingType) {
+    changed.push(
+      `billing type ${BILLING_TYPE_LABEL[storedBillingType]} → ${BILLING_TYPE_LABEL[nextBillingType]}`
+    );
+  }
   diff("opposing party", stored.opposingParty, data.opposingParty || null);
   diff("opposing firm", stored.opposingFirm, data.opposingFirm || null);
   diff("summary", stored.description, data.description || null);

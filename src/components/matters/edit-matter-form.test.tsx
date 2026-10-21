@@ -82,8 +82,7 @@ const matter: MatterForEdit = {
   caseNumber: null,
   practiceAreaId: "civil",
   stageId: "civil-intake",
-  feeStructure: "contingent",
-  billingMode: "hourly",
+  billingType: "court_appointed",
   court: null,
   clientId: "c1",
   opposingParty: null,
@@ -201,9 +200,16 @@ describe("EditMatterForm — validation error keeps the user's selections (F095)
       errors: { description: ["Summary is too long"] },
       values: {},
     };
-    render(<EditMatterForm matter={matter} options={options} canChangeLead />);
+    render(
+      <EditMatterForm
+        matter={matter}
+        options={options}
+        canChangeLead
+        canEditBillingType
+      />
+    );
 
-    await user.selectOptions(screen.getByLabelText(/fee structure/i), "hourly");
+    await user.selectOptions(screen.getByLabelText(/billing type/i), "hourly");
     await user.selectOptions(screen.getByLabelText(/^client/i), "c2");
     await user.selectOptions(screen.getByLabelText(/lead attorney/i), "u2");
     await user.selectOptions(screen.getByLabelText(/stage/i), "civil-disc");
@@ -213,7 +219,7 @@ describe("EditMatterForm — validation error keeps the user's selections (F095)
     // Wait for the error state to render.
     await screen.findByText(/summary is too long/i);
 
-    expect(screen.getByLabelText(/fee structure/i)).toHaveValue("hourly");
+    expect(screen.getByLabelText(/billing type/i)).toHaveValue("hourly");
     expect(screen.getByLabelText(/^client/i)).toHaveValue("c2");
     expect(screen.getByLabelText(/lead attorney/i)).toHaveValue("u2");
     expect(screen.getByLabelText(/stage/i)).toHaveValue("civil-disc");
@@ -224,7 +230,7 @@ describe("EditMatterForm — validation error keeps the user's selections (F095)
     await user.click(screen.getByRole("button", { name: /save changes/i }));
     await waitFor(() => expect(posted.calls).toHaveLength(2));
     const second = posted.calls[1];
-    expect(second.get("feeStructure")).toBe("hourly");
+    expect(second.get("billingType")).toBe("hourly");
     expect(second.get("clientId")).toBe("c2");
     expect(second.get("leadUserId")).toBe("u2");
     expect(second.get("stageId")).toBe("civil-disc");
@@ -326,5 +332,45 @@ describe("EditMatterForm — venue, filed/trial dates, required fields", () => {
     await user.click(screen.getByRole("button", { name: /save changes/i }));
     await waitFor(() => expect(posted.calls).toHaveLength(1));
     expect(posted.calls[0].get("venueId")).toBe("");
+  });
+});
+
+describe("EditMatterForm — billing type lock", () => {
+  test("without canEditBillingType it shows read-only text and posts no billingType", () => {
+    const { container } = render(
+      <EditMatterForm matter={matter} options={options} canChangeLead />
+    );
+    expect(screen.getByText("Court-appointed · set at creation")).toBeTruthy();
+    expect(container.querySelector('[name="billingType"]')).toBeNull();
+  });
+
+  test("with canEditBillingType it offers the five types with the current one selected", () => {
+    render(
+      <EditMatterForm
+        matter={matter}
+        options={options}
+        canChangeLead
+        canEditBillingType
+      />
+    );
+    const select = screen.getByLabelText(/billing type/i);
+    expect(select).toHaveValue("court_appointed");
+    expect(
+      Array.from(select.querySelectorAll("option")).map((o) => o.value)
+    ).toEqual(["hourly", "flat", "contingent", "court_appointed", "pro_bono"]);
+  });
+
+  test("a legacy hybrid matter gets a Hybrid option only while it is hybrid", () => {
+    render(
+      <EditMatterForm
+        matter={{ ...matter, billingType: "hybrid" }}
+        options={options}
+        canChangeLead
+        canEditBillingType
+      />
+    );
+    const select = screen.getByLabelText(/billing type/i);
+    expect(select).toHaveValue("hybrid");
+    expect(select.querySelectorAll("option")).toHaveLength(6);
   });
 });

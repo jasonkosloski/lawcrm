@@ -123,7 +123,6 @@ const updateForm = (overrides: Record<string, string> = {}) => {
   fd.set("name", "Doe v. Acme");
   fd.set("practiceAreaId", areaId);
   fd.set("stageId", stageId);
-  fd.set("feeStructure", "contingent");
   fd.set("leadUserId", userId);
   for (const [k, v] of Object.entries(overrides)) fd.set(k, v);
   return fd;
@@ -939,7 +938,7 @@ describe("matter audit trail", () => {
       updateMatter(
         matterId,
         updateMatterInitialState,
-        updateForm({ name: "Test Matter", feeStructure: "hourly" })
+        updateForm({ name: "Test Matter" })
       )
     ).rejects.toThrow(/__REDIRECT__/);
     expect(await prisma.activityLog.count({ where: { matterId } })).toBe(0);
@@ -2233,5 +2232,88 @@ describe("createMatter: open from a draft + originating-document gate", () => {
     expect(ag.signedDate).toBeNull();
     expect(ag.documentId).toBeNull();
     expect(await prisma.documentFolder.count({ where: { matterId: m.id } })).toBe(0);
+  });
+});
+
+// ── updateMatter: billing type is locked after creation ─────────────────
+
+describe("updateMatter billing type lock", () => {
+  const noBillingEdit = () =>
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (key) => key !== "matters.billing_type.edit"
+    );
+  const seed = async (data: { feeStructure: string; billingMode: string }) => {
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    await prisma.matter.update({ where: { id: matterId }, data });
+    return matterId;
+  };
+  const stored = (id: string) =>
+    prisma.matter.findUniqueOrThrow({
+      where: { id },
+      select: { feeStructure: true, billingMode: true },
+    });
+  const run = (id: string, o: Record<string, string>) =>
+    updateMatter(id, updateMatterInitialState, updateForm(o));
+
+  test("without the permission, a changed billingType is refused and nothing changes", async () => {
+    noBillingEdit();
+    const id = await seed({ feeStructure: "hourly", billingMode: "client" });
+    const res = await run(id, { billingType: "flat", caseNumber: "X-1" });
+    expect(res.status).toBe("error");
+    expect(res.errors?.billingType).toEqual([
+      "You don't have permission to change the billing type",
+    ]);
+    expect(await stored(id)).toEqual({ feeStructure: "hourly", billingMode: "client" });
+  });
+
+  test("without the permission, an omitted billingType saves and preserves hybrid", async () => {
+    noBillingEdit();
+    const id = await seed({ feeStructure: "hybrid", billingMode: "client" });
+    await expect(run(id, { caseNumber: "X-2" })).rejects.toThrow(/__REDIRECT__/);
+    expect(await stored(id)).toEqual({ feeStructure: "hybrid", billingMode: "client" });
+  });
+
+  test("without the permission, fee_petition mode is preserved on an ordinary edit", async () => {
+    noBillingEdit();
+    const id = await seed({ feeStructure: "contingent", billingMode: "fee_petition" });
+    await expect(run(id, { caseNumber: "X-3" })).rejects.toThrow(/__REDIRECT__/);
+    expect(await stored(id)).toEqual({
+      feeStructure: "contingent",
+      billingMode: "fee_petition",
+    });
+  });
+
+  test("without the permission, posting the stored type is accepted with no billing write", async () => {
+    noBillingEdit();
+    const id = await seed({ feeStructure: "contingent", billingMode: "fee_petition" });
+    await expect(run(id, { billingType: "contingent" })).rejects.toThrow(/__REDIRECT__/);
+    expect(await stored(id)).toEqual({
+      feeStructure: "contingent",
+      billingMode: "fee_petition",
+    });
+  });
+
+  test("with the permission, hourly -> court_appointed writes both columns and logs the diff", async () => {
+    const id = await seed({ feeStructure: "hourly", billingMode: "client" });
+    await expect(run(id, { billingType: "court_appointed" })).rejects.toThrow(/__REDIRECT__/);
+    expect(await stored(id)).toEqual({ feeStructure: "hourly", billingMode: "court_voucher" });
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId: id, title: "Matter updated" },
+    });
+    expect(log.detail).toContain("billing type Hourly → Court-appointed");
+  });
+
+  test("with the permission, a type outside the area's allowed list is accepted", async () => {
+    await prisma.practiceArea.update({
+      where: { id: areaId },
+      data: { allowedBillingTypes: ["hourly"], defaultBillingType: "hourly" },
+    });
+    const id = await seed({ feeStructure: "hourly", billingMode: "client" });
+    await expect(run(id, { billingType: "pro_bono" })).rejects.toThrow(/__REDIRECT__/);
+    expect(await stored(id)).toEqual({ feeStructure: "pro_bono", billingMode: "none" });
   });
 });

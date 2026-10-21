@@ -28,6 +28,7 @@ import {
 } from "@/components/matters/matter-team-management";
 import { MatterCalendarDefaultsCard } from "@/components/settings/calendar-defaults-card";
 import { toSolPeriod } from "@/lib/sol";
+import { billingTypeOf } from "@/lib/billing-type";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { listVenues } from "@/lib/queries/venues";
@@ -77,6 +78,7 @@ export default async function EditMatterPage({
     userRows,
     canManageTeam,
     canEditMatter,
+    canEditBillingType,
     firmDefaults,
     canRestrict,
     venueRows,
@@ -124,6 +126,7 @@ export default async function EditMatterPage({
     }),
     currentUserHasPermission("matters.manage_team"),
     currentUserHasPermission("matters.edit"),
+    currentUserHasPermission("matters.billing_type.edit"),
     // Firm-wide defaults — surfaced as the inherit hint copy on
     // the matter override card. Single firm row in single-tenant
     // mode; the resolver scopes by firm when multi-tenant lands.
@@ -197,8 +200,7 @@ export default async function EditMatterPage({
     caseNumber: matter.caseNumber,
     practiceAreaId: matter.practiceAreaId,
     stageId: matter.stageId,
-    feeStructure: matter.feeStructure,
-    billingMode: matter.billingMode,
+    billingType: billingTypeOf(matter),
     court: matter.court,
     clientId: matter.clientId,
     opposingParty: matter.opposingParty,
@@ -248,6 +250,7 @@ export default async function EditMatterPage({
                   firmState: firm.state ?? "",
                 }}
                 canChangeLead={canManageTeam}
+                canEditBillingType={canEditBillingType}
               />
             </CardContent>
           </Card>

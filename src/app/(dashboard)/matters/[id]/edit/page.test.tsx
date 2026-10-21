@@ -54,6 +54,8 @@ vi.mock("@/lib/permission-check", () => ({
 const formProps = vi.hoisted(() => ({
   current: undefined as
     | {
+        matter: { billingType: string };
+        canEditBillingType?: boolean;
         options: {
           venues?: Array<{ id: string; isActive: boolean }>;
           canAddVenue?: boolean;
@@ -105,7 +107,7 @@ const matter = {
   caseNumber: "2026-CV-001",
   practiceAreaId: "pa1",
   stageId: "st1",
-  feeStructure: "contingency",
+  feeStructure: "contingent",
   billingMode: "client",
   court: null,
   clientId: "c1",
@@ -264,6 +266,16 @@ describe("EditMatterPage — option lists keep the current client and lead (F082
     grant("matters.edit");
     await renderPage();
     expect(formProps.current?.canChangeLead).toBe(false);
+  });
+
+  test("the billing type is locked without matters.billing_type.edit and unlocked with it", async () => {
+    grant("matters.edit");
+    await renderPage();
+    expect(formProps.current?.canEditBillingType).toBe(false);
+    expect(formProps.current?.matter.billingType).toBe("contingent");
+    grant("matters.edit", "matters.billing_type.edit");
+    await renderPage();
+    expect(formProps.current?.canEditBillingType).toBe(true);
   });
 
   test("manage_team unlocks the lead field", async () => {

@@ -30,11 +30,11 @@ import {
   formatDateOnly,
   parseDateOnly,
 } from "@/lib/format-date";
-import { FEE_OPTIONS } from "@/lib/fee-structure-constants";
 import {
-  BILLING_MODES,
-  BILLING_MODE_LABEL,
-} from "@/lib/billing-mode-constants";
+  BILLING_TYPE_LABEL,
+  BILLING_TYPE_OPTIONS,
+  type BillingTypeOrLegacy,
+} from "@/lib/billing-type";
 import {
   updateMatterInitialState,
   type UpdateMatterState,
@@ -67,8 +67,7 @@ export type MatterForEdit = {
   caseNumber: string | null;
   practiceAreaId: string;
   stageId: string;
-  feeStructure: string;
-  billingMode: string;
+  billingType: BillingTypeOrLegacy;
   court: string | null;
   clientId: string | null;
   opposingParty: string | null;
@@ -131,6 +130,7 @@ export function EditMatterForm({
   matter,
   options,
   canChangeLead = false,
+  canEditBillingType = false,
 }: {
   matter: MatterForEdit;
   options: EditMatterFormOptions;
@@ -138,6 +138,10 @@ export function EditMatterForm({
    *  enforced by `updateMatter`). Without it the field is locked and
    *  the current lead is posted back unchanged. */
   canChangeLead?: boolean;
+  /** The billing type is set at creation; changing it needs
+   *  matters.billing_type.edit (enforced by `updateMatter`). Without it
+   *  the type is shown read-only and nothing is posted. */
+  canEditBillingType?: boolean;
 }) {
   // Bind matterId into the server action so the form's action prop
   // can stay `(prev, formData) => state`.
@@ -208,8 +212,7 @@ export function EditMatterForm({
     : dateInputValue(matter.statuteOfLimitationsDate);
   const init = {
     name: vals.name ?? matter.name,
-    feeStructure: vals.feeStructure ?? matter.feeStructure,
-    billingMode: vals.billingMode ?? matter.billingMode,
+    billingType: vals.billingType ?? matter.billingType,
     caseNumber: vals.caseNumber ?? matter.caseNumber ?? "",
     court: vals.court ?? matter.court ?? "",
     clientId: vals.clientId ?? matter.clientId ?? "",
@@ -423,46 +426,34 @@ export function EditMatterForm({
           </Field>
 
           <Field
-            label="Fee structure"
-            name="feeStructure"
-            error={errs.feeStructure}
+            label="Billing type"
+            name="billingType"
+            error={errs.billingType}
           >
-            <NativeSelect
-              className="w-full"
-              id="feeStructure"
-              name="feeStructure"
-              defaultValue={init.feeStructure}
-              aria-invalid={!!errs.feeStructure || undefined}
-            >
-              {FEE_OPTIONS.map((f) => (
-                <NativeSelectOption key={f.value} value={f.value}>
-                  {f.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Field>
-        </Row>
-
-        <Row>
-          <Field
-            label="Billing mode"
-            name="billingMode"
-            error={errs.billingMode}
-            hint="Which workflow the Billing tab uses. Inherited from the practice area on create; override per-matter when this case bills differently (e.g. a §1988-eligible contingency case switching to fee-petition mode)."
-          >
-            <NativeSelect
-              className="w-full"
-              id="billingMode"
-              name="billingMode"
-              defaultValue={init.billingMode}
-              aria-invalid={!!errs.billingMode || undefined}
-            >
-              {BILLING_MODES.map((m) => (
-                <NativeSelectOption key={m} value={m}>
-                  {BILLING_MODE_LABEL[m]}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+            {canEditBillingType ? (
+              <NativeSelect
+                className="w-full"
+                id="billingType"
+                name="billingType"
+                defaultValue={init.billingType}
+                aria-invalid={!!errs.billingType || undefined}
+              >
+                {matter.billingType === "hybrid" && (
+                  <NativeSelectOption value="hybrid">
+                    {BILLING_TYPE_LABEL.hybrid}
+                  </NativeSelectOption>
+                )}
+                {BILLING_TYPE_OPTIONS.map((o) => (
+                  <NativeSelectOption key={o.value} value={o.value}>
+                    {o.label}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            ) : (
+              <p className="text-sm text-ink-2">
+                {BILLING_TYPE_LABEL[matter.billingType]} · set at creation
+              </p>
+            )}
           </Field>
         </Row>
       </Section>
