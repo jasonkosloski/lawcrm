@@ -143,7 +143,7 @@ export default async function MatterDetailLayout({
         )}
         {matter.court && <span>{matter.court}</span>}
         <span>
-          Fee:{" "}
+          Billing:{" "}
           <span className="text-ink">
             {BILLING_TYPE_LABEL[billingTypeOf(matter)]}
           </span>

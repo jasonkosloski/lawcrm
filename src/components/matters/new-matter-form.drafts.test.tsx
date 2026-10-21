@@ -325,3 +325,28 @@ describe("NewMatterForm - Engagement section", () => {
     expect(hidden("originatingFileId")).toBe("");
   });
 });
+
+describe("NewMatterForm - legacy feeStructure drafts", () => {
+  const billingValue = () =>
+    (document.getElementById("billingType") as HTMLSelectElement).value;
+  const resume = (a: ReturnType<typeof area>, feeStructure: string) =>
+    render(
+      <NewMatterForm
+        options={{ ...options, areas: [a] }}
+        draft={draft({
+          values: { newClientName: "Maria Alvarez", practiceAreaId: "a1", name: "x", feeStructure },
+        })}
+        engagement={engagement()}
+      />
+    );
+
+  test("resumes the legacy feeStructure when the area allows it", () => {
+    resume(area("a1", "Personal Injury"), "flat");
+    expect(billingValue()).toBe("flat");
+  });
+
+  test("falls back to the area default when the area does not allow it", () => {
+    resume({ ...area("a1", "Personal Injury"), allowedBillingTypes: ["contingent", "hourly"] }, "flat");
+    expect(billingValue()).toBe("contingent");
+  });
+});

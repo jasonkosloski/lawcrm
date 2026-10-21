@@ -362,8 +362,10 @@ export function NewMatterForm({
   // (not defaultValue) so React 19's form reset can't revert it either.
   const [billingType, setBillingType] = useState<string>(() => {
     const allowed = initialArea?.allowedBillingTypes ?? [];
-    return isBillingType(vals.billingType) && allowed.includes(vals.billingType)
-      ? vals.billingType
+    // Drafts saved before billing types stored the old `feeStructure`.
+    const saved = vals.billingType ?? vals.feeStructure;
+    return isBillingType(saved) && allowed.includes(saved)
+      ? saved
       : (initialArea?.defaultBillingType ?? "contingent");
   });
 
