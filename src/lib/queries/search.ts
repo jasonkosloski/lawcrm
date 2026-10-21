@@ -675,10 +675,16 @@ export async function globalSearch(
     // Each thread is therefore verified against the tag-stripped
     // text of its matching messages and dropped when only markup
     // matched; `total` is the SQL count minus those dropped rows.
+    const emailLeadWall = await leadAccessWhere(viewerId);
     const bodyMatch = { OR: ciHtml.map((c) => ({ body: c })) };
     const where = {
       AND: [
         visibleEmailThreadWhere(viewerId),
+        // Lead wall: a thread filed to a restricted lead is not searchable.
+        // (Hidden-matter threads stay hits with the name withheld, below.)
+        ...(Object.keys(emailLeadWall).length === 0
+          ? []
+          : [{ OR: [{ leadId: null }, { lead: emailLeadWall }] }]),
         {
           OR: [
             { subject: ci },

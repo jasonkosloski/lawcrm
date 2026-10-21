@@ -26,9 +26,11 @@ import {
   getCommunicationCounts,
   getCommunicationPinnedMatters,
   getEmailUnreadCount,
+  getFilingLeadOptions,
   getFilingMatterOptions,
   getThreadById,
   listThreads,
+  listThreadsForLead,
   listThreadsForEmail,
   listThreadsForMatter,
   THREAD_PAGE_SIZE,
@@ -38,6 +40,7 @@ import {
 import {
   resetDb,
   seedFirm,
+  seedLead,
   seedMatter,
   seedPracticeArea,
   seedUser,
@@ -242,6 +245,7 @@ async function seedFlagged(opts: {
   isArchived?: boolean;
   followUpAt?: Date | null;
   matterId?: string | null;
+  leadId?: string | null;
 }): Promise<string> {
   const at = new Date(opts.at ?? "2026-06-01T10:00:00Z");
   const t = await prisma.emailThread.create({
@@ -254,6 +258,7 @@ async function seedFlagged(opts: {
       isArchived: opts.isArchived ?? false,
       followUpAt: opts.followUpAt ?? null,
       matterId: opts.matterId ?? null,
+      leadId: opts.leadId ?? null,
       messages: {
         create: [
           {
@@ -589,5 +594,130 @@ describe("paging (no silent truncation)", () => {
     const hit = await listThreadsForEmail("quiet@example.com");
     expect(hit).toMatchObject({ truncated: false });
     expect(hit.rows).toHaveLength(2);
+  });
+});
+
+describe("lead filing in thread queries", () => {
+  let bob: string;
+  let walled: string;
+  let open: string;
+  let walledThread: string;
+  let openThread: string;
+  let matterThread: string;
+  let plainThread: string;
+
+  beforeEach(async () => {
+    const { firmId } = await seedFirm();
+    ({ userId: bob } = await seedUser({ firmId }));
+    ({ leadId: walled } = await seedLead({
+      name: "Walled Lead",
+      restricted: true,
+      teamUserIds: [userId],
+    }));
+    ({ leadId: open } = await seedLead({ name: "Open Lead" }));
+    const area = await seedPracticeArea();
+    ({ matterId } = await seedMatter({
+      practiceAreaId: area.areaId,
+      stageId: area.stageId,
+      leadUserId: userId,
+    }));
+    // `userId` owns the mailbox; the member is `userId`, bob is the outsider.
+    walledThread = await seedFlagged({ accountId, subject: "walled", leadId: walled });
+    openThread = await seedFlagged({ accountId, subject: "open", leadId: open });
+    matterThread = await seedFlagged({ accountId, subject: "matter", matterId });
+    plainThread = await seedFlagged({ accountId, subject: "plain" });
+  });
+
+  /** bob owns the same mail but is not on the walled lead's team. */
+  async function moveMailboxToBob() {
+    await prisma.emailAccount.update({
+      where: { id: accountId },
+      data: { userId: bob },
+    });
+    mockedGetUser.mockResolvedValue(bob);
+  }
+
+  test("thread on a restricted lead is hidden from listThreads, rail counts and getThreadById for a non-member", async () => {
+    // Member sees it everywhere.
+    expect((await listThreads("all")).rows.map((r) => r.id)).toContain(walledThread);
+    expect((await getCommunicationCounts()).all).toBe(4);
+    expect(await getThreadById(walledThread)).not.toBeNull();
+
+    await moveMailboxToBob();
+    const ids = (await listThreads("all")).rows.map((r) => r.id);
+    expect(ids).not.toContain(walledThread);
+    expect(ids).toContain(openThread);
+    const counts = await getCommunicationCounts();
+    expect(counts.all).toBe(3);
+    expect(counts.filed).toBe(2);
+    expect(counts.unfiled).toBe(1);
+    expect(await getThreadById(walledThread)).toBeNull();
+    expect(await getThreadById(openThread)).not.toBeNull();
+    expect((await listThreadsForLead(walled)).rows).toHaveLength(0);
+    await prisma.emailThread.update({
+      where: { id: walledThread },
+      data: { isRead: false },
+    });
+    expect(await getEmailUnreadCount()).toBe(0);
+  });
+
+  test("an inactive viewer (no lead scope) loses lead-filed threads but keeps unfiled and matter-filed", async () => {
+    await prisma.user.update({ where: { id: userId }, data: { isActive: false } });
+    // Matter access also vanishes for an inactive user, so assert on leads
+    // and unfiled only.
+    const ids = (await listThreads("all")).rows.map((r) => r.id);
+    expect(ids).not.toContain(walledThread);
+    expect(ids).not.toContain(openThread);
+    expect(ids).toContain(plainThread);
+    const c = await getCommunicationCounts();
+    expect(c.unfiled).toBe(1);
+  });
+
+  test("lead-filed thread is not counted or listed as unfiled", async () => {
+    const unfiled = (await listThreads("unfiled")).rows.map((r) => r.id);
+    expect(unfiled).toEqual([plainThread]);
+    const filed = (await listThreads("filed")).rows.map((r) => r.id).sort();
+    expect(filed).toEqual([walledThread, openThread, matterThread].sort());
+    const counts = await getCommunicationCounts();
+    expect(counts.unfiled).toBe(1);
+    expect(counts.filed).toBe(3);
+  });
+
+  test("listThreadsForLead returns only the viewer's own threads filed to the lead", async () => {
+    const otherAcct = await seedAccount(bob);
+    await seedFlagged({ accountId: otherAcct, subject: "bobs", leadId: open });
+    const rows = (await listThreadsForLead(open)).rows;
+    expect(rows.map((r) => r.id)).toEqual([openThread]);
+  });
+
+  test("getThreadById exposes lead and hasAppSentMail", async () => {
+    const before = await getThreadById(openThread);
+    expect(before?.lead).toEqual({ id: open, name: "Open Lead" });
+    expect(before?.matter).toBeNull();
+    expect(before?.hasAppSentMail).toBe(false);
+    await prisma.emailMessage.updateMany({
+      where: { threadId: openThread },
+      data: { sentFromApp: true },
+    });
+    expect((await getThreadById(openThread))?.hasAppSentMail).toBe(true);
+    expect((await getThreadById(plainThread))?.lead).toBeNull();
+  });
+
+  test("getFilingLeadOptions omits converted and walled leads, keeps declined", async () => {
+    const { leadId: converted } = await seedLead({ name: "Converted" });
+    await prisma.lead.update({ where: { id: converted }, data: { stage: "converted" } });
+    const { leadId: declined } = await seedLead({ name: "Declined" });
+    await prisma.lead.update({ where: { id: declined }, data: { stage: "declined" } });
+
+    let ids = (await getFilingLeadOptions()).map((o) => o.id);
+    expect(ids).toContain(walled); // member
+    expect(ids).not.toContain(converted);
+    expect(ids).toContain(declined);
+
+    mockedGetUser.mockResolvedValue(bob);
+    ids = (await getFilingLeadOptions()).map((o) => o.id);
+    expect(ids).not.toContain(walled);
+    expect(ids).toContain(open);
+    expect(ids).toContain(declined);
   });
 });

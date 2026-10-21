@@ -16,8 +16,9 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 import {
   matterAccessWhere,
-  optionalMatterAccessClause,
+  optionalRecordAccessClause,
 } from "@/lib/matter-access";
+import { leadAccessWhere } from "@/lib/lead-access";
 import { paginate, type Page } from "@/lib/pagination";
 
 /** Threads per page in the inbox and a matter's Communication tab
@@ -29,27 +30,46 @@ export const THREAD_PAGE_SIZE = 100;
  *  it reports `truncated` and the tab says so instead. */
 export const THREADS_FOR_EMAIL_CAP = 500;
 
-/** Ethical walls: a thread filed to a matter the viewer can't see is
- *  hidden from every list / count / reader (unfiled threads stay).
- *  Spread as `AND: await threadMatterAccessAnd(userId)`. */
-async function threadMatterAccessAnd(
+/** Ethical walls: a thread filed to a matter or lead the viewer can't
+ *  see is hidden from every list / count / reader (unfiled threads
+ *  stay). Spread as `AND: await threadRecordAccessAnd(userId)`. */
+async function threadRecordAccessAnd(
   userId: string
 ): Promise<Prisma.EmailThreadWhereInput[]> {
-  return (await optionalMatterAccessClause(
+  return (await optionalRecordAccessClause(
     userId
   )) as Prisma.EmailThreadWhereInput[];
 }
 
-/** Raw-SQL twin of `threadMatterAccessAnd` for the rail-count scan
- *  (alias `t`). Empty when unrestricted. */
-async function threadMatterAccessSql(userId: string): Promise<Prisma.Sql> {
-  const where = await matterAccessWhere(userId);
-  if (Object.keys(where).length === 0) return Prisma.empty;
-  const ids = (
-    await prisma.matter.findMany({ where, select: { id: true } })
-  ).map((m) => m.id);
-  if (ids.length === 0) return Prisma.sql`AND t."matterId" IS NULL`;
-  return Prisma.sql`AND (t."matterId" IS NULL OR t."matterId" IN (${Prisma.join(ids)}))`;
+/** Raw-SQL twin of `threadRecordAccessAnd` for the rail-count scan
+ *  (alias `t`). Empty when unrestricted on both sides. */
+async function threadRecordAccessSql(userId: string): Promise<Prisma.Sql> {
+  const [mWhere, lWhere] = await Promise.all([
+    matterAccessWhere(userId),
+    leadAccessWhere(userId),
+  ]);
+  const parts: Prisma.Sql[] = [];
+  if (Object.keys(mWhere).length > 0) {
+    const ids = (
+      await prisma.matter.findMany({ where: mWhere, select: { id: true } })
+    ).map((m) => m.id);
+    parts.push(
+      ids.length === 0
+        ? Prisma.sql`AND t."matterId" IS NULL`
+        : Prisma.sql`AND (t."matterId" IS NULL OR t."matterId" IN (${Prisma.join(ids)}))`
+    );
+  }
+  if (Object.keys(lWhere).length > 0) {
+    const ids = (
+      await prisma.lead.findMany({ where: lWhere, select: { id: true } })
+    ).map((l) => l.id);
+    parts.push(
+      ids.length === 0
+        ? Prisma.sql`AND t."leadId" IS NULL`
+        : Prisma.sql`AND (t."leadId" IS NULL OR t."leadId" IN (${Prisma.join(ids)}))`
+    );
+  }
+  return parts.length === 0 ? Prisma.empty : Prisma.join(parts, " ");
 }
 
 export type CommunicationFilter =
@@ -68,7 +88,7 @@ export type CommunicationFilter =
    *  counterpart view now that the list rows can archive. */
   | "archived"
   | "unfiled"
-  /** Threads associated with any matter (matterId IS NOT NULL). */
+  /** Threads filed to any matter or lead. */
   | "filed"
   /** Threads where the current user has not logged time on any
    *  message — surfaces email work the user did but didn't bill. */
@@ -150,7 +170,7 @@ export async function listThreads(
   // user's accounts.
   const where: Prisma.EmailThreadWhereInput = {
     ...visibleEmailThreadWhere(userId),
-    AND: await threadMatterAccessAnd(userId),
+    AND: await threadRecordAccessAnd(userId),
   };
   if (filter === "unread") {
     where.isRead = false;
@@ -158,8 +178,13 @@ export async function listThreads(
   }
   if (filter === "starred") where.isStarred = true;
   if (filter === "archived") where.isArchived = true;
-  if (filter === "unfiled") where.matterId = null;
-  if (filter === "filed") where.matterId = { not: null };
+  if (filter === "unfiled") {
+    where.matterId = null;
+    where.leadId = null;
+  }
+  if (filter === "filed") {
+    where.OR = [{ matterId: { not: null } }, { leadId: { not: null } }];
+  }
   if (filter === "untimed") {
     // No message in this thread has a time entry by the current user.
     // Other users' time entries don't disqualify - this is "what
@@ -240,6 +265,11 @@ export type ThreadDetail = {
   subject: string;
   matter: { id: string; name: string; color: string; area: string } | null;
   labels: string[];
+  /** Set when the thread is filed to a lead (never with `matter`). */
+  lead: { id: string; name: string } | null;
+  /** True when any message was sent from the app; such a thread must
+   *  stay filed. */
+  hasAppSentMail: boolean;
   messageCount: number;
   lastMessageAt: Date;
   /** Snooze date — null when no follow-up is set. */
@@ -267,7 +297,7 @@ export async function getThreadById(id: string): Promise<ThreadDetail | null> {
     where: {
       id,
       ...visibleEmailThreadWhere(userId),
-      AND: await threadMatterAccessAnd(userId),
+      AND: await threadRecordAccessAnd(userId),
     },
     include: {
       matter: {
@@ -278,6 +308,7 @@ export async function getThreadById(id: string): Promise<ThreadDetail | null> {
           practiceArea: { select: { name: true } },
         },
       },
+      lead: { select: { id: true, name: true } },
       labels: true,
       messages: {
         include: {
@@ -305,6 +336,8 @@ export async function getThreadById(id: string): Promise<ThreadDetail | null> {
           area: thread.matter.practiceArea.name,
         }
       : null,
+    lead: thread.lead,
+    hasAppSentMail: thread.messages.some((m) => m.sentFromApp),
     labels: thread.labels.map((l) => l.label),
     messageCount: thread.messageCount,
     lastMessageAt: thread.lastMessageAt,
@@ -349,7 +382,25 @@ export async function listThreadsForMatter(
     {
       matterId,
       ...visibleEmailThreadWhere(userId),
-      AND: await threadMatterAccessAnd(userId),
+      AND: await threadRecordAccessAnd(userId),
+    },
+    page
+  );
+}
+
+/** Threads whose `leadId` points at this lead - scoped to the current
+ *  user's accounts. Used by the lead's Communication tab. */
+export async function listThreadsForLead(
+  leadId: string,
+  /** 1-based `?page=`; clamped into range. */
+  page = 1
+): Promise<Page<ThreadListRow>> {
+  const userId = await getCurrentUserId();
+  return pageThreads(
+    {
+      leadId,
+      ...visibleEmailThreadWhere(userId),
+      AND: await threadRecordAccessAnd(userId),
     },
     page
   );
@@ -383,7 +434,7 @@ export async function listThreadsForEmail(
   const candidates = await prisma.emailThread.findMany({
     where: {
       ...visibleEmailThreadWhere(userId),
-      AND: await threadMatterAccessAnd(userId),
+      AND: await threadRecordAccessAnd(userId),
       messages: { some: { OR: matchOr } },
     },
     // Capped (one past the cap detects truncation): without it a busy
@@ -473,8 +524,8 @@ type CheapEmailCountsRow = {
 export async function getCommunicationCounts(): Promise<CommunicationCounts> {
   const userId = await getCurrentUserId();
   const now = new Date();
-  const accessSql = await threadMatterAccessSql(userId);
-  const accessAnd = await threadMatterAccessAnd(userId);
+  const accessSql = await threadRecordAccessSql(userId);
+  const accessAnd = await threadRecordAccessAnd(userId);
   const [cheap, untimed] = await Promise.all([
     prisma.$queryRaw<CheapEmailCountsRow[]>(Prisma.sql`
       SELECT
@@ -488,8 +539,12 @@ export async function getCommunicationCounts(): Promise<CommunicationCounts> {
         )::int AS unread,
         COUNT(*) FILTER (WHERE t."isStarred" = true)::int AS starred,
         COUNT(*) FILTER (WHERE t."isArchived" = true)::int AS archived,
-        COUNT(*) FILTER (WHERE t."matterId" IS NULL)::int AS unfiled,
-        COUNT(*) FILTER (WHERE t."matterId" IS NOT NULL)::int AS filed
+        COUNT(*) FILTER (
+          WHERE t."matterId" IS NULL AND t."leadId" IS NULL
+        )::int AS unfiled,
+        COUNT(*) FILTER (
+          WHERE t."matterId" IS NOT NULL OR t."leadId" IS NOT NULL
+        )::int AS filed
       FROM email_threads t
       JOIN email_accounts a ON a.id = t."accountId"
       -- Keep in step with visibleEmailThreadWhere (email-visibility.ts).
@@ -526,7 +581,7 @@ export async function getEmailUnreadCount(): Promise<number> {
   return prisma.emailThread.count({
     where: {
       ...visibleEmailThreadWhere(userId),
-      AND: await threadMatterAccessAnd(userId),
+      AND: await threadRecordAccessAnd(userId),
       isRead: false,
       isArchived: false,
     },
@@ -580,6 +635,22 @@ export async function getFilingMatterOptions(): Promise<FilingMatterOption[]> {
       if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       return 0;
     });
+}
+
+/** Compact lead row for the file-to-lead picker. Open leads only
+ *  (converted ones file to their matter); declined stay. */
+export type FilingLeadOption = { id: string; name: string; stage: string };
+
+export async function getFilingLeadOptions(): Promise<FilingLeadOption[]> {
+  const userId = await getCurrentUserId();
+  return prisma.lead.findMany({
+    where: {
+      ...(await leadAccessWhere(userId)),
+      stage: { not: "converted" },
+    },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, name: true, stage: true },
+  });
 }
 
 /**

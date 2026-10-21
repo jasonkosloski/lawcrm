@@ -22,7 +22,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { emailAttachment: { findFirst: vi.fn() } },
 }));
 vi.mock("@/lib/matter-access", () => ({
-  optionalMatterAccessClause: vi.fn(async () => []),
+  optionalRecordAccessClause: vi.fn(async () => []),
 }));
 vi.mock("@/lib/email-attachments", () => ({
   AttachmentBytesError: class AttachmentBytesError extends Error {},

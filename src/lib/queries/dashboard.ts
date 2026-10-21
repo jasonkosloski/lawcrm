@@ -35,7 +35,6 @@ import { visibleEmailThreadWhere } from "@/lib/email-visibility";
 import {
   filterAccessibleMatterIds,
   matterAccessWhere,
-  optionalMatterAccessClause,
   optionalRecordAccessClause,
 } from "@/lib/matter-access";
 import { TASK_CLOSED_STATUSES } from "@/lib/constants/task-status";
@@ -117,6 +116,7 @@ export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
       prisma.emailThread.count({
         where: {
           ...visibleEmailThreadWhere(userId),
+          AND: await optionalRecordAccessClause(userId),
           isRead: false,
           isArchived: false,
         },
@@ -126,6 +126,7 @@ export async function getDashboardKpis(tz: string): Promise<DashboardKpis> {
       prisma.emailThread.count({
         where: {
           ...visibleEmailThreadWhere(userId),
+          AND: await optionalRecordAccessClause(userId),
           isStarred: true,
           isRead: false,
           isArchived: false,
@@ -386,7 +387,7 @@ export async function getFollowUpsDueToday(tz: string): Promise<FollowUpItem[]> 
   // Matter wall: a follow-up whose thread is filed to a matter the
   // viewer can't access is left off the card (no name leak, and the
   // thread itself 404s for them).
-  const emailMatterAccess = await optionalMatterAccessClause(userId);
+  const emailMatterAccess = await optionalRecordAccessClause(userId);
   const hiddenMatterWhere = await matterAccessWhere(userId);
   const messengerMatterAccess =
     Object.keys(hiddenMatterWhere).length === 0

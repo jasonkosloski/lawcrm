@@ -19,7 +19,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { matterAccessWhere } from "@/lib/matter-access";
+import {
+  matterAccessWhere,
+  optionalRecordAccessClause,
+} from "@/lib/matter-access";
 import { leadAccessWhere } from "@/lib/lead-access";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { dateOnlyRange, todayKey } from "@/lib/format-date";
@@ -104,6 +107,7 @@ export async function getSidebarData(): Promise<SidebarData> {
     prisma.emailThread.count({
       where: {
         ...visibleEmailThreadWhere(currentUserId),
+        AND: await optionalRecordAccessClause(currentUserId),
         isRead: false,
         isArchived: false,
       },
