@@ -8,7 +8,7 @@ import type { PortalSharedEventView } from "@/lib/portal/status";
 /**
  * All-day events are date-only values (ADR-012): read them in UTC so the
  * day never shifts. Timed events show date + start time, and the end time
- * when it falls on the same day.
+ * (with its date when it falls on another day).
  */
 export function whenLabel(e: PortalSharedEventView): string {
   if (e.isAllDay) {
@@ -30,7 +30,9 @@ export function whenLabel(e: PortalSharedEventView): string {
     const end = formatDate(e.endTime, "time", PORTAL_TIME_ZONE);
     return end === start ? `${date}, ${start}` : `${date}, ${start} to ${end}`;
   }
-  return `${date}, ${start}`;
+  const endDate = formatDate(e.endTime, "full_short", PORTAL_TIME_ZONE);
+  const end = formatDate(e.endTime, "time", PORTAL_TIME_ZONE);
+  return `${date}, ${start} to ${endDate}, ${end}`;
 }
 
 function EventItem({ e }: { e: PortalSharedEventView }) {

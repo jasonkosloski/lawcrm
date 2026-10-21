@@ -53,6 +53,39 @@ describe("EventsSection", () => {
     expect(screen.getByText("Tue, Nov 3, 2026")).toBeTruthy();
   });
 
+  test("a multi-day all-day event shows the first and last day", () => {
+    render(
+      <EventsSection
+        upcoming={[
+          ev({
+            isAllDay: true,
+            startTime: new Date("2026-11-03T00:00:00Z"),
+            endTime: new Date("2026-11-05T00:00:00Z"),
+          }),
+        ]}
+        past={[]}
+      />,
+    );
+    expect(screen.getByText("Tue, Nov 3, 2026 to Thu, Nov 5, 2026")).toBeTruthy();
+  });
+
+  test("a timed event ending on another day shows both dates", () => {
+    render(
+      <EventsSection
+        upcoming={[
+          ev({
+            startTime: new Date("2026-11-03T16:00:00Z"), // Nov 3, 9:00 AM MST
+            endTime: new Date("2026-11-04T17:00:00Z"), // Nov 4, 10:00 AM MST
+          }),
+        ]}
+        past={[]}
+      />,
+    );
+    expect(
+      screen.getByText("Tue, Nov 3, 2026, 9:00 AM to Wed, Nov 4, 2026, 10:00 AM"),
+    ).toBeTruthy();
+  });
+
   test("past events sit in a collapsed Past group; text is literal", () => {
     const { container } = render(
       <EventsSection
