@@ -40,6 +40,7 @@ email/mail invoice "send" is logged only ([issue](issues/invoice-email-not-sent.
 
 **Matters, intake, records**
 - [~] **Matter header "Create" menu**: only Note/Event have quick forms; others link to tabs. → [matters](features/matters.md)
+- [x] **Matter billing types**: per-area allowed types and default, locked after creation, permission to change (ADR-060); fee petition returns as its own switch. → [matters](features/matters.md)
 - [ ] **Matters list: Cards view**: third mode beside Table and Kanban. → [matters](features/matters.md)
 - [ ] **Intake queue: split-view reader pane** → [intake](features/intake.md)
 - [ ] **Lead scoring deep dive**: nothing computes scores yet. → [intake](features/intake.md)

@@ -6,10 +6,14 @@
  * voucher submissions, fee-petition documents for fee-shifting
  * statutes, or "no billing" for true pro-bono / personal matters.
  *
- * iteration 1: schema + select inputs only. Every mode still
- * routes through the traditional UX; the per-mode flows (voucher
- * submission packets, fee-petition court exhibits) land when each
- * has a real demand signal. See docs/features/time-and-billing.md.
+ * Users no longer pick a billing mode directly: it is set together
+ * with the fee structure by the matter's billing type
+ * (`billing-type.ts`, ADR-060). `fee_petition` is dormant — not
+ * selectable, existing values kept — until a fee-petition flow is
+ * built as its own matter switch. Every mode still routes through
+ * the traditional UX; the per-mode flows (voucher packets,
+ * fee-petition exhibits) are not built. See
+ * docs/features/time-and-billing.md.
  *
  * Lives outside server-only files so the matter / practice-area
  * edit forms can import without dragging Prisma into the client

@@ -120,6 +120,7 @@ The catalog still has some coarse `manage_*` keys (`matters.manage_team`, `firm.
 ### Keys that gate more than one surface
 
 - `matters.manage_team` gates `addMatterTeamMember`, extra team seats on `createMatter` (the lead alone needs only `matters.create`), **and** changing the lead attorney from the matter edit form (`updateMatter` returns a field error otherwise; the form locks the field). A save that leaves the lead unchanged or omits it needs only `matters.edit`.
+- `matters.billing_type.edit` gates changing a matter's billing type after creation (`updateMatter` rejects a changed value without it; the edit form shows the type read-only). Choosing the type at creation needs only `matters.create`, limited to the practice area's allowed list (ADR-060).
 - `billing.apply_trust` gates sendInvoice's apply-trust leg **and** `recordInvoicePayment` with `source=trust`. A role with only `billing.record_payment` is refused trust payments.
 - `billing.generate_invoice` gates generating/bundling invoices **and** `updateInvoiceLineItem`.
 - `billing.view` is a pure read gate (Billing tab, invoice print, trust KPI and deposit rows). Every billing action keeps its own key; action keys do not imply view, so grant both.
