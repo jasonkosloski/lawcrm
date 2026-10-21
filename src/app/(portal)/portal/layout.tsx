@@ -54,7 +54,7 @@ export default async function PortalLayout({
 
   return (
     <div className="flex min-h-dvh flex-col bg-paper-2 text-ink">
-      <header className="bg-brand-900 text-white">
+      <header className="bg-brand-900 text-white print:hidden">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4 px-4 py-4 sm:py-5">
           <Link
             href="/"
@@ -96,7 +96,7 @@ export default async function PortalLayout({
         {children}
       </main>
 
-      <footer className="border-t border-line bg-paper">
+      <footer className="border-t border-line bg-paper print:hidden">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-6 text-xs text-ink-3">
           <p className="font-medium text-ink-2">{firmName}</p>
           {firm?.phone || firm?.email || address ? (

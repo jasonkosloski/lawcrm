@@ -6,6 +6,8 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { portalMatterWhere, requirePortalIdentity } from "@/lib/portal-access";
 import { prisma } from "@/lib/prisma";
 import { countOpenRequestsByMatter } from "@/lib/portal/requests";
+import { portalBalanceDueByMatter } from "@/lib/portal/billing";
+import { formatMoney } from "@/lib/format-money";
 import { unreadPortalMessageMatters } from "@/lib/portal/messages";
 import { latestStageLabels } from "@/lib/portal/status";
 import { MatterStatus } from "./matter-status";
@@ -27,9 +29,10 @@ export default async function PortalHome() {
   ]);
 
   const matterIds = matters.map((m) => m.id);
-  const [stageLabels, unread] = await Promise.all([
+  const [stageLabels, unread, balances] = await Promise.all([
     latestStageLabels(identityId, matterIds),
     unreadPortalMessageMatters(identityId, matterIds),
+    portalBalanceDueByMatter(identityId, matterIds),
   ]);
   const open = matters.filter((m) => !m.isArchived);
   const closed = matters.filter((m) => m.isArchived);
@@ -62,6 +65,7 @@ export default async function PortalHome() {
               openCounts={openCounts}
               stageLabels={stageLabels}
               unread={unread}
+              balances={balances}
             />
           ) : null}
           {closed.length > 0 ? (
@@ -71,6 +75,7 @@ export default async function PortalHome() {
               openCounts={openCounts}
               stageLabels={stageLabels}
               unread={unread}
+              balances={balances}
             />
           ) : null}
         </>
@@ -85,11 +90,13 @@ function MatterList({
   openCounts,
   stageLabels,
   unread,
+  balances,
 }: {
   heading: string;
   openCounts: Map<string, number>;
   stageLabels: Map<string, string>;
   unread: Set<string>;
+  balances: Map<string, number>;
   matters: { id: string; name: string; isArchived: boolean }[];
 }) {
   const id = `${heading.toLowerCase().replace(/\s+/g, "-")}-heading`;
@@ -118,6 +125,11 @@ function MatterList({
               {unread.has(m.id) ? (
                 <span className="shrink-0 rounded-full border border-brand-200 bg-brand-tint px-2.5 py-0.5 text-xs font-medium text-brand-700">
                   New message
+                </span>
+              ) : null}
+              {balances.has(m.id) ? (
+                <span className="shrink-0 rounded-full border border-warn-border bg-warn-soft px-2.5 py-0.5 text-xs font-medium text-warn">
+                  Balance due {formatMoney(balances.get(m.id) ?? 0)}
                 </span>
               ) : null}
               {stageLabels.get(m.id) ? (

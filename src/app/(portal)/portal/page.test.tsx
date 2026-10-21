@@ -141,3 +141,35 @@ describe("portal home", () => {
     ).not.toContain("New message");
   });
 });
+
+describe("portal home balance due", () => {
+  test("shows Balance due only for matters with a visible unpaid balance", async () => {
+    await prisma.firm.updateMany({ data: { portalEnabled: true } });
+    await prisma.matter.update({
+      where: { id: openId },
+      data: { clientId: identity.contactId, portalBillingEnabled: true },
+    });
+    await prisma.invoice.create({
+      data: {
+        invoiceNumber: "INV-5",
+        matterId: openId,
+        kind: "client",
+        status: "partial",
+        issueDate: new Date("2026-03-05T18:00:00Z"),
+        dueDate: new Date("2999-01-01T00:00:00Z"),
+        subtotal: "1500.00",
+        totalAmount: "1500.00",
+        paidAmount: "500.25",
+      },
+    });
+    render(await PortalHome());
+    expect(screen.getAllByText(/Balance due/)).toHaveLength(1);
+    expect(screen.getByText("Balance due $999.75")).toBeTruthy();
+  });
+
+  test("no Balance due when the switch is off", async () => {
+    await prisma.firm.updateMany({ data: { portalEnabled: true } });
+    render(await PortalHome());
+    expect(screen.queryByText(/Balance due/)).toBeNull();
+  });
+});

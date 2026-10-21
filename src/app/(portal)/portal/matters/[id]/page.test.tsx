@@ -153,3 +153,45 @@ describe("portal matter page", () => {
     expect(screen.getAllByTestId("uploader")).toHaveLength(3);
   });
 });
+
+describe("portal matter page billing", () => {
+  test("Billing section shows only when the viewer can see money", async () => {
+    await prisma.firm.updateMany({ data: { portalEnabled: true } });
+    const ident = await prisma.portalIdentity.findFirstOrThrow({
+      select: { contactId: true },
+    });
+    await prisma.matter.update({
+      where: { id: invited },
+      data: { clientId: ident.contactId },
+    });
+    await prisma.invoice.create({
+      data: {
+        invoiceNumber: "INV-9",
+        matterId: invited,
+        kind: "client",
+        status: "sent",
+        issueDate: new Date("2026-03-05T18:00:00Z"),
+        dueDate: new Date("2999-01-01T00:00:00Z"),
+        subtotal: "100.00",
+        totalAmount: "100.00",
+        paidAmount: "0",
+      },
+    });
+    // Switch off: no section.
+    const off = render(
+      await PortalMatterPage({ params: Promise.resolve({ id: invited }) }),
+    );
+    expect(screen.queryByRole("heading", { name: "Billing" })).toBeNull();
+    off.unmount();
+    // Switch on: section with the invoice.
+    await prisma.matter.update({
+      where: { id: invited },
+      data: { portalBillingEnabled: true },
+    });
+    render(
+      await PortalMatterPage({ params: Promise.resolve({ id: invited }) }),
+    );
+    expect(screen.getByRole("heading", { name: "Billing" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "INV-9" })).toBeTruthy();
+  });
+});

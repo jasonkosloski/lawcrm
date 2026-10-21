@@ -16,8 +16,14 @@ import {
 } from "@/lib/portal/document-visibility.server";
 import { listPortalRequests } from "@/lib/portal/requests";
 import { getPortalMessages } from "@/lib/portal/messages";
+import {
+  canSeePortalBilling,
+  getPortalTrust,
+  listPortalInvoices,
+} from "@/lib/portal/billing";
 import { getPortalMatterStatus } from "@/lib/portal/status";
 import { MatterStatus } from "../../matter-status";
+import { BillingSection } from "./billing-section";
 import { EventsSection } from "./events-section";
 import { MessagesSection } from "./messages-section";
 import { RequestsSection } from "./requests-section";
@@ -49,6 +55,12 @@ export default async function PortalMatterPage({
     prisma.firm.findFirst({ select: { phone: true, email: true } }),
   ]);
   const storageDriver = activeStorageDriver();
+  const [invoices, trust] = (await canSeePortalBilling(identityId, id))
+    ? await Promise.all([
+        listPortalInvoices(identityId, id),
+        getPortalTrust(identityId, id),
+      ])
+    : [[], null];
 
   return (
     <div className="flex flex-col gap-6">
@@ -76,6 +88,9 @@ export default async function PortalMatterPage({
         firmPhone={firm?.phone ?? null}
         firmEmail={firm?.email ?? null}
       />
+      {invoices.length > 0 || trust ? (
+        <BillingSection matterId={matter.id} invoices={invoices} trust={trust} />
+      ) : null}
       <RequestsSection
         requests={requests}
         matterId={matter.id}
