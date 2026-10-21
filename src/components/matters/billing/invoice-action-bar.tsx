@@ -7,7 +7,7 @@
  * next step:
  *
  *   draft     → Approve            (one-click, no dialog)
- *   approved  → Mark as sent…       (dialog: method / recipient /
+ *   approved  → Send invoice…       (dialog: method / recipient /
  *                                    optional apply-trust)
  *   sent      → Record payment…     (dialog: amount / method incl.
  *                                    trust / reference / memo)
@@ -286,7 +286,7 @@ export function InvoiceActionBar({
               title="Email the invoice to the client, or post it to the client portal."
             >
               <Send size={11} />
-              Mark as sent
+              Send invoice…
             </button>
           )}
           {canRecordPayment && (

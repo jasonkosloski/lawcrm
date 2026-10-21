@@ -430,14 +430,14 @@ function SendInvoiceForm({
           }
         >
           {isPending
-            ? "Saving…"
+            ? "Sending…"
             : method === "portal"
               ? "Send via client portal"
               : willMarkPaid
-              ? "Mark sent + paid from trust"
+              ? "Send + pay from trust"
               : applyTrust && trustValid
-                ? "Mark sent + apply trust"
-                : "Mark as sent"}
+                ? "Send + apply trust"
+                : "Send email"}
         </Button>
       </DialogFooter>
     </form>

@@ -124,11 +124,11 @@ describe("InvoiceActionBar — per-action permission gating", () => {
     expect(button(/more invoice actions/i)).not.toBeInTheDocument();
   });
 
-  test("approved: Mark as sent needs billing.send_invoice", () => {
+  test("approved: Send invoice needs billing.send_invoice", () => {
     const { rerender } = render(
       <InvoiceActionBar {...baseProps} currentStatus="approved" canVoid />
     );
-    expect(button(/mark as sent/i)).not.toBeInTheDocument();
+    expect(button(/send invoice/i)).not.toBeInTheDocument();
     rerender(
       <InvoiceActionBar
         {...baseProps}
@@ -136,7 +136,7 @@ describe("InvoiceActionBar — per-action permission gating", () => {
         canSendInvoice
       />
     );
-    expect(button(/mark as sent/i)).toBeInTheDocument();
+    expect(button(/send invoice/i)).toBeInTheDocument();
   });
 
   test("void is hidden without billing.void_invoice", () => {
@@ -180,25 +180,25 @@ describe("InvoiceActionBar — status x kind x balance matrix (all permissions h
       name: "client draft",
       props: { currentStatus: "draft" },
       shown: [/^approve$/i, /more invoice actions/i],
-      hidden: [/mark as sent/i, /record payment/i, /mark recorded/i],
+      hidden: [/send invoice/i, /record payment/i, /mark recorded/i],
     },
     {
       name: "client approved",
       props: { currentStatus: "approved" },
-      shown: [/mark as sent/i, /more invoice actions/i],
+      shown: [/send invoice/i, /more invoice actions/i],
       hidden: [/^approve$/i, /record payment/i],
     },
     {
       name: "client sent with a balance",
       props: { currentStatus: "sent" },
       shown: [/record payment/i, /more invoice actions/i],
-      hidden: [/^approve$/i, /mark as sent/i],
+      hidden: [/^approve$/i, /send invoice/i],
     },
     {
       name: "client partial with a balance (no void; kebab holds Re-send)",
       props: { currentStatus: "partial", paidAmount: 100 },
       shown: [/record payment/i, /more invoice actions/i],
-      hidden: [/mark as sent/i],
+      hidden: [/send invoice/i],
     },
     {
       name: "client sent with zero balance",
@@ -222,7 +222,7 @@ describe("InvoiceActionBar — status x kind x balance matrix (all permissions h
       name: "internal record draft",
       props: { kind: "internal_record", currentStatus: "draft" },
       shown: [/mark recorded/i, /more invoice actions/i],
-      hidden: [/^approve$/i, /mark as sent/i, /record payment/i],
+      hidden: [/^approve$/i, /send invoice/i, /record payment/i],
     },
     {
       name: "internal record paid (voidable only)",
@@ -303,7 +303,7 @@ describe("InvoiceActionBar — Re-send email", () => {
   test("the send button tooltip describes email and portal", () => {
     render(<InvoiceActionBar {...baseProps} {...ALL} currentStatus="approved" />);
     expect(
-      screen.getByRole("button", { name: /mark as sent/i })
+      screen.getByRole("button", { name: /send invoice/i })
     ).toHaveAttribute(
       "title",
       "Email the invoice to the client, or post it to the client portal."
@@ -331,15 +331,15 @@ describe("InvoiceActionBar — warning toast survives the revalidation", () => {
     const { rerender } = render(
       <InvoiceActionBar {...baseProps} {...ALL} currentStatus="approved" />
     );
-    await user.click(screen.getByRole("button", { name: /mark as sent/i }));
-    await user.click(await screen.findByRole("button", { name: /^mark as sent$/i }));
+    await user.click(screen.getByRole("button", { name: /send invoice/i }));
+    await user.click(await screen.findByRole("button", { name: /^send email$/i }));
     await act(async () => {
       d.resolve({ status: "ok", warning: "W" });
       rerender(<InvoiceActionBar {...baseProps} {...ALL} currentStatus="sent" />);
     });
     expect(notifyWarning).toHaveBeenCalledTimes(1);
     expect(notifyWarning).toHaveBeenCalledWith("W");
-    expect(button(/mark as sent/i)).not.toBeInTheDocument();
+    expect(button(/send invoice/i)).not.toBeInTheDocument();
   });
 
   test("record payment: warning fires once when the balance hits 0 with the result", async () => {
