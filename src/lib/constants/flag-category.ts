@@ -61,3 +61,19 @@ export const FLAG_TONE_CHIP_CLASS: Record<
 export function flagCategoryChipClass(category: FlagCategory): string {
   return FLAG_TONE_CHIP_CLASS[FLAG_CATEGORY_TONE[category]];
 }
+
+/** Tone → background tint for transcript words a flag covers. */
+export const FLAG_TONE_TINT_CLASS: Record<
+  (typeof FLAG_CATEGORY_TONE)[FlagCategory],
+  string
+> = {
+  warn: "bg-warn-soft",
+  brand: "bg-brand-100",
+  neutral: "bg-paper-2",
+};
+
+/** Convenience: category → transcript word tint. Unknown values read as neutral. */
+export function flagCategoryTintClass(category: string): string {
+  const tone = FLAG_CATEGORY_TONE[category as FlagCategory] ?? "neutral";
+  return FLAG_TONE_TINT_CLASS[tone];
+}

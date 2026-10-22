@@ -178,6 +178,7 @@ export function MomentsRail({
           return (
             <li
               key={m.id}
+              id={`flag-${m.id}`}
               className="group flex items-start gap-2 rounded-lg border border-line bg-white p-2.5 transition-colors hover:border-brand-300"
             >
               {navigable ? (

@@ -61,6 +61,7 @@ import {
 import { resolveDocumentRenderer } from "@/components/documents-viewer/resolve-renderer";
 import { ViewerFallbackCard } from "@/components/documents-viewer/fallback-card";
 import { ImageViewer } from "@/components/documents-viewer/image-viewer";
+import { getDocumentTranscript } from "@/lib/queries/transcript";
 import { MediaReview } from "@/components/evidence/media-review";
 import { PdfReview } from "@/components/evidence/pdf-review";
 import { SpreadsheetPreview } from "@/components/documents-viewer/spreadsheet-preview";
@@ -69,6 +70,7 @@ import { HeicViewer, TiffViewer } from "@/components/documents-viewer/converted-
 import { renderStoredEmail, renderStoredSpreadsheet } from "@/lib/office-preview";
 import { TextReview } from "@/components/evidence/text-review";
 import { DocumentReview } from "@/components/evidence/document-review";
+import type { TranscriptView } from "@/lib/queries/transcript";
 import type { RailMoment } from "@/components/evidence/moments-rail";
 import { DocxViewer } from "@/components/documents-viewer/docx-viewer";
 import { DocxPreviewRenderer } from "@/components/documents-viewer/docx-preview-renderer";
@@ -147,13 +149,25 @@ export async function DocumentViewerBody({
     : null;
   let review: ReviewData | null = null;
   if (renderer) {
-    const [flags, currentUserId, canCreate, canEditAny, canDeleteAny] =
-      await Promise.all([
+    const isMedia = renderer === "video" || renderer === "audio";
+    const [
+      flags,
+      currentUserId,
+      canCreate,
+      canEditAny,
+      canDeleteAny,
+      transcript,
+      canTranscribe,
+      canDeleteTranscript,
+    ] = await Promise.all([
         getDocumentFlaggedMoments(doc.id),
         getCurrentUserId(),
         currentUserHasPermission("evidence.flag.create"),
         currentUserHasPermission("evidence.flag.edit_any"),
         currentUserHasPermission("evidence.flag.delete_any"),
+        isMedia ? getDocumentTranscript(doc.id) : Promise.resolve(null),
+        isMedia ? currentUserHasPermission("documents.transcribe") : Promise.resolve(false),
+        isMedia ? currentUserHasPermission("documents.transcript.delete") : Promise.resolve(false),
       ]);
     // Resolve ?flag= against the rail list (server-side) — its
     // anchor becomes the adapter's initial navigation. A stale id
@@ -164,6 +178,9 @@ export async function DocumentViewerBody({
       canCreate,
       canEditAny,
       canDeleteAny,
+      transcript,
+      canTranscribe,
+      canDeleteTranscript,
       initialSeconds: linked?.timeSeconds ?? tSeconds,
       initialPage: linked?.pageNumber ?? null,
       initialEndPage: linked?.endPageNumber ?? null,
@@ -365,6 +382,10 @@ type ReviewData = {
   initialEndPage: number | null;
   initialQuote: string | null;
   moments: RailMoment[];
+  /** Audio/video only. */
+  transcript: TranscriptView | null;
+  canTranscribe: boolean;
+  canDeleteTranscript: boolean;
 };
 
 /** Pick + build the body for a document that has stored bytes.
@@ -426,6 +447,9 @@ async function renderBody(
           src={downloadHref}
           name={doc.name}
           initialSeconds={review.initialSeconds}
+          transcript={review.transcript}
+          canTranscribe={review.canTranscribe}
+          canDeleteTranscript={review.canDeleteTranscript}
           {...shared}
         />
       );

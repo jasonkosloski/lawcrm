@@ -21,6 +21,8 @@ import { AudioPlayer } from "@/components/documents-viewer/audio-player";
 import { ReviewPanel } from "./review-panel";
 import type { ComposerAnchor } from "./flag-composer";
 import type { RailMoment } from "./moments-rail";
+import { MediaTranscript } from "@/components/transcripts/media-transcript";
+import type { TranscriptView } from "@/lib/queries/transcript";
 
 export function MediaReview({
   kind,
@@ -33,6 +35,9 @@ export function MediaReview({
   canCreate,
   canEditAny,
   canDeleteAny,
+  transcript,
+  canTranscribe,
+  canDeleteTranscript,
 }: {
   kind: "video" | "audio";
   src: string;
@@ -45,6 +50,10 @@ export function MediaReview({
   canCreate: boolean;
   canEditAny: boolean;
   canDeleteAny: boolean;
+  /** Null until someone requests one. */
+  transcript: TranscriptView | null;
+  canTranscribe: boolean;
+  canDeleteTranscript: boolean;
 }) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const [composerAnchor, setComposerAnchor] = useState<ComposerAnchor | null>(
@@ -99,18 +108,37 @@ export function MediaReview({
       getCurrentTime={getCurrentTime}
       emptyHint="Scrub to a key moment and hit “Flag this moment.”"
     >
-      {kind === "video" ? (
-        <VideoPlayer
-          src={src}
-          mediaRef={mediaRef as React.Ref<HTMLVideoElement>}
-        />
-      ) : (
-        <AudioPlayer
-          src={src}
-          name={name}
-          mediaRef={mediaRef as React.Ref<HTMLAudioElement>}
-        />
-      )}
+      {/* Video stays pinned while the transcript scrolls beneath it. */}
+      <div
+        className={
+          kind === "video"
+            ? "sticky top-0 z-10 flex shrink-0 flex-col bg-paper [&>div]:max-h-[45vh]"
+            : "flex shrink-0 flex-col"
+        }
+      >
+        {kind === "video" ? (
+          <VideoPlayer
+            src={src}
+            mediaRef={mediaRef as React.Ref<HTMLVideoElement>}
+          />
+        ) : (
+          <AudioPlayer
+            src={src}
+            name={name}
+            mediaRef={mediaRef as React.Ref<HTMLAudioElement>}
+          />
+        )}
+      </div>
+      <MediaTranscript
+        mediaRef={mediaRef}
+        transcript={transcript}
+        documentId={documentId}
+        documentName={name}
+        flags={moments}
+        canTranscribe={canTranscribe}
+        canDelete={canDeleteTranscript}
+        initialSeconds={initialSeconds}
+      />
     </ReviewPanel>
   );
 }
