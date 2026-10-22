@@ -5,7 +5,7 @@ Related: [ADR-013](../decisions/013-timer-sessions-are-pre-entries-ungated-to.md
 
 ## Open work
 
-- [ ] **Payment reversal** (P2) — `InvoicePayment` rows are append-only: no action edits, deletes or reverses one, and void is refused while any payment exists. A payment recorded against the wrong invoice (or a trust payment that already drew down `trustBalance`) can only be fixed in the database today. Needs a decision before building:
+- [ ] **Payment reversal** (deferred 2026-10-22) — `InvoicePayment` rows are append-only: no action edits, deletes or reverses one, and void is refused while any payment exists. A payment recorded against the wrong invoice (or a trust payment that already drew down `trustBalance`) can only be fixed in the database today. Needs a decision before building:
   - **Shape:** a reversing entry (negative `InvoicePayment` with `reversesId`, keeps the audit trail; matches how trust is a ledger) vs. a soft-delete flag. Leaning reversing entry: money history stays append-only.
   - **Effects to unwind under the invoice + matter locks:** `paidAmount` and status (paid → partial/sent), and for trust-sourced payments a compensating trust deposit restoring `trustBalance`.
   - **Gate:** its own key (`billing.reverse_payment`), required reason, activity-logged; client notice optional like the void notice.

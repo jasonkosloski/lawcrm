@@ -64,7 +64,6 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 
 - [x] **Invoice email delivery**: send, updated-invoice and re-send email the invoice PDF via Resend. → [time-and-billing](features/time-and-billing.md)
 - [x] **Void stamp + client notice**: voiding a sent invoice stamps filed PDFs VOID and can email the client. → [time-and-billing](features/time-and-billing.md)
-- [ ] **Payment reversal**: no way to undo a mis-recorded payment (or a trust-sourced one) today; void is blocked while payments exist. → [time-and-billing](features/time-and-billing.md)
 - [ ] **Settings: Billing & rates**: default rate, UTBMS library, invoice templates, payment terms. → [time-and-billing](features/time-and-billing.md)
 - [ ] **Time follow-ups**: auto-capture, idle detection, admin user picker on `/time`, editable reconciliation lanes. → [time-and-billing](features/time-and-billing.md)
 
@@ -95,4 +94,4 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 
 ## Deferred
 
-Nothing currently deferred.
+- [ ] **Payment reversal**: deferred 2026-10-22; mis-recorded payments are fixed by an admin in the database until it ships. → [time-and-billing](features/time-and-billing.md)
