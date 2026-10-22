@@ -16,7 +16,7 @@ import {
   type LogoPosition,
   type PageNumberPosition,
 } from "./page-style";
-import { overlayLegacyBody, parseParagraphStyles } from "./paragraph-styles";
+import { parseParagraphStyles } from "./paragraph-styles";
 
 export type LoadedDocumentStyle = DocumentStyleValues & {
   id: string;
@@ -60,10 +60,9 @@ function toValues(row: Row): LoadedDocumentStyle {
     logoContentType: row.logoContentType,
     continuationBlockId: row.continuationBlockId,
     pageNumbers: row.pageNumbers as PageNumberPosition,
-    paragraphStyles: overlayLegacyBody(parseParagraphStyles(row.paragraphStyles, house), {
-      ...house,
-      lineSpacing: row.lineSpacing as LineSpacing,
-    }),
+    // NULL until the firm first saves Settings -> Styles: defaults derived
+    // from the row's legacy house values, so output is unchanged.
+    paragraphStyles: parseParagraphStyles(row.paragraphStyles, house),
   };
 }
 

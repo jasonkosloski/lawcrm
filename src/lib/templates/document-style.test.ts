@@ -65,7 +65,7 @@ describe("getDocumentStyle paragraphStyles", () => {
     expect(s.paragraphStyles).toEqual(defaultParagraphStyles(house));
   });
 
-  test("a stored list is returned, with legacy size/spacing overlaid onto Body", async () => {
+  test("a stored list is returned as saved; Body is not overlaid from the legacy columns", async () => {
     const stored = defaultParagraphStyles({
       fontSizeHalfPt: 24,
       lineSpacing: "single",
@@ -83,9 +83,9 @@ describe("getDocumentStyle paragraphStyles", () => {
     });
     const s = await getDocumentStyle();
     expect(body(s.paragraphStyles)?.values).toMatchObject({
-      sizePt: 14,
-      lineSpacing: "1.5",
-      spaceAfterPt: 3,
+      sizePt: 12,
+      lineSpacing: "single",
+      spaceAfterPt: 12,
     });
     expect(s.paragraphStyles.find((p) => p.key === "title")?.values.bold).toBe(false);
   });
@@ -97,6 +97,16 @@ describe("getDocumentStyle paragraphStyles", () => {
     expect(s.paragraphStyles).toHaveLength(8);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe("getDocumentStyle with a NULL column", () => {
+  test("Body follows the legacy house values, so output is unchanged for untouched firms", async () => {
+    await prisma.documentStyle.create({
+      data: { firmId, fontSizeHalfPt: 28, lineSpacing: "1.5", spaceAfterPt: 3 },
+    });
+    const body = (await getDocumentStyle()).paragraphStyles.find((p) => p.key === "body");
+    expect(body?.values).toMatchObject({ sizePt: 14, lineSpacing: "1.5", spaceAfterPt: 3 });
   });
 });
 

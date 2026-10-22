@@ -1,8 +1,10 @@
 /**
  * Firm document style server action.
  *
- * Saves the house style (font, spacing, margins, letterhead and
- * continuation blocks, page numbers). The logo is NOT saved here —
+ * Saves the house style (font, margins, letterhead and continuation
+ * blocks, page numbers) and, separately, the named paragraph styles
+ * (Settings -> Styles). Body's size and spacing live in the paragraph
+ * styles; the legacy columns are written only by saveParagraphStyles. The logo is NOT saved here —
  * its bytes go through /api/document-style/logo (ADR-034).
  */
 
@@ -13,18 +15,15 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { logTemplateChange } from "@/lib/template-activity";
+import { paragraphStylesSchema, type ParagraphStyle } from "@/lib/templates/paragraph-styles";
+import { styleUsage } from "@/lib/templates/style-usage";
 import { DOCUMENT_STYLE_STALE, getDocumentStyle } from "@/lib/templates/document-style";
 import {
   FONT_KEYS,
-  FONT_SIZE_HALF_PT_MAX,
-  FONT_SIZE_HALF_PT_MIN,
-  LINE_SPACINGS,
   LOGO_POSITIONS,
   MARGIN_IN_MAX,
   MARGIN_IN_MIN,
   PAGE_NUMBER_POSITIONS,
-  SPACE_AFTER_PT_MAX,
-  SPACE_AFTER_PT_MIN,
   type DocumentStyleValues,
 } from "@/lib/templates/page-style";
 
@@ -38,17 +37,6 @@ const margin = z
 
 const styleSchema = z.object({
   fontKey: z.enum(FONT_KEYS),
-  fontSizeHalfPt: z
-    .number()
-    .int()
-    .min(FONT_SIZE_HALF_PT_MIN, "Font size must be 10-14 pt.")
-    .max(FONT_SIZE_HALF_PT_MAX, "Font size must be 10-14 pt."),
-  lineSpacing: z.enum(LINE_SPACINGS),
-  spaceAfterPt: z
-    .number()
-    .int()
-    .min(SPACE_AFTER_PT_MIN, "Space after must be 0-24 pt.")
-    .max(SPACE_AFTER_PT_MAX, "Space after must be 0-24 pt."),
   marginTopIn: margin,
   marginRightIn: margin,
   marginBottomIn: margin,
@@ -94,6 +82,84 @@ export async function saveDocumentStyle(
   if (count === 0) return { ok: false, error: STALE };
 
   await logTemplateChange(userId, "Document style updated", null);
+  revalidatePath("/settings/documents");
+  revalidatePath("/settings/templates");
+  return { ok: true, updatedAt: updatedAt.toISOString() };
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** "Caption is used by 3 templates: A, B, C." (blocks appended when any). */
+function usageMessage(name: string, u: { templates: string[]; blocks: string[] }): string {
+  const parts = [
+    u.templates.length > 0 &&
+      `${plural(u.templates.length, "template")}: ${u.templates.join(", ")}`,
+    u.blocks.length > 0 && `${plural(u.blocks.length, "block")}: ${u.blocks.join(", ")}`,
+  ].filter(Boolean);
+  return `${name} is used by ${parts.join(" and ")}.`;
+}
+
+const stylesInput = z.object({
+  styles: z.array(z.unknown()),
+  expectedUpdatedAt: z.string().datetime({ message: "Invalid save timestamp — reload." }),
+});
+
+/** Saves the firm's whole paragraph style list in one go. */
+export async function saveParagraphStyles(input: {
+  styles: ParagraphStyle[];
+  expectedUpdatedAt: string;
+}): Promise<Result> {
+  const userId = await requirePermission("firm.edit_document_style");
+  const head = stylesInput.safeParse(input);
+  if (!head.success) {
+    return { ok: false, error: head.error.issues[0]?.message ?? "Invalid styles." };
+  }
+
+  const current = await getDocumentStyle();
+  const submittedKeys = new Set(
+    head.data.styles
+      .map((s) => (s as { key?: unknown } | null)?.key)
+      .filter((k) => typeof k === "string"),
+  );
+  // Say which built-in went missing before the generic schema message does.
+  for (const s of current.paragraphStyles) {
+    if (s.builtIn && !submittedKeys.has(s.key)) {
+      return { ok: false, error: `${s.name} can't be deleted.` };
+    }
+  }
+
+  const parsed = paragraphStylesSchema.safeParse(head.data.styles);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid styles." };
+  }
+  const styles = parsed.data as ParagraphStyle[];
+
+  for (const old of current.paragraphStyles) {
+    if (old.builtIn || submittedKeys.has(old.key)) continue;
+    const usage = await styleUsage(old.key);
+    if (usage.templates.length > 0 || usage.blocks.length > 0) {
+      return { ok: false, error: usageMessage(old.name, usage) };
+    }
+  }
+
+  // Keep the legacy columns in step with Body for code paths that still
+  // read them (court format fallbacks). Exact line spacing has no legacy
+  // equivalent, so that column is left alone.
+  const body = styles.find((s) => s.key === "body")!;
+  const legacy: { fontSizeHalfPt: number; spaceAfterPt: number; lineSpacing?: string } = {
+    fontSizeHalfPt: Math.round(body.values.sizePt * 2),
+    spaceAfterPt: Math.round(body.values.spaceAfterPt),
+  };
+  if (typeof body.values.lineSpacing === "string") legacy.lineSpacing = body.values.lineSpacing;
+
+  const updatedAt = new Date();
+  const { count } = await prisma.documentStyle.updateMany({
+    where: { id: current.id, updatedAt: new Date(head.data.expectedUpdatedAt) },
+    data: { paragraphStyles: styles as never, ...legacy, updatedAt },
+  });
+  if (count === 0) return { ok: false, error: STALE };
+
+  await logTemplateChange(userId, "Paragraph styles updated", null);
   revalidatePath("/settings/documents");
   revalidatePath("/settings/templates");
   return { ok: true, updatedAt: updatedAt.toISOString() };

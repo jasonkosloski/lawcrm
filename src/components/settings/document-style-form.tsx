@@ -1,6 +1,7 @@
 /**
  * Document style form — the firm's house style for generated letters
- * and filings, with a live sample page beside it.
+ * and filings, with a live sample page beside it. Text size and spacing
+ * live in the paragraph styles form (Body), not here.
  *
  * The form is controlled so the preview follows every keystroke. Save
  * sends `expectedUpdatedAt` and adopts the returned timestamp; logo
@@ -13,7 +14,6 @@
 
 "use client";
 
-import { overlayLegacyBody } from "@/lib/templates/paragraph-styles";
 import { useState, useTransition } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { saveDocumentStyle } from "@/app/actions/document-style";
@@ -24,7 +24,6 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { FONTS } from "@/lib/templates/fonts";
 import {
   FONT_KEYS,
-  LINE_SPACINGS,
   LOGO_POSITIONS,
   MARGIN_IN_MAX,
   MARGIN_IN_MIN,
@@ -45,12 +44,6 @@ const GARAMOND_NOTE = "Line breaks may differ slightly between Word and PDF.";
 const PAGE_NUMBERS_NOTE =
   "Letters show the page number in the later-page header. The bottom center / bottom right choice applies to filings.";
 
-const LINE_LABEL: Record<(typeof LINE_SPACINGS)[number], string> = {
-  single: "Single",
-  "1.15": "1.15",
-  "1.5": "1.5",
-  double: "Double",
-};
 const LOGO_LABEL: Record<LogoPosition, string> = {
   none: "No logo",
   left: "Left",
@@ -63,7 +56,6 @@ const PAGE_NUMBER_LABEL = {
   bottom_right: "Bottom right",
 } as const;
 
-const SIZES = Array.from({ length: 9 }, (_, i) => 10 + i * 0.5);
 const ALL_FONT_FACES = FONT_KEYS.map(pageFontFaceCss).join("\n");
 
 /** Stand-in for the logo bytes: the preview only needs presence + position. */
@@ -125,8 +117,7 @@ export function DocumentStyleForm({
   const showLogo = hasLogo && values.logoPosition !== "none";
   const style = resolvePageStyle(
     "letter",
-    // The form edits the legacy columns; keep Body in step as the loader does.
-    { ...values, paragraphStyles: overlayLegacyBody(values.paragraphStyles, values) },
+    values,
     showLogo ? placeholderLogo(values.logoPosition as "left" | "center" | "right") : null,
   );
   const docFor = (id: string | null) => (id ? (blockDocs[id] ?? null) : null);
@@ -246,57 +237,6 @@ export function DocumentStyleForm({
           {values.fontKey === "garamond" && (
             <p className="col-span-2 text-2xs text-ink-3">{GARAMOND_NOTE}</p>
           )}
-          <Field label="Font size">
-            {(c) => (
-              <NativeSelect
-                {...c}
-                value={values.fontSizeHalfPt}
-                disabled={dis}
-                onChange={(e) => set("fontSizeHalfPt", Number(e.target.value))}
-                className="w-full"
-              >
-                {SIZES.map((pt) => (
-                  <option key={pt} value={pt * 2}>
-                    {pt} pt
-                  </option>
-                ))}
-              </NativeSelect>
-            )}
-          </Field>
-          <Field label="Line spacing">
-            {(c) => (
-              <NativeSelect
-                {...c}
-                value={values.lineSpacing}
-                disabled={dis}
-                onChange={(e) => set("lineSpacing", e.target.value as typeof values.lineSpacing)}
-                className="w-full"
-              >
-                {LINE_SPACINGS.map((l) => (
-                  <option key={l} value={l}>
-                    {LINE_LABEL[l]}
-                  </option>
-                ))}
-              </NativeSelect>
-            )}
-          </Field>
-          <Field label="Space after paragraph (pt)">
-            {(c) => (
-              <input
-                {...c}
-                type="number"
-                min={0}
-                max={24}
-                step={1}
-                value={values.spaceAfterPt}
-                disabled={dis}
-                onChange={(e) => {
-                  if (e.target.value !== "") set("spaceAfterPt", Number(e.target.value));
-                }}
-                className={ctl()}
-              />
-            )}
-          </Field>
         </div>
 
         <fieldset className="grid grid-cols-2 gap-3" disabled={dis}>

@@ -70,6 +70,9 @@ describe("paragraphStylesSchema rejects", () => {
 
   it("a missing built-in", () => reject(base().slice(1)));
   it("a duplicate key", () => reject([...base(), { ...base()[0], name: "Other" }]));
+  it.each(["Has Space", "UPPER", "a_b", "../x", ""])("a malformed key %j", (key) =>
+    reject([...base(), { key, name: "Custom", builtIn: false, values: base()[0].values }]),
+  );
   it("a duplicate name, case-insensitively", () =>
     reject([
       ...base(),

@@ -46,13 +46,11 @@ describe("DocumentStyleForm", () => {
     saveDocumentStyle.mockResolvedValue({ ok: true, updatedAt: "2026-10-22T11:00:00.000Z" });
     render(<DocumentStyleForm {...baseProps} />);
     fireEvent.change(screen.getByLabelText("Top margin (in)"), { target: { value: "1.25" } });
-    fireEvent.change(screen.getByLabelText("Line spacing"), { target: { value: "double" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(saveDocumentStyle).toHaveBeenCalledTimes(1));
     expect(saveDocumentStyle).toHaveBeenCalledWith({
       ...baseProps.initial,
       marginTopIn: 1.25,
-      lineSpacing: "double",
       expectedUpdatedAt: "2026-10-22T10:00:00.000Z",
     });
     await screen.findByText("Saved");
@@ -232,12 +230,22 @@ describe("DocumentStyleForm", () => {
     await waitFor(() => expect(document.querySelector("img")).toBeNull());
   });
 
-  test("changing line spacing updates the live preview", () => {
-    render(<DocumentStyleForm {...baseProps} />);
-    const before = pageStyleAttr();
-    fireEvent.change(screen.getByLabelText("Line spacing"), { target: { value: "double" } });
-    const after = pageStyleAttr();
-    expect(after).not.toBe(before);
-    expect(after).toContain(String(2 * 1.15));
+  test("size and spacing are Body's now: no fields here, the preview follows Body", () => {
+    const styles = baseProps.initial.paragraphStyles.map((p) =>
+      p.key === "body"
+        ? { ...p, values: { ...p.values, sizePt: 14, lineSpacing: "double" as const } }
+        : p,
+    );
+    render(
+      <DocumentStyleForm
+        {...baseProps}
+        initial={{ ...baseProps.initial, paragraphStyles: styles }}
+      />,
+    );
+    expect(screen.queryByLabelText("Font size")).toBeNull();
+    expect(screen.queryByLabelText("Line spacing")).toBeNull();
+    expect(screen.queryByLabelText("Space after paragraph (pt)")).toBeNull();
+    expect(pageStyleAttr()).toContain(String(14 * (96 / 72)));
+    expect(pageStyleAttr()).toContain(String(2 * 1.15));
   });
 });

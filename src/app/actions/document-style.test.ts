@@ -14,7 +14,8 @@ import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { getDocumentStyle } from "@/lib/templates/document-style";
 import { DEFAULT_DOCUMENT_STYLE } from "@/lib/templates/page-style";
-import { saveDocumentStyle } from "@/app/actions/document-style";
+import { saveDocumentStyle, saveParagraphStyles } from "@/app/actions/document-style";
+import { defaultParagraphStyles, type ParagraphStyle } from "@/lib/templates/paragraph-styles";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
 let firmId: string;
@@ -66,16 +67,10 @@ describe("saveDocumentStyle", () => {
   });
 
   test.each([
-    ["font size low", { fontSizeHalfPt: 19 }],
-    ["font size high", { fontSizeHalfPt: 29 }],
-    ["font size fractional", { fontSizeHalfPt: 24.5 }],
-    ["space after high", { spaceAfterPt: 25 }],
-    ["space after negative", { spaceAfterPt: -1 }],
     ["margin low", { marginLeftIn: 0.49 }],
     ["margin high", { marginRightIn: 2.01 }],
     ["margin 3 decimals", { marginTopIn: 1.005 }],
     ["bad font", { fontKey: "comic" }],
-    ["bad spacing", { lineSpacing: "triple" }],
     ["bad page numbers", { pageNumbers: "top" }],
     ["bad logo position", { logoPosition: "up" }],
   ])("refuses %s", async (_n, over) => {
@@ -121,5 +116,125 @@ describe("saveDocumentStyle", () => {
     const after = await getDocumentStyle();
     expect(after.logoKey).toBe("k1");
     expect(after.logoPosition).toBe("right");
+  });
+});
+
+describe("saveDocumentStyle and Body", () => {
+  test("never writes the legacy size, spacing or space-after columns", async () => {
+    const i = await input({ fontSizeHalfPt: 28, lineSpacing: "double", spaceAfterPt: 3 });
+    expect((await saveDocumentStyle(i)).ok).toBe(true);
+    const row = await prisma.documentStyle.findFirstOrThrow({ where: { firmId } });
+    expect(row.fontSizeHalfPt).toBe(24);
+    expect(row.lineSpacing).toBe("single");
+    expect(row.spaceAfterPt).toBe(12);
+  });
+});
+
+describe("saveParagraphStyles", () => {
+  const house = { fontSizeHalfPt: 24, lineSpacing: "single" as const, spaceAfterPt: 12 };
+  const defaults = () => defaultParagraphStyles(house);
+  const custom = (name: string, key = "caption-2"): ParagraphStyle => ({
+    key,
+    name,
+    builtIn: false,
+    values: defaults()[0].values,
+  });
+  const call = async (styles: ParagraphStyle[], over: Record<string, unknown> = {}) => {
+    const row = await getDocumentStyle();
+    return saveParagraphStyles({
+      styles,
+      expectedUpdatedAt: row.updatedAt.toISOString(),
+      ...over,
+    });
+  };
+  const doc = (style: string) => ({
+    type: "doc",
+    content: [{ type: "paragraph", attrs: { style } }],
+  });
+
+  test("gates on firm.edit_document_style and writes nothing when denied", async () => {
+    vi.mocked(requirePermission).mockRejectedValue(new Error("NEXT_REDIRECT"));
+    await expect(call(defaults())).rejects.toThrow("NEXT_REDIRECT");
+    expect(requirePermission).toHaveBeenCalledWith("firm.edit_document_style");
+    const row = await prisma.documentStyle.findFirstOrThrow({ where: { firmId } });
+    expect(row.paragraphStyles).toBeNull();
+  });
+
+  test("a stale timestamp is refused with the house style message", async () => {
+    const stale = (await getDocumentStyle()).updatedAt.toISOString();
+    expect((await call(defaults())).ok).toBe(true);
+    const r = await saveParagraphStyles({ styles: defaults(), expectedUpdatedAt: stale });
+    expect(r).toEqual({
+      ok: false,
+      error: "Someone else saved the document style — reload to see their changes.",
+    });
+  });
+
+  test("removing a built-in is refused", async () => {
+    const r = await call(defaults().filter((s) => s.key !== "body"));
+    expect(r).toEqual({ ok: false, error: "Body can't be deleted." });
+  });
+
+  test("a malformed key is refused", async () => {
+    const r = await call([...defaults(), custom("Bad", "Bad Key")]);
+    expect(r.ok).toBe(false);
+  });
+
+  test("removing a custom style used by templates names them", async () => {
+    expect((await call([...defaults(), custom("Caption 2")])).ok).toBe(true);
+    for (const name of ["A", "B", "C"]) {
+      await prisma.documentTemplate.create({ data: { name, content: doc("caption-2") } });
+    }
+    const r = await call(defaults());
+    expect(r).toEqual({ ok: false, error: "Caption 2 is used by 3 templates: A, B, C." });
+    const row = await getDocumentStyle();
+    expect(row.paragraphStyles).toHaveLength(9);
+  });
+
+  test("removing a custom style used only by a block is refused", async () => {
+    expect((await call([...defaults(), custom("Caption 2")])).ok).toBe(true);
+    await prisma.templateBlock.create({
+      data: { key: "b", name: "Sig block", content: doc("caption-2") },
+    });
+    const r = await call(defaults());
+    expect(r).toEqual({ ok: false, error: "Caption 2 is used by 1 block: Sig block." });
+  });
+
+  test("an unused custom style can be removed", async () => {
+    expect((await call([...defaults(), custom("Caption 2")])).ok).toBe(true);
+    expect((await call(defaults())).ok).toBe(true);
+    expect(await getDocumentStyle()).toMatchObject({ paragraphStyles: defaults() });
+  });
+
+  test("a valid save persists, syncs legacy Body columns, logs and revalidates", async () => {
+    const styles = defaults();
+    styles[0] = {
+      ...styles[0],
+      values: { ...styles[0].values, sizePt: 13, lineSpacing: "1.5", spaceAfterPt: 6 },
+    };
+    styles.push(custom("Caption 2"));
+    const r = await call(styles);
+    expect(r.ok).toBe(true);
+    const row = await prisma.documentStyle.findFirstOrThrow({ where: { firmId } });
+    expect(row.paragraphStyles).toEqual(styles);
+    expect(row.fontSizeHalfPt).toBe(26);
+    expect(row.lineSpacing).toBe("1.5");
+    expect(row.spaceAfterPt).toBe(6);
+    expect(r.ok && r.updatedAt).toBe(row.updatedAt.toISOString());
+    expect((await getDocumentStyle()).paragraphStyles).toEqual(styles);
+    const log = await prisma.activityLog.findFirst({ where: { source: "Settings" } });
+    expect(log?.matterId).toBeNull();
+    expect(revalidatePath).toHaveBeenCalledWith("/settings/documents");
+  });
+
+  test("exact Body line spacing leaves the legacy column unchanged", async () => {
+    const styles = defaults();
+    styles[0] = {
+      ...styles[0],
+      values: { ...styles[0].values, lineSpacing: { exactPt: 18 } },
+    };
+    expect((await call(styles)).ok).toBe(true);
+    const row = await prisma.documentStyle.findFirstOrThrow({ where: { firmId } });
+    expect(row.lineSpacing).toBe("single");
   });
 });

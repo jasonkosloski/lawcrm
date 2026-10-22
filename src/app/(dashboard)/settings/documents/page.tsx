@@ -1,14 +1,15 @@
 /**
  * Settings — Documents
  *
- * The firm's house style for generated letters and filings (font, size,
- * spacing, margins, letterhead, logo, continuation header, page numbers)
- * with a live sample page. Viewable by any signed-in member; editing
+ * The firm's house style for generated letters and filings (font,
+ * margins, letterhead, logo, continuation header, page numbers)
+ * with a live sample page, then the named paragraph styles. Viewable by any signed-in member; editing
  * needs `firm.edit_document_style` (every action and the logo route
  * re-check it).
  */
 
 import { DocumentStyleForm } from "@/components/settings/document-style-form";
+import { ParagraphStylesForm } from "@/components/settings/paragraph-styles-form";
 import { requireUser } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
@@ -63,6 +64,12 @@ export default async function DocumentSettingsPage() {
         blocks={blockRows.map(({ id, name, isActive }) => ({ id, name, isActive }))}
         body={body}
         blockDocs={blockDocs}
+        canEdit={canEdit}
+      />
+      <ParagraphStylesForm
+        initial={values.paragraphStyles}
+        updatedAt={updatedAt.toISOString()}
+        fontKey={values.fontKey}
         canEdit={canEdit}
       />
     </div>

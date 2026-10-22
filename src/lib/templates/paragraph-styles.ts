@@ -113,7 +113,11 @@ export const styleValuesSchema = z.object({
 export const styleOverrideSchema = styleValuesSchema.partial();
 
 const styleSchema = z.object({
-  key: z.string().min(1),
+  key: z
+    .string()
+    .min(1)
+    .max(60)
+    .regex(/^[a-z0-9-]+$/, "Style keys can only use lowercase letters, numbers and hyphens."),
   name: z
     .string()
     .trim()
@@ -226,8 +230,8 @@ export function newStyleKey(name: string, taken: Set<string>): string {
 }
 
 /** Stored overrides with invalid entries dropped. The legacy body columns
- *  are overlaid as the body override (stored values win): this bridges them
- *  until the styles UI replaces those fields. */
+ *  are overlaid as the body override (stored values win); a later task
+ *  removes this with the court-format migration. */
 export function readStyleOverrides(
   stored: unknown,
   legacy: {
@@ -251,26 +255,4 @@ export function readStyleOverrides(
   const merged = { ...body, ...out.body };
   if (Object.keys(merged).length > 0) out.body = merged;
   return out;
-}
-
-/** Bridges the legacy size/spacing columns (what the Settings form edits)
- *  onto the Body style until the styles UI replaces those fields. Used by the
- *  loader and by the form's live preview so there is one definition. */
-export function overlayLegacyBody(
-  styles: ParagraphStyle[],
-  legacy: { fontSizeHalfPt: number; lineSpacing: LineSpacing; spaceAfterPt: number },
-): ParagraphStyle[] {
-  return styles.map((s) =>
-    s.key === "body"
-      ? {
-          ...s,
-          values: {
-            ...s.values,
-            sizePt: legacy.fontSizeHalfPt / 2,
-            lineSpacing: legacy.lineSpacing,
-            spaceAfterPt: legacy.spaceAfterPt,
-          },
-        }
-      : s,
-  );
 }
