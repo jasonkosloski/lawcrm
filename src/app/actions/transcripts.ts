@@ -26,6 +26,7 @@ import { alignWords } from "@/lib/transcription/align";
 import { wordsToText } from "@/lib/transcription/normalize";
 import { stripUrls } from "@/lib/transcription/sanitize";
 import type { Word } from "@/lib/transcription/types";
+import { reassignSpeakerRange, type WordPoint } from "@/lib/transcription/speaker-range";
 
 export type RequestTranscriptResult =
   | { ok: true; status: "processing" | "completed" }
@@ -393,7 +394,17 @@ async function loadSegmentForEdit(
       },
     },
   });
-  if (!seg) return { error: { ok: false, error: "Paragraph not found." } };
+  // A paragraph can vanish when a speaker change merges or splits it:
+  // that's another editor's change, so treat it as a conflict (reload).
+  if (!seg) {
+    return {
+      error: {
+        ok: false,
+        conflict: true,
+        error: "This paragraph was changed by someone else. Reload to see the current version.",
+      },
+    };
+  }
   const { document: doc, ...transcript } = seg.transcript;
   await assertChildMatterAccess("document", doc.id);
   if (transcript.status !== "completed") {
@@ -413,6 +424,20 @@ async function loadSegmentForEdit(
     doc,
     viewerPath: `${scopeBasePath(scopeOf(doc))}/documents/${doc.id}`,
   };
+}
+
+/**
+ * Validate a speaker label against the transcript's map. An existing key is
+ * used as is; an unused A-Z label is added as "Speaker X". Returns the map
+ * to write (undefined when unchanged), or null for an invalid label.
+ */
+function resolveSpeakerLabel(
+  map: Record<string, string>,
+  label: string,
+): { speakers: Prisma.InputJsonValue | undefined } | null {
+  if (Object.hasOwn(map, label)) return { speakers: undefined };
+  if (!/^[A-Z]$/.test(label)) return null;
+  return { speakers: { ...map, [label]: `Speaker ${label}` } };
 }
 
 const NOT_READY: SegmentEditResult = {
@@ -441,13 +466,9 @@ async function writeSegment(
       if (fresh.status !== "completed") return NOT_READY;
       let speakers: Prisma.InputJsonValue | undefined;
       if (speakerLabel !== undefined) {
-        const map = speakerMap(fresh.speakers);
-        if (!Object.hasOwn(map, speakerLabel)) {
-          if (!/^[A-Z]$/.test(speakerLabel)) {
-            return { ok: false, error: "Unknown speaker." };
-          }
-          speakers = { ...map, [speakerLabel]: `Speaker ${speakerLabel}` };
-        }
+        const resolved = resolveSpeakerLabel(speakerMap(fresh.speakers), speakerLabel);
+        if (!resolved) return { ok: false, error: "Unknown speaker." };
+        speakers = resolved.speakers;
       }
       const res = await tx.transcriptSegment.updateMany({
         where: { id: ctx.seg.id, revision },
@@ -595,5 +616,183 @@ export async function renameTranscriptSpeaker(
     detail: doc.name,
   });
   revalidatePath(`${scopeBasePath(scopeOf(doc))}/documents/${doc.id}`);
+  return { ok: true };
+}
+
+/**
+ * Give a selected run of words to one speaker (the selection toolbar's
+ * "Change speaker"). Partly selected paragraphs split, same-speaker
+ * neighbours merge (src/lib/transcription/speaker-range.ts); words and
+ * timings never change. Runs under the transcript row lock; every
+ * paragraph in the selection must still be at the revision the client
+ * saw, otherwise nothing is applied.
+ *
+ * Rows are kept where they can be, so ids (search hits, open editors)
+ * and correction history survive:
+ *   - a new paragraph with exactly one old paragraph's words updates that
+ *     row in place (originalText kept);
+ *   - whole old paragraphs merged together reuse the first row, with
+ *     their originals joined when any had one;
+ *   - only pieces cut from a paragraph are new rows (no original: it
+ *     can't be split to match).
+ * Every reused row's revision is bumped, so a stale editor conflicts.
+ */
+export async function changeSpeakerForSelection(
+  transcriptId: string,
+  input: {
+    start: WordPoint;
+    end: WordPoint;
+    speaker: string;
+    /** Revision the client saw for each paragraph in the selection. */
+    revisions: Record<string, number>;
+  },
+): Promise<{ ok: true } | { ok: false; error: string; conflict?: true }> {
+  const userId = await requirePermission("documents.transcript.edit");
+  const isPoint = (p: unknown): p is WordPoint =>
+    !!p &&
+    typeof (p as WordPoint).segmentId === "string" &&
+    Number.isInteger((p as WordPoint).word);
+  if (
+    !input ||
+    !isPoint(input.start) ||
+    !isPoint(input.end) ||
+    typeof input.speaker !== "string" ||
+    !input.revisions ||
+    typeof input.revisions !== "object"
+  ) {
+    return { ok: false, error: "Invalid selection." };
+  }
+  const t = await prisma.transcript.findUnique({
+    where: { id: transcriptId },
+    select: {
+      id: true,
+      document: { select: { id: true, name: true, matterId: true, leadId: true } },
+    },
+  });
+  if (!t) return { ok: false, error: "Transcript not found." };
+  const doc = t.document;
+  await assertChildMatterAccess("document", doc.id);
+
+  const conflict = {
+    ok: false as const,
+    conflict: true as const,
+    error: "Someone else changed this part of the transcript. Reload to see their version.",
+  };
+
+  type Result = { ok: true; changed: boolean } | { ok: false; error: string; conflict?: true };
+  const result = await prisma.$transaction(async (tx): Promise<Result> => {
+    await tx.$queryRaw`SELECT id FROM transcripts WHERE id = ${t.id} FOR UPDATE`;
+    const fresh = await tx.transcript.findUniqueOrThrow({
+      where: { id: t.id },
+      select: { status: true, speakers: true },
+    });
+    if (fresh.status !== "completed") return { ok: false, error: "The transcript isn't ready to edit." };
+    const resolved = resolveSpeakerLabel(speakerMap(fresh.speakers), input.speaker);
+    if (!resolved) return { ok: false, error: "Unknown speaker." };
+
+    // Order and revisions for every row (cheap); words only around the selection.
+    const meta = await tx.transcriptSegment.findMany({
+      where: { transcriptId: t.id },
+      orderBy: { index: "asc" },
+      select: { id: true, index: true, speaker: true, revision: true },
+    });
+    let p0 = meta.findIndex((r) => r.id === input.start.segmentId);
+    let p1 = meta.findIndex((r) => r.id === input.end.segmentId);
+    if (p0 < 0 || p1 < 0) return conflict;
+    if (p0 > p1) [p0, p1] = [p1, p0];
+    for (let p = p0; p <= p1; p++) {
+      if (input.revisions[meta[p]!.id] !== meta[p]!.revision) return conflict;
+    }
+    const lo = Math.max(0, p0 - 1);
+    const hi = Math.min(meta.length - 1, p1 + 1);
+    const windowRows = await tx.transcriptSegment.findMany({
+      where: { id: { in: meta.slice(lo, hi + 1).map((r) => r.id) } },
+      orderBy: { index: "asc" },
+      select: { id: true, index: true, speaker: true, text: true, words: true, originalText: true, revision: true },
+    });
+    const rows = windowRows.map((r) => ({ ...r, words: (r.words as Word[]) ?? [] }));
+
+    const plan = reassignSpeakerRange(rows, input.start, input.end, input.speaker);
+    if (!plan) return conflict;
+    if (plan.kind === "noop") return { ok: true, changed: false };
+
+    const replaced = rows.slice(plan.from, plan.to + 1);
+    // Which old row each word came from (the plan keeps word objects).
+    const owner = new Map<Word, (typeof rows)[number]>();
+    for (const r of replaced) for (const w of r.words) owner.set(w, r);
+
+    const claimed = new Set<string>();
+    const writes = plan.segments.map((seg) => {
+      const owners = [...new Set(seg.words.map((w) => owner.get(w)!))];
+      // Whole rows only: a row split across new paragraphs has more words
+      // than this paragraph takes from it.
+      const wholeRows =
+        owners.every((o) => !claimed.has(o.id)) &&
+        owners.reduce((n, o) => n + o.words.length, 0) === seg.words.length;
+      if (!wholeRows) return { seg, reuse: null, originalText: null as string | null };
+      for (const o of owners) claimed.add(o.id);
+      const keep = owners[0]!;
+      const originalText =
+        owners.length === 1
+          ? keep.originalText
+          : owners.some((o) => o.originalText !== null)
+            ? owners.map((o) => o.originalText ?? o.text).join(" ")
+            : null;
+      return { seg, reuse: keep, originalText };
+    });
+
+    const baseIndex = replaced[0]!.index;
+    const delta = plan.segments.length - replaced.length;
+
+    // Park everything from the replaced run onward at negative indices so
+    // the (transcriptId, index) unique index never collides mid-rewrite.
+    await tx.$executeRaw`UPDATE transcript_segments SET "index" = -"index" - 1 WHERE "transcriptId" = ${t.id} AND "index" >= ${baseIndex}`;
+    const keptIds = new Set(writes.filter((w) => w.reuse).map((w) => w.reuse!.id));
+    const drop = replaced.filter((r) => !keptIds.has(r.id)).map((r) => r.id);
+    if (drop.length) await tx.transcriptSegment.deleteMany({ where: { id: { in: drop } } });
+    for (const [k, w] of writes.entries()) {
+      const data = {
+        index: baseIndex + k,
+        speaker: w.seg.speaker,
+        startSeconds: w.seg.startSeconds,
+        endSeconds: w.seg.endSeconds,
+        text: w.seg.text,
+        words: w.seg.words,
+        originalText: w.originalText,
+      };
+      if (w.reuse) {
+        await tx.transcriptSegment.update({
+          where: { id: w.reuse.id },
+          data: { ...data, revision: { increment: 1 } },
+        });
+      } else {
+        await tx.transcriptSegment.create({ data: { transcriptId: t.id, ...data } });
+      }
+    }
+    // Rows after the run return from parking, shifted by the size change.
+    await tx.$executeRaw`UPDATE transcript_segments SET "index" = -"index" - 1 + ${delta} WHERE "transcriptId" = ${t.id} AND "index" < 0`;
+
+    await tx.transcript.update({
+      where: { id: t.id },
+      data: {
+        ...(resolved.speakers ? { speakers: resolved.speakers } : {}),
+        correctedAt: new Date(),
+        correctedBy: { connect: { id: userId } },
+      },
+    });
+    return { ok: true, changed: true };
+  });
+  if (!result.ok) return result;
+  if (result.changed) {
+    await logActivity({
+      matterId: doc.matterId,
+      leadId: doc.leadId,
+      userId,
+      type: "document",
+      title: "Transcript speaker changed",
+      detail: doc.name,
+    });
+    revalidatePath(`${scopeBasePath(scopeOf(doc))}/documents/${doc.id}`);
+  }
   return { ok: true };
 }

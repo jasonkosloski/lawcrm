@@ -20,7 +20,7 @@ function toWord(w: AssemblyAIWord): Word {
 }
 
 /** Split one speaker turn into <= ~90 s chunks, preferring sentence ends. */
-function splitTurn(words: Word[]): Word[][] {
+export function splitTurn(words: Word[]): Word[][] {
   const out: Word[][] = [];
   let rest = words;
   while (rest.length > 0) {

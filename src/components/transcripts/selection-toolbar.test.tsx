@@ -5,6 +5,7 @@
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/feedback", () => ({
   confirmAction: vi.fn(),
@@ -176,5 +177,85 @@ describe("spanToComposerAnchor", () => {
 describe("nextSpeakerLabel", () => {
   test("skips labels used by paragraphs even when absent from the map", () => {
     expect(nextSpeakerLabel({ A: "x" }, ["B"])).toBe("C");
+  });
+});
+
+describe("Change speaker", () => {
+  function IndexedDoc() {
+    return (
+      <div>
+        <div data-seg="s1">
+          <span data-i="0" data-s="0" data-e="1">hello</span> <span data-i="1" data-s="1" data-e="2">there</span>
+        </div>
+        <div data-seg="s2">
+          <span data-i="0" data-s="5" data-e="6">general</span> <span data-i="1" data-s="6" data-e="7">kenobi</span>
+        </div>
+      </div>
+    );
+  }
+  function mount(over: Partial<React.ComponentProps<typeof SelectionToolbar>> = {}) {
+    const onChangeSpeaker = vi.fn();
+    function Harness() {
+      const ref = useRef<HTMLDivElement>(null);
+      return (
+        <>
+          <div ref={ref}>
+            <IndexedDoc />
+          </div>
+          <SelectionToolbar
+            rootRef={ref}
+            documentName="x.mp4"
+            canFlag={false}
+            onFlag={vi.fn()}
+            speakers={[
+              { label: "A", name: "Officer" },
+              { label: "B", name: "Driver" },
+            ]}
+            newSpeakerLabel="C"
+            onChangeSpeaker={onChangeSpeaker}
+            {...over}
+          />
+        </>
+      );
+    }
+    render(<Harness />);
+    select("there", "general");
+    act(() => void document.dispatchEvent(new Event("selectionchange")));
+    return { onChangeSpeaker };
+  }
+
+  test("the span carries its first and last word (paragraph + index)", () => {
+    render(
+      <div data-testid="r">
+        <IndexedDoc />
+      </div>
+    );
+    const span = selectionToSpan(select("there", "general"), screen.getByTestId("r"));
+    expect(span).toMatchObject({
+      start: { segmentId: "s1", word: 1 },
+      end: { segmentId: "s2", word: 0 },
+    });
+  });
+
+  test("picking a speaker hands the span and label to onChangeSpeaker", async () => {
+    const { onChangeSpeaker } = mount();
+    await userEvent.click(screen.getByRole("button", { name: /Change speaker/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Driver" }));
+    expect(onChangeSpeaker).toHaveBeenCalledWith(
+      expect.objectContaining({ start: { segmentId: "s1", word: 1 }, end: { segmentId: "s2", word: 0 } }),
+      "B"
+    );
+  });
+
+  test("New speaker uses the next free label", async () => {
+    const { onChangeSpeaker } = mount();
+    await userEvent.click(screen.getByRole("button", { name: /Change speaker/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "New speaker" }));
+    expect(onChangeSpeaker).toHaveBeenCalledWith(expect.anything(), "C");
+  });
+
+  test("hidden for non-editors", () => {
+    mount({ speakers: undefined });
+    expect(screen.queryByRole("button", { name: /Change speaker/ })).toBeNull();
   });
 });

@@ -18,13 +18,14 @@ vi.mock("@/app/actions/transcripts", () => ({
   updateTranscriptSegment: vi.fn(),
   setSegmentSpeaker: vi.fn(),
   renameTranscriptSpeaker: vi.fn(),
+  changeSpeakerForSelection: vi.fn(async () => ({ ok: true })),
 }));
 vi.mock("@/lib/feedback", () => ({
   confirmAction: vi.fn(),
   notifyError: vi.fn(),
 }));
 
-import { requestTranscript, deleteTranscript } from "@/app/actions/transcripts";
+import { requestTranscript, deleteTranscript, changeSpeakerForSelection } from "@/app/actions/transcripts";
 import { confirmAction, notifyError } from "@/lib/feedback";
 import type { TranscriptView } from "@/lib/queries/transcript";
 import { TranscriptPane } from "./transcript-pane";
@@ -391,5 +392,56 @@ describe("render budget", () => {
     rerender(<TranscriptPane {...props} currentTime={1012.4} />);
     const changed = [...reads].filter(([id, n]) => n !== before.get(id)).map(([id]) => id);
     expect(changed).toEqual(["seg101"]);
+  });
+});
+
+describe("change speaker from a selection", () => {
+  const selectWords = (from: Element, to: Element) => {
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.setBaseAndExtent(from.firstChild!, 0, to.firstChild!, to.textContent!.length);
+    act(() => void document.dispatchEvent(new Event("selectionchange")));
+  };
+  const word = (segId: string, i: number) =>
+    document.querySelector(`[data-seg="${segId}"] [data-i="${i}"]`)!;
+
+  test("sends the bounds and the revision of every covered paragraph", async () => {
+    const t: TranscriptView = {
+      ...BASE,
+      segments: BASE.segments.map((s, i) => ({ ...s, revision: [2, 0, 5][i]! })),
+    };
+    pane({ transcript: t, canEdit: true });
+    selectWords(word("seg0", 3), word("seg2", 1));
+    await userEvent.click(screen.getByRole("button", { name: /Change speaker/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Speaker B" }));
+    expect(changeSpeakerForSelection).toHaveBeenCalledWith("t1", {
+      start: { segmentId: "seg0", word: 3 },
+      end: { segmentId: "seg2", word: 1 },
+      speaker: "B",
+      revisions: { seg0: 2, seg1: 0, seg2: 5 },
+    });
+    window.getSelection()?.removeAllRanges();
+  });
+
+  test("a conflict reports and reloads", async () => {
+    vi.mocked(changeSpeakerForSelection).mockResolvedValueOnce({
+      ok: false,
+      conflict: true,
+      error: "Someone else changed this part of the transcript. Reload to see their version.",
+    });
+    pane({ canEdit: true });
+    selectWords(word("seg1", 0), word("seg1", 1));
+    await userEvent.click(screen.getByRole("button", { name: /Change speaker/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Officer Diaz" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(notifyError).toHaveBeenCalledWith(expect.stringMatching(/Someone else changed/));
+    window.getSelection()?.removeAllRanges();
+  });
+
+  test("not offered without edit permission", () => {
+    pane({ canEdit: false });
+    selectWords(word("seg1", 0), word("seg1", 1));
+    expect(screen.queryByRole("button", { name: /Change speaker/ })).toBeNull();
+    window.getSelection()?.removeAllRanges();
   });
 });

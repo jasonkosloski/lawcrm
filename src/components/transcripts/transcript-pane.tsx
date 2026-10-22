@@ -20,7 +20,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { deleteTranscript } from "@/app/actions/transcripts";
+import { changeSpeakerForSelection, deleteTranscript } from "@/app/actions/transcripts";
+import { nextSpeakerLabel } from "./speaker-chip";
 import { confirmAction, notifyError } from "@/lib/feedback";
 import type { TranscriptView } from "@/lib/queries/transcript";
 import { activeWordIndex } from "@/lib/transcription/timecode";
@@ -163,6 +164,13 @@ export function TranscriptPane({
     [segments],
   );
 
+  // "Change speaker" choices: every label in the map or in use, by name.
+  const speakerChoices = useMemo(() => {
+    const speakers = transcript?.speakers ?? {};
+    const labels = [...new Set([...Object.keys(speakers), ...usedSpeakers])].sort();
+    return labels.map((label) => ({ label, name: speakers[label] ?? `Speaker ${label}` }));
+  }, [transcript?.speakers, usedSpeakers]);
+
   // ── Find ──
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -302,6 +310,38 @@ export function TranscriptPane({
       router.refresh();
     } catch {
       notifyError("Couldn't delete the transcript. Try again.");
+    }
+  };
+
+  // One change at a time: a second one sent before the refresh lands
+  // would carry paragraph ids the first one replaced.
+  const changingSpeaker = useRef(false);
+  const changeSpeaker = async (span: SelectionSpan, speaker: string) => {
+    if (changingSpeaker.current) return;
+    if (!transcript || !segments || !span.start || !span.end) return;
+    const i0 = segments.findIndex((s) => s.id === span.start!.segmentId);
+    const i1 = segments.findIndex((s) => s.id === span.end!.segmentId);
+    if (i0 < 0 || i1 < 0) return;
+    // The revision of every paragraph the selection covers, as seen here.
+    const revisions = Object.fromEntries(
+      segments.slice(Math.min(i0, i1), Math.max(i0, i1) + 1).map((s) => [s.id, s.revision]),
+    );
+    changingSpeaker.current = true;
+    try {
+      const res = await changeSpeakerForSelection(transcript.id, {
+        start: span.start,
+        end: span.end,
+        speaker,
+        revisions,
+      });
+      if (!res.ok) {
+        notifyError(res.error);
+        if (res.conflict) router.refresh();
+      }
+    } catch {
+      notifyError("Couldn't change the speaker. Try again.");
+    } finally {
+      changingSpeaker.current = false;
     }
   };
 
@@ -476,6 +516,9 @@ export function TranscriptPane({
             documentName={documentName}
             canFlag={canFlag && !!onFlagSelection}
             onFlag={(span) => onFlagSelection?.(span)}
+            speakers={canEdit && status === "completed" ? speakerChoices : undefined}
+            newSpeakerLabel={nextSpeakerLabel(transcript.speakers, usedSpeakers)}
+            onChangeSpeaker={changeSpeaker}
           />
           {!following && !findOpen && (
             <button
