@@ -320,16 +320,17 @@ export async function voidInvoice(
     // read above: the invoice may have been sent in between.
     const wasSent = invoice.kind === "client" && res.fromStatus === "sent";
     if (!wasSent) return { status: "ok" };
-    if (!prepared) {
-      // Moved to sent after our first read: no pre-void render exists
-      // (the entries are already unlinked), but filed copies can still
-      // be stamped.
-      await prepare();
-      if (preDocCount === 0) renderFailed = true;
-    }
 
     const warnings: string[] = [];
     try {
+      if (!prepared) {
+        // Moved to sent after our first read: no pre-void render exists
+        // (the entries are already unlinked), but filed copies can still
+        // be stamped. Inside the try so a failure here can't report the
+        // committed void as an error.
+        await prepare();
+        if (preDocCount === 0) renderFailed = true;
+      }
       let pdf: { name: string; bytes: Buffer } | null = null;
       let copiesWarn = false;
       if (preDocCount > 0) {
