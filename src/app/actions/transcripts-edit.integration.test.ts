@@ -200,6 +200,37 @@ describe("speakers", () => {
     expect((await renameTranscriptSpeaker(transcriptId, "Q", "Bob")).ok).toBe(false);
   });
 
+  test("concurrent renames of different speakers both survive", async () => {
+    const [a, b] = await Promise.all([
+      renameTranscriptSpeaker(transcriptId, "A", "Officer Diaz"),
+      renameTranscriptSpeaker(transcriptId, "B", "Witness Lee"),
+    ]);
+    expect(a.ok && b.ok).toBe(true);
+    const t = await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } });
+    expect(t.speakers).toEqual({ A: "Officer Diaz", B: "Witness Lee" });
+  });
+
+  test("concurrent rename and new label both survive", async () => {
+    const [a, b] = await Promise.all([
+      renameTranscriptSpeaker(transcriptId, "A", "Officer Diaz"),
+      setSegmentSpeaker(segId, "C", 0),
+    ]);
+    expect(a.ok && b.ok).toBe(true);
+    const t = await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } });
+    expect(t.speakers).toEqual({ A: "Officer Diaz", B: "Speaker B", C: "Speaker C" });
+  });
+
+  test("segment edits after the transcript was re-queued are refused", async () => {
+    await prisma.transcript.update({ where: { id: transcriptId }, data: { status: "queued" } });
+    expect((await updateTranscriptSegment(segId, { text: "x y", revision: 0 })).ok).toBe(false);
+    expect((await revertTranscriptSegment(segId, 0)).ok).toBe(false);
+    expect((await setSegmentSpeaker(segId, "B", 0)).ok).toBe(false);
+    expect(await renameTranscriptSpeaker(transcriptId, "A", "Bob")).toMatchObject({ ok: false });
+    const s = await seg();
+    expect(s.text).toBe("the cat sat");
+    expect(s.revision).toBe(0);
+  });
+
   test("rename is walled", async () => {
     vi.mocked(assertChildMatterAccess).mockRejectedValue(new Error("NOT_FOUND"));
     await expect(renameTranscriptSpeaker(transcriptId, "A", "Bob")).rejects.toThrow("NOT_FOUND");

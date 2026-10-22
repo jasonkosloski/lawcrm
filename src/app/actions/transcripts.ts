@@ -363,32 +363,58 @@ async function loadSegmentForEdit(
   };
 }
 
-/** Revision-checked segment write plus transcript corrected stamp, in one transaction. */
+const NOT_READY: SegmentEditResult = {
+  ok: false,
+  error: "The transcript isn't ready to edit.",
+};
+
+/**
+ * Revision-checked segment write plus transcript corrected stamp, in one
+ * transaction. The transcript row is locked first so status and the speakers
+ * map are read fresh and concurrent speaker edits serialize.
+ */
 async function writeSegment(
   ctx: SegmentContext,
   revision: number,
   data: Prisma.TranscriptSegmentUpdateManyMutationInput,
-  transcriptData?: Prisma.TranscriptUpdateInput,
+  speakerLabel?: string,
 ): Promise<SegmentEditResult> {
-  const ok = await prisma.$transaction(async (tx) => {
-    const res = await tx.transcriptSegment.updateMany({
-      where: { id: ctx.seg.id, revision },
-      data: { ...data, revision: { increment: 1 } },
-    });
-    if (res.count === 0) return false;
-    await tx.transcript.update({
-      where: { id: ctx.transcript.id },
-      data: {
-        ...transcriptData,
-        correctedAt: new Date(),
-        correctedBy: { connect: { id: ctx.userId } },
-      },
-    });
-    return true;
-  });
-  if (!ok) return CONFLICT;
-  revalidatePath(ctx.viewerPath);
-  return { ok: true, revision: revision + 1 };
+  const result = await prisma.$transaction(
+    async (tx): Promise<SegmentEditResult> => {
+      await tx.$queryRaw`SELECT id FROM transcripts WHERE id = ${ctx.transcript.id} FOR UPDATE`;
+      const fresh = await tx.transcript.findUniqueOrThrow({
+        where: { id: ctx.transcript.id },
+        select: { status: true, speakers: true },
+      });
+      if (fresh.status !== "completed") return NOT_READY;
+      let speakers: Prisma.InputJsonValue | undefined;
+      if (speakerLabel !== undefined) {
+        const map = speakerMap(fresh.speakers);
+        if (!Object.hasOwn(map, speakerLabel)) {
+          if (!/^[A-Z]$/.test(speakerLabel)) {
+            return { ok: false, error: "Unknown speaker." };
+          }
+          speakers = { ...map, [speakerLabel]: `Speaker ${speakerLabel}` };
+        }
+      }
+      const res = await tx.transcriptSegment.updateMany({
+        where: { id: ctx.seg.id, revision },
+        data: { ...data, revision: { increment: 1 } },
+      });
+      if (res.count === 0) return CONFLICT;
+      await tx.transcript.update({
+        where: { id: ctx.transcript.id },
+        data: {
+          ...(speakers ? { speakers } : {}),
+          correctedAt: new Date(),
+          correctedBy: { connect: { id: ctx.userId } },
+        },
+      });
+      return { ok: true, revision: revision + 1 };
+    },
+  );
+  if (result.ok) revalidatePath(ctx.viewerPath);
+  return result;
 }
 
 function logCorrection(ctx: SegmentContext, title: string) {
@@ -449,13 +475,7 @@ export async function setSegmentSpeaker(
 ): Promise<SegmentEditResult> {
   const ctx = await loadSegmentForEdit(segmentId);
   if ("error" in ctx) return ctx.error;
-  const speakers = speakerMap(ctx.transcript.speakers);
-  let transcriptData: Prisma.TranscriptUpdateInput | undefined;
-  if (!Object.hasOwn(speakers, speaker)) {
-    if (!/^[A-Z]$/.test(speaker)) return { ok: false, error: "Unknown speaker." };
-    transcriptData = { speakers: { ...speakers, [speaker]: `Speaker ${speaker}` } };
-  }
-  const res = await writeSegment(ctx, revision, { speaker }, transcriptData);
+  const res = await writeSegment(ctx, revision, { speaker }, speaker);
   if (res.ok) await logCorrection(ctx, "Transcript speaker changed");
   return res;
 }
@@ -485,10 +505,12 @@ export async function renameTranscriptSpeaker(
     return { ok: false, error: "Names must be 1 to 60 characters." };
   }
   const found = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM transcripts WHERE id = ${t.id} FOR UPDATE`;
     const fresh = await tx.transcript.findUniqueOrThrow({
       where: { id: t.id },
-      select: { speakers: true },
+      select: { status: true, speakers: true },
     });
+    if (fresh.status !== "completed") return "not_ready" as const;
     const speakers = speakerMap(fresh.speakers);
     if (!Object.hasOwn(speakers, speaker)) return false;
     speakers[speaker] = trimmed;
@@ -502,6 +524,9 @@ export async function renameTranscriptSpeaker(
     });
     return true;
   });
+  if (found === "not_ready") {
+    return { ok: false, error: "The transcript isn't ready to edit." };
+  }
   if (!found) return { ok: false, error: "Unknown speaker." };
   await logActivity({
     matterId: doc.matterId,
