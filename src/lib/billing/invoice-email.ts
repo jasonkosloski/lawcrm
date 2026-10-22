@@ -1,15 +1,9 @@
 import { escapeHtml as esc } from "@/lib/email/escape";
 import { formatDate } from "@/lib/format-date";
+import { formatMoney } from "@/lib/format-money";
 import { portalHomeUrl } from "@/lib/portal/link-url";
 
 export type InvoiceEmailKind = "initial" | "updated" | "resend";
-
-const usd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 /** Subject/text/html for an invoice email. The PDF is attached by the caller. */
 export function invoiceEmail(input: {
@@ -35,7 +29,7 @@ export function invoiceEmail(input: {
   const due = formatDate(input.dueDate, "long", input.timeZone);
   const balance =
     input.balanceDue > 0
-      ? `Balance due: ${usd.format(input.balanceDue)}, due ${due}.`
+      ? `Balance due: ${formatMoney(input.balanceDue)}, due ${due}.`
       : "This invoice is paid in full. Thank you.";
   const attached = "The invoice is attached as a PDF.";
   const portalLine = "You can also view this invoice in your client portal:";

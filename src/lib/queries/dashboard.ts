@@ -22,6 +22,7 @@
 
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { formatPhone } from "@/lib/format-phone";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getFirmGoals } from "@/lib/firm";
 import { currentUserHasPermission } from "@/lib/permission-check";
@@ -447,8 +448,7 @@ export async function getFollowUpsDueToday(tz: string): Promise<FollowUpItem[]> 
       kind: "messenger" as const,
       label:
         t.contact?.name ??
-        prettyPhoneForFollowUp(t.contactPhone) ??
-        "Unknown number",
+        (formatPhone(t.contactPhone) || "Unknown number"),
       followUpAt: t.followUpAt!,
       isOverdue: isOverdue(t.followUpAt!),
       matterName: t.defaultMatter?.name ?? null,
@@ -461,17 +461,6 @@ export async function getFollowUpsDueToday(tz: string): Promise<FollowUpItem[]> 
     if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
     return a.followUpAt.getTime() - b.followUpAt.getTime();
   });
-}
-
-function prettyPhoneForFollowUp(p: string): string {
-  const digits = p.replace(/\D/g, "");
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  return p;
 }
 
 export type DeadlineItem = {

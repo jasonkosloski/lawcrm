@@ -1,12 +1,11 @@
 /**
  * Helpers shared by the matter-detail tab readers: the viewer's time
- * zone, date-only "days until" math, and the event-reference scrub
- * used by tabs that link to calendar events.
+ * zone and the event-reference scrub used by tabs that link to
+ * calendar events.
  */
 
 import type { Prisma } from "@/generated/prisma/client";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
-import { dateOnlyKey, daysBetweenKeys, todayKey } from "@/lib/format-date";
 
 /** The viewer's time zone, resolved lazily so callers that already
  *  know it (or never need it) don't pull the server-only resolver
@@ -16,13 +15,6 @@ export async function resolveTz(tz?: string): Promise<string> {
   if (tz) return tz;
   const { getCurrentUserTimeZone } = await import("@/lib/current-user-tz");
   return getCurrentUserTimeZone();
-}
-
-/** Whole calendar days from the viewer's today to a date-only value
- *  (0 = today, negative = past). Never compares against an instant —
- *  a deadline due today is not "late" until the day is over. */
-export function daysUntilDueDate(dueDate: Date, tz: string): number {
-  return daysBetweenKeys(todayKey(tz), dateOnlyKey(dueDate));
 }
 
 // ── Event references from other tabs ─────────────────────────────────────

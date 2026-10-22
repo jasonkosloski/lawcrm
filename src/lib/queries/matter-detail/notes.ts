@@ -110,9 +110,6 @@ export function truncate(s: string, n: number): string {
   return s.length <= n ? s : `${s.slice(0, n - 1)}…`;
 }
 
-// Entity-decoded (stored note HTML is "Smith &amp; Jones").
-export const plainTextFromHtml = noteToPlainText;
-
 /** Chip label for a phone number: formatted, or a placeholder. */
 export function prettyPhoneForLink(p: string): string {
   return formatPhone(p) || "Unknown number";
@@ -224,7 +221,7 @@ async function getNoteRows(where: Prisma.NoteWhereInput): Promise<NoteRow[]> {
       link = {
         kind: "parent",
         id: n.parent.id,
-        label: truncate(plainTextFromHtml(n.parent.content), 60) || "note",
+        label: truncate(noteToPlainText(n.parent.content), 60) || "note",
       };
     } else if (n.event) {
       link = {

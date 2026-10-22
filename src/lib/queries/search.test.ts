@@ -16,7 +16,7 @@
  *   - Notes: raw-HTML match, but snippets/titles are tag-stripped
  *     and markup-only matches (e.g. inside an href) are dropped.
  *
- * Pure helpers (stripHtmlTags / makeSnippet) are unit-tested at the
+ * Pure helpers (makeSnippet) are unit-tested at the
  * top — same file since one test file per source is the convention.
  */
 
@@ -29,7 +29,6 @@ import {
   isSearchHitType,
   makeSnippet,
   SEARCH_GROUP_TAKE,
-  stripHtmlTags,
   type GlobalSearchResult,
   type SearchHitType,
 } from "@/lib/queries/search";
@@ -101,18 +100,6 @@ function collectKeys(v: unknown): string[] {
   }
   return [];
 }
-
-describe("stripHtmlTags", () => {
-  test("strips tags, decodes entities, collapses whitespace", () => {
-    expect(
-      stripHtmlTags("<p>Tom &amp; Jerry</p>\n<p>saw the&nbsp;<strong>report</strong></p>")
-    ).toBe("Tom & Jerry saw the report");
-  });
-
-  test("empty input stays empty", () => {
-    expect(stripHtmlTags("")).toBe("");
-  });
-});
 
 describe("makeSnippet", () => {
   test("null when the text doesn't contain the query (or is null)", () => {

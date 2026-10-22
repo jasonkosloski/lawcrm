@@ -10,15 +10,12 @@
  * only then cut to length, so an entity is never sliced in half.
  */
 
-import { decodeHtmlEntities } from "@/lib/html-to-text";
+import { noteToPlainText } from "@/lib/note-text";
 
 export function notePreviewText(
   html: string,
   fallback = "Note",
   max = 80
 ): string {
-  const text = decodeHtmlEntities(html.replace(/<[^>]+>/g, " "))
-    .replace(/\s+/g, " ")
-    .trim();
-  return text.slice(0, max) || fallback;
+  return noteToPlainText(html).slice(0, max) || fallback;
 }

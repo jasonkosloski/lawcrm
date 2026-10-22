@@ -53,6 +53,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { noteToPlainText } from "@/lib/note-text";
 import { scopeBasePath, scopeOf } from "@/lib/record-scope";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
@@ -156,23 +157,6 @@ const EMAIL_BODY_MAX_EXTRA_PAGES = 5;
 const EMAIL_SCAN_PAGE = 50;
 
 // ── Pure helpers (exported for tests) ───────────────────────────────────
-
-/** Strip tags + decode the handful of entities the Tiptap sanitizer
- *  (src/lib/sanitize-html.ts) lets through, collapse whitespace.
- *  Good enough for snippets over sanitized note/email HTML — this is
- *  NOT a sanitizer (output is rendered as plain text by React). */
-export function stripHtmlTags(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&amp;/gi, "&")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 /** Build a highlight-marked snippet: first case-insensitive
  *  occurrence of `query` in `text`, ±SNIPPET_RADIUS chars of
@@ -443,7 +427,7 @@ export async function globalSearch(
       });
       for (const n of rows) {
         if (hits.length >= take) break;
-        const text = stripHtmlTags(n.content);
+        const text = noteToPlainText(n.content);
         if (!text.toLowerCase().includes(qLower)) {
           markupOnly++; // matched markup only
           continue;
@@ -816,7 +800,7 @@ export async function globalSearch(
         if (!subjectHit && !snippetCol) {
           const scan = (msgs: Array<{ body: string }>) => {
             for (const m of msgs) {
-              const found = makeSnippet(stripHtmlTags(m.body), q);
+              const found = makeSnippet(noteToPlainText(m.body), q);
               if (found) return found;
             }
             return null;

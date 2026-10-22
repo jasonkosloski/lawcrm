@@ -4,11 +4,11 @@
 
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { noteToPlainText } from "@/lib/note-text";
 import { getCurrentUserId } from "@/lib/current-user";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import {
   resolveTz,
-  daysUntilDueDate,
   EVENT_REF_SELECT,
   scrubEventRef,
 } from "./shared";
@@ -17,10 +17,10 @@ import {
 } from "./deadlines";
 import {
   truncate,
-  plainTextFromHtml,
   prettyPhoneForLink,
   capitalizeKind,
 } from "./notes";
+import { daysUntilDateOnly } from "@/lib/format-date";
 
 // ── Tasks ────────────────────────────────────────────────────────────────
 
@@ -154,7 +154,7 @@ async function getTaskRows(
     status: t.status,
     dueDate: t.dueDate,
     // Date-only due date: calendar-day distance in the viewer's zone.
-    daysUntilDue: t.dueDate ? daysUntilDueDate(t.dueDate, tz) : null,
+    daysUntilDue: t.dueDate ? daysUntilDateOnly(t.dueDate, tz) : null,
     ownerId: t.ownerId,
     ownerName: t.owner?.name ?? null,
     ownerInitials: t.owner?.initials ?? null,
@@ -201,7 +201,7 @@ export function resolveEntitySource(refs: {
     return {
       kind: "note",
       id: refs.note.id,
-      label: truncate(plainTextFromHtml(refs.note.content), 60) || "note",
+      label: truncate(noteToPlainText(refs.note.content), 60) || "note",
     };
   }
   if (refs.email) {

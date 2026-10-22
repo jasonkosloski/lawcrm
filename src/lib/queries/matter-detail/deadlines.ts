@@ -7,7 +7,6 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import {
   resolveTz,
-  daysUntilDueDate,
   EVENT_REF_SELECT,
   scrubEventRef,
 } from "./shared";
@@ -16,6 +15,7 @@ import {
   AttachedNotePreview,
   resolveEntitySource,
 } from "./tasks";
+import { daysUntilDateOnly } from "@/lib/format-date";
 
 // ── Deadlines ────────────────────────────────────────────────────────────
 
@@ -100,7 +100,7 @@ export async function getMatterDeadlines(
   const shaped = rows.map((d) => {
     // dueDate is date-only: compare calendar days in the viewer's zone,
     // not instants (a deadline due today is "0d", never "0d late").
-    const daysUntil = daysUntilDueDate(d.dueDate, tz);
+    const daysUntil = daysUntilDateOnly(d.dueDate, tz);
     return {
       id: d.id,
       title: d.title,
