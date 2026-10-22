@@ -1,0 +1,593 @@
+{
+  "id": "fixture-transcript-1",
+  "status": "completed",
+  "text": "Good morning everyone. Please state your name. I was at the store. Then I left the building. My name is Jane Smith. I live in Denver. Thank you. Did you see the car? Yes, I did. It was red.",
+  "language_code": "en_us",
+  "audio_duration": 144,
+  "words": [
+    {
+      "text": "Good",
+      "start": 500,
+      "end": 900,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "morning",
+      "start": 1000,
+      "end": 1500,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "everyone.",
+      "start": 1600,
+      "end": 2200,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "Please",
+      "start": 3000,
+      "end": 3400,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "state",
+      "start": 3500,
+      "end": 3900,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "your",
+      "start": 4000,
+      "end": 4200,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "name.",
+      "start": 4300,
+      "end": 4800,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "I",
+      "start": 30000,
+      "end": 30200,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "was",
+      "start": 30300,
+      "end": 30500,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "at",
+      "start": 30600,
+      "end": 30700,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "the",
+      "start": 30800,
+      "end": 30900,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "store.",
+      "start": 31000,
+      "end": 31600,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "Then",
+      "start": 80000,
+      "end": 80400,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "I",
+      "start": 80500,
+      "end": 80600,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "left",
+      "start": 80700,
+      "end": 81000,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "the",
+      "start": 100000,
+      "end": 100100,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "building.",
+      "start": 129000,
+      "end": 130000,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "My",
+      "start": 132000,
+      "end": 132300,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "name",
+      "start": 132400,
+      "end": 132700,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "is",
+      "start": 132800,
+      "end": 132900,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "Jane",
+      "start": 133000,
+      "end": 133400,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "Smith.",
+      "start": 133500,
+      "end": 134000,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "I",
+      "start": 134500,
+      "end": 134600,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "live",
+      "start": 134700,
+      "end": 135000,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "in",
+      "start": 135100,
+      "end": 135200,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "Denver.",
+      "start": 135300,
+      "end": 135900,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "Thank",
+      "start": 137000,
+      "end": 137300,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "you.",
+      "start": 137400,
+      "end": 137800,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "Did",
+      "start": 138000,
+      "end": 138200,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "you",
+      "start": 138300,
+      "end": 138400,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "see",
+      "start": 138500,
+      "end": 138800,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "the",
+      "start": 138900,
+      "end": 139000,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "car?",
+      "start": 139100,
+      "end": 139600,
+      "confidence": 0.95,
+      "speaker": "A"
+    },
+    {
+      "text": "Yes,",
+      "start": 141000,
+      "end": 141300,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "I",
+      "start": 141400,
+      "end": 141500,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "did.",
+      "start": 141600,
+      "end": 142000,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "It",
+      "start": 142100,
+      "end": 142200,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "was",
+      "start": 142300,
+      "end": 142500,
+      "confidence": 0.95,
+      "speaker": "B"
+    },
+    {
+      "text": "red.",
+      "start": 142600,
+      "end": 143000,
+      "confidence": 0.95,
+      "speaker": "B"
+    }
+  ],
+  "utterances": [
+    {
+      "speaker": "A",
+      "start": 500,
+      "end": 130000,
+      "text": "Good morning everyone. Please state your name. I was at the store. Then I left the building.",
+      "confidence": 0.95,
+      "words": [
+        {
+          "text": "Good",
+          "start": 500,
+          "end": 900,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "morning",
+          "start": 1000,
+          "end": 1500,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "everyone.",
+          "start": 1600,
+          "end": 2200,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "Please",
+          "start": 3000,
+          "end": 3400,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "state",
+          "start": 3500,
+          "end": 3900,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "your",
+          "start": 4000,
+          "end": 4200,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "name.",
+          "start": 4300,
+          "end": 4800,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "I",
+          "start": 30000,
+          "end": 30200,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "was",
+          "start": 30300,
+          "end": 30500,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "at",
+          "start": 30600,
+          "end": 30700,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "the",
+          "start": 30800,
+          "end": 30900,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "store.",
+          "start": 31000,
+          "end": 31600,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "Then",
+          "start": 80000,
+          "end": 80400,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "I",
+          "start": 80500,
+          "end": 80600,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "left",
+          "start": 80700,
+          "end": 81000,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "the",
+          "start": 100000,
+          "end": 100100,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "building.",
+          "start": 129000,
+          "end": 130000,
+          "confidence": 0.95,
+          "speaker": "A"
+        }
+      ]
+    },
+    {
+      "speaker": "B",
+      "start": 132000,
+      "end": 135900,
+      "text": "My name is Jane Smith. I live in Denver.",
+      "confidence": 0.95,
+      "words": [
+        {
+          "text": "My",
+          "start": 132000,
+          "end": 132300,
+          "confidence": 0.95,
+          "speaker": "B"
+        },
+        {
+          "text": "name",
+          "start": 132400,
+          "end": 132700,
+          "confidence": 0.95,
+          "speaker": "B"
+        },
+        {
+          "text": "is",
+          "start": 132800,
+          "end": 132900,
+          "confidence": 0.95,
+          "speaker": "B"
+        },
+        {
+          "text": "Jane",
+          "start": 133000,
+          "end": 133400,
+          "confidence": 0.95,
+          "speaker": "B"
+        },
+        {
+          "text": "Smith.",
+          "start": 133500,
+          "end": 134000,
+          "confidence": 0.95,
+          "speaker": "B"
+        },
+        {
+          "text": "I",
+          "start": 134500,
+          "end": 134600,
+          "confidence": 0.95,
+          "speaker": "B"
+        },
+        {
+          "text": "live",
+          "start": 134700,
+          "end": 135000,
+          "confidence": 0.95,
+          "speaker": "B"
+        },
+        {
+          "text": "in",
+          "start": 135100,
+          "end": 135200,
+          "confidence": 0.95,
+          "speaker": "B"
+        },
+        {
+          "text": "Denver.",
+          "start": 135300,
+          "end": 135900,
+          "confidence": 0.95,
+          "speaker": "B"
+        }
+      ]
+    },
+    {
+      "speaker": "A",
+      "start": 137000,
+      "end": 139600,
+      "text": "Thank you. Did you see the car?",
+      "confidence": 0.95,
+      "words": [
+        {
+          "text": "Thank",
+          "start": 137000,
+          "end": 137300,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "you.",
+          "start": 137400,
+          "end": 137800,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "Did",
+          "start": 138000,
+          "end": 138200,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "you",
+          "start": 138300,
+          "end": 138400,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "see",
+          "start": 138500,
+          "end": 138800,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "the",
+          "start": 138900,
+          "end": 139000,
+          "confidence": 0.95,
+          "speaker": "A"
+        },
+        {
+          "text": "car?",
+          "start": 139100,
+          "end": 139600,
+          "confidence": 0.95,
+          "speaker": "A"
+        }
+      ]
+    },
+    {
+      "speaker": "B",
+      "start": 141000,
+      "end": 143000,
+      "text": "Yes, I did. It was red.",
+      "confidence": 0.95,
+      "words": [
+        {
+          "text": "Yes,",
+          "start": 141000,
+          "end": 141300,
+          "confidence": 0.95,
+          "speaker": "B"
+        },
+        {
+          "text": "I",
+          "start": 141400,
+          "end": 141500,
+          "confidence": 0.95,
+          "speaker": "B"
+        },
+        {
+          "text": "did.",
+          "start": 141600,
+          "end": 142000,
+          "confidence": 0.95,
+          "speaker": "B"
+        },
+        {
+          "text": "It",
+          "start": 142100,
+          "end": 142200,
+          "confidence": 0.95,
+          "speaker": "B"
+        },
+        {
+          "text": "was",
+          "start": 142300,
+          "end": 142500,
+          "confidence": 0.95,
+          "speaker": "B"
+        },
+        {
+          "text": "red.",
+          "start": 142600,
+          "end": 143000,
+          "confidence": 0.95,
+          "speaker": "B"
+        }
+      ]
+    }
+  ]
+}
