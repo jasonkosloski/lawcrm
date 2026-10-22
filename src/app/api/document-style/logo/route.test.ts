@@ -40,10 +40,20 @@ const jpegOf = () =>
     .jpeg()
     .toBuffer();
 
-function upload(bytes: Uint8Array, name = "logo.png"): Request {
+function upload(bytes: Uint8Array, name = "logo.png", withLength = true): Request {
   const fd = new FormData();
   fd.set("file", new File([new Uint8Array(bytes)], name));
-  return new Request(URL_, { method: "POST", body: fd });
+  const size = bytes.length + 512;
+  const body = new Response(fd);
+  return new Request(URL_, {
+    method: "POST",
+    body: body.body,
+    headers: {
+      "content-type": body.headers.get("content-type")!,
+      ...(withLength ? { "content-length": String(size) } : {}),
+    },
+    duplex: "half",
+  } as RequestInit);
 }
 
 beforeAll(() => {
@@ -86,7 +96,7 @@ describe("POST", () => {
   test("stores a PNG, sets position left from none, logs", async () => {
     const r = await POST(upload(await pngOf()));
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ ok: true });
+    expect(await r.json()).toMatchObject({ ok: true, logoPosition: "left" });
     const row = await getDocumentStyle();
     expect(row.logoKey).toBe("logo-1");
     expect(row.logoContentType).toBe("image/png");
@@ -150,8 +160,58 @@ describe("POST", () => {
   });
 
   test("missing file field is a 400", async () => {
-    const r = await POST(new Request(URL_, { method: "POST", body: new FormData() }));
+    const fd = new FormData();
+    fd.set("other", "x");
+    const r = await POST(
+      new Request(URL_, { method: "POST", body: fd, headers: { "content-length": "100" } }),
+    );
     expect(r.status).toBe(400);
+  });
+
+  test("411 without Content-Length, before reading the body", async () => {
+    const r = await POST(upload(await pngOf(), "logo.png", false));
+    expect(r.status).toBe(411);
+    expect(await r.json()).toEqual({ ok: false, error: "Upload size unknown." });
+    expect(storeFile).not.toHaveBeenCalled();
+  });
+
+  test("a PNG claiming huge dimensions is a 400, not a hang", async () => {
+    const png = new Uint8Array(await pngOf());
+    const dv = new DataView(png.buffer, png.byteOffset);
+    dv.setUint32(16, 60000);
+    dv.setUint32(20, 60000);
+    const r = await POST(upload(png));
+    expect(r.status).toBe(400);
+    expect(storeFile).not.toHaveBeenCalled();
+  });
+
+  test("returns the new updatedAt and position so the form can keep saving", async () => {
+    const r = await POST(upload(await pngOf()));
+    const row = await getDocumentStyle();
+    expect(await r.json()).toEqual({
+      ok: true,
+      updatedAt: row.updatedAt.toISOString(),
+      logoPosition: "left",
+    });
+  });
+
+  test("409 and the new file is deleted when the logo changed underneath", async () => {
+    await POST(upload(await pngOf()));
+    const row = await getDocumentStyle();
+    const orig = prisma.documentStyle.updateMany.bind(prisma.documentStyle);
+    const spy = vi.spyOn(prisma.documentStyle, "updateMany").mockImplementationOnce(((
+      args: never,
+    ) => {
+      return prisma.documentStyle
+        .update({ where: { id: row.id }, data: { logoKey: "other" } })
+        .then(() => orig(args));
+    }) as never);
+    const r = await POST(upload(await pngOf()));
+    spy.mockRestore();
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ ok: false, error: "The logo changed — try again." });
+    expect(deleteFile).toHaveBeenCalledWith("logo-2");
+    expect((await getDocumentStyle()).logoKey).toBe("other");
   });
 
   test("replacing deletes the old key after the row update", async () => {
@@ -165,7 +225,7 @@ describe("POST", () => {
   test("a failed row update deletes the new file and keeps the old one", async () => {
     await POST(upload(await pngOf()));
     const spy = vi
-      .spyOn(prisma.documentStyle, "update")
+      .spyOn(prisma.documentStyle, "updateMany")
       .mockRejectedValueOnce(new Error("db down"));
     await expect(POST(upload(await pngOf()))).rejects.toThrow("db down");
     spy.mockRestore();
@@ -184,11 +244,32 @@ describe("DELETE", () => {
   test("clears the row and deletes the file", async () => {
     await POST(upload(await pngOf()));
     const r = await DELETE(new Request(URL_, { method: "DELETE" }));
-    expect(await r.json()).toEqual({ ok: true });
     const row = await getDocumentStyle();
+    expect(await r.json()).toEqual({
+      ok: true,
+      updatedAt: row.updatedAt.toISOString(),
+      logoPosition: "left",
+    });
     expect(row.logoKey).toBeNull();
     expect(row.logoContentType).toBeNull();
     expect(deleteFile).toHaveBeenCalledWith("logo-1");
+  });
+
+  test("409 when the logo changed underneath", async () => {
+    await POST(upload(await pngOf()));
+    const row = await getDocumentStyle();
+    const orig = prisma.documentStyle.updateMany.bind(prisma.documentStyle);
+    const spy = vi.spyOn(prisma.documentStyle, "updateMany").mockImplementationOnce(((
+      args: never,
+    ) => {
+      return prisma.documentStyle
+        .update({ where: { id: row.id }, data: { logoKey: "other" } })
+        .then(() => orig(args));
+    }) as never);
+    const r = await DELETE(new Request(URL_, { method: "DELETE" }));
+    spy.mockRestore();
+    expect(r.status).toBe(409);
+    expect((await getDocumentStyle()).logoKey).toBe("other");
   });
 
   test("ok when there is no logo", async () => {
@@ -223,6 +304,7 @@ describe("GET", () => {
     expect(r.status).toBe(200);
     expect(r.headers.get("Content-Type")).toBe("image/png");
     expect(r.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(r.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(Buffer.from(await r.arrayBuffer()).equals(bytes)).toBe(true);
     expect(readStoredFile).toHaveBeenCalledWith("logo-1", 1024 * 1024 + 1);
   });

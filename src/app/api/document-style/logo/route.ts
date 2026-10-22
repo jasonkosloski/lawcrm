@@ -30,6 +30,7 @@ import { getDocumentStyle } from "@/lib/templates/document-style";
 import { LOGO_MAX_BYTES } from "@/lib/templates/page-style";
 
 const PERMISSION = "firm.edit_document_style";
+const CHANGED = "The logo changed — try again.";
 const MAX_DIMENSION = 1200;
 /** Multipart framing slack on top of the 1 MB file cap. */
 const BODY_SLACK = 64 * 1024;
@@ -58,8 +59,10 @@ export async function POST(req: Request): Promise<Response> {
   const auth = await authorize(req);
   if ("response" in auth) return auth.response;
 
-  const declared = Number(req.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > LOGO_MAX_BYTES + BODY_SLACK) {
+  const lengthHeader = req.headers.get("content-length");
+  if (lengthHeader === null) return fail("Upload size unknown.", 411);
+  const declared = Number(lengthHeader);
+  if (!Number.isFinite(declared) || declared > LOGO_MAX_BYTES + BODY_SLACK) {
     return fail("The logo must be 1 MB or smaller.", 413);
   }
 
@@ -77,7 +80,7 @@ export async function POST(req: Request): Promise<Response> {
 
   let png: Buffer;
   try {
-    png = await sharp(input)
+    png = await sharp(input, { limitInputPixels: 40_000_000 })
       .rotate()
       .resize({
         width: MAX_DIMENSION,
@@ -99,23 +102,34 @@ export async function POST(req: Request): Promise<Response> {
 
   const style = await getDocumentStyle();
   const previousKey = style.logoKey;
+  let count: number;
   try {
-    await prisma.documentStyle.update({
-      where: { id: style.id },
+    ({ count } = await prisma.documentStyle.updateMany({
+      where: { id: style.id, logoKey: previousKey },
       data: {
         logoKey: stored.key,
         logoContentType: "image/png",
+        updatedAt: new Date(),
         ...(style.logoPosition === "none" ? { logoPosition: "left" } : {}),
       },
-    });
+    }));
   } catch (err) {
     await deleteFile(stored.key).catch(() => {});
     throw err;
   }
+  if (count === 0) {
+    await deleteFile(stored.key).catch(() => {});
+    return fail(CHANGED, 409);
+  }
   if (previousKey && previousKey !== stored.key) await deleteFile(previousKey).catch(() => {});
 
   await logTemplateChange(auth.userId, "Document style logo uploaded", null);
-  return NextResponse.json({ ok: true });
+  const row = await getDocumentStyle();
+  return NextResponse.json({
+    ok: true,
+    updatedAt: row.updatedAt.toISOString(),
+    logoPosition: row.logoPosition,
+  });
 }
 
 export async function DELETE(req: Request): Promise<Response> {
@@ -124,15 +138,21 @@ export async function DELETE(req: Request): Promise<Response> {
 
   const style = await getDocumentStyle();
   const previousKey = style.logoKey;
-  await prisma.documentStyle.update({
-    where: { id: style.id },
-    data: { logoKey: null, logoContentType: null },
+  const { count } = await prisma.documentStyle.updateMany({
+    where: { id: style.id, logoKey: previousKey },
+    data: { logoKey: null, logoContentType: null, updatedAt: new Date() },
   });
+  if (count === 0) return fail(CHANGED, 409);
   if (previousKey) {
     await deleteFile(previousKey).catch(() => {});
     await logTemplateChange(auth.userId, "Document style logo removed", null);
   }
-  return NextResponse.json({ ok: true });
+  const row = await getDocumentStyle();
+  return NextResponse.json({
+    ok: true,
+    updatedAt: row.updatedAt.toISOString(),
+    logoPosition: row.logoPosition,
+  });
 }
 
 export async function GET(req: Request): Promise<Response> {
@@ -149,6 +169,7 @@ export async function GET(req: Request): Promise<Response> {
       "Content-Length": String(bytes.length),
       // Stable URL, replaced in place: never cache.
       "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }
