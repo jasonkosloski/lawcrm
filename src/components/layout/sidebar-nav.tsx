@@ -44,6 +44,7 @@ import { useCommandPalette } from "@/components/command-palette/command-palette-
 import { useClerk } from "@clerk/nextjs";
 import type { SidebarData } from "@/lib/queries/sidebar";
 import { useMobileNav } from "./mobile-nav-provider";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 
 interface NavItem {
   id: string;
@@ -134,32 +135,6 @@ function isActive(
  *  so the badge is omitted entirely. */
 const numBadge = (n: number): string | undefined =>
   n > 0 ? n.toString() : undefined;
-
-/** Tailwind `lg` breakpoint — must stay in sync with the `lg:`
- *  classes below that switch the drawer into a persistent column.
- *  Same pattern as MailboxDrawer (mailbox-drawer.tsx). */
-const DESKTOP_QUERY = "(min-width: 1024px)";
-
-function subscribeToDesktop(callback: () => void) {
-  const mql = window.matchMedia(DESKTOP_QUERY);
-  mql.addEventListener("change", callback);
-  return () => mql.removeEventListener("change", callback);
-}
-
-/** Whether the viewport is at `lg+`, where the sidebar is a
- *  persistent column. Needed because `inert` on the closed drawer
- *  is correct only on mobile — at `lg+` the same element is visible
- *  and must stay interactive, and there's no CSS-only way to scope
- *  an attribute to a breakpoint. Server snapshot assumes desktop so
- *  SSR never ships an inert (unclickable) sidebar; on mobile the
- *  drawer starts closed and gains `inert` at hydration. */
-function useIsDesktop(): boolean {
-  return useSyncExternalStore(
-    subscribeToDesktop,
-    () => window.matchMedia(DESKTOP_QUERY).matches,
-    () => true
-  );
-}
 
 export function SidebarNav({
   data,
