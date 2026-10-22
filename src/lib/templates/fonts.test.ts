@@ -2,9 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { FONT_KEYS, FONTS, fontFilePath, fontPublicUrl } from "./fonts";
+import { FONT_KEYS, FONTS, fontPublicUrl } from "./fonts";
+import { fontFilePath } from "./fonts-server";
 
-// fontkit is a transitive dependency of @react-pdf; load it untyped.
+// fontkit (devDependency, same version @react-pdf uses); loaded untyped.
 const fontkit = createRequire(import.meta.url)("fontkit") as {
   create: (buf: Buffer) => { familyName: string; numGlyphs: number };
 };
