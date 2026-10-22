@@ -1,0 +1,127 @@
+/**
+ * Page-shaped preview of a generated document in the firm's house style.
+ * Renders the page frame, logo, strip and CSS through React; only the
+ * sanitized fragments from `resolvedToPageParts` go through
+ * dangerouslySetInnerHTML. The page is laid out at 8.5in x 96 px and
+ * CSS-scaled to the container width.
+ */
+
+"use client";
+
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import type { ResolvedDoc } from "@/lib/templates/render";
+import type { PageStyle } from "@/lib/templates/page-style";
+import {
+  LOGO_MAX_H_PX,
+  LOGO_MAX_W_PX,
+  PAGE_MIN_HEIGHT_PX,
+  PAGE_WIDTH_PX,
+  pageFontFaceCss,
+  resolvedToPageParts,
+} from "@/lib/templates/to-html";
+
+const HEADING_PT = [6, 4, 2] as const;
+const PAGE_CSS = `
+[data-page]{box-sizing:border-box;background:#fff;color:#000;font-family:var(--page-family);font-size:var(--page-font-size);line-height:var(--page-line-height);}
+[data-page] p,[data-page] ul,[data-page] ol,[data-page] table{margin:0 0 var(--page-space-after);}
+[data-page] ul,[data-page] ol{padding-left:2em;}
+[data-page] ul{list-style:disc;}
+[data-page] ol{list-style:decimal;}
+[data-page] li>p{margin:0;}
+[data-page] td,[data-page] th{border:1px solid #999;padding:2px 6px;vertical-align:top;}
+[data-page] table{border-collapse:collapse;}
+[data-page] hr[data-page-break]{border:0;border-top:1px dashed #bbb;margin:0 0 var(--page-space-after);}
+[data-page] mark[data-missing]{background:#fde68a;color:inherit;}
+[data-page] h1,[data-page] h2,[data-page] h3{font-weight:bold;margin:0 0 var(--page-space-after);}
+${HEADING_PT.map((d, i) => `[data-page] h${i + 1}{font-size:calc(var(--page-font-size) + ${d * (96 / 72)}px);}`).join("\n")}
+[data-page2]{border-top:1px dashed #bbb;margin-top:var(--page-space-after);}
+`;
+
+export function PagePreview(input: {
+  body: ResolvedDoc;
+  letterhead: ResolvedDoc | null;
+  continuation: ResolvedDoc | null;
+  style: PageStyle;
+  logoUrl: string | null;
+}) {
+  const parts = resolvedToPageParts(input);
+  const wrap = useRef<HTMLDivElement>(null);
+  const page = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [height, setHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      if (w > 0) setScale(Math.min(1, w / PAGE_WIDTH_PX));
+      if (page.current) setHeight(page.current.offsetHeight);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    if (page.current) ro.observe(page.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const pageStyle = {
+    ...parts.style,
+    "--page-family": parts.fontFamily,
+    width: PAGE_WIDTH_PX,
+    minHeight: PAGE_MIN_HEIGHT_PX,
+    transform: `scale(${scale})`,
+    transformOrigin: "top left",
+  } as CSSProperties;
+  const JUSTIFY = { left: "flex-start", center: "center", right: "flex-end" } as const;
+  const strip = parts.strip;
+  const stripEl = strip && (
+    <div data-page2 data-placement={strip.placement}>
+      {strip.continuationHtml && (
+        // Sanitized by resolvedToHtml.
+        <div dangerouslySetInnerHTML={{ __html: strip.continuationHtml }} />
+      )}
+      {strip.pageLabel && (
+        <div style={{ textAlign: strip.pageLabel.align, marginBottom: "var(--page-space-after)" }}>
+          {strip.pageLabel.text}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div
+      ref={wrap}
+      data-testid="page-preview"
+      className="w-full overflow-hidden rounded-md border border-line bg-surface-2 shadow-sm"
+      style={height ? { height: height * scale } : undefined}
+    >
+      <style>{`${pageFontFaceCss(input.style.font)}\n${PAGE_CSS}`}</style>
+      <div ref={page} data-page style={pageStyle}>
+        {parts.logo && (
+          <div style={{ display: "flex", justifyContent: JUSTIFY[parts.logo.position] }}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- firm logo from an API route */}
+            <img
+              src={parts.logo.url}
+              alt=""
+              style={{
+                maxWidth: LOGO_MAX_W_PX,
+                maxHeight: LOGO_MAX_H_PX,
+                width: "auto",
+                height: "auto",
+                marginBottom: "var(--page-space-after)",
+              }}
+            />
+          </div>
+        )}
+        {parts.letterheadHtml && (
+          // Sanitized by resolvedToHtml.
+          <div data-page-letterhead dangerouslySetInnerHTML={{ __html: parts.letterheadHtml }} />
+        )}
+        <div data-page-body dangerouslySetInnerHTML={{ __html: parts.bodyHtml }} />
+        {stripEl}
+      </div>
+    </div>
+  );
+}

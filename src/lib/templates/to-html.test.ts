@@ -28,3 +28,81 @@ describe("resolvedToHtml", () => {
     expect(html).toContain("&lt;b&gt;Notice&lt;/b&gt;");
   });
 });
+
+import { resolvePageStyle, DEFAULT_DOCUMENT_STYLE } from "./page-style";
+import { resolvedToPageParts, pageFontFaceCss } from "./to-html";
+
+describe("resolvedToPageParts", () => {
+  const doc = renderFixture();
+  const base = { ...DEFAULT_DOCUMENT_STYLE, letterheadBlockId: "b1", continuationBlockId: "b2" };
+  const logo = {
+    bytes: new Uint8Array(),
+    contentType: "image/png" as const,
+    position: "right" as const,
+  };
+  const mk = (kind: "letter" | "filing", over = {}, lg: typeof logo | null = null) =>
+    resolvedToPageParts({
+      body: doc,
+      letterhead: doc,
+      continuation: doc,
+      style: resolvePageStyle(kind, { ...base, ...over }, lg),
+      logoUrl: "/api/document-style/logo",
+    });
+
+  it("reflects style values in vars and padding", () => {
+    const p = mk("letter", {
+      fontSizeHalfPt: 26,
+      spaceAfterPt: 6,
+      marginLeftIn: 1.5,
+      lineSpacing: "1.5",
+    });
+    expect(p.style["--page-font-size"]).toBe(`${13 * (96 / 72)}px`);
+    expect(p.style["--page-space-after"]).toBe("8px");
+    expect(p.style.paddingLeft).toBe("144px");
+    expect(p.style["--page-line-height"]).toBe(String(1.5 * 1.15));
+    expect(p.fontFamily).toContain("Tpl Liberation Serif");
+  });
+  it("letter: letterhead, logo, top strip with right Page 2", () => {
+    const p = mk("letter", {}, logo);
+    expect(p.letterheadHtml).toContain("<table>");
+    expect(p.logo).toEqual({ url: "/api/document-style/logo", position: "right" });
+    expect(p.strip?.placement).toBe("top");
+    expect(p.strip?.continuationHtml).toContain("<table>");
+    expect(p.strip?.pageLabel).toEqual({ text: "Page 2", align: "right" });
+  });
+  it("letter without page numbers keeps continuation only; nothing -> no strip", () => {
+    expect(mk("letter", { pageNumbers: "none" }).strip?.pageLabel).toBeNull();
+    const none = resolvedToPageParts({
+      body: doc,
+      letterhead: null,
+      continuation: null,
+      style: resolvePageStyle("letter", { ...DEFAULT_DOCUMENT_STYLE, pageNumbers: "none" }, null),
+      logoUrl: null,
+    });
+    expect(none.strip).toBeNull();
+    expect(none.letterheadHtml).toBeNull();
+    expect(none.logo).toBeNull();
+  });
+  it("filing: no letterhead/logo/continuation; bottom Page 2 or no strip", () => {
+    const p = mk("filing", { pageNumbers: "bottom_right" }, logo);
+    expect(p.letterheadHtml).toBeNull();
+    expect(p.logo).toBeNull();
+    expect(p.strip).toEqual({
+      placement: "bottom",
+      continuationHtml: null,
+      pageLabel: { text: "Page 2", align: "right" },
+    });
+    expect(mk("filing", { pageNumbers: "bottom_center" }).strip?.pageLabel?.align).toBe("center");
+    expect(mk("filing", { pageNumbers: "none" }).strip).toBeNull();
+  });
+  it("emits one font-face per face with the prefixed family", () => {
+    const css = pageFontFaceCss("times");
+    expect(css.match(/@font-face/g)).toHaveLength(4);
+    expect(css).toContain('"Tpl Liberation Serif"');
+    expect(css).toContain("/fonts/templates/LiberationSerif-BoldItalic.ttf");
+    expect(css).toContain("font-display:swap");
+  });
+  it("sanitized fragments carry no raw page style", () => {
+    expect(mk("letter").bodyHtml).not.toContain("--page");
+  });
+});
