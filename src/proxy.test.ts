@@ -373,6 +373,16 @@ describe("portal host routing", () => {
     expect(clerk.handlerCalls).toBe(0);
   });
 
+  it.each(["/fonts/templates/EBGaramond-Regular.ttf", "/fonts/templates/x.otf"])(
+    "staff host: preview font %s passes through without a session",
+    async (path) => {
+      const res = await proxy(makeRequest(path));
+      expect(res.status).toBe(200);
+      expect(res.headers.has("location")).toBe(false);
+      expect(clerk.handlerCalls).toBe(0);
+    },
+  );
+
   it("isPortalHost ignores one trailing dot", () => {
     expect(isPortalHost("portal.example.com.")).toBe(true);
   });

@@ -35,7 +35,7 @@ import { staffAuthorizedParties } from "@/lib/staff-authorized-parties";
 
 export { isPortalHost };
 
-const STATIC_EXT = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$/;
+const STATIC_EXT = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|ttf|otf)$/;
 
 const PUBLIC_PATH_PREFIXES = ["/login", "/sso-callback", "/no-access", "/api/csp-report"];
 
