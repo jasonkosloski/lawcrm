@@ -51,8 +51,24 @@ import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templ
 import { convertLegacyBody } from "@/lib/templates/legacy";
 import { resolvedToHtml } from "@/lib/templates/to-html";
 import { resolvedToText } from "@/lib/templates/to-text";
-import { DEFAULT_DOCUMENT_STYLE, resolvePageStyle } from "@/lib/templates/page-style";
+import {
+  getDocumentStyle,
+  loadLogo,
+  type LoadedDocumentStyle,
+} from "@/lib/templates/document-style";
+import {
+  logoPreviewUrl,
+  logoRefOf,
+  mergeReport,
+  renderPage,
+  renderPageView,
+  styleBlockIds,
+  type GenerationReport,
+  type PageKind,
+  type PageView,
+} from "@/lib/templates/page-render";
 import { resolvedToDocx } from "@/lib/templates/to-docx";
+import { resolvedToPdf } from "@/lib/templates/to-pdf";
 import { Prisma } from "@/generated/prisma/client";
 import {
   checkTemplateFit,
@@ -264,15 +280,22 @@ export async function deleteDocumentTemplate(
 const REQUEST_NOT_FOUND = "Records request not found.";
 const NOT_A_DOCUMENT = "This template can't be saved as a document.";
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const PDF_MIME = "application/pdf";
+const FORMATS = ["docx", "pdf", "both"] as const;
+export type GenerateFormat = (typeof FORMATS)[number];
 
 /** Kinds that produce a saved document (email and SMS are message drafts). */
-const isDocumentKind = (kind: string) => kind === "letter" || kind === "filing";
+const isDocumentKind = (kind: string): kind is PageKind => kind === "letter" || kind === "filing";
 
-/** The blocks a doc references, active AND archived (archived ones render
- *  a visible placeholder rather than vanishing). Unknown ids are absent
+/** The blocks a doc references (plus `extraIds`, e.g. the firm style's
+ *  letterhead/continuation), active AND archived (archived ones render a
+ *  visible placeholder rather than vanishing). Unknown ids are absent
  *  from the map, which the renderer reports as deleted. */
-async function loadBlockMap(doc: TemplateDoc): Promise<Map<string, BlockSource>> {
-  const ids = collectBlockIds(doc);
+async function loadBlockMap(
+  doc: TemplateDoc,
+  extraIds: string[] = [],
+): Promise<Map<string, BlockSource>> {
+  const ids = [...new Set([...collectBlockIds(doc), ...extraIds])];
   const map = new Map<string, BlockSource>();
   if (ids.length === 0) return map;
   const rows = await prisma.templateBlock.findMany({
@@ -281,6 +304,35 @@ async function loadBlockMap(doc: TemplateDoc): Promise<Map<string, BlockSource>>
   });
   for (const r of rows) map.set(r.id, { ...r, content: r.content as unknown as TemplateDoc });
   return map;
+}
+
+/** The body plus the style's block refs, so signer/recipient detection
+ *  sees fields used in the letterhead or continuation header too. */
+const withStyleBlocks = (doc: TemplateDoc, ids: string[]): TemplateDoc => ({
+  type: "doc",
+  content: [
+    ...(doc.content ?? []),
+    ...ids.map((blockId) => ({ type: "block" as const, attrs: { blockId } })),
+  ],
+});
+
+/** Preview-side page: the style without logo bytes, the logo via its route. */
+function previewPage(
+  doc: TemplateDoc,
+  kind: PageKind,
+  data: TemplateData,
+  blocks: Map<string, BlockSource>,
+  style: LoadedDocumentStyle,
+): { page: PageView; report: RenderReport } {
+  return renderPageView({
+    doc,
+    kind,
+    data,
+    blocks,
+    style,
+    logo: logoRefOf(style),
+    logoUrl: logoPreviewUrl(style.updatedAt.toISOString()),
+  });
 }
 
 /** Structured content, or the legacy `{{token}}` body converted on the fly. */
@@ -299,6 +351,8 @@ export type TemplatePreviewResult =
       templateName: string;
       html: string;
       text: string;
+      /** Rendered by <PagePreview/> in the browser. */
+      page: PageView;
       report: RenderReport;
       templateUpdatedAt: string;
       needsSigner: boolean;
@@ -346,9 +400,12 @@ export async function previewDocumentFromTemplate(
     return { ok: false, error: "Template not found or archived." };
   }
   if (!isDocumentKind(template.kind)) return { ok: false, error: NOT_A_DOCUMENT };
+  const kind = template.kind;
 
   const doc = contentOf(template);
-  const blocks = await loadBlockMap(doc);
+  const style = await getDocumentStyle();
+  const styleIds = styleBlockIds(kind, style);
+  const blocks = await loadBlockMap(doc, styleIds);
   const loaded = await loadTemplateData({
     scope,
     signerId: opts?.signerId,
@@ -357,42 +414,53 @@ export async function previewDocumentFromTemplate(
   });
   if (!loaded.ok) return { ok: false, error: loaded.error };
 
-  const { doc: resolved, report } = renderTemplate(doc, { data: loaded.data, blocks });
+  const { page, report } = previewPage(doc, kind, loaded.data, blocks, style);
+  const whole = withStyleBlocks(doc, styleIds);
   return {
     ok: true,
     templateName: template.name,
-    html: resolvedToHtml(resolved),
-    text: resolvedToText(resolved),
+    html: resolvedToHtml(page.body),
+    text: resolvedToText(page.body),
+    page,
     report,
     templateUpdatedAt: template.updatedAt.toISOString(),
-    needsSigner: usesSigner(doc, blocks),
-    needsRecipient: usesRecipient(doc, blocks),
+    needsSigner: usesSigner(whole, blocks),
+    needsRecipient: usesRecipient(whole, blocks),
   };
 }
 
 export type GenerateDocumentResult =
-  | { ok: true; documentId: string; documentName: string; report: RenderReport }
+  | { ok: true; documents: { id: string; name: string }[]; report: GenerationReport }
   | { ok: false; error: string };
 
 /**
- * Render + SAVE: stores the result as a .docx via the file-storage lib
- * and creates a Document row on the record (source "generated"),
- * mirroring uploadDocument's storage + row + activity shape. Gated on
- * `documents.upload`.
+ * Render + SAVE: renders once in the firm's document style, converts to
+ * the chosen `format` (.docx, PDF, or both), stores each file, then
+ * creates every Document row in ONE transaction (source "generated"),
+ * mirroring uploadDocument's storage + row + activity shape. Any failure
+ * after a store deletes every stored file and returns one error. Gated
+ * on `documents.upload`.
  *
- * Missing/invalid fields do NOT block the save (the caller previews
- * first and placeholders are visible in the output) but the render
- * report is returned so the UI can warn one last time. A template that
- * changed since the preview (`expectedUpdatedAt`) is refused.
+ * Missing/invalid fields, an unreadable logo and PDF font gaps do NOT
+ * block the save (the caller previews first and placeholders are visible
+ * in the output); they come back in `report` (`warnings` holds the logo
+ * and PDF notes). A template that changed since the preview
+ * (`expectedUpdatedAt`) is refused.
  */
 export async function generateDocumentFromTemplate(
   templateId: string,
   scope: RecordScope,
-  opts: GenerateOpts & { folderId?: string | null; expectedUpdatedAt: string },
+  opts: GenerateOpts & {
+    folderId?: string | null;
+    expectedUpdatedAt: string;
+    format?: GenerateFormat;
+  },
 ): Promise<GenerateDocumentResult> {
   const userId = await requirePermission("documents.upload");
   // Tagging a document to a records request is a records edit.
   if (opts.recordsRequestId) await requirePermission("records.edit");
+  const format = opts.format ?? "docx";
+  if (!FORMATS.includes(format)) return { ok: false, error: "Choose Word, PDF or both." };
   await assertScopeAccess(scope);
   const readOnly = await assertScopeWritable(scope);
   if (readOnly) return { ok: false, error: readOnly };
@@ -422,6 +490,7 @@ export async function generateDocumentFromTemplate(
   if (template.updatedAt.getTime() !== new Date(opts.expectedUpdatedAt).getTime()) {
     return { ok: false, error: STALE_TEMPLATE };
   }
+  const kind = template.kind;
 
   // Records requests file into their own role folder; otherwise the
   // chosen folder must belong to this very record.
@@ -435,8 +504,10 @@ export async function generateDocumentFromTemplate(
     folderId = folder.id;
   }
 
+  // One style + logo load per generation; every format renders from it.
   const doc = contentOf(template);
-  const blocks = await loadBlockMap(doc);
+  const style = await getDocumentStyle();
+  const blocks = await loadBlockMap(doc, styleBlockIds(kind, style));
   const loaded = await loadTemplateData({
     scope,
     signerId: opts.signerId,
@@ -445,33 +516,57 @@ export async function generateDocumentFromTemplate(
   });
   if (!loaded.ok) return { ok: false, error: loaded.error };
 
-  const { doc: resolved, report } = renderTemplate(doc, { data: loaded.data, blocks });
-  const buffer = await resolvedToDocx({
-    body: resolved,
-    letterhead: null,
-    continuation: null,
-    style: resolvePageStyle(
-      template.kind === "filing" ? "filing" : "letter",
-      DEFAULT_DOCUMENT_STYLE,
-      null,
-    ),
-  });
+  // Filings never show a letterhead, so their logo is never read.
+  const { logo, warning } =
+    kind === "letter" ? await loadLogo(style) : { logo: null, warning: null };
+  const page = renderPage({ doc, kind, data: loaded.data, blocks, style, logo });
+  const report: GenerationReport = { ...page.report, warnings: warning ? [warning] : [] };
+  const parts = {
+    body: page.body,
+    letterhead: page.letterhead,
+    continuation: page.continuation,
+    style: page.style,
+  };
 
-  // "<template name> — <date>.docx" — the date disambiguates repeat generations.
-  const documentName = `${template.name} — ${formatDate(
-    loaded.data.today,
-    "medium",
-    loaded.data.timeZone,
-  )}.docx`;
+  // "<template name> — <date>.docx|.pdf" — the date disambiguates repeat generations.
+  const base = `${template.name} — ${formatDate(loaded.data.today, "medium", loaded.data.timeZone)}`;
+  const outputs: { name: string; type: string; bytes: Uint8Array<ArrayBuffer> }[] = [];
+  try {
+    if (format !== "pdf") {
+      const docx = await resolvedToDocx(parts);
+      outputs.push({ name: `${base}.docx`, type: DOCX_MIME, bytes: new Uint8Array(docx) });
+    }
+    if (format !== "docx") {
+      const pdf = await resolvedToPdf(parts);
+      for (const w of pdf.warnings) if (!report.warnings.includes(w)) report.warnings.push(w);
+      outputs.push({ name: `${base}.pdf`, type: PDF_MIME, bytes: new Uint8Array(pdf.buffer) });
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      error: toUserMessage(
+        err,
+        "Couldn't create the document. Try again.",
+        "generateDocumentFromTemplate.convert",
+      ),
+    };
+  }
+
+  // Once anything is stored, every exit that doesn't create the rows
+  // deletes it: no row will ever point at an orphan file.
+  const stored: Awaited<ReturnType<typeof storeFile>>[] = [];
+  const cleanup = () => Promise.all(stored.map((f) => deleteFile(f.key).catch(() => {})));
 
   // Node's global File — same shape uploadDocument receives from the
   // browser. Infrastructure failures (blob 5xx, misconfigured driver,
   // matter deleted mid-request) come back as {ok:false} so the dialog
   // shows an inline error instead of the route error boundary.
-  let stored: Awaited<ReturnType<typeof storeFile>>;
   try {
-    stored = await storeFile(new File([new Uint8Array(buffer)], documentName, { type: DOCX_MIME }));
+    for (const o of outputs) {
+      stored.push(await storeFile(new File([o.bytes], o.name, { type: o.type })));
+    }
   } catch (err) {
+    await cleanup();
     return {
       ok: false,
       error: toUserMessage(
@@ -482,45 +577,55 @@ export async function generateDocumentFromTemplate(
     };
   }
 
-  let created: { id: string };
+  let documents: { id: string; name: string }[];
   try {
-    const data = {
-      ...scopeWhere(scope),
-      name: documentName,
-      category: documentCategoryForTemplate(template.category),
-      source: "generated" as const,
-      fileUrl: stored.key,
-      contentType: stored.contentType,
-      fileSize: stored.size,
-      uploadedBy: userId,
-    };
-    created = request
-      ? await prisma.$transaction(async (tx) => {
-          const requestFolderId = await resolveRecordsRoleFolder(
-            tx,
-            {
-              id: request.id,
-              matterId: request.matterId,
-              leadId: request.leadId,
-              custodianName: request.custodian.name,
-              typeName: request.type?.name ?? request.adHocTypeName ?? "Records",
-            },
-            "request_letter",
-          );
-          return tx.document.create({
+    documents = await prisma.$transaction(async (tx) => {
+      let target: {
+        folderId: string | null;
+        recordsRequestId?: string;
+        recordsRequestRole?: "request_letter";
+      } = { folderId };
+      if (request) {
+        const requestFolderId = await resolveRecordsRoleFolder(
+          tx,
+          {
+            id: request.id,
+            matterId: request.matterId,
+            leadId: request.leadId,
+            custodianName: request.custodian.name,
+            typeName: request.type?.name ?? request.adHocTypeName ?? "Records",
+          },
+          "request_letter",
+        );
+        target = {
+          folderId: requestFolderId,
+          recordsRequestId: request.id,
+          recordsRequestRole: "request_letter",
+        };
+      }
+      const rows: { id: string; name: string }[] = [];
+      for (const [i, f] of stored.entries()) {
+        rows.push(
+          await tx.document.create({
             data: {
-              ...data,
-              folderId: requestFolderId,
-              recordsRequestId: request.id,
-              recordsRequestRole: "request_letter",
+              ...scopeWhere(scope),
+              ...target,
+              name: outputs[i]!.name,
+              category: documentCategoryForTemplate(template.category),
+              source: "generated",
+              fileUrl: f.key,
+              contentType: f.contentType,
+              fileSize: f.size,
+              uploadedBy: userId,
             },
-            select: { id: true },
-          });
-        })
-      : await prisma.document.create({ data: { ...data, folderId }, select: { id: true } });
+            select: { id: true, name: true },
+          }),
+        );
+      }
+      return rows;
+    });
   } catch (err) {
-    // The file is already written; no row will ever point at it.
-    await deleteFile(stored.key).catch(() => {});
+    await cleanup();
     return {
       ok: false,
       error: toUserMessage(
@@ -537,11 +642,11 @@ export async function generateDocumentFromTemplate(
     userId,
     type: "document",
     title: "Document generated from template",
-    detail: `${documentName} (from "${template.name}")`,
+    detail: `${documents.map((d) => d.name).join(", ")} (from "${template.name}")`,
   });
 
   revalidateDocumentScope(scope);
-  return { ok: true, documentId: created.id, documentName, report };
+  return { ok: true, documents, report };
 }
 
 // ── Editor draft preview ───────────────────────────────────────────────
@@ -595,7 +700,15 @@ export async function previewTemplateDraft(input: {
   appliesTo: AppliesTo;
   target: { sample: true } | { scope: RecordScope };
 }): Promise<
-  | { ok: true; html: string; text: string; subjectText: string | null; report: RenderReport }
+  | {
+      ok: true;
+      html: string;
+      text: string;
+      subjectText: string | null;
+      /** Letters and filings only. */
+      page: PageView | null;
+      report: RenderReport;
+    }
   | { ok: false; error: string }
 > {
   if (!(await canPreviewDrafts())) {
@@ -611,7 +724,12 @@ export async function previewTemplateDraft(input: {
     subjectDoc = s.doc;
   }
 
-  const blocks = await loadBlockMap(content.doc);
+  const kind = input.kind;
+  const style = isDocumentKind(kind) ? await getDocumentStyle() : null;
+  const blocks = await loadBlockMap(
+    content.doc,
+    style && isDocumentKind(kind) ? styleBlockIds(kind, style) : [],
+  );
 
   let data: TemplateData;
   if ("sample" in input.target) {
@@ -625,20 +743,27 @@ export async function previewTemplateDraft(input: {
     data = loaded.data;
   }
 
-  const { doc: resolved, report } = renderTemplate(content.doc, { data, blocks });
+  let page: PageView | null = null;
+  let resolved;
+  let report: RenderReport;
+  if (style && isDocumentKind(kind)) {
+    ({ page, report } = previewPage(content.doc, kind, data, blocks, style));
+    resolved = page.body;
+  } else {
+    ({ doc: resolved, report } = renderTemplate(content.doc, { data, blocks }));
+  }
   let subjectText: string | null = null;
   if (subjectDoc) {
     const rendered = renderTemplate(subjectDoc, { data, blocks });
     subjectText = resolvedToText(rendered.doc);
-    for (const k of ["missing", "invalid", "archivedBlocks"] as const) {
-      for (const v of rendered.report[k]) if (!report[k].includes(v)) report[k].push(v);
-    }
+    mergeReport(report, rendered.report);
   }
   return {
     ok: true,
     html: resolvedToHtml(resolved),
     text: resolvedToText(resolved),
     subjectText,
+    page,
     report,
   };
 }

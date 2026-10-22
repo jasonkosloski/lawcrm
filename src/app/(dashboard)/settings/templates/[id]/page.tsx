@@ -9,7 +9,11 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/current-user";
 import { getCurrentUserPermissions, requirePermission } from "@/lib/permission-check";
-import { loadBlockSources, loadEditorTemplate } from "@/lib/templates/editor-data";
+import {
+  loadBlockSources,
+  loadEditorPageStyle,
+  loadEditorTemplate,
+} from "@/lib/templates/editor-data";
 import {
   TemplateEditorPage,
   type EditorTemplate,
@@ -36,13 +40,23 @@ export default async function TemplateEditorRoute({
   const isNew = id === "new";
   if (isNew) await requirePermission("documents.template.create");
 
-  const [{ isAdmin, granted }, template, blocks] = await Promise.all([
+  // Blocks include the style's letterhead/continuation (active and archived).
+  const [{ isAdmin, granted }, template, blocks, pageStyle] = await Promise.all([
     getCurrentUserPermissions(),
     isNew ? NEW_TEMPLATE : loadEditorTemplate(id),
     loadBlockSources(),
+    loadEditorPageStyle(),
   ]);
   if (!template) notFound();
   const canSave = isNew || isAdmin || granted.has("documents.template.edit");
 
-  return <TemplateEditorPage key={id} template={template} blocks={blocks} canSave={canSave} />;
+  return (
+    <TemplateEditorPage
+      key={id}
+      template={template}
+      blocks={blocks}
+      pageStyle={pageStyle}
+      canSave={canSave}
+    />
+  );
 }

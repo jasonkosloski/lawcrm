@@ -64,17 +64,33 @@ export type LoadedLogo = {
   position: "left" | "center" | "right";
 };
 
-export type PageStyle = {
+/** What a preview needs to know about the logo: where it goes, never its bytes. */
+export type LogoRef = { position: LoadedLogo["position"] };
+
+/** A page style carrying logo type `L`: the loaded bytes for the
+ *  converters, or only a `LogoRef` for previews sent to the browser. */
+export type PageStyleOf<L extends LogoRef> = {
   kind: "letter" | "filing";
   font: FontKey;
   sizePt: number;
   lineSpacing: 1 | 1.15 | 1.5 | 2;
   spaceAfterPt: number;
   marginsIn: { top: number; right: number; bottom: number; left: number };
-  letterhead: { blockId: string | null; logo: LoadedLogo | null } | null;
+  letterhead: { blockId: string | null; logo: L | null } | null;
   continuationBlockId: string | null;
   pageNumbers: PageNumberPosition;
 };
+
+export type PageStyle = PageStyleOf<LoadedLogo>;
+/** Serializable: safe to hand to a client component. */
+export type PreviewPageStyle = PageStyleOf<LogoRef>;
+
+/** Drops the logo bytes so the style can go over the wire. */
+export function toPreviewPageStyle(style: PageStyleOf<LogoRef>): PreviewPageStyle {
+  if (!style.letterhead) return style;
+  const logo = style.letterhead.logo ? { position: style.letterhead.logo.position } : null;
+  return { ...style, letterhead: { blockId: style.letterhead.blockId, logo } };
+}
 
 const LINE_FACTOR: Record<LineSpacing, PageStyle["lineSpacing"]> = {
   single: 1,
@@ -89,7 +105,17 @@ export function resolvePageStyle(
   kind: "letter" | "filing",
   style: DocumentStyleValues,
   logo: LoadedLogo | null,
-): PageStyle {
+): PageStyle;
+export function resolvePageStyle<L extends LogoRef>(
+  kind: "letter" | "filing",
+  style: DocumentStyleValues,
+  logo: L | null,
+): PageStyleOf<L>;
+export function resolvePageStyle<L extends LogoRef>(
+  kind: "letter" | "filing",
+  style: DocumentStyleValues,
+  logo: L | null,
+): PageStyleOf<L> {
   const isLetter = kind === "letter";
   const hasLetterhead = isLetter && (style.letterheadBlockId !== null || logo !== null);
   return {

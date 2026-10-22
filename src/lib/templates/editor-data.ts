@@ -4,6 +4,8 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getDocumentStyle } from "./document-style";
+import { logoPreviewUrl, logoRefOf, type FirmPageStyle } from "./page-render";
 import type { BlockSource } from "./render";
 import type { AppliesTo, TemplateDoc, TemplateKind } from "./schema";
 
@@ -53,5 +55,30 @@ export async function loadEditorBlock(id: string) {
     ...b,
     content: b.content as unknown as TemplateDoc,
     updatedAt: b.updatedAt.toISOString(),
+  };
+}
+
+/** The firm document style for the editor's sample preview. Picks the
+ *  style values explicitly so the logo's storage key stays server-side. */
+export async function loadEditorPageStyle(): Promise<FirmPageStyle> {
+  const s = await getDocumentStyle();
+  const logo = logoRefOf(s);
+  return {
+    values: {
+      fontKey: s.fontKey,
+      fontSizeHalfPt: s.fontSizeHalfPt,
+      lineSpacing: s.lineSpacing,
+      spaceAfterPt: s.spaceAfterPt,
+      marginTopIn: s.marginTopIn,
+      marginRightIn: s.marginRightIn,
+      marginBottomIn: s.marginBottomIn,
+      marginLeftIn: s.marginLeftIn,
+      letterheadBlockId: s.letterheadBlockId,
+      logoPosition: s.logoPosition,
+      continuationBlockId: s.continuationBlockId,
+      pageNumbers: s.pageNumbers,
+    },
+    logo,
+    logoUrl: logo ? logoPreviewUrl(s.updatedAt.toISOString()) : null,
   };
 }

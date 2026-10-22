@@ -27,6 +27,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { TemplateEditorPage, type EditorTemplate } from "./template-editor-page";
+import { DEFAULT_DOCUMENT_STYLE, resolvePageStyle } from "@/lib/templates/page-style";
 
 let viewport = { desktop: true, listeners: new Set<() => void>() };
 
@@ -226,6 +227,69 @@ describe("TemplateEditorPage — templates", () => {
       target: { scope: { kind: "matter", matterId: "m1" } },
     });
     expect(screen.getByText("Not on file: Court")).toBeInTheDocument();
+  });
+
+  const PAGE_STYLE = {
+    values: { ...DEFAULT_DOCUMENT_STYLE, letterheadBlockId: "lh", logoPosition: "right" as const },
+    logo: { position: "right" as const },
+    logoUrl: "/api/document-style/logo?v=1",
+  };
+  const LH_BLOCK = {
+    id: "lh",
+    name: "Letterhead",
+    isActive: true,
+    content: {
+      type: "doc",
+      content: [para(text("FIRM HEAD "), field("matter.caseNumber"))],
+    } as never,
+  };
+
+  it("letters preview as a styled page with the firm letterhead and logo (sample data)", () => {
+    render(
+      <TemplateEditorPage template={tpl()} blocks={[LH_BLOCK]} pageStyle={PAGE_STYLE} canSave />,
+    );
+    const page = screen.getByTestId("page-preview");
+    expect(screen.getByTestId("template-preview")).toContainElement(page);
+    expect(page.querySelector("[data-page-letterhead]")?.textContent).toBe(
+      "FIRM HEAD 2026-CV-00000",
+    );
+    expect(page.querySelector("img")?.getAttribute("src")).toBe("/api/document-style/logo?v=1");
+    expect(page.querySelector("[data-page-body]")?.textContent).toContain("Hello 2026-CV-00000");
+  });
+
+  it("text messages keep the plain preview even with a page style", async () => {
+    const user = userEvent.setup();
+    render(<TemplateEditorPage template={tpl()} blocks={[]} pageStyle={PAGE_STYLE} canSave />);
+    await user.selectOptions(screen.getByLabelText("Kind"), "sms");
+    expect(screen.queryByTestId("page-preview")).not.toBeInTheDocument();
+  });
+
+  it("a real-record preview renders the page the action returns", async () => {
+    const user = userEvent.setup();
+    searchRecords.mockResolvedValue([
+      { scope: { kind: "matter", matterId: "m1" }, label: "Alvarez v. Aurora" },
+    ]);
+    previewDraft.mockResolvedValue({
+      ok: true,
+      html: "<p>Hello 2026-CV-00481</p>",
+      text: "Hello 2026-CV-00481",
+      subjectText: null,
+      page: {
+        body: { type: "doc", content: [para(text("Hello 2026-CV-00481"))] },
+        letterhead: { type: "doc", content: [para(text("REAL HEAD"))] },
+        continuation: null,
+        style: resolvePageStyle("letter", PAGE_STYLE.values, null),
+        logoUrl: null,
+      },
+      report: { missing: [], invalid: [], archivedBlocks: [] },
+    });
+    render(<TemplateEditorPage template={tpl()} blocks={[]} pageStyle={PAGE_STYLE} canSave />);
+    await user.click(screen.getByRole("button", { name: "Preview with a real matter or lead" }));
+    await user.type(screen.getByLabelText("Search for a matter"), "alv");
+    await user.click(await screen.findByRole("button", { name: /Alvarez v. Aurora/ }));
+    await waitFor(() =>
+      expect(screen.getByTestId("page-preview").textContent).toContain("REAL HEAD"),
+    );
   });
 
   it("narrowing the window keeps the editor and its unsaved edits", async () => {

@@ -10,9 +10,13 @@
  *     only rendered for holders of `documents.upload`, which the
  *     preview action requires.
  *   - "Save to documents" — calls the `documents.upload`-gated
- *     generate action, which stores the result as a .docx file and
- *     creates the Document row. The button renders only when the
- *     caller holds the permission (server re-checks regardless).
+ *     generate action, which stores the result as Word, PDF or both
+ *     ("Save as") and creates the Document row(s). The button renders
+ *     only when the caller holds the permission (server re-checks
+ *     regardless).
+ *
+ * The preview is the page in the firm's document style (<PagePreview/>
+ * from the action's serializable `page`).
  */
 
 "use client";
@@ -38,9 +42,11 @@ import { STALE_TEMPLATE, templateCategoryLabel } from "@/lib/template-constants"
 import {
   generateDocumentFromTemplate,
   previewDocumentFromTemplate,
+  type GenerateFormat,
   type TemplatePreviewResult,
 } from "@/app/actions/document-templates";
 import { FormErrorBanner } from "@/components/ui/field";
+import { PagePreview } from "@/components/templates/page-preview";
 
 export type TemplateOption = {
   id: string;
@@ -56,6 +62,11 @@ export type SignerOption = { id: string; name: string };
 export type RecipientOption = { id: string; name: string; role: string | null };
 
 const DOCUMENT_KINDS = ["letter", "filing"];
+const SAVE_AS: { value: GenerateFormat; label: string }[] = [
+  { value: "docx", label: "Word" },
+  { value: "pdf", label: "PDF" },
+  { value: "both", label: "Both" },
+];
 
 export function GenerateFromTemplateDialog({
   scope,
@@ -113,9 +124,11 @@ export function GenerateFromTemplateDialog({
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  // Name of the Document just saved - shown in place of silently
-  // closing, since the file lands at the root list.
-  const [savedName, setSavedName] = useState<string | null>(null);
+  const [format, setFormat] = useState<GenerateFormat>("docx");
+  // Names of the Documents just saved - shown in place of silently
+  // closing, since the files land at the root list - plus any notes
+  // (logo, PDF fonts) from generation.
+  const [saved, setSaved] = useState<{ names: string[]; warnings: string[] } | null>(null);
   const [previewPending, startPreview] = useTransition();
   const [savePending, startSave] = useTransition();
 
@@ -146,7 +159,7 @@ export function GenerateFromTemplateDialog({
     setPreview(null);
     setSaveError(null);
     setStaleNotice(null);
-    setSavedName(null);
+    setSaved(null);
     setCopied(false);
     setCopyError(false);
     setSignerId("");
@@ -174,10 +187,11 @@ export function GenerateFromTemplateDialog({
     setCopied(false);
     setCopyError(false);
     setSaveError(null);
-    setSavedName(null);
+    setSaved(null);
     setStaleNotice(null);
     setSignerId("");
     setRecipientId("");
+    setFormat("docx");
     setOpen(true);
     if (defaultTemplateId && offered.some((t) => t.id === defaultTemplateId)) {
       onPick(defaultTemplateId);
@@ -212,12 +226,13 @@ export function GenerateFromTemplateDialog({
         ...(preview.needsSigner ? { signerId: signerId || currentUserId || undefined } : {}),
         ...(preview.needsRecipient && recipientId ? { recipientContactId: recipientId } : {}),
         expectedUpdatedAt: preview.templateUpdatedAt,
+        format,
       });
       if (res.ok) {
         // The action revalidated the documents route. The document is
         // filed at the root, which is invisible if a subfolder
         // is open - so confirm by name instead of closing silently.
-        setSavedName(res.documentName);
+        setSaved({ names: res.documents.map((d) => d.name), warnings: res.report.warnings });
       } else if (res.error === STALE_TEMPLATE) {
         // Refresh the preview (and its version) so the next save is valid.
         setStaleNotice(res.error);
@@ -235,11 +250,14 @@ export function GenerateFromTemplateDialog({
     grouped.get(t.category)!.push(t);
   }
 
+  // Generation notes (logo, PDF fonts) join the preview's report lines.
+  const notes = saved?.warnings ?? [];
   const warnings =
     preview?.ok &&
     (preview.report.missing.length > 0 ||
       preview.report.invalid.length > 0 ||
-      preview.report.archivedBlocks.length > 0)
+      preview.report.archivedBlocks.length > 0 ||
+      notes.length > 0)
       ? preview.report
       : null;
 
@@ -376,16 +394,43 @@ export function GenerateFromTemplateDialog({
                         {warnings.archivedBlocks.length > 0 && (
                           <span>Archived blocks: {warnings.archivedBlocks.join(", ")}</span>
                         )}
+                        {notes.map((n) => (
+                          <span key={n}>{n}</span>
+                        ))}
                       </div>
                     </div>
                   )}
-                  <div className="px-3 py-2.5 rounded-md border border-line bg-paper-2/40 max-h-72 overflow-y-auto">
-                    <div
-                      className="prose prose-sm max-w-none text-xs text-ink"
-                      // Sanitized by resolvedToHtml (sanitizeDocumentHtml).
-                      dangerouslySetInnerHTML={{ __html: preview.html }}
-                    />
+                  <div className="max-h-96 overflow-y-auto rounded-md">
+                    <PagePreview {...preview.page} />
                   </div>
+                  {canUpload && !saved && (
+                    <div
+                      role="radiogroup"
+                      aria-labelledby="generate-save-as"
+                      className="flex items-center gap-4"
+                    >
+                      <span id="generate-save-as" className="text-xs font-medium text-ink-2">
+                        Save as
+                      </span>
+                      {SAVE_AS.map((o) => (
+                        <label
+                          key={o.value}
+                          className="inline-flex items-center gap-1.5 text-xs text-ink-2 select-none"
+                        >
+                          <input
+                            type="radio"
+                            name="generate-save-as"
+                            value={o.value}
+                            checked={format === o.value}
+                            onChange={() => setFormat(o.value)}
+                            disabled={savePending}
+                            className="h-3.5 w-3.5"
+                          />
+                          {o.label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
 
@@ -396,14 +441,20 @@ export function GenerateFromTemplateDialog({
                 </div>
               )}
 
-              {savedName && (
+              {saved && (
                 <div
                   role="status"
                   className="flex items-start gap-2 px-3 py-2 rounded-md bg-paper-2/40 border border-line text-2xs text-ink-2"
                 >
                   <Check size={12} className="shrink-0 mt-px" />
                   <span>
-                    Saved as <span className="font-medium">{savedName}</span>{" "}
+                    {saved.names.length === 1 ? "Saved as " : "Saved "}
+                    {saved.names.map((n, i) => (
+                      <span key={n}>
+                        {i > 0 && " and "}
+                        <span className="font-medium">{n}</span>
+                      </span>
+                    ))}{" "}
                     {folderId && !recordsRequestId
                       ? "in the folder you have open."
                       : `in All documents (the ${noun}'s root list — switch folders to see it).`}
@@ -417,7 +468,7 @@ export function GenerateFromTemplateDialog({
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              {savedName ? "Done" : "Cancel"}
+              {saved ? "Done" : "Cancel"}
             </Button>
             {offered.length > 0 && (
               <>
@@ -430,7 +481,7 @@ export function GenerateFromTemplateDialog({
                   {copied ? <Check /> : <Copy />}
                   {copied ? "Copied" : "Copy text"}
                 </Button>
-                {canUpload && !savedName && (
+                {canUpload && !saved && (
                   <Button
                     type="button"
                     disabled={!preview?.ok || previewPending || savePending}

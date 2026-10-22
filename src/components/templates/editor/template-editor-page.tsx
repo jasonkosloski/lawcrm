@@ -189,6 +189,7 @@ function Editor(props: EditorProps & { narrow: boolean }) {
       kind={kind}
       appliesTo={appliesTo}
       blocks={blocks}
+      pageStyle={props.pageStyle ?? null}
       allowRecord={allowRecord}
     />
   );

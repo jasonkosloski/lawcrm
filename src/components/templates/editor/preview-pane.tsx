@@ -3,6 +3,10 @@
  * change; "Preview with a real matter or lead" renders the current draft
  * on the server against a picked record (`previewTemplateDraft`, which
  * checks access to it). The render report is listed under the preview.
+ *
+ * Letters and filings show the page in the firm's document style
+ * (<PagePreview/>) when the editor page loaded it (`pageStyle`); the
+ * sample path renders the letterhead/continuation blocks from `blocks`.
  */
 
 "use client";
@@ -16,9 +20,19 @@ import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templ
 import type { AppliesTo, TemplateDoc, TemplateKind } from "@/lib/templates/schema";
 import { resolvedToHtml } from "@/lib/templates/to-html";
 import { resolvedToText } from "@/lib/templates/to-text";
+import { renderPageView, type FirmPageStyle, type PageView } from "@/lib/templates/page-render";
+import { PagePreview } from "@/components/templates/page-preview";
 import { RecordPicker, type PickedRecord } from "./record-picker";
 
-type Rendered = { html: string; text: string; subjectText: string | null; report: RenderReport };
+type Rendered = {
+  html: string;
+  text: string;
+  subjectText: string | null;
+  page?: PageView | null;
+  report: RenderReport;
+};
+
+const isPageKind = (k: TemplateKind): k is "letter" | "filing" => k === "letter" || k === "filing";
 
 /** Client-side render with obviously-fake sample data. */
 export function renderSample(
@@ -26,14 +40,34 @@ export function renderSample(
   subject: TemplateDoc | null,
   appliesTo: AppliesTo,
   blocks: BlockSource[],
+  kind: TemplateKind = "letter",
+  pageStyle: FirmPageStyle | null = null,
 ): Rendered {
   const data = {
     ...SAMPLE_TEMPLATE_DATA,
     scope: appliesTo === "lead" ? "lead" : "matter",
   } as const;
   const map = new Map(blocks.map((b) => [b.id, b]));
-  const body = renderTemplate(doc, { data, blocks: map });
   const subj = subject ? renderTemplate(subject, { data, blocks: map }) : null;
+  if (pageStyle && isPageKind(kind)) {
+    const { page, report } = renderPageView({
+      doc,
+      kind,
+      data,
+      blocks: map,
+      style: pageStyle.values,
+      logo: pageStyle.logo,
+      logoUrl: pageStyle.logoUrl,
+    });
+    return {
+      html: resolvedToHtml(page.body),
+      text: resolvedToText(page.body),
+      subjectText: null,
+      page,
+      report,
+    };
+  }
+  const body = renderTemplate(doc, { data, blocks: map });
   return {
     html: resolvedToHtml(body.doc),
     text: resolvedToText(body.doc),
@@ -69,6 +103,7 @@ export function PreviewPane({
   kind,
   appliesTo,
   blocks,
+  pageStyle = null,
   allowRecord,
 }: {
   doc: TemplateDoc;
@@ -76,12 +111,14 @@ export function PreviewPane({
   kind: TemplateKind;
   appliesTo: AppliesTo;
   blocks: BlockSource[];
+  /** Firm document style; letters/filings then preview as a page. */
+  pageStyle?: FirmPageStyle | null;
   /** Offer the real-record preview (desktop editors only). */
   allowRecord: boolean;
 }) {
   const sample = useMemo(
-    () => renderSample(doc, subject, appliesTo, blocks),
-    [doc, subject, appliesTo, blocks],
+    () => renderSample(doc, subject, appliesTo, blocks, kind, pageStyle),
+    [doc, subject, appliesTo, blocks, kind, pageStyle],
   );
   const [picking, setPicking] = useState(false);
   const [record, setRecord] = useState<PickedRecord | null>(null);
@@ -119,6 +156,9 @@ export function PreviewPane({
   };
 
   const shown = record ? real : sample;
+  // A record preview carries its own page; pageStyle gates the look so
+  // the block editor (no style) keeps the plain preview.
+  const page = pageStyle && isPageKind(kind) ? shown?.page : null;
 
   return (
     <div className="flex flex-col gap-2">
@@ -173,9 +213,13 @@ export function PreviewPane({
           )}
           <div
             data-testid="template-preview"
-            className="min-h-40 rounded-md border border-line bg-white px-4 py-3"
+            className={
+              page ? "min-h-40" : "min-h-40 rounded-md border border-line bg-white px-4 py-3"
+            }
           >
-            {kind === "sms" ? (
+            {page ? (
+              <PagePreview {...page} />
+            ) : kind === "sms" ? (
               <p className="whitespace-pre-wrap text-xs text-ink">{shown.text}</p>
             ) : (
               <div

@@ -14,7 +14,7 @@
 
 import { sanitizeDocumentHtml } from "@/lib/sanitize-html";
 import { FONTS, fontPublicUrl, type FontKey } from "./fonts";
-import type { PageStyle } from "./page-style";
+import type { PreviewPageStyle } from "./page-style";
 import type {
   ResolvedBlock,
   ResolvedDoc,
@@ -137,7 +137,7 @@ export function resolvedToPageParts(input: {
   body: ResolvedDoc;
   letterhead: ResolvedDoc | null;
   continuation: ResolvedDoc | null;
-  style: PageStyle;
+  style: PreviewPageStyle;
   logoUrl: string | null;
 }): PageParts {
   const { style } = input;

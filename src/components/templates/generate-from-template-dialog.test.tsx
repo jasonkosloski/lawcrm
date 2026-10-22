@@ -22,6 +22,7 @@ vi.mock("@/app/actions/document-templates", () => ({
 }));
 
 import { GenerateFromTemplateDialog } from "./generate-from-template-dialog";
+import { DEFAULT_DOCUMENT_STYLE, resolvePageStyle } from "@/lib/templates/page-style";
 
 const TEMPLATES = [
   { id: "t1", name: "Demand letter", category: "demand_letter", description: null },
@@ -34,16 +35,36 @@ const TEAM = [
 const CONTACTS = [{ id: "c1", name: "Pat Counsel", role: "opposing counsel" }];
 const M1 = { kind: "matter", matterId: "m1" } as const;
 
-const okPreview = (over: Record<string, unknown> = {}) => ({
+const STYLE = resolvePageStyle("letter", DEFAULT_DOCUMENT_STYLE, null);
+/** The serializable page a preview action returns, with one paragraph. */
+const pageOf = (text: string) => ({
+  body: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] },
+  letterhead: null,
+  continuation: null,
+  style: STYLE,
+  logoUrl: null,
+});
+
+const okPreview = (over: Record<string, unknown> = {}) => {
+  const text = typeof over.text === "string" ? over.text : "Dear Maria Alvarez,";
+  return {
+    ok: true,
+    templateName: "Demand letter",
+    text,
+    html: `<p>${text}</p>`,
+    page: pageOf(text),
+    report: { missing: [], invalid: [], archivedBlocks: [] },
+    templateUpdatedAt: "2026-10-22T00:00:00.000Z",
+    needsSigner: false,
+    needsRecipient: false,
+    ...over,
+  };
+};
+const REPORT = { missing: [], invalid: [], archivedBlocks: [], warnings: [] };
+const saved = (...names: string[]) => ({
   ok: true,
-  templateName: "Demand letter",
-  text: "Dear Maria Alvarez,",
-  html: "<p>Dear Maria Alvarez,</p>",
-  report: { missing: [], invalid: [], archivedBlocks: [] },
-  templateUpdatedAt: "2026-10-22T00:00:00.000Z",
-  needsSigner: false,
-  needsRecipient: false,
-  ...over,
+  documents: names.map((name, i) => ({ id: `d${i}`, name })),
+  report: REPORT,
 });
 
 async function openAndPick(user: ReturnType<typeof userEvent.setup>, templateId = "t1") {
@@ -130,12 +151,7 @@ describe("GenerateFromTemplateDialog", () => {
 
   it("on a lead the save confirmation names the intake, not the matter", async () => {
     previewMock.mockResolvedValue(okPreview());
-    generateMock.mockResolvedValue({
-      ok: true,
-      documentId: "d1",
-      documentName: "Demand letter.docx",
-      report: { missing: [], invalid: [], archivedBlocks: [] },
-    });
+    generateMock.mockResolvedValue(saved("Demand letter.docx"));
     const user = userEvent.setup();
     render(
       <GenerateFromTemplateDialog
@@ -154,12 +170,7 @@ describe("GenerateFromTemplateDialog", () => {
 
   it("confirms a successful save by document name instead of closing silently", async () => {
     previewMock.mockResolvedValue(okPreview());
-    generateMock.mockResolvedValue({
-      ok: true,
-      documentId: "d1",
-      documentName: "Demand letter — Apr 15, 2026.docx",
-      report: { missing: [], invalid: [], archivedBlocks: [] },
-    });
+    generateMock.mockResolvedValue(saved("Demand letter — Apr 15, 2026.docx"));
     const user = userEvent.setup();
     render(
       <GenerateFromTemplateDialog
@@ -254,7 +265,7 @@ describe("GenerateFromTemplateDialog", () => {
 
   it("with a records request: preselects the default template and passes the request id", async () => {
     previewMock.mockResolvedValue(okPreview());
-    generateMock.mockResolvedValue({ ok: true, documentName: "Letter.md" });
+    generateMock.mockResolvedValue(saved("Letter.md"));
     const user = userEvent.setup();
     render(
       <GenerateFromTemplateDialog
@@ -279,7 +290,7 @@ describe("GenerateFromTemplateDialog", () => {
     expect(generateMock).toHaveBeenCalledWith(
       "t2",
       { kind: "matter", matterId: "m1" },
-      { recordsRequestId: "rr1", expectedUpdatedAt: "2026-10-22T00:00:00.000Z" },
+      { recordsRequestId: "rr1", expectedUpdatedAt: "2026-10-22T00:00:00.000Z", format: "docx" },
     );
   });
 
@@ -394,7 +405,7 @@ describe("GenerateFromTemplateDialog", () => {
 
   it("save sends folderId, signer, recipient and expectedUpdatedAt", async () => {
     previewMock.mockResolvedValue(okPreview({ needsSigner: true, needsRecipient: true }));
-    generateMock.mockResolvedValue({ ok: true, documentId: "d1", documentName: "X.docx" });
+    generateMock.mockResolvedValue(saved("X.docx"));
     const user = userEvent.setup();
     render(
       <GenerateFromTemplateDialog
@@ -416,13 +427,14 @@ describe("GenerateFromTemplateDialog", () => {
       signerId: "u1",
       recipientContactId: "c1",
       expectedUpdatedAt: "2026-10-22T00:00:00.000Z",
+      format: "docx",
     });
   });
 
   it("on a stale refusal re-runs the preview and shows the copy above it", async () => {
     previewMock.mockResolvedValueOnce(okPreview());
     previewMock.mockResolvedValueOnce(
-      okPreview({ html: "<p>Newer text</p>", templateUpdatedAt: "2026-10-23T00:00:00.000Z" }),
+      okPreview({ text: "Newer text", templateUpdatedAt: "2026-10-23T00:00:00.000Z" }),
     );
     generateMock.mockResolvedValue({
       ok: false,
@@ -490,10 +502,58 @@ describe("GenerateFromTemplateDialog", () => {
     const recipient = await screen.findByLabelText("Recipient");
     await user.selectOptions(recipient, "c1"); // older
     await user.selectOptions(recipient, "c2"); // newest
-    resolveFast(okPreview({ html: "<p>Newest</p>", needsRecipient: true }));
-    resolveSlow(okPreview({ html: "<p>Old</p>", needsRecipient: true }));
+    resolveFast(okPreview({ text: "Newest", needsRecipient: true }));
+    resolveSlow(okPreview({ text: "Old", needsRecipient: true }));
     expect(await screen.findByText("Newest")).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText("Old")).not.toBeInTheDocument();
+  });
+
+  it("previews the letter as a styled page", async () => {
+    previewMock.mockResolvedValue(okPreview());
+    const user = userEvent.setup();
+    render(<GenerateFromTemplateDialog scope={M1} templates={TEMPLATES} canUpload />);
+    await openAndPick(user);
+    await screen.findByText("Dear Maria Alvarez,");
+    expect(screen.getByTestId("page-preview")).toHaveTextContent("Dear Maria Alvarez,");
+  });
+
+  it("Save as defaults to Word and sends the chosen format", async () => {
+    previewMock.mockResolvedValue(okPreview());
+    generateMock.mockResolvedValue(saved("X.pdf"));
+    const user = userEvent.setup();
+    render(<GenerateFromTemplateDialog scope={M1} templates={TEMPLATES} canUpload />);
+    await openAndPick(user);
+    await screen.findByText("Dear Maria Alvarez,");
+    const group = screen.getByRole("radiogroup", { name: "Save as" });
+    expect(group).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Word" })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "PDF" }));
+    await user.click(screen.getByRole("button", { name: /save to documents/i }));
+    await screen.findByRole("status");
+    expect(generateMock).toHaveBeenCalledWith("t1", M1, expect.objectContaining({ format: "pdf" }));
+  });
+
+  it("saving both lists every saved name and the generation warnings", async () => {
+    previewMock.mockResolvedValue(okPreview());
+    generateMock.mockResolvedValue({
+      ...saved("Demand letter — Oct 22, 2026.docx", "Demand letter — Oct 22, 2026.pdf"),
+      report: { ...REPORT, warnings: ["Logo couldn't be loaded."] },
+    });
+    const user = userEvent.setup();
+    render(<GenerateFromTemplateDialog scope={M1} templates={TEMPLATES} canUpload />);
+    await openAndPick(user);
+    await screen.findByText("Dear Maria Alvarez,");
+    await user.click(screen.getByRole("radio", { name: "Both" }));
+    await user.click(screen.getByRole("button", { name: /save to documents/i }));
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("Demand letter — Oct 22, 2026.docx");
+    expect(status).toHaveTextContent("Demand letter — Oct 22, 2026.pdf");
+    expect(generateMock).toHaveBeenCalledWith(
+      "t1",
+      M1,
+      expect.objectContaining({ format: "both" }),
+    );
+    expect(screen.getByText("Logo couldn't be loaded.")).toBeInTheDocument();
   });
 });

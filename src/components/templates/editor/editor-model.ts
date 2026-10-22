@@ -13,6 +13,7 @@ import {
   type TemplateData,
 } from "@/lib/templates/catalog";
 import { convertLegacyBody } from "@/lib/templates/legacy";
+import type { FirmPageStyle } from "@/lib/templates/page-render";
 import type { BlockSource } from "@/lib/templates/render";
 import type { AppliesTo, TemplateDoc, TemplateKind } from "@/lib/templates/schema";
 import type { BlockMeta, TemplateMeta } from "./metadata-form";
@@ -42,8 +43,21 @@ export type EditorBlock = {
 };
 
 export type EditorProps = { canSave: boolean } & (
-  | { template: EditorTemplate; blocks: BlockSource[]; block?: undefined; usage?: undefined }
-  | { block: EditorBlock; usage: Usage[]; template?: undefined; blocks?: undefined }
+  | {
+      template: EditorTemplate;
+      blocks: BlockSource[];
+      /** Firm document style: letters/filings preview as a styled page. */
+      pageStyle?: FirmPageStyle;
+      block?: undefined;
+      usage?: undefined;
+    }
+  | {
+      block: EditorBlock;
+      usage: Usage[];
+      template?: undefined;
+      blocks?: undefined;
+      pageStyle?: undefined;
+    }
 );
 
 const EMPTY_DOC: TemplateDoc = { type: "doc", content: [{ type: "paragraph" }] };

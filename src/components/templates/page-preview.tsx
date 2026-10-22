@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { ResolvedDoc } from "@/lib/templates/render";
-import type { PageStyle } from "@/lib/templates/page-style";
+import type { PreviewPageStyle } from "@/lib/templates/page-style";
 import {
   LOGO_MAX_H_PX,
   LOGO_MAX_W_PX,
@@ -41,7 +41,7 @@ export function PagePreview(input: {
   body: ResolvedDoc;
   letterhead: ResolvedDoc | null;
   continuation: ResolvedDoc | null;
-  style: PageStyle;
+  style: PreviewPageStyle;
   logoUrl: string | null;
 }) {
   const parts = resolvedToPageParts(input);

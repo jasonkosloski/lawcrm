@@ -22,20 +22,23 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("@/lib/file-storage", () => ({
-  storeFile: vi.fn().mockResolvedValue({
-    key: "uploads/generated-key.docx",
-    contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  storeFile: vi.fn(async (file: File) => ({
+    key:
+      file.type === "application/pdf" ? "uploads/generated-key.pdf" : "uploads/generated-key.docx",
+    contentType: file.type,
     size: 42,
-  }),
+  })),
   deleteFile: vi.fn(),
+  readStoredFile: vi.fn(),
 }));
 
 import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
-import { deleteFile, storeFile } from "@/lib/file-storage";
+import { deleteFile, readStoredFile, storeFile } from "@/lib/file-storage";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
+import { resolvedToText } from "@/lib/templates/to-text";
 import {
   deleteDocumentTemplate,
   generateDocumentFromTemplate,
@@ -56,6 +59,7 @@ import {
 } from "@/test/integration-helpers";
 
 let userId: string;
+let firmId: string;
 let matterId: string;
 let M: { kind: "matter"; matterId: string };
 
@@ -86,12 +90,13 @@ beforeEach(async () => {
   vi.clearAllMocks();
   vi.mocked(currentUserHasPermission).mockReset();
   vi.mocked(currentUserHasPermission).mockResolvedValue(true);
-  const { firmId } = await seedFirm();
+  ({ firmId } = await seedFirm());
   const u = await seedUser({ firmId, name: "Test Attorney" });
   userId = u.userId;
   vi.mocked(requirePermission).mockResolvedValue(userId);
   vi.mocked(getCurrentUserId).mockResolvedValue(userId);
-  vi.mocked(getCurrentFirm).mockResolvedValue(FIRM_PROFILE);
+  // The firm's DocumentStyle row hangs off the seeded firm.
+  vi.mocked(getCurrentFirm).mockResolvedValue({ ...FIRM_PROFILE, id: firmId });
 
   const { areaId, stageId } = await seedPracticeArea({ name: "Civil Rights" });
   const { contactId } = await seedContact({
@@ -299,14 +304,15 @@ describe("generate", () => {
     const file = vi.mocked(storeFile).mock.calls[0]![0] as File;
     expect(file.type).toBe(DOCX_MIME);
     expect(file.name).toMatch(/^Demand letter — .+\.docx$/);
-    expect(file.name).toBe(res.documentName);
+    expect(res.documents).toHaveLength(1);
+    expect(file.name).toBe(res.documents[0]!.name);
     // A .docx is a zip.
     const bytes = new Uint8Array(await file.arrayBuffer());
     expect(String.fromCharCode(bytes[0]!, bytes[1]!)).toBe("PK");
 
     const doc = await prisma.document.findFirstOrThrow({ where: { matterId } });
-    expect(doc.id).toBe(res.documentId);
-    expect(doc.name).toBe(res.documentName);
+    expect(doc.id).toBe(res.documents[0]!.id);
+    expect(doc.name).toBe(res.documents[0]!.name);
     expect(doc.source).toBe("generated");
     expect(doc.category).toBe("correspondence");
     expect(doc.fileUrl).toBe("uploads/generated-key.docx");
@@ -607,13 +613,218 @@ describe("generate failure handling", () => {
     vi.mocked(deleteFile).mockResolvedValue(undefined);
     const t = await seedTemplate();
     const createSpy = vi
-      .spyOn(prisma.document, "create")
+      .spyOn(prisma, "$transaction")
       .mockRejectedValueOnce(new Error("FK violation"));
     const res = await gen(t.id, M);
     createSpy.mockRestore();
     expect(res.ok).toBe(false);
     expect(deleteFile).toHaveBeenCalledWith("uploads/generated-key.docx");
     expect(await prisma.document.count()).toBe(0);
+  });
+});
+
+const PDF_MIME = "application/pdf";
+const baseName = (n: string) => n.replace(/\.(docx|pdf)$/, "");
+const storedFiles = () => vi.mocked(storeFile).mock.calls.map((c) => c[0] as File);
+
+/** Seeds a firm block and points the firm style's letterhead/continuation at it. */
+async function seedStyle(over: Prisma.DocumentStyleUncheckedCreateInput | object = {}) {
+  await prisma.templateBlock.deleteMany({ where: { id: { in: ["lh", "cont"] } } });
+  await prisma.templateBlock.createMany({
+    data: [
+      {
+        id: "lh",
+        key: "lh",
+        name: "Letterhead",
+        content: jsonDoc(para(text("LETTERHEAD for "), fieldNode("client.name"))),
+      },
+      { id: "cont", key: "cont", name: "Continuation", content: jsonDoc(para(text("CONT"))) },
+    ],
+  });
+  await prisma.documentStyle.upsert({
+    where: { firmId },
+    create: { firmId, letterheadBlockId: "lh", continuationBlockId: "cont", ...over },
+    update: { letterheadBlockId: "lh", continuationBlockId: "cont", ...over },
+  });
+}
+
+describe("generate formats", () => {
+  test("pdf stores application/pdf with a .pdf name", async () => {
+    const t = await seedTemplate();
+    const res = await gen(t.id, M, { format: "pdf" });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const files = storedFiles();
+    expect(files).toHaveLength(1);
+    expect(files[0]!.type).toBe(PDF_MIME);
+    expect(files[0]!.name).toMatch(/^Demand letter — .+\.pdf$/);
+    const bytes = new Uint8Array(await files[0]!.arrayBuffer());
+    expect(String.fromCharCode(...bytes.slice(0, 4))).toBe("%PDF");
+    const doc = await prisma.document.findFirstOrThrow({ where: { matterId } });
+    expect(doc).toMatchObject({ name: files[0]!.name, contentType: PDF_MIME });
+    expect(res.documents).toEqual([{ id: doc.id, name: files[0]!.name }]);
+  });
+
+  test("both stores .docx then .pdf and creates two rows with matching base names", async () => {
+    const t = await seedTemplate();
+    const res = await gen(t.id, M, { format: "both" });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(storedFiles().map((f) => f.type)).toEqual([DOCX_MIME, PDF_MIME]);
+    expect(res.documents).toHaveLength(2);
+    const [w, p] = res.documents;
+    expect(w!.name).toMatch(/\.docx$/);
+    expect(p!.name).toMatch(/\.pdf$/);
+    expect(baseName(w!.name)).toBe(baseName(p!.name));
+    const rows = await prisma.document.findMany({ where: { matterId } });
+    expect(rows.map((r) => r.name).sort()).toEqual([w!.name, p!.name].sort());
+  });
+
+  test("both: a failing second store deletes the first file and writes no rows", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(deleteFile).mockResolvedValue(undefined);
+    vi.mocked(storeFile)
+      .mockImplementationOnce(async () => ({
+        key: "uploads/generated-key.docx",
+        contentType: DOCX_MIME,
+        size: 1,
+      }))
+      .mockRejectedValueOnce(new Error("BlobError: 503"));
+    const t = await seedTemplate();
+    const res = await gen(t.id, M, { format: "both" });
+    expect(res.ok).toBe(false);
+    expect(deleteFile).toHaveBeenCalledWith("uploads/generated-key.docx");
+    expect(deleteFile).toHaveBeenCalledTimes(1);
+    expect(await prisma.document.count()).toBe(0);
+  });
+
+  test("both: a failed transaction deletes both stored files", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(deleteFile).mockResolvedValue(undefined);
+    const t = await seedTemplate();
+    const spy = vi.spyOn(prisma, "$transaction").mockRejectedValueOnce(new Error("deadlock"));
+    const res = await gen(t.id, M, { format: "both" });
+    spy.mockRestore();
+    expect(res.ok).toBe(false);
+    expect(
+      vi
+        .mocked(deleteFile)
+        .mock.calls.map((c) => c[0])
+        .sort(),
+    ).toEqual(["uploads/generated-key.docx", "uploads/generated-key.pdf"]);
+    expect(await prisma.document.count()).toBe(0);
+  });
+
+  test("the letterhead and continuation blocks render with the same data into the .docx headers", async () => {
+    await seedStyle();
+    const t = await seedTemplate({ body: "Body for {{client.name}}" });
+    const res = await gen(t.id, M);
+    expect(res.ok).toBe(true);
+    const { default: JSZip } = await import("jszip");
+    const zip = await JSZip.loadAsync(await storedFiles()[0]!.arrayBuffer());
+    const headers = await Promise.all(
+      Object.keys(zip.files)
+        .filter((n) => /^word\/header\d*\.xml$/.test(n))
+        .map((n) => zip.file(n)!.async("string")),
+    );
+    // Runs split at the field, so check both halves land in one header.
+    expect(headers.some((h) => h.includes("LETTERHEAD for") && h.includes("Maria Alvarez"))).toBe(
+      true,
+    );
+    expect(headers.some((h) => h.includes("CONT"))).toBe(true);
+  });
+
+  test("an archived letterhead block is reported", async () => {
+    await seedStyle();
+    await prisma.templateBlock.update({ where: { id: "lh" }, data: { isActive: false } });
+    const t = await seedTemplate();
+    const res = await gen(t.id, M);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.report.archivedBlocks).toEqual(["Letterhead"]);
+    expect(res.report.warnings).toEqual([]);
+  });
+
+  test("filings skip the letterhead and continuation blocks", async () => {
+    await seedStyle();
+    await prisma.templateBlock.update({ where: { id: "lh" }, data: { isActive: false } });
+    const t = await seedTemplate({ kind: "filing" });
+    const res = await gen(t.id, M);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.report.archivedBlocks).toEqual([]);
+  });
+
+  test("an unreadable logo is a warning and the files still save", async () => {
+    await seedStyle({
+      logoKey: "uploads/logo.png",
+      logoContentType: "image/png",
+      logoPosition: "left",
+    });
+    vi.mocked(readStoredFile).mockRejectedValueOnce(new Error("gone"));
+    const t = await seedTemplate();
+    const res = await gen(t.id, M, { format: "both" });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.report.warnings).toEqual(["Logo couldn't be loaded."]);
+    expect(readStoredFile).toHaveBeenCalledTimes(1);
+    expect(await prisma.document.count({ where: { matterId } })).toBe(2);
+  });
+});
+
+describe("preview page", () => {
+  test("a letter preview carries the page parts, style without logo bytes, and a logo url", async () => {
+    await seedStyle({
+      logoKey: "uploads/logo.png",
+      logoContentType: "image/png",
+      logoPosition: "center",
+    });
+    const t = await seedTemplate({ body: "Hi {{client.name}}" });
+    const res = await previewDocumentFromTemplate(t.id, M);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const style = await prisma.documentStyle.findUniqueOrThrow({ where: { firmId } });
+    expect(res.page.style.kind).toBe("letter");
+    expect(res.page.style.letterhead).toEqual({ blockId: "lh", logo: { position: "center" } });
+    expect(resolvedToText(res.page.letterhead!)).toBe("LETTERHEAD for Maria Alvarez");
+    expect(resolvedToText(res.page.continuation!)).toBe("CONT");
+    expect(res.page.logoUrl).toBe(
+      `/api/document-style/logo?v=${encodeURIComponent(style.updatedAt.toISOString())}`,
+    );
+    expect(readStoredFile).not.toHaveBeenCalled();
+    expect(res.text).toBe("Hi Maria Alvarez");
+  });
+
+  test("a filing preview has no letterhead, continuation or logo", async () => {
+    await seedStyle({ logoKey: "k", logoContentType: "image/png", logoPosition: "left" });
+    const t = await seedTemplate({ kind: "filing" });
+    const res = await previewDocumentFromTemplate(t.id, M);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.page).toMatchObject({
+      letterhead: null,
+      continuation: null,
+      logoUrl: null,
+      style: { kind: "filing", letterhead: null },
+    });
+  });
+
+  test("draft preview returns a page for letters and none for email", async () => {
+    await seedStyle();
+    const letter = await previewTemplateDraft({
+      kind: "letter",
+      appliesTo: "matter",
+      content: docOf(para(text("Hello"))),
+      target: { scope: M },
+    });
+    expect(letter.ok && letter.page?.letterhead).toBeTruthy();
+    const email = await previewTemplateDraft({
+      kind: "email",
+      appliesTo: "matter",
+      content: docOf(para(text("Hello"))),
+      target: { sample: true },
+    });
+    expect(email).toMatchObject({ ok: true, page: null });
   });
 });
 
@@ -640,7 +851,7 @@ describe("generate on a lead", () => {
 
     const doc = await prisma.document.findFirstOrThrow({ where: { leadId } });
     expect(doc.matterId).toBeNull();
-    expect(doc.id).toBe(res.documentId);
+    expect(doc.id).toBe(res.documents[0]!.id);
   });
 
   test("falls back to the legacy lead columns without a contact", async () => {
@@ -723,6 +934,19 @@ describe("records request letters", () => {
     expect(request.parent?.name).toBe("Records Requests");
     const file = vi.mocked(storeFile).mock.calls.at(-1)![0] as File;
     expect(file.type).toBe(DOCX_MIME);
+  });
+
+  test("both: the .docx and .pdf are each tagged request_letter in the request folder", async () => {
+    const t = await seedTemplate();
+    const r = await seedRecordsRequest();
+    const res = await gen(t.id, M, { recordsRequestId: r.id, format: "both" });
+    expect(res.ok).toBe(true);
+    const docs = await prisma.document.findMany({ where: { recordsRequestId: r.id } });
+    expect(docs).toHaveLength(2);
+    expect(docs.every((d) => d.recordsRequestRole === "request_letter")).toBe(true);
+    expect(new Set(docs.map((d) => d.folderId)).size).toBe(1);
+    expect(docs[0]!.folderId).not.toBeNull();
+    expect(docs.map((d) => d.contentType).sort()).toEqual([PDF_MIME, DOCX_MIME].sort());
   });
 
   test("preview merges the request fields without writing", async () => {
