@@ -12,9 +12,13 @@ export type VenueOption = {
 };
 
 /** Venues ordered by name, with the number of matters using each. */
-export async function listVenues(opts: {
-  activeOnly: boolean;
-}): Promise<(VenueOption & { matterCount: number })[]> {
+export async function listVenues(opts: { activeOnly: boolean }): Promise<
+  (VenueOption & {
+    matterCount: number;
+    courtFormatId?: string | null;
+    captionName?: string | null;
+  })[]
+> {
   const rows = await prisma.venue.findMany({
     where: opts.activeOnly ? { isActive: true } : undefined,
     orderBy: [{ name: "asc" }, { id: "asc" }],
@@ -25,6 +29,8 @@ export async function listVenues(opts: {
       county: true,
       state: true,
       isActive: true,
+      courtFormatId: true,
+      captionName: true,
       _count: { select: { matters: true } },
     },
   });

@@ -35,3 +35,18 @@ describe("SettingsNav Documents", () => {
     expect(links[0].getAttribute("href")).toBe("/settings/documents");
   });
 });
+
+describe("SettingsNav Court formats", () => {
+  test("shown right after Venues for a court-format key holder", () => {
+    render(
+      <SettingsNav isAdmin={false} grantedPermissions={["venues.edit", "court_formats.edit"]} />,
+    );
+    const labels = screen.getAllByRole("link").map((l) => l.textContent);
+    const i = labels.indexOf("Venues");
+    expect(labels[i + 1]).toBe("Court formats");
+  });
+  test("hidden with no court-format key", () => {
+    render(<SettingsNav isAdmin={false} grantedPermissions={["venues.edit"]} />);
+    expect(screen.queryAllByText("Court formats")).toHaveLength(0);
+  });
+});

@@ -15,6 +15,9 @@ vi.mock("next/navigation", () => ({
     throw new Error("NEXT_NOT_FOUND");
   }),
 }));
+vi.mock("@/lib/prisma", () => ({
+  prisma: { courtFormat: { findMany: vi.fn(async () => []) } },
+}));
 vi.mock("@/lib/firm", () => ({ getCurrentFirm: vi.fn(async () => ({ state: "WY" })) }));
 vi.mock("@/lib/queries/venues", () => ({
   listVenues: vi.fn(async () => [

@@ -67,6 +67,11 @@ const SECTIONS: NavSection[] = [
         label: "Venues",
         requiresAny: ["venues.add", "venues.edit", "venues.delete"],
       },
+      {
+        href: "/settings/court-formats",
+        label: "Court formats",
+        requiresAny: ["court_formats.add", "court_formats.edit", "court_formats.delete"],
+      },
       // Visible to everyone — generating FROM templates is ungated,
       // so anyone may browse the library. Manage affordances inside
       // the page gate on the documents.template.* keys.

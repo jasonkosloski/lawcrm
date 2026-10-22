@@ -28,8 +28,17 @@ import {
 import { createVenue, deleteVenue, setVenueActive, updateVenue } from "@/app/actions/venues";
 import type { VenueOption } from "@/lib/queries/venues";
 import { inputClass, labelClass } from "@/components/ui/field";
+import { NativeSelect } from "@/components/ui/native-select";
 
-type VenueRow = VenueOption & { matterCount: number };
+type VenueRow = VenueOption & {
+  matterCount: number;
+  courtFormatId?: string | null;
+  captionName?: string | null;
+};
+export type CourtFormatChoice = { id: string; name: string; isActive: boolean };
+
+const CAPTION_HINT =
+  "As it appears in a caption, e.g. DISTRICT COURT, CITY AND COUNTY OF DENVER, STATE OF COLORADO";
 
 const iconBtn =
   "inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-3 hover:text-brand-700 hover:bg-brand-soft disabled:opacity-60";
@@ -40,6 +49,7 @@ export function VenueEditor({
   canEdit,
   canDelete,
   defaultState = "",
+  courtFormats = [],
 }: {
   venues: VenueRow[];
   canAdd: boolean;
@@ -47,6 +57,7 @@ export function VenueEditor({
   canDelete: boolean;
   /** State prefilled on a new venue (the firm's state). */
   defaultState?: string;
+  courtFormats?: CourtFormatChoice[];
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<VenueRow | null>(null);
@@ -157,7 +168,13 @@ export function VenueEditor({
         </Table>
       )}
 
-      <VenueDialog open={open} onOpenChange={setOpen} venue={editing} defaultState={defaultState} />
+      <VenueDialog
+        open={open}
+        onOpenChange={setOpen}
+        venue={editing}
+        defaultState={defaultState}
+        courtFormats={courtFormats}
+      />
     </>
   );
 }
@@ -167,11 +184,13 @@ function VenueDialog({
   onOpenChange,
   venue,
   defaultState,
+  courtFormats,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   venue: VenueRow | null;
   defaultState: string;
+  courtFormats: CourtFormatChoice[];
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -187,6 +206,7 @@ function VenueDialog({
           key={`${venue?.id ?? "new"}-${open}`}
           venue={venue}
           defaultState={defaultState}
+          courtFormats={courtFormats}
           onDone={() => onOpenChange(false)}
           onCancel={() => onOpenChange(false)}
         />
@@ -198,11 +218,13 @@ function VenueDialog({
 function VenueForm({
   venue,
   defaultState,
+  courtFormats,
   onDone,
   onCancel,
 }: {
   venue: VenueRow | null;
   defaultState: string;
+  courtFormats: CourtFormatChoice[];
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -210,6 +232,8 @@ function VenueForm({
   const [city, setCity] = useState(venue?.city ?? "");
   const [county, setCounty] = useState(venue?.county ?? "");
   const [state, setState] = useState(venue?.state ?? defaultState);
+  const [courtFormatId, setCourtFormatId] = useState(venue?.courtFormatId ?? "");
+  const [captionName, setCaptionName] = useState(venue?.captionName ?? "");
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
@@ -219,7 +243,14 @@ function VenueForm({
     setErrors({});
     setFormError(null);
     startSaving(async () => {
-      const input = { name, city, county, state };
+      const input = {
+        name,
+        city,
+        county,
+        state,
+        courtFormatId: courtFormatId || null,
+        captionName,
+      };
       const res = venue ? await updateVenue(venue.id, input) : await createVenue(input);
       if (res.ok) return onDone();
       if (res.code === "invalid") setErrors(res.errors);
@@ -295,6 +326,45 @@ function VenueForm({
           className={inputClass()}
         />
         {errP("state")}
+      </div>
+      <div className="flex flex-col gap-1">
+        <label htmlFor="venue-court-format" className={labelClass}>
+          Court format
+        </label>
+        <NativeSelect
+          id="venue-court-format"
+          value={courtFormatId}
+          onChange={(e) => setCourtFormatId(e.target.value)}
+          className="w-full"
+        >
+          <option value="">None</option>
+          {courtFormats
+            .filter((f) => f.isActive || f.id === courtFormatId)
+            .map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+                {f.isActive ? "" : " (archived)"}
+              </option>
+            ))}
+        </NativeSelect>
+        {errP("courtFormatId")}
+      </div>
+      <div className="flex flex-col gap-1">
+        <label htmlFor="venue-caption-name" className={labelClass}>
+          Caption name
+        </label>
+        <input
+          id="venue-caption-name"
+          maxLength={300}
+          value={captionName}
+          onChange={(e) => setCaptionName(e.target.value)}
+          className={inputClass()}
+          aria-describedby="venue-caption-name-hint"
+        />
+        <p id="venue-caption-name-hint" className="text-2xs text-ink-4">
+          {CAPTION_HINT}
+        </p>
+        {errP("captionName")}
       </div>
       {formError && (
         <p role="alert" className="text-2xs text-warn">

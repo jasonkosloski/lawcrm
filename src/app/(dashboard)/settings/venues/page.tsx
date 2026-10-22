@@ -10,6 +10,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/current-user";
 import { currentUserHasAnyPermission, currentUserHasPermission } from "@/lib/permission-check";
 import { getCurrentFirm } from "@/lib/firm";
+import { prisma } from "@/lib/prisma";
 import { listVenues } from "@/lib/queries/venues";
 import { VenueEditor } from "@/components/settings/venue-editor";
 
@@ -19,8 +20,12 @@ export default async function VenuesPage() {
     notFound();
   }
 
-  const [venues, firm, canAdd, canEdit, canDelete] = await Promise.all([
+  const [venues, courtFormats, firm, canAdd, canEdit, canDelete] = await Promise.all([
     listVenues({ activeOnly: false }),
+    prisma.courtFormat.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, isActive: true },
+    }),
     getCurrentFirm(),
     currentUserHasPermission("venues.add"),
     currentUserHasPermission("venues.edit"),
@@ -43,6 +48,7 @@ export default async function VenuesPage() {
         canEdit={canEdit}
         canDelete={canDelete}
         defaultState={firm.state ?? ""}
+        courtFormats={courtFormats}
       />
     </div>
   );
