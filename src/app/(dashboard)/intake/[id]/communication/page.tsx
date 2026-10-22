@@ -50,6 +50,7 @@ import { LogCallButton } from "@/components/communication/log-call-button";
 import { requireUser } from "@/lib/current-user";
 import { assertLeadAccess } from "@/lib/lead-access";
 import { parsePageParam } from "@/lib/pagination";
+import { firstParam } from "@/lib/search-params";
 
 export default async function LeadCommunicationPage({
   params,
@@ -59,7 +60,7 @@ export default async function LeadCommunicationPage({
   const { id } = await params;
   await assertLeadAccess(id);
   const sp = await searchParams;
-  const rawThread = Array.isArray(sp.thread) ? sp.thread[0] : sp.thread;
+  const rawThread = firstParam(sp.thread);
   const requestedThreadId =
     typeof rawThread === "string" ? rawThread : null;
 

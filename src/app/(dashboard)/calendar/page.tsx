@@ -47,6 +47,7 @@ import {
 import { getEventPortalShareProp } from "@/lib/queries/portal-status";
 import { getEditableEventIds } from "@/lib/queries/calendar-edit-flags";
 import { requireUser } from "@/lib/current-user";
+import { firstParam } from "@/lib/search-params";
 
 export default async function CalendarPage({
   searchParams,
@@ -77,7 +78,7 @@ export default async function CalendarPage({
   // (Opening an event still re-renders this page — searchParams
   // changed — so the grid's queries re-run; the boundary only keeps
   // the modal's own fetches from blocking the grid.)
-  const rawEventParam = Array.isArray(sp.event) ? sp.event[0] : sp.event;
+  const rawEventParam = firstParam(sp.event);
   const eventId = typeof rawEventParam === "string" ? rawEventParam : null;
 
   const items = await getCalendarItems(range.rangeStart, range.rangeEnd);

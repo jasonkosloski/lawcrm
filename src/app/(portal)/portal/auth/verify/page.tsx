@@ -9,6 +9,7 @@ import { AuthPanel } from "../../auth-panel";
 import { LoginForm } from "../../login/login-form";
 import { PortalOff } from "../../portal-off";
 import { VerifyForm } from "./verify-form";
+import { firstParam } from "@/lib/search-params";
 
 export default async function PortalVerifyPage({
   searchParams,
@@ -17,7 +18,7 @@ export default async function PortalVerifyPage({
 }) {
   const firm = await prisma.firm.findFirst({ select: { portalEnabled: true } });
   const sp = await searchParams;
-  const token = Array.isArray(sp.token) ? sp.token[0] : sp.token;
+  const token = firstParam(sp.token);
 
   if (!firm?.portalEnabled) {
     return (

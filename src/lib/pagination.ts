@@ -9,6 +9,8 @@
  * docs/UI_PATTERNS.md → "Long lists: paginate, never truncate".
  */
 
+import { firstParam } from "@/lib/search-params";
+
 /** One page of a list plus what the pager needs to render. */
 export type Page<T> = {
   rows: T[];
@@ -23,8 +25,7 @@ export type Page<T> = {
 
 /** `?page=` → a positive integer (1 for missing / junk values). */
 export function parsePageParam(raw: string | string[] | undefined): number {
-  const v = Array.isArray(raw) ? raw[0] : raw;
-  const n = Number(v);
+  const n = Number(firstParam(raw));
   return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : 1;
 }
 

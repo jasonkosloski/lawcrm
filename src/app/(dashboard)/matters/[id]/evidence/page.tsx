@@ -50,6 +50,7 @@ import { FlagCategoryChip } from "@/components/evidence/flag-category-chip";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireUser } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
+import { firstParam } from "@/lib/search-params";
 
 /** Renderer → group-header icon. Mirrors the viewer's renderer
  *  resolution, so the icon always matches what actually opens. */
@@ -96,7 +97,7 @@ export default async function MatterEvidencePage({
   const { id } = await params;
   await assertMatterAccess(id);
   const sp = await searchParams;
-  const rawCategory = Array.isArray(sp.category) ? sp.category[0] : sp.category;
+  const rawCategory = firstParam(sp.category);
   const filter: FlagCategory | null =
     typeof rawCategory === "string" &&
     (FLAG_CATEGORIES as readonly string[]).includes(rawCategory)

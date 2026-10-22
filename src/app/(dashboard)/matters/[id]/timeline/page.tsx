@@ -44,6 +44,7 @@ import {
 import { getMatterById } from "@/lib/queries/matters";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { activityIcon } from "@/lib/activity-icons";
+import { firstParam } from "@/lib/search-params";
 
 /// Maps a filter pill key to the underlying ActivityLog.type values
 /// it surfaces. Key "all" is the default and skips filtering. Keep
@@ -95,7 +96,7 @@ export default async function MatterTimelinePage({
   const { id } = await params;
   await assertMatterAccess(id);
   const sp = await searchParams;
-  const rawType = Array.isArray(sp.type) ? sp.type[0] : sp.type;
+  const rawType = firstParam(sp.type);
   // Own-property check: `in` also matches prototype keys
   // ("constructor", "toString"), which would crash on bucket.types.
   const filterKey =

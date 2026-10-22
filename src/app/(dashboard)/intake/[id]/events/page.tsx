@@ -42,6 +42,7 @@ import {
   formatDateOnly,
 } from "@/lib/format-date";
 import { Badge } from "@/components/ui/badge";
+import { firstParam } from "@/lib/search-params";
 
 export default async function LeadEventsPage({
   params,
@@ -52,7 +53,7 @@ export default async function LeadEventsPage({
   const { id } = await params;
   await assertLeadAccess(id);
   const sp = await searchParams;
-  const rawEventParam = Array.isArray(sp.event) ? sp.event[0] : sp.event;
+  const rawEventParam = firstParam(sp.event);
   const requestedEventId =
     typeof rawEventParam === "string" ? rawEventParam : null;
 

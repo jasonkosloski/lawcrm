@@ -30,6 +30,7 @@ import {
 } from "@/lib/queries/calendar";
 import { getEventPortalShareProp } from "@/lib/queries/portal-status";
 import { assertMatterAccess } from "@/lib/matter-access";
+import { firstParam } from "@/lib/search-params";
 
 export default async function MatterEventsPage({
   params,
@@ -41,7 +42,7 @@ export default async function MatterEventsPage({
   await assertMatterAccess(id);
   const sp = await searchParams;
 
-  const rawEventParam = Array.isArray(sp.event) ? sp.event[0] : sp.event;
+  const rawEventParam = firstParam(sp.event);
   const requestedEventId =
     typeof rawEventParam === "string" ? rawEventParam : null;
 

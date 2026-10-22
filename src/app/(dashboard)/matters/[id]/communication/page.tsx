@@ -40,6 +40,7 @@ import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { requireUser } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { parsePageParam } from "@/lib/pagination";
+import { firstParam } from "@/lib/search-params";
 
 export default async function MatterCommunicationPage({
   params,
@@ -49,7 +50,7 @@ export default async function MatterCommunicationPage({
   const { id } = await params;
   await assertMatterAccess(id);
   const sp = await searchParams;
-  const rawChannel = Array.isArray(sp.channel) ? sp.channel[0] : sp.channel;
+  const rawChannel = firstParam(sp.channel);
   // Portal visibility is a permission, so resolve it before choosing
   // the channel: a pasted ?channel=portal without the key becomes email.
   const [canViewPortal, canSendPortal] = await Promise.all([
@@ -62,7 +63,7 @@ export default async function MatterCommunicationPage({
       : rawChannel === "portal" && canViewPortal
         ? "portal"
         : "email";
-  const rawThread = Array.isArray(sp.thread) ? sp.thread[0] : sp.thread;
+  const rawThread = firstParam(sp.thread);
   const requestedThreadId =
     typeof rawThread === "string" ? rawThread : null;
 

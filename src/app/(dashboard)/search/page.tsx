@@ -34,6 +34,7 @@ import {
 import { globalSearch, type GlobalSearchResult } from "@/lib/queries/search";
 import { getSavedSearches } from "@/lib/queries/saved-searches";
 import { requireUser } from "@/lib/current-user";
+import { firstParam } from "@/lib/search-params";
 
 export default async function SearchPage({
   searchParams,
@@ -45,9 +46,9 @@ export default async function SearchPage({
   // Same cap globalSearch and createSavedSearch apply, so the saved
   // strip's (q, type) comparison and the Save button stay consistent.
   const q = normalizeSearchQuery(
-    (Array.isArray(sp.q) ? sp.q[0] : sp.q) ?? ""
+    (firstParam(sp.q)) ?? ""
   );
-  const rawType = Array.isArray(sp.type) ? sp.type[0] : sp.type;
+  const rawType = firstParam(sp.type);
   const expandedType = isSearchHitType(rawType) ? rawType : null;
 
   const longEnough = q.length >= SEARCH_MIN_QUERY_LENGTH;

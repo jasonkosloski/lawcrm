@@ -7,12 +7,13 @@
 import { SsoCallback } from "@/components/auth/sso-callback";
 import { StaffClerkProvider } from "@/components/auth/staff-clerk-provider";
 import { safeRedirectPath } from "@/lib/safe-redirect";
+import { firstParam } from "@/lib/search-params";
 
 export default async function SsoCallbackPage({
   searchParams,
 }: PageProps<"/sso-callback">) {
   const sp = await searchParams;
-  const next = safeRedirectPath(Array.isArray(sp.next) ? sp.next[0] : sp.next);
+  const next = safeRedirectPath(firstParam(sp.next));
   return (
     <StaffClerkProvider>
       <div className="min-h-dvh flex items-center justify-center bg-paper-2 px-4">

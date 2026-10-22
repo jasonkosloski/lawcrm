@@ -18,12 +18,13 @@ import { StaffClerkProvider } from "@/components/auth/staff-clerk-provider";
 import { safeRedirectPath } from "@/lib/safe-redirect";
 import { getStaffAuth } from "@/lib/staff-auth";
 import { LoginScreen } from "./login-screen";
+import { firstParam } from "@/lib/search-params";
 
 export default async function LoginPage({
   searchParams,
 }: PageProps<"/login">) {
   const sp = await searchParams;
-  const next = safeRedirectPath(Array.isArray(sp.next) ? sp.next[0] : sp.next);
+  const next = safeRedirectPath(firstParam(sp.next));
 
   const staff = await getStaffAuth();
   if (staff.status === "ok") redirect(next);

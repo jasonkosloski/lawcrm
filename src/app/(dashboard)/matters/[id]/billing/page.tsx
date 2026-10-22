@@ -42,6 +42,7 @@ import { loadBillingTab } from "@/lib/queries/billing-tab";
 import { requirePermission } from "@/lib/permission-check";
 import type { InvoiceKind } from "@/lib/billing-form";
 import { assertMatterAccess } from "@/lib/matter-access";
+import { firstParam } from "@/lib/search-params";
 
 export default async function MatterBillingPage({
   params,
@@ -54,7 +55,7 @@ export default async function MatterBillingPage({
   const { id } = await params;
   await assertMatterAccess(id);
   const sp = await searchParams;
-  const rawInvoice = Array.isArray(sp.invoice) ? sp.invoice[0] : sp.invoice;
+  const rawInvoice = firstParam(sp.invoice);
   const requestedInvoiceId =
     typeof rawInvoice === "string" ? rawInvoice : null;
 

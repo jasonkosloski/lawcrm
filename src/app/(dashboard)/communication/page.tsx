@@ -64,11 +64,12 @@ import {
   PAGE_SIZE as PORTAL_PAGE_SIZE,
 } from "@/lib/queries/portal-messages";
 import { PortalThreadList } from "@/components/communication/portal-thread-list";
+import { firstParam } from "@/lib/search-params";
 
 type View = "email" | "messages" | "portal";
 
 function parseView(raw: string | string[] | undefined): View {
-  const v = Array.isArray(raw) ? raw[0] : raw;
+  const v = firstParam(raw);
   return v === "messages" || v === "portal" ? v : "email";
 }
 
@@ -76,7 +77,7 @@ function parseEmailFilter(
   raw: string | string[] | undefined,
   fallback: CommunicationFilter
 ): CommunicationFilter {
-  const v = Array.isArray(raw) ? raw[0] : raw;
+  const v = firstParam(raw);
   if (
     v === "inbox" ||
     v === "unread" ||
@@ -98,7 +99,7 @@ function parseEmailFilter(
 function parseMessengerFilter(
   raw: string | string[] | undefined
 ): MessengerFilter {
-  const v = Array.isArray(raw) ? raw[0] : raw;
+  const v = firstParam(raw);
   if (v === "unread" || v === "unfiled" || v === "pinned" || v === "all")
     return v;
   return "all";
@@ -115,7 +116,7 @@ export default async function CommunicationPage({
   const parsedView = parseView(sp.view);
   const view: View =
     parsedView === "portal" && !(await canViewPortalP) ? "email" : parsedView;
-  const rawThread = Array.isArray(sp.thread) ? sp.thread[0] : sp.thread;
+  const rawThread = firstParam(sp.thread);
   const threadId = typeof rawThread === "string" ? rawThread : null;
 
   if (view === "portal") {
@@ -272,7 +273,7 @@ export default async function CommunicationPage({
   });
   // Per-pinned-matter drilldown: ?matter=<id> overrides matter-related
   // filter behavior to scope the list to that single matter.
-  const rawMatter = Array.isArray(sp.matter) ? sp.matter[0] : sp.matter;
+  const rawMatter = firstParam(sp.matter);
   const matterIdParam = typeof rawMatter === "string" ? rawMatter : null;
   const filter = parseEmailFilter(sp.filter, defaultEmailFilter(matterIdParam));
 

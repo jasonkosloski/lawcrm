@@ -37,6 +37,7 @@ import {
 import { activityIcon } from "@/lib/activity-icons";
 import { inputClass } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
+import { firstParam } from "@/lib/search-params";
 
 // Date rendering routes through the centralized formatter.
 
@@ -51,20 +52,20 @@ export default async function FirmActivityPage({
 
   const sp = await searchParams;
 
-  const rawType = Array.isArray(sp.type) ? sp.type[0] : sp.type;
+  const rawType = firstParam(sp.type);
   const filterKey =
     typeof rawType === "string" && Object.hasOwn(FILTER_BUCKETS, rawType)
       ? rawType
       : "all";
 
-  const rawUser = Array.isArray(sp.user) ? sp.user[0] : sp.user;
+  const rawUser = firstParam(sp.user);
   const userId =
     typeof rawUser === "string" && rawUser.length > 0 ? rawUser : undefined;
 
-  const rawFrom = Array.isArray(sp.from) ? sp.from[0] : sp.from;
+  const rawFrom = firstParam(sp.from);
   const from = typeof rawFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawFrom) ? rawFrom : undefined;
 
-  const rawTo = Array.isArray(sp.to) ? sp.to[0] : sp.to;
+  const rawTo = firstParam(sp.to);
   const to = typeof rawTo === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawTo) ? rawTo : undefined;
 
   const bucket = FILTER_BUCKETS[filterKey];
