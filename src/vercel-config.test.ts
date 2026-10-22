@@ -38,12 +38,13 @@ const config = JSON.parse(
 const crons = config.crons ?? [];
 
 describe("vercel.json crons", () => {
-  it("schedules the email sync, notification sweep, notification email and draft sweep", () => {
+  it("schedules the email sync, notification sweep, notification email, draft sweep and transcription sweep", () => {
     expect(crons.map((c) => c.path).sort()).toEqual([
       "/api/email-sync",
       "/api/matter-draft-sweep",
       "/api/notification-email",
       "/api/notification-sweep",
+      "/api/transcription-sweep",
     ]);
   });
 

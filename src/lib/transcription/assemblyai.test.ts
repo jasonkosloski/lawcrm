@@ -140,3 +140,16 @@ describe("uploadBytes", () => {
     expect(init.body).toBe(bytes);
   });
 });
+
+describe("request timeouts", () => {
+  it("passes an abort signal on submit, fetch and delete", async () => {
+    fetchMock.mockResolvedValue(res(200, { id: "j", status: "queued" }));
+    await submitJob({ audioUrl: "u", webhookUrl: null, webhookSecret: "s" });
+    await fetchJob("j");
+    await deleteJob("j");
+    expect(fetchMock.mock.calls).toHaveLength(3);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    }
+  });
+});

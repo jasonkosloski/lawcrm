@@ -9,6 +9,9 @@ import type { AssemblyAITranscript } from "./types";
 
 const BASE_URL = "https://api.assemblyai.com";
 
+/** No hung provider call may hold an action or the sweep. */
+const FETCH_TIMEOUT_MS = 30_000;
+
 export const WEBHOOK_SECRET_HEADER = "x-transcript-secret";
 
 export function transcriptionConfigured(): boolean {
@@ -56,6 +59,7 @@ export async function submitJob(input: {
     method: "POST",
     headers: { authorization: apiKey(), "content-type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   await failIfNotOk(res, "submit");
   const json = (await res.json()) as { id?: string };
@@ -70,7 +74,10 @@ export async function fetchJob(jobId: string): Promise<{
 }> {
   const res = await fetch(
     `${BASE_URL}/v2/transcript/${encodeURIComponent(jobId)}`,
-    { headers: { authorization: apiKey() } },
+    {
+      headers: { authorization: apiKey() },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    },
   );
   await failIfNotOk(res, "fetch");
   const json = (await res.json()) as AssemblyAITranscript & { error?: string };
@@ -86,7 +93,11 @@ export async function deleteJob(jobId: string): Promise<void> {
   try {
     const res = await fetch(
       `${BASE_URL}/v2/transcript/${encodeURIComponent(jobId)}`,
-      { method: "DELETE", headers: { authorization: apiKey() } },
+      {
+        method: "DELETE",
+        headers: { authorization: apiKey() },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      },
     );
     if (!res.ok) {
       console.warn(

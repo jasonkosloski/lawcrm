@@ -67,6 +67,8 @@ const SELF_AUTHENTICATED_PATHS = new Set([
   "/api/matter-draft-sweep",
   "/api/documents/upload/blob",
   "/api/webhooks/clerk",
+  "/api/webhooks/assemblyai",
+  "/api/transcription-sweep",
 ]);
 
 /** Path-boundary-aware prefix match: `/login` and `/login/...` are
