@@ -39,6 +39,7 @@ const NEW_FORMAT: CourtFormatEditorInitial = {
     marginLeftIn: null,
     pageNumbers: null,
     paperSize: "letter",
+    styleOverrides: {},
   },
   replacements: [],
   updatedAt: null,
@@ -92,6 +93,7 @@ export default async function CourtFormatEditorRoute({
           marginLeftIn: num(row.marginLeftIn),
           pageNumbers: row.pageNumbers as PageNumberPosition | null,
           paperSize: row.paperSize as PaperSize,
+          styleOverrides: {},
         },
         replacements: row.blocks.map((b) => ({
           blockId: b.blockId,

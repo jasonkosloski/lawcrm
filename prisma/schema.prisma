@@ -2439,6 +2439,8 @@ model DocumentStyle {
   continuationBlockId String?
   /// none | bottom_center | bottom_right; pages 2+ only.
   pageNumbers         String   @default("bottom_center")
+  /// Named paragraph styles (validated in code). NULL = defaults derived from the house style above.
+  paragraphStyles     Json?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -3008,6 +3010,8 @@ model CourtFormat {
   pageNumbers    String?
   /// letter | legal
   paperSize      String   @default("letter")
+  /// Sparse per-style overrides keyed by style key (validated in code).
+  styleOverrides Json     @default("{}")
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

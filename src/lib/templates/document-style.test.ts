@@ -8,6 +8,7 @@ import { readStoredFile } from "@/lib/file-storage";
 import { prisma } from "@/lib/prisma";
 import { resetDb } from "@/test/integration-helpers";
 import { getDocumentStyle, loadLogo } from "./document-style";
+import { defaultParagraphStyles } from "./paragraph-styles";
 
 let firmId: string;
 beforeEach(async () => {
@@ -49,6 +50,53 @@ describe("getDocumentStyle", () => {
   test("does not overwrite an existing row", async () => {
     await prisma.documentStyle.create({ data: { firmId, fontKey: "arial" } });
     expect((await getDocumentStyle()).fontKey).toBe("arial");
+  });
+});
+
+describe("getDocumentStyle paragraphStyles", () => {
+  const body = (list: { key: string; values: unknown }[]) => list.find((p) => p.key === "body");
+
+  test("null column returns defaults derived from the row's house values", async () => {
+    await prisma.documentStyle.create({
+      data: { firmId, fontSizeHalfPt: 26, lineSpacing: "double", spaceAfterPt: 6 },
+    });
+    const s = await getDocumentStyle();
+    const house = { fontSizeHalfPt: 26, lineSpacing: "double" as const, spaceAfterPt: 6 };
+    expect(s.paragraphStyles).toEqual(defaultParagraphStyles(house));
+  });
+
+  test("a stored list is returned, with legacy size/spacing overlaid onto Body", async () => {
+    const stored = defaultParagraphStyles({
+      fontSizeHalfPt: 24,
+      lineSpacing: "single",
+      spaceAfterPt: 12,
+    });
+    stored[1].values.bold = false; // title
+    await prisma.documentStyle.create({
+      data: {
+        firmId,
+        fontSizeHalfPt: 28,
+        lineSpacing: "1.5",
+        spaceAfterPt: 3,
+        paragraphStyles: stored as never,
+      },
+    });
+    const s = await getDocumentStyle();
+    expect(body(s.paragraphStyles)?.values).toMatchObject({
+      sizePt: 14,
+      lineSpacing: "1.5",
+      spaceAfterPt: 3,
+    });
+    expect(s.paragraphStyles.find((p) => p.key === "title")?.values.bold).toBe(false);
+  });
+
+  test("an invalid stored value falls back to defaults", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await prisma.documentStyle.create({ data: { firmId, paragraphStyles: { nope: 1 } } });
+    const s = await getDocumentStyle();
+    expect(s.paragraphStyles).toHaveLength(8);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 

@@ -6,7 +6,7 @@
  */
 
 import { z } from "zod";
-import { headingSizePt, LINE_SPACINGS, type LineSpacing } from "./page-style";
+import { headingSizePt, LINE_SPACINGS, type LineSpacing } from "./style-basics";
 import type { TextAlign } from "./schema";
 
 export type LineSpacingValue = LineSpacing | { exactPt: number };
@@ -202,6 +202,8 @@ export function defaultParagraphStyles(house: House): ParagraphStyle[] {
 
 /** Reads the stored list defensively: anything invalid falls back to the defaults. */
 export function parseParagraphStyles(json: unknown, house: House): ParagraphStyle[] {
+  // NULL is the normal "not customised yet" state: defaults, no warning.
+  if (json === null || json === undefined) return defaultParagraphStyles(house);
   const parsed = paragraphStylesSchema.safeParse(json);
   if (parsed.success) return parsed.data as ParagraphStyle[];
   console.warn("Invalid paragraphStyles; using defaults.", parsed.error.issues[0]?.message);

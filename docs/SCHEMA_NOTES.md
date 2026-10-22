@@ -115,6 +115,8 @@ Only non-obvious facts; anything not listed is as `schema.prisma` reads.
 
 **Batch 4 data fixes worth knowing** (migration `20261017120000_quality_sweep`): `UNIQUE settlements(matterId)` was added behind a guard that aborts the deploy, deleting nothing, if any matter had 2+ settlements; `billing.view` was granted to every role holding any `billing.*` or `trust.*` key (ADR-038).
 
+**Paragraph styles** (migration `20261022230000_paragraph_styles`): `DocumentStyle.paragraphStyles` and `CourtFormat.styleOverrides` are JSON validated in code (`paragraph-styles.ts`), not by the DB. NULL `paragraphStyles` means "defaults derived from the house style", with no backfill. The loaders overlay the legacy size/line-spacing/space-after columns onto Body (house) and the `body` override (court) until the styles UI replaces those fields; the legacy columns are dropped in a later migration.
+
 ---
 
 ## Pending migration candidates (NOT applied)

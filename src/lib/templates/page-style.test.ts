@@ -99,6 +99,7 @@ const NULL_COURT: CourtFormatValues = {
   marginLeftIn: null,
   pageNumbers: null,
   paperSize: "letter",
+  styleOverrides: {},
 };
 
 describe("court format layer", () => {

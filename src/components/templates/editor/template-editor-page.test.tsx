@@ -308,6 +308,7 @@ describe("TemplateEditorPage — templates", () => {
         marginLeftIn: null,
         pageNumbers: null,
         paperSize: "legal" as const,
+        styleOverrides: {},
       },
       replacements: [
         [

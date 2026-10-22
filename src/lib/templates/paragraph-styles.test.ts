@@ -126,7 +126,14 @@ describe("parseParagraphStyles", () => {
     expect(parseParagraphStyles(list, HOUSE)).toEqual(list);
   });
 
-  it.each([null, {}, [{ key: "body" }]])("falls back to defaults and warns on %j", (input) => {
+  it("falls back to defaults silently for null (the normal uncustomised state)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(parseParagraphStyles(null, HOUSE)).toEqual(defaultParagraphStyles(HOUSE));
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it.each([{}, [{ key: "body" }]])("falls back to defaults and warns on %j", (input) => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(parseParagraphStyles(input, HOUSE)).toEqual(defaultParagraphStyles(HOUSE));
     expect(warn).toHaveBeenCalled();

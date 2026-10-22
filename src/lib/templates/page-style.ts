@@ -5,12 +5,14 @@
  */
 
 import { FONT_KEYS, type FontKey } from "./fonts";
+import { defaultParagraphStyles, type ParagraphStyle, type StyleValues } from "./paragraph-styles";
+import { headingSizePt, LINE_SPACINGS, type LineSpacing } from "./style-basics";
 
 export { FONT_KEYS };
 export type { FontKey };
 
-export const LINE_SPACINGS = ["single", "1.15", "1.5", "double"] as const;
-export type LineSpacing = (typeof LINE_SPACINGS)[number];
+export { LINE_SPACINGS, headingSizePt };
+export type { LineSpacing };
 
 export const PAGE_NUMBER_POSITIONS = ["none", "bottom_center", "bottom_right"] as const;
 export type PageNumberPosition = (typeof PAGE_NUMBER_POSITIONS)[number];
@@ -67,6 +69,7 @@ export type DocumentStyleValues = {
   logoPosition: LogoPosition;
   continuationBlockId: string | null;
   pageNumbers: PageNumberPosition;
+  paragraphStyles: ParagraphStyle[];
 };
 
 /** A court format's layout overrides for filings; null = keep the house value. */
@@ -81,6 +84,8 @@ export type CourtFormatValues = {
   marginLeftIn: number | null;
   pageNumbers: PageNumberPosition | null;
   paperSize: PaperSize;
+  /** Sparse per-style overrides keyed by style key. */
+  styleOverrides: Record<string, Partial<StyleValues>>;
 };
 
 /** Mirrors the schema defaults (block ids are set by getDocumentStyle). */
@@ -89,6 +94,11 @@ export const DEFAULT_DOCUMENT_STYLE: DocumentStyleValues = {
   fontSizeHalfPt: 24,
   lineSpacing: "single",
   spaceAfterPt: 12,
+  paragraphStyles: defaultParagraphStyles({
+    fontSizeHalfPt: 24,
+    lineSpacing: "single",
+    spaceAfterPt: 12,
+  }),
   marginTopIn: 1,
   marginRightIn: 1,
   marginBottomIn: 1,
@@ -182,9 +192,4 @@ export function resolvePageStyle<L extends LogoRef>(
     pageNumbers: c?.pageNumbers ?? style.pageNumbers,
     paperSize: c?.paperSize ?? "letter",
   };
-}
-
-/** Headings are bold at body size +6 / +4 / +2 pt. */
-export function headingSizePt(sizePt: number, level: 1 | 2 | 3): number {
-  return sizePt + (level === 1 ? 6 : level === 2 ? 4 : 2);
 }

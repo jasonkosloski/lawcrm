@@ -80,6 +80,7 @@ export async function loadEditorPageStyle(): Promise<FirmPageStyle> {
       logoPosition: s.logoPosition,
       continuationBlockId: s.continuationBlockId,
       pageNumbers: s.pageNumbers,
+      paragraphStyles: s.paragraphStyles,
     },
     logo,
     logoUrl: logo ? logoPreviewUrl(s.updatedAt.toISOString()) : null,
@@ -114,6 +115,7 @@ export async function loadEditorCourtFormats(): Promise<SerializedCourtContext[]
       marginLeftIn: num(f.marginLeftIn),
       pageNumbers: f.pageNumbers as CourtFormatValues["pageNumbers"],
       paperSize: f.paperSize as CourtFormatValues["paperSize"],
+      styleOverrides: {},
     };
     const replacements = new Map<string, BlockSource>();
     for (const b of f.blocks) {

@@ -41,6 +41,7 @@ const values = {
   marginLeftIn: null,
   pageNumbers: null,
   paperSize: "legal" as const,
+  styleOverrides: {},
 };
 const court = (over: Partial<CourtContext> = {}, repl?: BlockSource): CourtContext => ({
   id: "c1",

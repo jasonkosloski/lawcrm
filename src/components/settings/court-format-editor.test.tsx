@@ -35,6 +35,7 @@ const NULL_VALUES = {
   marginLeftIn: null,
   pageNumbers: null,
   paperSize: "letter" as const,
+  styleOverrides: {},
 };
 
 const base = {

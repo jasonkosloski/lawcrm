@@ -93,4 +93,44 @@ describe("loadCourtContext", () => {
       isActive: false,
     });
   });
+
+  describe("styleOverrides", () => {
+    async function withFormat(data: Record<string, unknown>) {
+      const f = await prisma.courtFormat.create({ data: { name: "CO", ...data } as never });
+      const v = await prisma.venue.create({
+        data: { name: "V", nameKey: "v", state: "CO", courtFormatId: f.id },
+      });
+      await prisma.matter.update({ where: { id: matterId }, data: { venueId: v.id } });
+      return loadCourtContext({ kind: "matter", matterId });
+    }
+
+    test("defaults to an empty object", async () => {
+      expect((await withFormat({}))?.values.styleOverrides).toEqual({});
+    });
+
+    test("drops invalid entries and keeps valid ones", async () => {
+      const c = await withFormat({
+        styleOverrides: { heading1: { sizePt: 16 }, title: { sizePt: 999 }, junk: "x" },
+      });
+      expect(c?.values.styleOverrides).toEqual({ heading1: { sizePt: 16 } });
+    });
+
+    test("overlays legacy body columns, stored values winning", async () => {
+      const c = await withFormat({
+        fontSizeHalfPt: 26,
+        lineSpacing: "double",
+        spaceAfterPt: 0,
+        styleOverrides: { body: { sizePt: 11 } },
+      });
+      expect(c?.values.styleOverrides.body).toEqual({
+        sizePt: 11,
+        lineSpacing: "double",
+        spaceAfterPt: 0,
+      });
+    });
+
+    test("no legacy columns adds no body entry", async () => {
+      expect((await withFormat({}))?.values.styleOverrides).not.toHaveProperty("body");
+    });
+  });
 });
