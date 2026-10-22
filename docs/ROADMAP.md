@@ -71,8 +71,9 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [ ] **Document versioning** → [documents](features/documents.md)
 - [ ] **Firm-wide document library**: cross-matter folder tree, file grid, category filters. → [documents](features/documents.md)
 - [ ] **Export / print to PDF beyond invoices**: demand letters, trust reports. → [documents](features/documents.md)
-- [ ] **Viewer follow-ups**: transcripts, OCR into search, legacy .doc, docx visual check. → [documents](features/documents.md)
-- [~] **Evidence review follow-ups**: transcripts, OCR, multi-track sync, Evidence-model ingestion, quote index. → [evidence-review](features/evidence-review.md)
+- [ ] **Viewer follow-ups**: OCR into search, legacy .doc, docx visual check. → [documents](features/documents.md)
+- [~] **Evidence review follow-ups**: OCR, multi-track sync, Evidence-model ingestion, quote index. → [evidence-review](features/evidence-review.md)
+- [ ] **Transcript follow-ups**: clip reels, export formats, auto/batch transcribe, portal sharing, launch checklist. → [documents](features/documents.md)
 
 **Shell, settings, automations**
 - [~] **Command palette v2 leftovers**: fuzzy highlight, New task, Log a call, Start timer. → [app-shell](features/app-shell.md)
