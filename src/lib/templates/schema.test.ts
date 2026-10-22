@@ -244,4 +244,19 @@ describe("seeded default blocks", () => {
       expect(r).toMatchObject({ ok: true });
     }
   });
+
+  it("keeps a valid ordered list start and drops other list attrs", () => {
+    const item = { type: "listItem", content: [para(text("b"))] };
+    const run = (attrs: unknown) => {
+      const r = validateTemplateContent("letter", {
+        type: "doc",
+        content: [{ type: "orderedList", attrs, content: [item] }],
+      });
+      return r.ok ? r.doc.content?.[0] : r;
+    };
+    expect(run({ start: 3, type: "a" })).toMatchObject({ attrs: { start: 3 } });
+    expect(run({ start: 0 })).not.toHaveProperty("attrs");
+    expect(run({ start: 1.5 })).not.toHaveProperty("attrs");
+    expect(run({ type: "a" })).not.toHaveProperty("attrs");
+  });
 });

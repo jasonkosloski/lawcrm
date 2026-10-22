@@ -51,7 +51,11 @@ export type HeadingNode = {
 };
 export type ListItemNode = { type: "listItem"; content: BlockNode[] };
 export type BulletListNode = { type: "bulletList"; content: ListItemNode[] };
-export type OrderedListNode = { type: "orderedList"; content: ListItemNode[] };
+export type OrderedListNode = {
+  type: "orderedList";
+  attrs?: { start?: number };
+  content: ListItemNode[];
+};
 export type TableCellNode = {
   type: "tableCell" | "tableHeader";
   attrs?: { colspan?: 1; rowspan?: 1; colwidth?: number[] | null };
@@ -275,10 +279,18 @@ function block(raw: unknown, depth: number, ctx: Ctx): BlockNode {
     case "orderedList": {
       const items = children(n);
       if (items.length === 0) return fail("A list needs at least one item.");
-      return {
-        type: t,
-        content: items.map((i) => listItem(i, depth + 1, ctx)),
-      } as BulletListNode | OrderedListNode;
+      const content = items.map((i) => listItem(i, depth + 1, ctx));
+      if (t === "orderedList") {
+        // Keep a valid start number (a list may continue from 3); drop
+        // anything else the editor emits (e.g. TipTap's `type`).
+        const start = attrsOf(n).start;
+        const out: OrderedListNode = { type: "orderedList", content };
+        if (typeof start === "number" && Number.isInteger(start) && start >= 1) {
+          out.attrs = { start };
+        }
+        return out;
+      }
+      return { type: "bulletList", content };
     }
     case "table": {
       const rows = children(n);
