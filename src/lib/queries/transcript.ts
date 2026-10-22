@@ -27,6 +27,8 @@ export type TranscriptView = {
   id: string;
   status: TranscriptStatus;
   error: string | null;
+  durationSeconds: number | null;
+  completedAt: Date | null;
   correctedAt: Date | null;
   correctedByName: string | null;
   speakers: Record<string, string>;
@@ -43,6 +45,8 @@ export async function getDocumentTranscript(
       id: true,
       status: true,
       error: true,
+      durationSeconds: true,
+      completedAt: true,
       correctedAt: true,
       speakers: true,
       correctedBy: { select: { name: true } },
@@ -71,6 +75,8 @@ export async function getDocumentTranscript(
     id: t.id,
     status: t.status as TranscriptStatus,
     error: t.error,
+    durationSeconds: t.durationSeconds,
+    completedAt: t.completedAt,
     correctedAt: t.correctedAt,
     correctedByName: t.correctedBy?.name ?? null,
     speakers,
@@ -78,5 +84,28 @@ export async function getDocumentTranscript(
       ...s,
       words: Array.isArray(s.words) ? (s.words as unknown as Word[]) : [],
     })),
+  };
+}
+
+/**
+ * Document name + caption (matter name, or the intake lead's name) for
+ * the export header. Call only after `getDocumentTranscript` has
+ * asserted access to the document.
+ */
+export async function getTranscriptCaption(
+  documentId: string,
+): Promise<{ documentName: string; caption: string } | null> {
+  const d = await prisma.document.findUnique({
+    where: { id: documentId },
+    select: {
+      name: true,
+      matter: { select: { name: true } },
+      lead: { select: { name: true } },
+    },
+  });
+  if (!d) return null;
+  return {
+    documentName: d.name,
+    caption: d.matter?.name ?? d.lead?.name ?? "",
   };
 }

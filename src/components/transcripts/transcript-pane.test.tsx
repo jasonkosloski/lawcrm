@@ -50,6 +50,8 @@ const BASE: TranscriptView = {
   id: "t1",
   status: "completed",
   error: null,
+  durationSeconds: null,
+  completedAt: null,
   correctedAt: null,
   correctedByName: null,
   speakers: { A: "Officer Diaz", B: "Speaker B" },
@@ -80,6 +82,18 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(() => cleanup());
 
 describe("TranscriptPane", () => {
+  test("Export PDF opens the print route in a new tab for a completed transcript", () => {
+    pane();
+    const a = screen.getByRole("link", { name: "Export PDF" });
+    expect(a.getAttribute("href")).toBe("/print/transcripts/doc1");
+    expect(a.getAttribute("target")).toBe("_blank");
+  });
+
+  test("no Export PDF while the transcript is still processing", () => {
+    pane({ transcript: { ...BASE, status: "processing", segments: [] } });
+    expect(screen.queryByRole("link", { name: "Export PDF" })).toBeNull();
+  });
+
   test("renders speaker names and timecodes", () => {
     pane();
     expect(screen.getAllByText("Officer Diaz").length).toBeGreaterThan(0);

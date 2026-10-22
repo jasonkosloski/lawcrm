@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, Pencil } from "lucide-react";
+import { FileDown, MoreHorizontal, Pencil } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -341,6 +341,17 @@ export function TranscriptPane({
                 >
                   Find
                 </button>
+              )}
+              {status === "completed" && hasText && (
+                <a
+                  href={`/print/transcripts/${documentId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-6 items-center gap-1 rounded-md px-2 text-2xs font-medium text-ink-3 hover:text-ink"
+                >
+                  <FileDown className="h-3 w-3" aria-hidden />
+                  Export PDF
+                </a>
               )}
               {canEdit && hasText && (
                 <button

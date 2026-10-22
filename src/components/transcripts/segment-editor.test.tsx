@@ -54,6 +54,8 @@ const T: TranscriptView = {
   id: "t1",
   status: "completed",
   error: null,
+  durationSeconds: null,
+  completedAt: null,
   correctedAt: null,
   correctedByName: null,
   speakers: { A: "Officer Diaz", B: "Speaker B" },
