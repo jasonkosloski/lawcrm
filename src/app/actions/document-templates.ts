@@ -507,7 +507,7 @@ export async function previewDocumentFromTemplate(
   const resolved = await resolveMergeContext(scope, request);
   if (!resolved) return { ok: false, error: "Record not found." };
 
-  const merged = mergeTemplate(template.body, resolved.ctx);
+  const merged = mergeTemplate(template.body ?? "", resolved.ctx);
   return {
     ok: true,
     templateName: template.name,
@@ -566,7 +566,7 @@ export async function generateDocumentFromTemplate(
   const resolved = await resolveMergeContext(scope, request);
   if (!resolved) return { ok: false, error: "Record not found." };
 
-  const merged = mergeTemplate(template.body, resolved.ctx);
+  const merged = mergeTemplate(template.body ?? "", resolved.ctx);
 
   // "<template name> — <date>.md" — matches the naming the docs tab
   // sorts/reads well, and the date disambiguates repeat generations.

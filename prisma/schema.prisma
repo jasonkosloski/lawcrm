@@ -124,6 +124,7 @@ model User {
   notifications           Notification[]
   timerSession            TimerSession?
   documentTemplates       DocumentTemplate[]
+  templateBlocks          TemplateBlock[]
   savedSearches           SavedSearch[]
   /// Calendar events the user is an attendee on. Created via the
   /// event detail modal's attendee picker (or any future API
@@ -2350,7 +2351,16 @@ model DocumentTemplate {
   /// pleading | general.
   category            String               @default("general")
   description         String?
-  body                String
+  /// Legacy plain-text body; null for structured templates (`content`).
+  body                String?
+  /// letter | email | document — what the template generates.
+  kind                String               @default("letter")
+  /// TipTap/ProseMirror JSON document (structured body).
+  content             Json?
+  /// TipTap JSON for the subject line (email templates).
+  subject             Json?
+  /// matter | lead — which record scope the template merges against.
+  appliesTo           String               @default("matter")
   /// Soft-archive — generation pickers hide inactive templates but
   /// history stays intact.
   isActive            Boolean              @default(true)
@@ -2363,6 +2373,25 @@ model DocumentTemplate {
 
   @@index([category, isActive])
   @@map("document_templates")
+}
+
+/// Firm-wide reusable content block (letterhead, signature, ...) that
+/// templates embed by key. Edited in one place, resolved at generation.
+model TemplateBlock {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String?
+  /// TipTap/ProseMirror JSON document.
+  content     Json
+  isActive    Boolean  @default(true)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("template_blocks")
 }
 
 /// A saved global-search query — per-user shortcut back to a
@@ -2852,10 +2881,10 @@ model Transcript {
   completedAt     DateTime?
   updatedAt       DateTime  @updatedAt
 
-  document      Document            @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  requestedBy   User                @relation("TranscriptRequestedBy", fields: [requestedById], references: [id])
-  correctedBy   User?               @relation("TranscriptCorrectedBy", fields: [correctedById], references: [id])
-  segments      TranscriptSegment[]
+  document    Document            @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  requestedBy User                @relation("TranscriptRequestedBy", fields: [requestedById], references: [id])
+  correctedBy User?               @relation("TranscriptCorrectedBy", fields: [correctedById], references: [id])
+  segments    TranscriptSegment[]
 
   @@index([status, requestedAt])
   @@map("transcripts")
@@ -2863,10 +2892,10 @@ model Transcript {
 
 /// One speaker turn / paragraph.
 model TranscriptSegment {
-  id           String     @id @default(cuid())
+  id           String  @id @default(cuid())
   transcriptId String
-  index        Int        /// Order within the transcript
-  speaker      String     /// Provider label key ("A"), names live on Transcript.speakers
+  index        Int /// Order within the transcript
+  speaker      String /// Provider label key ("A"), names live on Transcript.speakers
   startSeconds Float
   endSeconds   Float
   /// Plain text, words joined: what search matches and export prints.
@@ -2877,7 +2906,7 @@ model TranscriptSegment {
   /// The provider's text before any correction; null when never edited.
   originalText String?
   /// Optimistic concurrency for corrections.
-  revision     Int        @default(0)
+  revision     Int     @default(0)
 
   transcript Transcript @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
 
