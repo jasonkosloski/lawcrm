@@ -65,7 +65,7 @@ const nextConfig: NextConfig = {
   // tracer can't see that, so ship them with every server route (invoices
   // are sent from server actions on many pages).
   outputFileTracingIncludes: {
-    "/**": ["./src/lib/billing/fonts/**"],
+    "/**": ["./src/lib/billing/fonts/**", "./src/lib/templates/fonts/**"],
   },
 
   async headers() {
