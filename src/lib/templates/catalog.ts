@@ -118,6 +118,8 @@ export type TemplateData = {
     venueCity: string | null;
     venueCounty: string | null;
     venueState: string | null;
+    /** Venue caption name, else venue name. */
+    courtCaption: string | null;
     practiceArea: string | null;
     stage: string | null;
     /** Date-only fields are UTC-midnight calendar dates (ADR-012). */
@@ -336,6 +338,7 @@ export const FIELDS: readonly CatalogField[] = [
   text("matter.name", "Matter name", "Matter", (d) => str(m(d)?.name), MATTER),
   text("matter.caseNumber", "Case number", "Matter", (d) => str(m(d)?.caseNumber), MATTER),
   text("matter.court", "Court", "Matter", (d) => str(m(d)?.court), MATTER),
+  text("matter.courtCaption", "Court caption", "Matter", (d) => str(m(d)?.courtCaption), MATTER),
   text("matter.venueName", "Venue name", "Matter", (d) => str(m(d)?.venueName), MATTER),
   text("matter.venueCity", "Venue city", "Matter", (d) => str(m(d)?.venueCity), MATTER),
   text("matter.venueCounty", "Venue county", "Matter", (d) => str(m(d)?.venueCounty), MATTER),
@@ -558,6 +561,7 @@ export const SAMPLE_TEMPLATE_DATA: TemplateData = {
     venueCity: "Sampletown",
     venueCounty: "Sample County",
     venueState: "CO",
+    courtCaption: "DISTRICT COURT, CITY AND COUNTY OF SAMPLE, STATE OF EXAMPLE",
     practiceArea: "Personal Injury (sample)",
     stage: "Discovery (sample)",
     incidentDate: new Date(Date.UTC(2025, 5, 1)),

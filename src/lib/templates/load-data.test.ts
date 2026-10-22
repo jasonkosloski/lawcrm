@@ -248,3 +248,21 @@ describe("loadTemplateData — lead scope", () => {
     expect(s).toEqual({ ok: false, error: "That signer isn't on this record's team." });
   });
 });
+
+describe("loadTemplateData — matter.courtCaption", () => {
+  test("uses the venue caption name, falling back to the venue name", async () => {
+    const { matterId } = await matterWithParties();
+    const v = await prisma.venue.create({
+      data: { name: "Denver District", nameKey: "denver district", state: "CO" },
+    });
+    await prisma.matter.update({ where: { id: matterId }, data: { venueId: v.id } });
+    const load = async () => {
+      const r = await loadTemplateData({ scope: { kind: "matter", matterId } });
+      if (!r.ok) throw new Error(r.error);
+      return r.data.matter?.courtCaption;
+    };
+    expect(await load()).toBe("Denver District");
+    await prisma.venue.update({ where: { id: v.id }, data: { captionName: "DISTRICT COURT" } });
+    expect(await load()).toBe("DISTRICT COURT");
+  });
+});

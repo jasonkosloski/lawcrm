@@ -314,7 +314,9 @@ export async function loadTemplateData(
         clientId: true,
         practiceArea: { select: { name: true } },
         stage: { select: { name: true } },
-        venue: { select: { name: true, city: true, county: true, state: true } },
+        venue: {
+          select: { name: true, city: true, county: true, state: true, captionName: true },
+        },
         client: { select: contactSelect },
         contacts: {
           orderBy: { createdAt: "asc" },
@@ -362,6 +364,7 @@ export async function loadTemplateData(
         venueCity: matter.venue?.city ?? null,
         venueCounty: matter.venue?.county ?? null,
         venueState: matter.venue?.state ?? null,
+        courtCaption: matter.venue?.captionName ?? matter.venue?.name ?? null,
         practiceArea: matter.practiceArea?.name ?? null,
         stage: matter.stage?.name ?? null,
         incidentDate: matter.incidentDate,

@@ -20,6 +20,7 @@ import {
   type PreviewPageStyle,
 } from "./page-style";
 import type { TemplateDoc } from "./schema";
+import { applyCourtBlocks, type CourtContext } from "./court-blocks";
 
 export type PageKind = "letter" | "filing";
 
@@ -72,6 +73,22 @@ export function mergeReport(into: RenderReport, from: RenderReport): void {
   }
 }
 
+/** The court only matters for filings with an active court format. */
+const activeCourt = (kind: PageKind, court: CourtContext | null | undefined) =>
+  kind === "filing" && court?.isActive ? court : null;
+
+/** The block map a page of this kind renders with: the court's
+ *  replacements applied for filings. Use it wherever blocks are inspected
+ *  (e.g. signer/recipient detection) so it matches what renders. */
+export function effectiveBlocks(
+  kind: PageKind,
+  blocks: Map<string, BlockSource>,
+  court?: CourtContext | null,
+): Map<string, BlockSource> {
+  const c = activeCourt(kind, court);
+  return c ? applyCourtBlocks(blocks, c.replacements) : blocks;
+}
+
 const blockDoc = (blockId: string): TemplateDoc => ({
   type: "doc",
   content: [{ type: "block", attrs: { blockId } }],
@@ -84,6 +101,7 @@ export function renderPage<L extends LogoRef>(input: {
   blocks: Map<string, BlockSource>;
   style: DocumentStyleValues;
   logo: L | null;
+  court?: CourtContext | null;
 }): {
   body: ResolvedDoc;
   letterhead: ResolvedDoc | null;
@@ -91,8 +109,9 @@ export function renderPage<L extends LogoRef>(input: {
   style: PageStyleOf<L>;
   report: RenderReport;
 } {
-  const ctx = { data: input.data, blocks: input.blocks };
-  const style = resolvePageStyle<L>(input.kind, input.style, input.logo);
+  const court = activeCourt(input.kind, input.court);
+  const ctx = { data: input.data, blocks: effectiveBlocks(input.kind, input.blocks, court) };
+  const style = resolvePageStyle<L>(input.kind, input.style, input.logo, court?.values);
   const body = renderTemplate(input.doc, ctx);
   const report = body.report;
   const part = (blockId: string | null | undefined) => {
@@ -119,6 +138,7 @@ export function renderPageView(input: {
   style: DocumentStyleValues;
   logo: LogoRef | null;
   logoUrl: string | null;
+  court?: CourtContext | null;
 }): { page: PageView; report: RenderReport } {
   const r = renderPage(input);
   return {
