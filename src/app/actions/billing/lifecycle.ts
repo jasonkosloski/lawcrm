@@ -103,7 +103,7 @@ async function setInvoiceStatusUnchecked(
   invoiceId: string,
   next: string,
   userId: string
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; fromStatus?: string }> {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     select: {
@@ -216,7 +216,7 @@ async function setInvoiceStatusUnchecked(
   revalidatePath(`/matters/${invoice.matterId}/time`);
   revalidatePath(`/matters/${invoice.matterId}`);
   revalidatePath("/", "layout");
-  return { ok: true };
+  return { ok: true, fromStatus: invoice.status };
 }
 
 // ── Void with stamp + client notice ─────────────────────────────────────
@@ -253,11 +253,31 @@ export async function voidInvoice(
   try {
     const invoice = await prisma.invoice.findUnique({
       where: { id: invoiceId },
-      select: { matterId: true, invoiceNumber: true, kind: true, status: true },
+      select: {
+        matterId: true,
+        invoiceNumber: true,
+        kind: true,
+        status: true,
+        paidAmount: true,
+        matter: { select: { name: true } },
+      },
     });
     if (!invoice) return { status: "error", error: "Invoice not found." };
-    const wasSent = invoice.kind === "client" && invoice.status === "sent";
     const n = invoice.invoiceNumber;
+    const matterName = invoice.matter.name;
+
+    // Same refusal setInvoiceStatusUnchecked gives, but before any
+    // render work is spent on an invoice that can't be voided.
+    if (
+      invoice.paidAmount.toNumber() > 0 &&
+      !canVoidInvoice(invoice.status, invoice.paidAmount.toNumber(), invoice.kind as InvoiceKind)
+    ) {
+      return {
+        status: "error",
+        error: "Can't void an invoice with payments recorded — refund the payments first.",
+      };
+    }
+    const preSent = invoice.kind === "client" && invoice.status === "sent";
 
     // The void unlinks the time and expenses, so a fresh render has to
     // happen first. Only needed when no PDF was ever filed for it.
@@ -265,18 +285,24 @@ export async function voidInvoice(
     let renderFailed = false;
     let voidedOn = "";
     let timeZone = "";
-    let firm: Awaited<ReturnType<typeof loadFirmProfileForUser>> = null;
-    let matterName = "";
+    let firm = null as Awaited<ReturnType<typeof loadFirmProfileForUser>>;
     let preDocCount = 0;
-    if (wasSent) {
+    let prepared = false;
+    const prepare = async () => {
+      prepared = true;
       preDocCount = await prisma.document.count({ where: { invoiceId } });
       voidedOn = formatDateOnly(await todayDateOnly(), "long");
       timeZone = await getCurrentUserTimeZone();
+      firm = await loadFirmProfileForUser(userId).catch((err) => {
+        console.warn("[void-invoice] firm profile load failed", err);
+        return null;
+      });
+    };
+    if (preSent) {
+      await prepare();
       try {
-        firm = await loadFirmProfileForUser(userId);
-        const detail = await getInvoiceById(invoiceId, timeZone);
-        if (detail) matterName = detail.matterName;
         if (preDocCount === 0) {
+          const detail = await getInvoiceById(invoiceId, timeZone);
           if (!firm || !detail) throw new Error("invoice or firm profile missing");
           fresh = await stampVoid(await renderInvoicePdf(detail, firm, timeZone), voidedOn);
         }
@@ -290,24 +316,48 @@ export async function voidInvoice(
     if (!res.ok) {
       return { status: "error", error: res.error ?? "Couldn't void the invoice." };
     }
+    // Decided by the status the claim actually flipped from, not the
+    // read above: the invoice may have been sent in between.
+    const wasSent = invoice.kind === "client" && res.fromStatus === "sent";
     if (!wasSent) return { status: "ok" };
+    if (!prepared) {
+      // Moved to sent after our first read: no pre-void render exists
+      // (the entries are already unlinked), but filed copies can still
+      // be stamped.
+      await prepare();
+      if (preDocCount === 0) renderFailed = true;
+    }
 
     const warnings: string[] = [];
     try {
       let pdf: { name: string; bytes: Buffer } | null = null;
       let copiesWarn = false;
       if (preDocCount > 0) {
-        const r = await stampFiledInvoicePdfs({ invoiceId, voidedOn });
+        const r = await stampFiledInvoicePdfs({
+          invoiceId,
+          matterId: invoice.matterId,
+          voidedOn,
+        });
         if (r.stamped > 0) {
           await logActivity({
             matterId: invoice.matterId,
             userId,
             type: "filing",
             title: `Stamped ${r.stamped} filed PDF(s) of invoice ${n} VOID`,
+            detail: r.stampedNames.join(", "),
           });
           pdf = r.latest;
         }
-        if (r.failed > 0) copiesWarn = true;
+        if (r.failed > 0) {
+          copiesWarn = true;
+          await logActivity({
+            matterId: invoice.matterId,
+            userId,
+            type: "filing",
+            title: `${r.failed} filed PDF(s) of invoice ${n} couldn't be stamped VOID`,
+            detail: r.failedNames.length ? r.failedNames.join(", ") : null,
+          });
+        }
       } else if (fresh) {
         try {
           await fileInvoicePdf({
@@ -339,12 +389,14 @@ export async function voidInvoice(
       if (notify) {
         if (!pdf) {
           warnings.push("No PDF was available, so the client wasn't emailed.");
+        } else if (!firm) {
+          warnings.push("The firm profile couldn't be loaded, so the client wasn't emailed.");
         } else {
           const sender = await prisma.user.findUnique({
             where: { id: userId },
             select: { email: true },
           });
-          const firmName = firm ? (firm.shortName ?? firm.name) : "Our firm";
+          const firmName = firm.shortName ?? firm.name;
           const result = await sendEmail({
             to: recipient,
             ...invoiceVoidEmail({ invoiceNumber: n, firmName, matterName }),

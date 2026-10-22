@@ -39,4 +39,5 @@ Related: [ADR-013](../decisions/013-timer-sessions-are-pre-entries-ungated-to.md
 - Voiding a **sent** client invoice opens a dialog: "Email the client a voided copy" (default on) and a recipient field, both shown only with `billing.send_invoice`. Approved-but-unsent invoices and internal records keep the plain confirm, with no stamp or email.
 - After the void commits, every PDF of the invoice filed in the matter's Invoices folder (linked by `Document.invoiceId`) has its bytes replaced in place with a VOID-stamped copy (pdf-lib overlay: red diagonal VOID plus "Voided <date>"); the old file is deleted unless another document shares it.
 - If nothing was filed, a stamped copy is rendered before the void and filed as "Invoice <n> (void YYYY-MM-DD).pdf". The client is emailed the stamped PDF.
+- Stamping covers every document linked to the invoice wherever it was moved; a "Copy to…" copy isn't linked, so it keeps the original unstamped bytes.
 - Failures after the void never undo it; they surface as a warning.

@@ -38,6 +38,7 @@ import { currentUserHasPermission, requirePermission } from "@/lib/permission-ch
 import { assertChildMatterAccess } from "@/lib/matter-access";
 import { prisma } from "@/lib/prisma";
 import * as pdf from "@/lib/billing/invoice-pdf";
+import * as firmLib from "@/lib/firm";
 import { voidInvoice } from "@/app/actions/billing";
 import { billingInitialState } from "@/lib/billing-form";
 import {
@@ -227,6 +228,76 @@ describe("voidInvoice (sent)", () => {
     expect((await prisma.document.findUniqueOrThrow({ where: { id: a.id } })).fileUrl).toBe("old-a");
     expect(cap.sent).toHaveLength(1);
     expect(await statusOf(id)).toBe("void");
+  });
+
+  test("failed stamps are recorded with the document names, stamped names too", async () => {
+    const id = await makeInvoice();
+    await filedCopy(id, `Invoice ${N} (sent 2026-10-02).pdf`, "old-a");
+    await filedCopy(id, `Invoice ${N} (resent 2026-10-03).pdf`, "old-b");
+    failStoreFor = "(sent";
+    await run(id);
+    const logs = await prisma.activityLog.findMany({ where: { matterId } });
+    const failed = logs.find((l) => l.title === `1 filed PDF(s) of invoice ${N} couldn't be stamped VOID`);
+    expect(failed?.detail).toBe(`Invoice ${N} (sent 2026-10-02).pdf`);
+    const ok = logs.find((l) => l.title === `Stamped 1 filed PDF(s) of invoice ${N} VOID`);
+    expect(ok?.detail).toBe(`Invoice ${N} (resent 2026-10-03).pdf`);
+  });
+
+  test("approved on first read but sent at the claim: still stamped and emailed", async () => {
+    const id = await makeInvoice("approved");
+    await filedCopy(id, `Invoice ${N} (sent 2026-10-02).pdf`, "old-a");
+    const real = prisma.invoice.findUnique.bind(prisma.invoice);
+    let calls = 0;
+    vi.spyOn(prisma.invoice, "findUnique").mockImplementation(((args: never) => {
+      calls++;
+      // The action's own read sees approved; the claim's read sees sent.
+      if (calls === 2) {
+        return prisma.invoice
+          .update({ where: { id }, data: { status: "sent" } })
+          .then(() => real(args));
+      }
+      return real(args);
+    }) as never);
+    const res = await run(id);
+    expect(res).toEqual({ status: "ok" });
+    expect(await statusOf(id)).toBe("void");
+    expect(cap.sent).toHaveLength(1);
+    expect((await titles()).some((t) => t.startsWith("Stamped 1"))).toBe(true);
+    const row = await prisma.document.findFirstOrThrow({ where: { invoiceId: id } });
+    expect(row.fileUrl).not.toBe("old-a");
+  });
+
+  test("sent with a payment recorded: refused before any render", async () => {
+    const spy = vi.spyOn(pdf, "renderInvoicePdf");
+    const id = await makeInvoice("sent", { paid: 50 });
+    const res = await run(id);
+    expect(res).toEqual({
+      status: "error",
+      error: "Can't void an invoice with payments recorded — refund the payments first.",
+    });
+    expect(spy).not.toHaveBeenCalled();
+    expect(await statusOf(id)).toBe("sent");
+  });
+
+  test("firm profile can't load: voided, filed, warns, no blank-name email", async () => {
+    vi.spyOn(firmLib, "loadFirmProfileForUser").mockRejectedValue(new Error("db blip"));
+    const id = await makeInvoice();
+    await filedCopy(id, `Invoice ${N} (sent 2026-10-02).pdf`, "old-a");
+    const res = await run(id);
+    expect(res.status).toBe("ok");
+    expect(res.warning).toBe(
+      "Invoice voided. The firm profile couldn't be loaded, so the client wasn't emailed."
+    );
+    expect(await statusOf(id)).toBe("void");
+    expect(cap.sent).toHaveLength(0);
+  });
+
+  test("email uses the matter's name", async () => {
+    const id = await makeInvoice();
+    await filedCopy(id, `Invoice ${N} (sent 2026-10-02).pdf`, "old-a");
+    await run(id);
+    const m = await prisma.matter.findUniqueOrThrow({ where: { id: matterId } });
+    expect(JSON.stringify(cap.sent[0])).toContain(m.name);
   });
 
   test("storage fully down: void stands, warning, no email", async () => {

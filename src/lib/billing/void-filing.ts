@@ -12,20 +12,27 @@ import { stampVoid } from "./void-stamp";
 export type StampFiledResult = {
   stamped: number;
   failed: number;
+  /** Names of the documents that couldn't be stamped. */
+  failedNames: string[];
+  /** Names of the documents that were stamped. */
+  stampedNames: string[];
   /** Newest stamped document by createdAt, for the client email. */
   latest: { name: string; bytes: Buffer } | null;
 };
 
 export async function stampFiledInvoicePdfs(args: {
   invoiceId: string;
+  matterId: string;
   voidedOn: string;
 }): Promise<StampFiledResult> {
   let stamped = 0;
   let failed = 0;
+  const failedNames: string[] = [];
+  const stampedNames: string[] = [];
   let latest: StampFiledResult["latest"] = null;
   try {
     const docs = await prisma.document.findMany({
-      where: { invoiceId: args.invoiceId },
+      where: { invoiceId: args.invoiceId, matterId: args.matterId },
       orderBy: { createdAt: "asc" },
       select: { id: true, name: true, fileUrl: true },
     });
@@ -48,6 +55,7 @@ export async function stampFiledInvoicePdfs(args: {
         if (res.count === 0) throw new Error("document changed concurrently");
         newKey = null;
         stamped++;
+        stampedNames.push(doc.name);
         latest = { name: doc.name, bytes };
         // Best effort; a "Copy to…" sibling may still share the old key.
         try {
@@ -59,11 +67,12 @@ export async function stampFiledInvoicePdfs(args: {
         }
       } catch {
         failed++;
+        failedNames.push(doc.name);
         if (newKey) await deleteFile(newKey).catch(() => {});
       }
     }
   } catch {
     failed++;
   }
-  return { stamped, failed, latest };
+  return { stamped, failed, failedNames, stampedNames, latest };
 }
