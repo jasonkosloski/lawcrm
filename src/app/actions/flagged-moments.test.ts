@@ -860,3 +860,39 @@ describe("updateFlaggedMoment — PDF passages", () => {
     });
   });
 });
+
+describe("update/delete — evidence-anchored flags respect the matter wall", () => {
+  test("a non-member cannot edit or delete an evidence flag on a restricted matter", async () => {
+    await prisma.matter.update({
+      where: { id: matterId },
+      data: { restricted: true },
+    });
+    const ev = await prisma.evidence.create({
+      data: { matterId, type: "audio", description: "Wire recording" },
+      select: { id: true },
+    });
+    const flag = await prisma.flaggedMoment.create({
+      data: {
+        evidenceId: ev.id,
+        timeSeconds: 10,
+        category: "emphasis",
+        description: "Original",
+        flaggedById: otherUserId,
+      },
+      select: { id: true },
+    });
+    // otherUserId authored the flag (so the _any gate is not the
+    // thing under test) but is not on the restricted matter's team.
+    mockedGetUser.mockResolvedValue(otherUserId);
+    await expect(
+      updateFlaggedMoment(flag.id, { ...validInput, description: "Hijack" })
+    ).rejects.toThrow("404");
+    await expect(deleteFlaggedMoment(flag.id)).rejects.toThrow(
+      "404"
+    );
+    const row = await prisma.flaggedMoment.findUniqueOrThrow({
+      where: { id: flag.id },
+    });
+    expect(row.description).toBe("Original");
+  });
+});

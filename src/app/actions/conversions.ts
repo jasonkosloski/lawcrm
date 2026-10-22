@@ -59,7 +59,7 @@ export async function convertNoteToTask(
 
   const note = await prisma.note.findUnique({
     where: { id: noteId },
-    select: { matterId: true },
+    select: { matterId: true, leadId: true },
   });
   if (!note) {
     return {
@@ -79,6 +79,7 @@ export async function convertNoteToTask(
   await prisma.task.create({
     data: {
       matterId: note.matterId,
+      leadId: note.matterId ? null : note.leadId,
       noteId,
       title: parsed.data.title,
       description: parsed.data.description || null,
@@ -88,11 +89,16 @@ export async function convertNoteToTask(
     },
   });
 
-  revalidatePath(`/matters/${note.matterId}/tasks`);
-  revalidatePath(`/matters/${note.matterId}/notes`);
-  revalidatePath(`/matters/${note.matterId}`);
+  if (note.matterId) {
+    revalidatePath(`/matters/${note.matterId}/tasks`);
+    revalidatePath(`/matters/${note.matterId}/notes`);
+    revalidatePath(`/matters/${note.matterId}`);
+  } else if (note.leadId) {
+    revalidatePath(`/intake/${note.leadId}`, "layout");
+  }
   await logActivity({
     matterId: note.matterId,
+    leadId: note.matterId ? null : note.leadId,
     userId,
     type: "task",
     title: "Note converted to task",

@@ -1921,18 +1921,27 @@ export async function setMatterRestricted(
   const actorId = await requirePermission("matters.restrict");
   await assertMatterAccess(matterId);
 
-  if (restricted) {
-    const members = await prisma.matterTeamMember.count({
-      where: { matterId, removedAt: null },
-    });
-    if (members === 0) {
-      return { ok: false, error: "Add a team member before restricting this matter." };
+  // The member-count check and the flip run under the matter row lock,
+  // the same lock removeMatterTeamMember takes, so a concurrent removal
+  // can't empty the team of a matter that is being restricted.
+  const outcome = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "matters" WHERE id = ${matterId} FOR UPDATE`;
+    if (restricted) {
+      const members = await tx.matterTeamMember.count({
+        where: { matterId, removedAt: null },
+      });
+      if (members === 0) return { empty: true as const, count: 0 };
     }
-  }
-  const { count } = await prisma.matter.updateMany({
-    where: { id: matterId, restricted: !restricted },
-    data: { restricted },
+    const { count } = await tx.matter.updateMany({
+      where: { id: matterId, restricted: !restricted },
+      data: { restricted },
+    });
+    return { empty: false as const, count };
   });
+  if (outcome.empty) {
+    return { ok: false, error: "Add a team member before restricting this matter." };
+  }
+  const { count } = outcome;
   if (count > 0) {
     await logActivity({
       matterId,
@@ -2157,7 +2166,20 @@ export async function removeMatterTeamMember(
   // a former member keep seeing the full details. Only future events on
   // THIS matter, only the auto-add status ("accepted"), and never the
   // events they created themselves.
-  const { detached } = await prisma.$transaction(async (tx) => {
+  const txResult = await prisma.$transaction(async (tx) => {
+    // Lock the matter row (shared with setMatterRestricted) so the
+    // last-member check and the removal can't race a restrict.
+    await tx.$queryRaw`SELECT id FROM "matters" WHERE id = ${matterId} FOR UPDATE`;
+    const m = await tx.matter.findUnique({
+      where: { id: matterId },
+      select: { restricted: true },
+    });
+    if (m?.restricted) {
+      const active = await tx.matterTeamMember.count({
+        where: { matterId, removedAt: null },
+      });
+      if (active <= 1) return { lastMember: true as const };
+    }
     await tx.matterTeamMember.update({
       where: { id: member.id },
       data: { removedAt: new Date(), removedBy: actorId },
@@ -2177,8 +2199,16 @@ export async function removeMatterTeamMember(
         },
       },
     });
-    return { detached: gone.count };
+    return { lastMember: false as const, detached: gone.count };
   });
+  if (txResult.lastMember) {
+    return {
+      ok: false,
+      error:
+        "Can't remove the last team member of a restricted matter. Add someone else first, or open the matter to the firm.",
+    };
+  }
+  const { detached } = txResult;
 
   await logActivity({
     matterId,

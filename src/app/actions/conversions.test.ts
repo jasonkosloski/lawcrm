@@ -37,6 +37,7 @@ import { inboxActionInitialState } from "@/lib/inbox-action-form";
 import {
   resetDb,
   seedFirm,
+  seedLead,
   seedMatter,
   seedPracticeArea,
   seedUser,
@@ -162,6 +163,27 @@ describe("convertNoteToTask", () => {
 
     const note = await prisma.note.findUnique({ where: { id: noteId } });
     expect(note).not.toBeNull();
+  });
+
+  test("a lead-scoped note converts to a lead-scoped task, not a firm-wide one", async () => {
+    const { leadId } = await seedLead();
+    const note = await prisma.note.create({
+      data: { leadId, authorId: userId, content: "Sensitive intake detail" },
+      select: { id: true },
+    });
+    const res = await convertNoteToTask(
+      note.id,
+      inboxActionInitialState,
+      noteToTaskForm()
+    );
+    expect(res.status).toBe("ok");
+    const task = await prisma.task.findFirst({ where: { noteId: note.id } });
+    expect(task!.matterId).toBeNull();
+    expect(task!.leadId).toBe(leadId);
+    const log = await prisma.activityLog.findFirst({
+      where: { title: "Note converted to task" },
+    });
+    expect(log!.leadId).toBe(leadId);
   });
 
   test("rejects when the note no longer exists", async () => {

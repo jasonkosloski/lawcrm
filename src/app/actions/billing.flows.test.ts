@@ -38,9 +38,11 @@ vi.mock("@/lib/file-storage", () => {
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn().mockResolvedValue("test-user"),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
+  userHasPermission: vi.fn().mockResolvedValue(true),
 }));
 
 import { getCurrentUserId } from "@/lib/current-user";
+import { userHasPermission } from "@/lib/permission-check";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
 import {
@@ -269,6 +271,29 @@ describe("trust ledger — manual transactions", () => {
 // ── recordInvoicePayment ────────────────────────────────────────────────
 
 describe("recordInvoicePayment", () => {
+  test("payment notification only reaches team members with billing.view", async () => {
+    const { firmId } = await seedFirm();
+    const { userId: allowed } = await seedUser({ firmId });
+    const { userId: denied } = await seedUser({ firmId });
+    await prisma.matterTeamMember.createMany({
+      data: [
+        { matterId, userId: allowed, role: "co_counsel" },
+        { matterId, userId: denied, role: "co_counsel" },
+      ],
+    });
+    vi.mocked(userHasPermission).mockImplementation(
+      async (id: string) => id !== denied
+    );
+    const id = await makeInvoice({ status: "sent", total: 100 });
+    const res = await recordInvoicePayment(id, billingInitialState, payForm("30"));
+    expect(res.status).toBe("ok");
+    const notes = await prisma.notification.findMany({
+      where: { type: "invoice_payment_recorded" },
+    });
+    expect(notes.map((n) => n.userId)).toEqual([allowed]);
+    vi.mocked(userHasPermission).mockResolvedValue(true);
+  });
+
   test("a partial then a final check payment move sent → partial → paid", async () => {
     const id = await makeInvoice({ status: "sent", total: 100 });
     const a = await recordInvoicePayment(id, billingInitialState, payForm("30"));

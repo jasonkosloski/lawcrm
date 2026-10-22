@@ -51,7 +51,7 @@ import { revalidatePath } from "next/cache";
 import { scopeBasePath, scopeOf, type RecordScope } from "@/lib/record-scope";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { assertChildMatterAccess, assertRecordAccess } from "@/lib/matter-access";
+import { assertChildMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
@@ -352,7 +352,9 @@ export async function updateFlaggedMoment(
     },
   });
   if (!flag) return { ok: false, error: FLAG_NOT_FOUND };
-  await assertRecordAccess(flag.document ?? {});
+  // Resolves through document OR evidence: an evidence-anchored flag has
+  // no document, so a document-only check would pass vacuously.
+  await assertChildMatterAccess("flaggedMoment", flagId);
 
   // Creator can always edit their own; otherwise gate.
   if (flag.flaggedById !== actorId) {
@@ -442,7 +444,9 @@ export async function deleteFlaggedMoment(
     },
   });
   if (!flag) return { ok: false, error: FLAG_NOT_FOUND };
-  await assertRecordAccess(flag.document ?? {});
+  // Resolves through document OR evidence: an evidence-anchored flag has
+  // no document, so a document-only check would pass vacuously.
+  await assertChildMatterAccess("flaggedMoment", flagId);
 
   // Creator can always delete their own; otherwise gate.
   if (flag.flaggedById !== actorId) {

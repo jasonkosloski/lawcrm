@@ -1563,6 +1563,31 @@ describe("addMatterTeamMember / removeMatterTeamMember", () => {
     expect(await activeLeads()).toEqual([{ userId }]);
   });
 
+  test("removeMatterTeamMember refuses to remove the last member of a restricted matter", async () => {
+    await addMatterTeamMember(matterId, teamForm(other, "paralegal"));
+    // Take the lead off directly so `other` is the only active member.
+    await prisma.matterTeamMember.updateMany({
+      where: { matterId, role: "lead" },
+      data: { removedAt: new Date() },
+    });
+    await prisma.matter.update({ where: { id: matterId }, data: { restricted: true } });
+    mockedGetUser.mockResolvedValue(other); // the sole remaining member
+    const row = await prisma.matterTeamMember.findFirstOrThrow({
+      where: { matterId, userId: other, removedAt: null },
+    });
+    const res = await removeMatterTeamMember(matterId, row.id);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/last team member/i);
+    expect(
+      (await prisma.matterTeamMember.findUniqueOrThrow({ where: { id: row.id } }))
+        .removedAt
+    ).toBeNull();
+
+    // Unrestricted: the same removal is allowed.
+    await prisma.matter.update({ where: { id: matterId }, data: { restricted: false } });
+    expect((await removeMatterTeamMember(matterId, row.id)).ok).toBe(true);
+  });
+
   test("a deactivated user can't be added", async () => {
     const { userId: gone } = await seedUser({ firmId, isActive: false });
     const res = await addMatterTeamMember(matterId, teamForm(gone, "paralegal"));

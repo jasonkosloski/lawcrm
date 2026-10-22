@@ -151,6 +151,7 @@ describe("requestPortalLink", () => {
     expect(cap.sent).toHaveLength(3);
     expect(await requestPortalLink({ status: "idle" }, form("jane@example.com"))).toEqual(SENT);
     expect(cap.sent).toHaveLength(3);
+    expect(await prisma.portalLinkRequest.count()).toBe(3);
   });
 
   test("21st request from one IP in 15 min sends nothing; rows hold hashes only", async () => {
@@ -160,9 +161,11 @@ describe("requestPortalLink", () => {
     expect(await prisma.portalLinkRequest.count()).toBe(20);
     expect(await requestPortalLink({ status: "idle" }, form("jane@example.com"))).toEqual(SENT);
     expect(cap.sent).toHaveLength(0);
-    expect(await prisma.portalLinkRequest.count()).toBe(21);
+    // Over-limit requests insert no row, so the table can't be grown
+    // unboundedly by a script.
+    expect(await prisma.portalLinkRequest.count()).toBe(20);
     const row = await prisma.portalLinkRequest.findFirst({
-      where: { emailHash: hmacSecret("jane@example.com") },
+      where: { emailHash: hmacSecret("x0@example.com") },
     });
     expect(row?.ipHash).toBe(hmacSecret("203.0.113.7"));
     const all = JSON.stringify(await prisma.portalLinkRequest.findMany());

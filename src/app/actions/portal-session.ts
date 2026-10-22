@@ -55,7 +55,9 @@ export async function requestPortalLink(
   const emailHash = hmacSecret(email);
   const ipHash = hmacSecret(ip);
 
-  await prisma.portalLinkRequest.create({ data: { emailHash, ipHash } });
+  // Check the limits BEFORE recording this request: an over-limit caller
+  // gets the uniform response and no new row, so a script can't grow the
+  // table without bound (prune.ts clears expired rows).
   const since = new Date(Date.now() - WINDOW_MS);
   const [byEmail, byIp] = await Promise.all([
     prisma.portalLinkRequest.count({
@@ -65,7 +67,8 @@ export async function requestPortalLink(
       where: { ipHash, createdAt: { gte: since } },
     }),
   ]);
-  if (byEmail > EMAIL_LIMIT || byIp > IP_LIMIT) return uniform;
+  if (byEmail >= EMAIL_LIMIT || byIp >= IP_LIMIT) return uniform;
+  await prisma.portalLinkRequest.create({ data: { emailHash, ipHash } });
 
   const firm = await prisma.firm.findFirst({ select: { portalEnabled: true } });
   if (!firm?.portalEnabled) return uniform;

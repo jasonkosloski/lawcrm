@@ -16,7 +16,11 @@ import { getCurrentUserId } from "@/lib/current-user";
 // in UTC (ADR-012). "Today" is the user's calendar day in their
 // profile zone, never the server's.
 import { parseDateOnly } from "@/lib/format-date";
-import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
+import {
+  currentUserHasPermission,
+  requirePermission,
+  userHasPermission,
+} from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { deliverInvoiceEmail } from "@/lib/billing/invoice-delivery";
 import { roundMoney } from "@/lib/money";
@@ -288,9 +292,16 @@ export async function recordInvoicePayment(
         where: { matterId: result.matterId, removedAt: null },
         select: { userId: true },
       });
-      const recipients = team
+      // The body carries the payment amount, and billing data is
+      // gated by billing.view (ADR-038) — so only notify members who
+      // may see it.
+      const candidates = team
         .map((t) => t.userId)
         .filter((id) => id !== userId);
+      const canView = await Promise.all(
+        candidates.map((id) => userHasPermission(id, "billing.view"))
+      );
+      const recipients = candidates.filter((_, i) => canView[i]);
       if (recipients.length > 0) {
         const matter = await prisma.matter.findUnique({
           where: { id: result.matterId },
