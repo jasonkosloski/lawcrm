@@ -166,6 +166,15 @@ export async function deleteTemplateBlock(
     select: { name: true, key: true },
   });
   if (!existing) return { ok: false, error: "Block not found." };
+  const styleUse = await prisma.documentStyle.count({
+    where: { OR: [{ letterheadBlockId: id }, { continuationBlockId: id }] },
+  });
+  if (styleUse > 0) {
+    return {
+      ok: false,
+      error: "This block is used by the firm's document style. Choose another block there first.",
+    };
+  }
   const used = await usageOf(id);
   if (used.length > 0) {
     return {

@@ -202,3 +202,21 @@ describe("listBlockUsage", () => {
     expect(requireUser).toHaveBeenCalled();
   });
 });
+
+describe("deleteTemplateBlock and the document style", () => {
+  test("refuses while document_styles references the block", async () => {
+    const { firmId } = await prisma.user
+      .findUniqueOrThrow({ where: { id: userId }, select: { firmId: true } })
+      .then((u) => ({ firmId: u.firmId as string }));
+    const block = await prisma.templateBlock.create({
+      data: { key: "lh", name: "Letterhead", content: doc() },
+    });
+    await prisma.documentStyle.create({ data: { firmId, continuationBlockId: block.id } });
+    const r = await deleteTemplateBlock(block.id);
+    expect(r).toEqual({
+      ok: false,
+      error: "This block is used by the firm's document style. Choose another block there first.",
+    });
+    expect(await prisma.templateBlock.count({ where: { id: block.id } })).toBe(1);
+  });
+});
