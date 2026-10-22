@@ -60,6 +60,13 @@ describe("formatFieldValue", () => {
     expect(formatFieldValue(f, instant, "long", "UTC")).toBe("October 22, 2026");
   });
 
+  it("iso on an instant uses the zone's calendar day", () => {
+    const f = mk("date");
+    const d = new Date("2026-10-22T02:00:00Z");
+    expect(formatFieldValue(f, d, "iso", "America/Denver")).toBe("2026-10-21");
+    expect(formatFieldValue(f, d, "iso", "UTC")).toBe("2026-10-22");
+  });
+
   it("date-only values never shift with the zone", () => {
     const f = mk("date", { dateOnly: true });
     expect(formatFieldValue(f, calendar, "long", "America/Los_Angeles")).toBe("October 22, 2026");

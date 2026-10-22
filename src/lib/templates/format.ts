@@ -4,7 +4,7 @@
  * lives here.
  */
 
-import { formatDate } from "@/lib/format-date";
+import { dateKeyInTz, formatDate } from "@/lib/format-date";
 import type { CatalogField, FieldFormat, FieldValue } from "./catalog";
 
 export type ListJoin = "and" | "oxford_and" | "lines";
@@ -40,7 +40,7 @@ function formatDateValue(
   const zone = dateOnly ? "UTC" : tz;
   switch (format) {
     case "iso":
-      return formatDate(d, "iso", "UTC");
+      return zone ? dateKeyInTz(d, zone) : formatDate(d, "iso", "UTC");
     case "short":
       return d.toLocaleDateString("en-US", {
         month: "numeric",
