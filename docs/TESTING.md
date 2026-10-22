@@ -15,15 +15,15 @@ How LawCRM tests its work, what contributors (human and agent) are expected to w
 
 When you add or change behavior, add or update a test. The bar isn't 100% coverage; it's "this is exercised by code that runs before the diff lands."
 
-| Change | Test posture |
-|---|---|
-| New pure helper in `src/lib/` | Direct unit test for every public export. Required, no exceptions. |
-| New permission key | Add to the expected-key list in `src/lib/permissions.test.ts`. Required. |
-| New server action | Integration test (DB + action) or a focused unit test of the validation/branching. Required for non-trivial logic. |
-| New schema field that drives logic | Test exercises the field via the helper that reads it. Required. |
-| New UI component | Component test if it has non-trivial state. Layout-only is exempt. |
-| Bug fix | Reproducer that fails before the fix, passes after. Required. |
-| Pure cosmetic / docs change | None. |
+| Change                             | Test posture                                                                                                       |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| New pure helper in `src/lib/`      | Direct unit test for every public export. Required, no exceptions.                                                 |
+| New permission key                 | Add to the expected-key list in `src/lib/permissions.test.ts`. Required.                                           |
+| New server action                  | Integration test (DB + action) or a focused unit test of the validation/branching. Required for non-trivial logic. |
+| New schema field that drives logic | Test exercises the field via the helper that reads it. Required.                                                   |
+| New UI component                   | Component test if it has non-trivial state. Layout-only is exempt.                                                 |
+| Bug fix                            | Reproducer that fails before the fix, passes after. Required.                                                      |
+| Pure cosmetic / docs change        | None.                                                                                                              |
 
 If you skip a test on a non-cosmetic change, say why in one line in the commit message ("untestable without real Gmail OAuth"). Don't silently skip.
 
@@ -32,8 +32,9 @@ If you skip a test on a non-cosmetic change, say why in one line in the commit m
 `.husky/pre-commit` (header comment documents it):
 
 1. `npm run precommit` = `npm run typecheck` (`next typegen && tsc --noEmit`) + `npm run lint` (ESLint, `--max-warnings 0`).
-2. `npm run test:related -- <staged src .ts/.tsx files>` (`vitest related --run`): only test files whose import graph reaches a staged file. Skipped when no `src/` TypeScript is staged.
-3. Only when `prisma/schema.prisma` or `prisma/migrations/` is staged: `npm run check:migrations` (applies every migration to a scratch DB and diffs against `schema.prisma`, ADR-016).
+2. `prettier --check` on every staged file. Formatting is format-on-touch: the repo was never reformatted wholesale, so a file you edit must be formatted in full (`npm run format -- <files>`, or format-on-save from `lawcrm.code-workspace`). Keep that formatting in its own commit when it would bury a small change. ESLint's stylistic rules are off (`eslint-config-prettier`), so Prettier decides formatting.
+3. `npm run test:related -- <staged src .ts/.tsx files>` (`vitest related --run`): only test files whose import graph reaches a staged file. Skipped when no `src/` TypeScript is staged.
+4. Only when `prisma/schema.prisma` or `prisma/migrations/` is staged: `npm run check:migrations` (applies every migration to a scratch DB and diffs against `schema.prisma`, ADR-016).
 
 The hook deliberately does NOT run the whole suite. Related-test selection follows static imports, so it can miss a test reaching your change through a dynamic import, a config/schema file, or shared DB state: **run `npm test` before pushing.** Fast loops: `npm run test:related -- <files>`, `npm run test:watch`, `npx vitest run path/to/file.test.ts`.
 
@@ -90,7 +91,9 @@ vi.mock("@/lib/permission-check", () => ({
 }));
 // redirect throws an internal error in prod; stub it to something assertable.
 vi.mock("next/navigation", () => ({
-  redirect: vi.fn((url: string) => { throw new Error(`__REDIRECT__:${url}`); }),
+  redirect: vi.fn((url: string) => {
+    throw new Error(`__REDIRECT__:${url}`);
+  }),
 }));
 ```
 
@@ -124,17 +127,18 @@ vi.mock("next/navigation", () => ({
 
 ## Running tests
 
-| Command | What |
-|---|---|
-| `npm test` | Full suite, exit 1 on failure. Needs the Docker test DB. |
-| `npm run test:watch` | Watch mode (TDD default). |
-| `npm run test:related -- <files>` | Only tests importing the given files (what the hook runs). |
-| `npm run test:ui` | Vitest UI at `http://localhost:51204/__vitest__/`. |
-| `npm run test:utc` | Full suite with `TZ=UTC`, the production server's zone. |
-| `npm run test:coverage` | `vitest run --coverage`; the only place coverage thresholds apply. |
-| `npm run typecheck` / `npm run lint` | `next typegen && tsc --noEmit` / ESLint `--max-warnings 0`. |
-| `npm run check:migrations` | Migrations vs `schema.prisma` drift check. |
-| `npm run precommit` | `typecheck` + `lint` (the hook adds related tests and the migration check). |
+| Command                                                         | What                                                                        |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `npm test`                                                      | Full suite, exit 1 on failure. Needs the Docker test DB.                    |
+| `npm run test:watch`                                            | Watch mode (TDD default).                                                   |
+| `npm run test:related -- <files>`                               | Only tests importing the given files (what the hook runs).                  |
+| `npm run test:ui`                                               | Vitest UI at `http://localhost:51204/__vitest__/`.                          |
+| `npm run test:utc`                                              | Full suite with `TZ=UTC`, the production server's zone.                     |
+| `npm run test:coverage`                                         | `vitest run --coverage`; the only place coverage thresholds apply.          |
+| `npm run typecheck` / `npm run lint`                            | `next typegen && tsc --noEmit` / ESLint `--max-warnings 0`.                 |
+| `npm run check:migrations`                                      | Migrations vs `schema.prisma` drift check.                                  |
+| `npm run format -- <files>` / `npm run format:check -- <files>` | Prettier write / check (the hook checks staged files).                      |
+| `npm run precommit`                                             | `typecheck` + `lint` (the hook adds related tests and the migration check). |
 
 The hook is wired via `npm run prepare` (auto-runs after `npm install`).
 

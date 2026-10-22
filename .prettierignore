@@ -1,0 +1,13 @@
+# Generated, vendored, or not ours to format.
+src/generated/
+design_handoff_kosloski_law_crm/
+prisma/migrations/
+.claude/
+.superpowers/
+.taste-skill/
+.agents/
+uploads/
+out/
+package-lock.json
+skills-lock.json
+next-env.d.ts

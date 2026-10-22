@@ -1,6 +1,7 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import prettier from "eslint-config-prettier/flat";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -24,6 +25,8 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // Last: turn off stylistic rules that would fight Prettier.
+  prettier,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

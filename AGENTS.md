@@ -16,11 +16,11 @@ change looks. State the tier in one line at the start of the task
 bump it up or down. This overrides skills that default to the full
 brainstorm → spec → plan → subagent flow for all creative work.
 
-| Tier | When | Process |
-|---|---|---|
-| **Just do it** | Copy, styling, layout, an obvious bug, a contained change to one or two files | Edit, run related tests, commit. No spec, plan, or subagents. |
-| **Light** | A real feature with none of the risk triggers below | 5–10 bullet plan in chat for the user to OK, build inline, one `/code-review` at the end. No spec/plan files. |
-| **Full** | Any risk trigger | Brainstorm → spec → plan → subagents, reviewing once per phase rather than after every task. |
+| Tier           | When                                                                          | Process                                                                                                       |
+| -------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Just do it** | Copy, styling, layout, an obvious bug, a contained change to one or two files | Edit, run related tests, commit. No spec, plan, or subagents.                                                 |
+| **Light**      | A real feature with none of the risk triggers below                           | 5–10 bullet plan in chat for the user to OK, build inline, one `/code-review` at the end. No spec/plan files. |
+| **Full**       | Any risk trigger                                                              | Brainstorm → spec → plan → subagents, reviewing once per phase rather than after every task.                  |
 
 Risk triggers (any one means Full):
 
@@ -74,7 +74,9 @@ Rules that review rounds keep catching. Each links to its ADR.
 
 Every new feature ships with at least one test (Vitest, `*.test.ts(x)`
 beside the source). The pre-commit hook (`.husky/pre-commit`) runs
-typecheck, lint, and only the tests related to staged `src/` files.
+typecheck, lint, `prettier --check` on staged files (format-on-touch:
+run `npm run format -- <files>` on what you edit), and only the tests
+related to staged `src/` files.
 Run the full `npm test` before pushing; CI runs it on every push. See
 **`docs/TESTING.md`** for the discipline.
 
@@ -108,15 +110,16 @@ neither can: what's next, why, and how we work.
 the one `docs/features/<area>.md` you're working in, and the specific
 ADRs it links. Don't load whole folders.
 
-| When you… | Update |
-|---|---|
-| Start, ship, descope, or reprioritize work | `docs/features/<area>.md` (detail) **and** its line in `docs/ROADMAP.md` |
-| Make a choice a future session might undo without knowing why | New ADR in `docs/decisions/` + its row in `decisions/README.md` |
-| Find a problem too big for a roadmap line | `docs/issues/<slug>.md`; delete it when fixed |
-| Change the schema | `docs/SCHEMA_NOTES.md`, only if there's a non-obvious invariant or trade-off |
-| Add a reusable UI pattern / change structure or data flow | `docs/UI_PATTERNS.md` / `docs/ARCHITECTURE.md` |
+| When you…                                                     | Update                                                                       |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Start, ship, descope, or reprioritize work                    | `docs/features/<area>.md` (detail) **and** its line in `docs/ROADMAP.md`     |
+| Make a choice a future session might undo without knowing why | New ADR in `docs/decisions/` + its row in `decisions/README.md`              |
+| Find a problem too big for a roadmap line                     | `docs/issues/<slug>.md`; delete it when fixed                                |
+| Change the schema                                             | `docs/SCHEMA_NOTES.md`, only if there's a non-obvious invariant or trade-off |
+| Add a reusable UI pattern / change structure or data flow     | `docs/UI_PATTERNS.md` / `docs/ARCHITECTURE.md`                               |
 
 Keep it lean:
+
 - ROADMAP lines are one line each; detail lives in the feature file.
 - Feature files describe end state, not history; aim under ~15KB.
 - Don't log what code, tests, or git already record: no changelogs,
