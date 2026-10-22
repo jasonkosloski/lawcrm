@@ -61,11 +61,9 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [x] **Invoice email delivery**: send, updated-invoice and re-send email the invoice PDF via Resend. → [time-and-billing](features/time-and-billing.md)
 - [x] **Void stamp + client notice**: voiding a sent invoice stamps filed PDFs VOID and can email the client. → [time-and-billing](features/time-and-billing.md)
 - [ ] **Settings: Billing & rates**: default rate, UTBMS library, invoice templates, payment terms. → [time-and-billing](features/time-and-billing.md)
-- [ ] **`updateExpense` edit dialog**: action exists, no UI. → [time-and-billing](features/time-and-billing.md)
 - [ ] **Time follow-ups**: auto-capture, idle detection, admin user picker on `/time`, editable reconciliation lanes. → [time-and-billing](features/time-and-billing.md)
 
 **Documents**
-- [ ] **Expense receipt picker cap**: lists at most 200 documents; needs search-as-you-type. → [issue](issues/receipt-picker-cap.md)
 - [x] **Documents tab as a file manager**: multi-select, right-click menus, drag-to-move with undo, desktop drop to upload. → [documents](features/documents.md)
 - [ ] **File-manager follow-ups**: zip download of a selection, grid view, sortable columns. → [documents](features/documents.md)
 - [ ] **Document versioning** → [documents](features/documents.md)

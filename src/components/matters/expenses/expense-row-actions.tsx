@@ -20,16 +20,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { deleteExpense } from "@/app/actions/expenses";
 import { EditExpenseDialog, type EditableExpense } from "./edit-expense-dialog";
-import type { ExpenseDocumentOption } from "./expense-fields";
 import { confirmAction, notifyError } from "@/lib/feedback";
 
 export function ExpenseRowActions({
+  matterId,
   expense,
   isBilled,
   canEdit,
   canDelete,
-  documentOptions = [],
 }: {
+  matterId: string;
   expense: EditableExpense;
   /** True when the expense has been linked onto an invoice. */
   isBilled: boolean;
@@ -37,8 +37,6 @@ export function ExpenseRowActions({
   canEdit: boolean;
   /** matters.expense.delete */
   canDelete: boolean;
-  /** Receipt candidates for the edit dialog. */
-  documentOptions?: ExpenseDocumentOption[];
 }) {
   const [pending, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
@@ -99,10 +97,10 @@ export function ExpenseRowActions({
       </DropdownMenu>
       {showEdit && (
         <EditExpenseDialog
+          matterId={matterId}
           open={editOpen}
           onOpenChange={setEditOpen}
           expense={expense}
-          documentOptions={documentOptions}
         />
       )}
     </>

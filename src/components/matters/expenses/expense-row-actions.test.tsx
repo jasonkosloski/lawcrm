@@ -14,6 +14,9 @@ vi.mock("@/lib/feedback", () => ({
 vi.mock("@/app/actions/expenses", () => ({
   deleteExpense: vi.fn(),
   updateExpense: vi.fn(async () => ({ status: "ok" })),
+  searchReceiptDocuments: vi.fn(async () => [
+    { id: "doc-new", name: "New receipt.pdf" },
+  ]),
 }));
 
 import { deleteExpense, updateExpense } from "@/app/actions/expenses";
@@ -45,11 +48,13 @@ const expenseRow = {
   clientAdvanced: false,
   notes: "",
   receiptDocumentId: "doc-old",
+  receiptDocumentName: "Old receipt.pdf",
 };
 
 const renderRow = (over: Partial<Parameters<typeof ExpenseRowActions>[0]> = {}) =>
   render(
     <ExpenseRowActions
+      matterId="m1"
       expense={expenseRow}
       isBilled={false}
       canEdit={false}
@@ -123,11 +128,13 @@ describe("ExpenseRowActions — Edit", () => {
     expect(screen.getByRole("button", { name: /expense actions/i })).toBeInTheDocument();
   });
 
-  test("the dialog is seeded from the row and posts every field, keeping an off-list receipt", async () => {
+  test("the dialog is seeded from the row and posts every field, keeping the attached receipt", async () => {
     const user = userEvent.setup();
-    renderRow({ canEdit: true, documentOptions: [{ id: "doc-new", name: "New receipt.pdf" }] });
+    vi.mocked(updateExpense).mockClear();
+    renderRow({ canEdit: true });
     await user.click(screen.getByRole("button", { name: /expense actions/i }));
     await user.click(await screen.findByText(/edit expense/i));
+    expect(screen.getByLabelText(/^receipt/i)).toHaveTextContent("Old receipt.pdf");
 
     const amount = await screen.findByLabelText(/amount/i);
     expect(amount).toHaveValue("12.50");
@@ -144,7 +151,21 @@ describe("ExpenseRowActions — Edit", () => {
     expect(f.get("description")).toBe("Postage");
     expect(f.get("category")).toBe("postage");
     expect(f.get("billable")).toBe("on");
-    // The attached receipt isn't in the picker list but must survive.
+    // The attached receipt was never searched for but must survive.
     expect(f.getAll("receiptDocumentId")).toEqual(["doc-old"]);
+  });
+
+  test("picking another document from the search swaps the receipt", async () => {
+    const user = userEvent.setup();
+    vi.mocked(updateExpense).mockClear();
+    renderRow({ canEdit: true });
+    await user.click(screen.getByRole("button", { name: /expense actions/i }));
+    await user.click(await screen.findByText(/edit expense/i));
+    await user.click(screen.getByLabelText(/^receipt/i));
+    await user.click(await screen.findByRole("button", { name: /new receipt\.pdf/i }));
+    await user.click(screen.getByRole("button", { name: /save expense/i }));
+
+    const fd = vi.mocked(updateExpense).mock.calls[0][2] as FormData;
+    expect(fd.getAll("receiptDocumentId")).toEqual(["doc-new"]);
   });
 });

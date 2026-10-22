@@ -14,14 +14,19 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn().mockResolvedValue("test-user"),
+  currentUserHasAnyPermission: vi.fn().mockResolvedValue(true),
 }));
 
 import { getCurrentUserId } from "@/lib/current-user";
-import { requirePermission } from "@/lib/permission-check";
+import {
+  currentUserHasAnyPermission,
+  requirePermission,
+} from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
   createExpense,
   deleteExpense,
+  searchReceiptDocuments,
   updateExpense,
 } from "@/app/actions/expenses";
 import { expenseInitialState } from "@/lib/expense-constants";
@@ -301,5 +306,42 @@ describe("deleteExpense", () => {
       ok: false,
       error: "Expense not found.",
     });
+  });
+});
+
+describe("searchReceiptDocuments", () => {
+  test("lists only this matter's documents, newest first, filtered by name", async () => {
+    const older = await seedDocument({ matterId, name: "Filing fee receipt.pdf" });
+    const newer = await seedDocument({ matterId, name: "Court costs.pdf" });
+    await prisma.document.update({
+      where: { id: older.documentId },
+      data: { createdAt: new Date("2026-01-01T00:00:00Z") },
+    });
+    await seedDocument({ matterId: otherMatterId, name: "Other matter receipt.pdf" });
+
+    expect((await searchReceiptDocuments(matterId, "")).map((d) => d.id)).toEqual([
+      newer.documentId,
+      older.documentId,
+    ]);
+    expect(await searchReceiptDocuments(matterId, "  RECEIPT ")).toEqual([
+      { id: older.documentId, name: "Filing fee receipt.pdf" },
+    ]);
+    expect(currentUserHasAnyPermission).toHaveBeenCalledWith([
+      "matters.expense.create",
+      "matters.expense.edit",
+    ]);
+  });
+
+  test("returns nothing without an expense create/edit permission", async () => {
+    await seedDocument({ matterId });
+    vi.mocked(currentUserHasAnyPermission).mockResolvedValueOnce(false);
+    expect(await searchReceiptDocuments(matterId, "")).toEqual([]);
+  });
+
+  test("a malformed payload returns nothing", async () => {
+    await seedDocument({ matterId });
+    expect(
+      await searchReceiptDocuments(matterId, { contains: "" } as unknown as string)
+    ).toEqual([]);
   });
 });

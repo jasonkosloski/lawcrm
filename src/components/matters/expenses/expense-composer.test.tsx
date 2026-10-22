@@ -3,8 +3,8 @@
  *
  * The composer's behavior worth pinning down:
  *   - Collapsed by default; expand on "Log expense" click.
- *   - Receipt picker only renders when documentOptions is non-empty
- *     (no point picking from an empty list).
+ *   - Receipt picker searches the matter's documents and posts the
+ *     pick as receiptDocumentId.
  *   - Server validation errors surface inline on the right field.
  *   - On success (state.status==="ok"), the form resets + collapses.
  */
@@ -16,17 +16,26 @@ import { UserTimeZoneProvider } from "@/components/user-time-zone";
 
 vi.mock("@/app/actions/expenses", () => ({
   createExpense: vi.fn(),
+  searchReceiptDocuments: vi.fn(),
 }));
 
-import { createExpense } from "@/app/actions/expenses";
+import { createExpense, searchReceiptDocuments } from "@/app/actions/expenses";
 import { ExpenseComposer } from "./expense-composer";
 
 const mockedAction = vi.mocked(createExpense);
+const mockedSearch = vi.mocked(searchReceiptDocuments);
 
 beforeEach(() => {
   mockedAction.mockReset();
   // Default success that fires whatever the form posts back.
   mockedAction.mockImplementation(async () => ({ status: "ok" as const }));
+  mockedSearch.mockReset();
+  mockedSearch.mockImplementation(async (_matterId, query) =>
+    [
+      { id: "doc1", name: "Filing fee receipt.pdf" },
+      { id: "doc2", name: "Court costs.pdf" },
+    ].filter((d) => d.name.toLowerCase().includes(query.toLowerCase()))
+  );
 });
 
 afterEach(() => {
@@ -69,42 +78,47 @@ describe("ExpenseComposer — collapsed mode", () => {
 });
 
 describe("ExpenseComposer — receipt picker", () => {
-  test("hides the Receipt field when documentOptions is empty", async () => {
+  test("posts no receipt by default", async () => {
     const user = userEvent.setup();
-    const { container } = render(
-      <ExpenseComposer matterId="m1" documentOptions={[]} />
-    );
+    const { container } = render(<ExpenseComposer matterId="m1" />);
     await user.click(screen.getByRole("button", { name: /log expense/i }));
-    expect(
-      container.querySelector('[name="receiptDocumentId"]')
-    ).toBeNull();
+    const field = container.querySelector(
+      '[name="receiptDocumentId"]'
+    ) as HTMLInputElement;
+    expect(field.value).toBe("");
+    expect(screen.getByLabelText(/^receipt/i)).toHaveTextContent(/no receipt/i);
   });
 
-  test("shows the Receipt picker when at least one document is available", async () => {
+  test("searches the matter's documents as you type and posts the pick", async () => {
     const user = userEvent.setup();
-    const { container } = render(
-      <ExpenseComposer
-        matterId="m1"
-        documentOptions={[
-          { id: "doc1", name: "Filing fee receipt.pdf" },
-          { id: "doc2", name: "Court costs.pdf" },
-        ]}
-      />
-    );
+    const { container } = render(<ExpenseComposer matterId="m1" />);
     await user.click(screen.getByRole("button", { name: /log expense/i }));
-    const picker = container.querySelector('[name="receiptDocumentId"]');
-    expect(picker).toBeInTheDocument();
-    // Each document surfaces as an <option>.
+    await user.click(screen.getByLabelText(/^receipt/i));
+    await waitFor(() => expect(mockedSearch).toHaveBeenCalledWith("m1", ""));
+
+    await user.type(screen.getByLabelText(/search documents/i), "court");
+    await waitFor(() => expect(mockedSearch).toHaveBeenCalledWith("m1", "court"));
+    await user.click(await screen.findByRole("button", { name: /court costs/i }));
+
     expect(
-      screen.getByRole("option", { name: /Filing fee receipt/i })
-    ).toBeInTheDocument();
+      (container.querySelector('[name="receiptDocumentId"]') as HTMLInputElement).value
+    ).toBe("doc2");
+    expect(screen.getByLabelText(/^receipt/i)).toHaveTextContent("Court costs.pdf");
+
+    // Remove clears it again.
+    await user.click(screen.getByRole("button", { name: /remove receipt/i }));
     expect(
-      screen.getByRole("option", { name: /Court costs/i })
-    ).toBeInTheDocument();
-    // And the no-receipt sentinel.
-    expect(
-      screen.getByRole("option", { name: /no receipt/i })
-    ).toBeInTheDocument();
+      (container.querySelector('[name="receiptDocumentId"]') as HTMLInputElement).value
+    ).toBe("");
+  });
+
+  test("an empty matter explains where receipts come from", async () => {
+    mockedSearch.mockResolvedValue([]);
+    const user = userEvent.setup();
+    render(<ExpenseComposer matterId="m1" />);
+    await user.click(screen.getByRole("button", { name: /log expense/i }));
+    await user.click(screen.getByLabelText(/^receipt/i));
+    expect(await screen.findByText(/no documents on this matter yet/i)).toBeInTheDocument();
   });
 });
 
@@ -159,12 +173,7 @@ describe("ExpenseComposer — validation surface", () => {
 describe("ExpenseComposer — labels (F889)", () => {
   test("every field is reachable by its label", async () => {
     const user = userEvent.setup();
-    render(
-      <ExpenseComposer
-        matterId="m1"
-        documentOptions={[{ id: "d1", name: "Receipt.pdf" }]}
-      />
-    );
+    render(<ExpenseComposer matterId="m1" />);
     await user.click(screen.getByRole("button", { name: /log expense/i }));
     for (const label of [
       /^date/i,

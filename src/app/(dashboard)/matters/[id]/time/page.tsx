@@ -33,10 +33,7 @@ import {
 import { TimeComposer } from "@/components/matters/captures/time-composer";
 import { TimeEntryRowMenu } from "@/components/time-entries/time-entry-row-actions";
 import { EntitySourceChip } from "@/components/matters/entity-source-chip";
-import {
-  ExpenseComposer,
-  type ExpenseDocumentOption,
-} from "@/components/matters/expenses/expense-composer";
+import { ExpenseComposer } from "@/components/matters/expenses/expense-composer";
 import { ExpenseRowActions } from "@/components/matters/expenses/expense-row-actions";
 import { prisma } from "@/lib/prisma";
 import { RowAttachedNotes } from "@/components/matters/row-attached-notes";
@@ -60,13 +57,6 @@ import {
 } from "@/lib/queries/matter-detail";
 import { requireUser } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
-
-/// The expense composer's receipt picker is a native <select>; an
-/// unbounded document list (thousands of discovery files) would ship
-/// every file name in the RSC payload. Newest first - receipts are
-/// attached right after upload. Existing receipts keep their label
-/// via the expense row itself, so the cap never hides one.
-const RECEIPT_PICKER_LIMIT = 200;
 
 const formatMoney = (n: number | null): string => {
   if (n === null) return "—";
@@ -111,24 +101,9 @@ export default async function MatterTimePage({
   // Expense data waits on the view gate: getMatterExpenses does no
   // permission check itself, so amounts/receipts must not be fetched
   // (never mind rendered) for viewers without matters.expense.view.
-  // The document list only feeds the expense composer's receipt
-  // and edit-dialog receipt pickers, so it loads only for viewers who
-  // can create or edit expenses.
-  const [expenses, matterDocuments] = canViewExpenses
-    ? await Promise.all([
-        getMatterExpenses(id),
-        canCreateExpense || canEditExpense
-          ? // Compact, capped projection - name + id only.
-            prisma.document.findMany({
-              where: { matterId: id },
-              orderBy: { createdAt: "desc" },
-              take: RECEIPT_PICKER_LIMIT,
-              select: { id: true, name: true },
-            })
-          : Promise.resolve([]),
-      ])
-    : [null, []];
-  const expenseDocumentOptions: ExpenseDocumentOption[] = matterDocuments;
+  // (The receipt picker searches documents on demand; nothing is
+  // preloaded for it.)
+  const expenses = canViewExpenses ? await getMatterExpenses(id) : null;
 
   if (entries.length === 0) {
     return (
@@ -146,7 +121,6 @@ export default async function MatterTimePage({
             canCreate={canCreateExpense}
             canEdit={canEditExpense}
             canDelete={canDeleteExpense}
-            documentOptions={expenseDocumentOptions}
           />
         )}
       </div>
@@ -229,7 +203,6 @@ export default async function MatterTimePage({
           canCreate={canCreateExpense}
           canEdit={canEditExpense}
           canDelete={canDeleteExpense}
-          documentOptions={expenseDocumentOptions}
         />
       )}
     </div>
@@ -385,14 +358,12 @@ function ExpensesSection({
   canCreate,
   canEdit,
   canDelete,
-  documentOptions,
 }: {
   matterId: string;
   expenses: { rows: ExpenseRow[]; totalAmount: number; billableUnbilledAmount: number };
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
-  documentOptions: ExpenseDocumentOption[];
 }) {
   const { rows, totalAmount, billableUnbilledAmount } = expenses;
   return (
@@ -412,10 +383,7 @@ function ExpensesSection({
       </div>
 
       {canCreate && (
-        <ExpenseComposer
-          matterId={matterId}
-          documentOptions={documentOptions}
-        />
+        <ExpenseComposer matterId={matterId} />
       )}
 
       {rows.length === 0 ? (
@@ -446,7 +414,6 @@ function ExpensesSection({
                   matterId={matterId}
                   canEdit={canEdit}
                   canDelete={canDelete}
-                  documentOptions={documentOptions}
                 />
               ))}
             </TableBody>
@@ -462,13 +429,11 @@ function ExpenseTableRow({
   matterId,
   canEdit,
   canDelete,
-  documentOptions,
 }: {
   expense: ExpenseRow;
   matterId: string;
   canEdit: boolean;
   canDelete: boolean;
-  documentOptions: ExpenseDocumentOption[];
 }) {
   return (
     <TableRow>
@@ -552,6 +517,7 @@ function ExpenseTableRow({
       </TableCell>
       <TableCell className="pr-4 text-right">
         <ExpenseRowActions
+          matterId={matterId}
           // Server-shaped for the edit dialog: a day key + fixed-2
           // string, never a Date the browser would re-read (ADR-012).
           expense={{
@@ -565,11 +531,11 @@ function ExpenseTableRow({
             clientAdvanced: expense.clientAdvanced,
             notes: expense.notes ?? "",
             receiptDocumentId: expense.receiptDocumentId ?? "",
+            receiptDocumentName: expense.receiptDocumentName ?? "",
           }}
           isBilled={!!expense.invoiceId}
           canEdit={canEdit}
           canDelete={canDelete}
-          documentOptions={documentOptions}
         />
       </TableCell>
     </TableRow>

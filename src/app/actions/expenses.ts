@@ -37,7 +37,10 @@ import {
 // Expense.date is a date-only value (ADR-012): "YYYY-MM-DD" parses to
 // UTC midnight and is read back in UTC — no time zone is ever applied.
 import { parseDateOnly } from "@/lib/format-date";
-import { requirePermission } from "@/lib/permission-check";
+import {
+  currentUserHasAnyPermission,
+  requirePermission,
+} from "@/lib/permission-check";
 import {
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABEL,
@@ -78,8 +81,8 @@ const expenseSchema = z.object({
 /** Validate the posted receipt-document FK against the matter
  *  scope. Empty/null maps to "no receipt"; an unknown id or
  *  cross-matter id silently coerces to null rather than blowing
- *  up the create. The dropdown is server-rendered from the
- *  matter's documents so a legitimate selection always resolves.
+ *  up the create. The picker only offers the matter's documents
+ *  (searchReceiptDocuments) so a legitimate selection always resolves.
  *  Anything off that path probably came from a stale form or a
  *  tampered POST — drop it, don't error.
  *
@@ -96,6 +99,41 @@ async function resolveReceiptDocumentId(
   });
   if (!doc || doc.matterId !== matterId) return null;
   return doc.id;
+}
+
+export type ReceiptCandidate = { id: string; name: string };
+
+const RECEIPT_SEARCH_LIMIT = 50;
+
+/** The receipt picker's search: the matter's documents, newest first
+ *  (receipts are usually attached right after upload), optionally
+ *  filtered by name. Open to anyone who can log or edit an expense
+ *  on the matter; a malformed payload returns nothing. */
+export async function searchReceiptDocuments(
+  matterId: string,
+  query: string
+): Promise<ReceiptCandidate[]> {
+  if (typeof matterId !== "string" || typeof query !== "string") return [];
+  await getCurrentUserId();
+  if (
+    !(await currentUserHasAnyPermission([
+      "matters.expense.create",
+      "matters.expense.edit",
+    ]))
+  ) {
+    return [];
+  }
+  await assertMatterAccess(matterId);
+  const q = query.trim().slice(0, 200);
+  return prisma.document.findMany({
+    where: {
+      matterId,
+      ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    take: RECEIPT_SEARCH_LIMIT,
+    select: { id: true, name: true },
+  });
 }
 
 const BILLED_EDIT_ERROR =

@@ -18,11 +18,7 @@ import {
   type ExpenseCategory,
 } from "@/lib/expense-constants";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-
-export type ExpenseDocumentOption = {
-  id: string;
-  name: string;
-};
+import { ReceiptPicker } from "./receipt-picker";
 
 export type ExpenseDraft = {
   /** YYYY-MM-DD */
@@ -37,6 +33,8 @@ export type ExpenseDraft = {
   notes: string;
   /** "" = no receipt. */
   receiptDocumentId: string;
+  /** Display label for the receipt; never posted. */
+  receiptDocumentName: string;
 };
 
 export function blankExpenseDraft(todayKey: string): ExpenseDraft {
@@ -50,6 +48,7 @@ export function blankExpenseDraft(todayKey: string): ExpenseDraft {
     clientAdvanced: false,
     notes: "",
     receiptDocumentId: "",
+    receiptDocumentName: "",
   };
 }
 
@@ -57,24 +56,18 @@ const inputClass =
   "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
 
 export function ExpenseFields({
+  matterId,
   draft,
   onChange,
   errors = {},
-  documentOptions = [],
 }: {
+  /** Scopes the receipt search. */
+  matterId: string;
   draft: ExpenseDraft;
   onChange: (patch: Partial<ExpenseDraft>) => void;
   errors?: Record<string, string[] | undefined>;
-  /** Receipt candidates; the picker hides when empty. A receipt
-   *  already attached but missing from the list stays selectable. */
-  documentOptions?: ExpenseDocumentOption[];
 }) {
   const uid = useId();
-  // An attached receipt missing from the (capped) list must survive a
-  // save — otherwise editing an old expense would silently detach it.
-  const receiptOffList =
-    draft.receiptDocumentId !== "" &&
-    !documentOptions.some((d) => d.id === draft.receiptDocumentId);
   return (
     <>
       <div className="grid grid-cols-3 gap-3">
@@ -182,34 +175,17 @@ export function ExpenseFields({
         />
       </Field>
 
-      {/* Receipt picker — only when the matter has documents (upload a
-          receipt via the Documents tab first). */}
-      {documentOptions.length > 0 && (
-        <Field label="Receipt" htmlFor={`${uid}-receipt`}>
-          <NativeSelect
-            className="w-full"
-            id={`${uid}-receipt`}
-            name="receiptDocumentId"
-            value={draft.receiptDocumentId}
-            onChange={(e) => onChange({ receiptDocumentId: e.target.value })}
-          >
-            <NativeSelectOption value="">— No receipt —</NativeSelectOption>
-            {receiptOffList && (
-              <NativeSelectOption value={draft.receiptDocumentId}>Current receipt</NativeSelectOption>
-            )}
-            {documentOptions.map((d) => (
-              <NativeSelectOption key={d.id} value={d.id}>
-                {d.name}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </Field>
-      )}
-      {/* No picker at all (no documents listed) → still post the
-          attached receipt so the save keeps it. */}
-      {documentOptions.length === 0 && receiptOffList && (
-        <input type="hidden" name="receiptDocumentId" value={draft.receiptDocumentId} />
-      )}
+      <Field label="Receipt" htmlFor={`${uid}-receipt`}>
+        <ReceiptPicker
+          id={`${uid}-receipt`}
+          matterId={matterId}
+          documentId={draft.receiptDocumentId}
+          documentName={draft.receiptDocumentName}
+          onChange={(receiptDocumentId, receiptDocumentName) =>
+            onChange({ receiptDocumentId, receiptDocumentName })
+          }
+        />
+      </Field>
     </>
   );
 }

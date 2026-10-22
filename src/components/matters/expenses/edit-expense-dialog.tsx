@@ -23,25 +23,21 @@ import {
 import { Button } from "@/components/ui/button";
 import { updateExpense } from "@/app/actions/expenses";
 import { expenseInitialState, type ExpenseFormState } from "@/lib/expense-constants";
-import {
-  ExpenseFields,
-  type ExpenseDocumentOption,
-  type ExpenseDraft,
-} from "./expense-fields";
+import { ExpenseFields, type ExpenseDraft } from "./expense-fields";
 
 /** The editable shape the server hands the row. */
 export type EditableExpense = ExpenseDraft & { id: string };
 
 export function EditExpenseDialog({
+  matterId,
   open,
   onOpenChange,
   expense,
-  documentOptions = [],
 }: {
+  matterId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   expense: EditableExpense;
-  documentOptions?: ExpenseDocumentOption[];
 }) {
   const [state, formAction, isPending] = useDialogActionState<ExpenseFormState, FormData>(
     updateExpense.bind(null, expense.id),
@@ -74,10 +70,10 @@ export function EditExpenseDialog({
         </DialogHeader>
         <form action={formAction} className="flex flex-col gap-3">
           <ExpenseFields
+            matterId={matterId}
             draft={draft}
             onChange={patch}
             errors={state.errors}
-            documentOptions={documentOptions}
           />
           {state.error && <div className="text-2xs text-warn">{state.error}</div>}
           <DialogFooter>

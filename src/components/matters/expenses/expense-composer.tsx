@@ -25,21 +25,10 @@ import { expenseInitialState, type ExpenseFormState } from "@/lib/expense-consta
 import {
   ExpenseFields,
   blankExpenseDraft,
-  type ExpenseDocumentOption,
   type ExpenseDraft,
 } from "./expense-fields";
 
-export type { ExpenseDocumentOption } from "./expense-fields";
-
-export function ExpenseComposer({
-  matterId,
-  documentOptions = [],
-}: {
-  matterId: string;
-  /** Documents on this matter, surfaced as receipt options in the
-   *  dropdown. Empty list (the default) hides the receipt field. */
-  documentOptions?: ExpenseDocumentOption[];
-}) {
+export function ExpenseComposer({ matterId }: { matterId: string }) {
   const [expanded, setExpanded] = useState(false);
   const action = createExpense.bind(null, matterId);
   // Wrapped useActionState: masks state left over from a previous
@@ -105,10 +94,10 @@ export function ExpenseComposer({
       </div>
 
       <ExpenseFields
+        matterId={matterId}
         draft={draft}
         onChange={patch}
         errors={state.errors}
-        documentOptions={documentOptions}
       />
 
       {state.error && <div className="text-2xs text-warn">{state.error}</div>}

@@ -39,4 +39,3 @@ Related: [ADR-015](../decisions/015-driver-based-document-storage-local-disk-in.
 
 ## Notes
 - Matter-team access (ADR-039) is enforced on document/attachment downloads and uploads.
-- The expense receipt picker is capped at 200 documents (`RECEIPT_PICKER_LIMIT`, see [issues/receipt-picker-cap.md](../issues/receipt-picker-cap.md)).
