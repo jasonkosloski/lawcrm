@@ -8,6 +8,12 @@
 export const AGREEMENT_STATUSES = ["not_sent", "sent", "signed"] as const;
 export type AgreementStatus = (typeof AGREEMENT_STATUSES)[number];
 
+export const AGREEMENT_STATUS_LABEL: Record<AgreementStatus, string> = {
+  not_sent: "Not sent",
+  sent: "Sent",
+  signed: "Signed",
+};
+
 const DEFAULT_LABEL = "Fee agreement";
 
 export function originatingDocLabel(

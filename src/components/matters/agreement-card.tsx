@@ -19,12 +19,7 @@ import {
 } from "@/app/actions/matter-agreement";
 import { AgreementFields } from "./agreement-fields";
 import { Field } from "@/components/ui/field";
-
-const STATUS_LABELS: Record<string, string> = {
-  not_sent: "Not sent",
-  sent: "Sent",
-  signed: "Signed",
-};
+import { AGREEMENT_STATUS_LABEL, type AgreementStatus } from "@/lib/originating-doc";
 
 const initial: AgreementFormState = { status: "idle" };
 
@@ -143,7 +138,7 @@ export function AgreementCard({
         ) : agreement ? (
           <div className="text-xs text-ink flex flex-wrap items-center gap-x-1.5">
             <span>
-              {STATUS_LABELS[agreement.status] ?? agreement.status}
+              {AGREEMENT_STATUS_LABEL[agreement.status as AgreementStatus] ?? agreement.status}
               {agreement.signedDate ? ` ${agreement.signedDate}` : ""}
             </span>
             {agreement.document && (

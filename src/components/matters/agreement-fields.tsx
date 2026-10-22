@@ -8,15 +8,9 @@
 "use client";
 
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { AGREEMENT_STATUSES } from "@/lib/originating-doc";
+import { AGREEMENT_STATUSES, AGREEMENT_STATUS_LABEL } from "@/lib/originating-doc";
 import { Row } from "./form-primitives";
 import { Field, inputClass } from "@/components/ui/field";
-
-const STATUS_LABELS: Record<string, string> = {
-  not_sent: "Not sent",
-  sent: "Sent",
-  signed: "Signed",
-};
 
 export function AgreementFields({
   required,
@@ -52,7 +46,7 @@ export function AgreementFields({
         >
           {AGREEMENT_STATUSES.map((s) => (
             <NativeSelectOption key={s} value={s}>
-              {STATUS_LABELS[s]}
+              {AGREEMENT_STATUS_LABEL[s]}
             </NativeSelectOption>
           ))}
         </NativeSelect>

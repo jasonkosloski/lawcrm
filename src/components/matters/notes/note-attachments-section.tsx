@@ -66,6 +66,10 @@ import {
 import { confirmAction, notifyError } from "@/lib/feedback";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { Button } from "@/components/ui/button";
+import {
+  TIME_ENTRY_STATUS_LABEL,
+  type TimeEntryStatus,
+} from "@/lib/constants/time-entry-status";
 
 const formatDate = (d: Date): string => formatDateOnly(d, "short");
 
@@ -440,14 +444,6 @@ function DeadlineChip({
 
 // ── Time entries (mirrors EventTimeEntriesSection layout) ──────────────
 
-const TIME_STATUS_LABEL: Record<string, string> = {
-  draft: "draft",
-  submitted: "submitted",
-  billable: "billable",
-  billed: "billed",
-  written_off: "written off",
-};
-
 /** Aggregate hours per user, sorted by hours desc. Drives the
  *  collapsed-summary line so the user knows who logged how much
  *  without expanding the full list.
@@ -665,7 +661,7 @@ function TimeEntryItem({
       )}
 
       <div className="flex items-center gap-2 pl-8 text-3xs text-ink-4 font-mono">
-        <span>{TIME_STATUS_LABEL[entry.status] ?? entry.status}</span>
+        <span>{TIME_ENTRY_STATUS_LABEL[entry.status as TimeEntryStatus]?.toLowerCase() ?? entry.status}</span>
         {!entry.billable && <span>· non-billable</span>}
         {entry.noCharge && <span>· no charge</span>}
       </div>

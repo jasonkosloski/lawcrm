@@ -22,7 +22,7 @@ import { deleteTimeEntry } from "@/app/actions/time-entries";
 // they were saved on. (`formatDate` without a zone ran in the
 // browser's zone and showed Denver users the previous day.)
 import { formatDateOnly } from "@/lib/format-date";
-import { formatHours } from "@/lib/format-hours";
+import { formatHours } from "@/lib/time-entry-constants";
 import type { EventTimeEntry } from "@/lib/queries/calendar";
 import {
   canDeleteRecord,

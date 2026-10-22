@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 // trip a hydration mismatch. All-day events are date-only values and
 // read in UTC.
 import { dateKeyInTz, formatDate, formatDateOnly } from "@/lib/format-date";
-import { formatHours } from "@/lib/format-hours";
+import { formatHours } from "@/lib/time-entry-constants";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { EventLink } from "@/components/calendar/event-link";
 import {
@@ -32,16 +32,10 @@ import { EventNotesSection } from "@/components/calendar/event-notes-section";
 import { EventTimeEntriesSection } from "@/components/calendar/event-time-entries-section";
 import type { MatterEventRow } from "@/lib/queries/matter-detail";
 import { Badge } from "@/components/ui/badge";
-
-const TYPE_LABEL: Record<string, string> = {
-  meeting: "Meeting",
-  deposition: "Deposition",
-  hearing: "Hearing",
-  intake: "Intake",
-  block_time: "Block time",
-  mediation: "Mediation",
-  trial: "Trial",
-};
+import {
+  EVENT_TYPE_LABEL,
+  type CalendarEventType,
+} from "@/lib/constants/calendar-event-type";
 
 /** Plain-text preview of the first (pinned-first, most-recent) note
  *  shown under the event title when the row is collapsed. Note content
@@ -173,7 +167,7 @@ export function EventRowExpandable({
               )}
             </div>
             <Badge variant="neutral">
-              {TYPE_LABEL[event.type] ?? event.type}
+              {EVENT_TYPE_LABEL[event.type as CalendarEventType] ?? event.type}
             </Badge>
             {event.attendeeCount > 0 && (
               <span className="text-2xs font-mono text-ink-4 shrink-0">

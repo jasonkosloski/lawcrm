@@ -235,7 +235,7 @@ describe("EventTimeEntriesSection", () => {
     );
     expect(screen.getByText("0.25h")).toBeTruthy();
     expect(screen.getByText("0.75h")).toBeTruthy();
-    expect(screen.getByText(/1h total/)).toBeTruthy();
+    expect(screen.getByText(/1\.0h total/)).toBeTruthy();
     expect(screen.getByText(/0\.25h billable/)).toBeTruthy();
   });
 
