@@ -149,6 +149,19 @@ describe("requestTranscript", () => {
     expect(t.error).toContain("nope");
   });
 
+  test("a failed re-run keeps the previous completedAt", async () => {
+    const done = new Date("2026-10-02T12:00:00Z");
+    await prisma.transcript.create({
+      data: { documentId: docId, status: "completed", providerJobId: "old", requestedById: userId, durationSeconds: 90, completedAt: done },
+    });
+    vi.mocked(submitJob).mockRejectedValue(new Error("down"));
+    expect((await requestTranscript(docId)).ok).toBe(false);
+    const t = await prisma.transcript.findUniqueOrThrow({ where: { documentId: docId } });
+    expect(t.status).toBe("failed");
+    expect(t.completedAt).toEqual(done);
+    expect(t.durationSeconds).toBe(90);
+  });
+
   describe("corrected transcript", () => {
     beforeEach(async () => {
       await prisma.transcript.create({
@@ -239,8 +252,19 @@ describe("deleteTranscript", () => {
     expect(requirePermission).toHaveBeenCalledWith("documents.transcript.delete");
     expect(assertChildMatterAccess).toHaveBeenCalledWith("document", docId);
     expect(await prisma.transcript.count()).toBe(0);
-    expect(deleteJob).toHaveBeenCalledWith("j9");
+    // The DB trigger queues the provider copy; no inline provider call.
+    expect(deleteJob).not.toHaveBeenCalled();
+    const purges = await prisma.transcriptPurge.findMany();
+    expect(purges.map((p) => p.providerJobId)).toEqual(["j9"]);
     expect(await prisma.activityLog.count({ where: { title: "Transcript deleted" } })).toBe(1);
+  });
+
+  test("completed row: no purge row", async () => {
+    await prisma.transcript.create({
+      data: { documentId: docId, status: "completed", providerJobId: "done", requestedById: userId },
+    });
+    await deleteTranscript(docId);
+    expect(await prisma.transcriptPurge.count()).toBe(0);
   });
 
   test("walled: refused, row kept", async () => {

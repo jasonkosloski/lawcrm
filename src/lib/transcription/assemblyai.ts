@@ -88,8 +88,12 @@ export async function fetchJob(jobId: string): Promise<{
   return { status: json.status === "queued" ? "queued" : "processing" };
 }
 
-/** Best-effort removal of the provider-side copy; failures are logged only. */
-export async function deleteJob(jobId: string): Promise<void> {
+/**
+ * Best-effort removal of the provider-side copy. Never throws. Returns
+ * true when the job is gone (2xx, or 404: already deleted) and false
+ * otherwise, so callers can queue a retry.
+ */
+export async function deleteJob(jobId: string): Promise<boolean> {
   try {
     const res = await fetch(
       `${BASE_URL}/v2/transcript/${encodeURIComponent(jobId)}`,
@@ -99,13 +103,14 @@ export async function deleteJob(jobId: string): Promise<void> {
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       },
     );
-    if (!res.ok) {
-      console.warn(
-        `[assemblyai] deleteJob ${jobId} failed: ${await providerError(res)}`,
-      );
-    }
+    if (res.ok || res.status === 404) return true;
+    console.warn(
+      `[assemblyai] deleteJob ${jobId} failed: ${await providerError(res)}`,
+    );
+    return false;
   } catch (err) {
     console.warn(`[assemblyai] deleteJob ${jobId} failed`, err);
+    return false;
   }
 }
 

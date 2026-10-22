@@ -154,9 +154,10 @@ Invariants (SCHEMA_NOTES.md gets the non-obvious ones):
    `src/app/actions/transcripts.ts`:
    `requirePermission("documents.transcribe")` → document access → must be
    audio/video (same resolver as the viewer) with a stored file → refuse if
-   a job is `queued`/`processing` → monthly cap check → if another document
+   a job is `queued`/`processing` → if another document
    with the same `fileUrl` in the same scope has a `completed` transcript,
-   copy it (segments + speakers, `requestedById` = caller) and finish →
+   copy it (segments + speakers, `requestedById` = caller) and finish
+   (free, so it precedes the cap) → monthly cap check →
    else upsert Transcript `queued`, presign the file (existing
    `signedBlobUrl`, 6 h media lifetime), `submitJob`, store `providerJobId`,
    status `processing`. `logActivity` "Transcription requested". Re-running
@@ -267,6 +268,11 @@ migration to roles holding `documents.upload` (transcribe/edit) and
 
 - Provider sees one presigned URL (6 h) per job; API key server-only;
   webhook verified by per-job secret; provider copy deleted after storing.
+  Non-success paths (failure, timeout, a deleted transcript or document)
+  also delete it; when the provider refuses, the job id goes into
+  `transcript_purges` and the sweep retries (give up after 7 days). A
+  BEFORE DELETE trigger on `transcripts` queues in-flight jobs, so
+  document and matter cascades are covered.
 - Launch checklist (owner: firm): AssemblyAI zero-data-retention / BAA terms
   signed before production use.
 - Monthly cap: `TRANSCRIPTION_MONTHLY_HOURS` env (default 50). Sum of

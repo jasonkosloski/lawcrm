@@ -101,6 +101,8 @@ Only non-obvious facts; anything not listed is as `schema.prisma` reads.
 
 **Transcripts** (migration `20261021210000_transcripts`): `Transcript.documentId` is unique, so at most one transcript (and one active job) per document; a re-run reuses the row. `TranscriptSegment.text` is always derived from `words` and written together with it. Neither table has a `matterId`: scope comes only from the Document (`assertChildMatterAccess("document", id)`, ADR-039), so never query them without that join. `webhookSecret` is cleared when the job finishes.
 
+**Transcript purges** (migration `20261021220000_transcript_purges`): `transcript_purges` has no relations by design (it must outlive the Document). A raw-SQL BEFORE DELETE trigger on `transcripts` inserts the `providerJobId` of any `queued`/`processing` row being deleted; `db push` doesn't create it, so `integration-setup.ts` applies it for tests. The sweep drains the table.
+
 **Document.invoiceId** (migration `20261021200000_document_invoice_id`): links a filed invoice PDF copy to its invoice (SetNull keeps the file). Existing copies were backfilled by name (`starts_with` `Invoice <number> (`, a literal prefix match, not LIKE) within the same matter's Invoices system folder.
 
 **Batch 4 data fixes worth knowing** (migration `20261017120000_quality_sweep`): `UNIQUE settlements(matterId)` was added behind a guard that aborts the deploy, deleting nothing, if any matter had 2+ settlements; `billing.view` was granted to every role holding any `billing.*` or `trust.*` key (ADR-038).

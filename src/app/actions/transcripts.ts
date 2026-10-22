@@ -188,7 +188,6 @@ export async function requestTranscript(
     error: null,
     requestedById: userId,
     requestedAt: new Date(),
-    completedAt: null,
   };
   if (existing) {
     const res = await prisma.transcript.updateMany({
@@ -271,8 +270,11 @@ export async function deleteTranscript(
   if (!t) return { ok: false, error: "No transcript to delete." };
 
   await prisma.transcript.deleteMany({ where: { id: t.id } });
-  if (IN_FLIGHT.includes(t.status) && t.providerJobId) {
-    await deleteJob(t.providerJobId); // best effort; never throws
+  // In-flight jobs are queued for provider deletion by the transcripts
+  // BEFORE DELETE trigger (transcript_purges); a finished row normally
+  // has no job id left, so this is a best-effort no-op.
+  if (t.status === "completed" && t.providerJobId) {
+    await deleteJob(t.providerJobId);
   }
   await logActivity({
     matterId: doc.matterId,

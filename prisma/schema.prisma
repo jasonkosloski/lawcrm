@@ -2882,3 +2882,17 @@ model TranscriptSegment {
   @@index([transcriptId, startSeconds])
   @@map("transcript_segments")
 }
+
+/// Provider-side transcription jobs whose copy must still be deleted at
+/// the provider. A BEFORE DELETE trigger on "transcripts" (see migration
+/// 20261021220000_transcript_purges) queues the job id of any in-flight
+/// transcript that is deleted; the transcription sweep drains the table.
+/// No relations: the row outlives the transcript and Document.
+model TranscriptPurge {
+  id            String   @id @default(cuid())
+  providerJobId String   @unique
+  createdAt     DateTime @default(now())
+  attempts      Int      @default(0)
+
+  @@map("transcript_purges")
+}

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { createNotification } from "@/lib/notifications";
@@ -9,6 +10,55 @@ import { normalizeAssemblyAI } from "./normalize";
 
 /** A job still unfinished this long after the request is abandoned. */
 const JOB_TIMEOUT_MS = 6 * 3600_000;
+/** A claimed row with no provider job id this long after the request
+ *  never reached the provider (the request died mid-flight). */
+export const QUEUED_STALE_MS = 10 * 60_000;
+/** Purge rows older than this are given up on. */
+const PURGE_GIVE_UP_MS = 7 * 86_400_000;
+const PURGE_BATCH = 25;
+
+/** Delete the provider copy; when the provider refuses (it may not delete
+ *  a non-terminal job), queue it so the sweep retries. */
+async function deleteProviderCopy(jobId: string): Promise<void> {
+  if (await deleteJob(jobId)) return;
+  await prisma.transcriptPurge.upsert({
+    where: { providerJobId: jobId },
+    create: { providerJobId: jobId },
+    update: {},
+  });
+}
+
+/** Retry queued provider deletions, oldest first. Bounded per run. */
+export async function drainTranscriptPurges(): Promise<{
+  deleted: number;
+  retried: number;
+  gaveUp: number;
+}> {
+  const out = { deleted: 0, retried: 0, gaveUp: 0 };
+  const rows = await prisma.transcriptPurge.findMany({
+    orderBy: { createdAt: "asc" },
+    take: PURGE_BATCH,
+  });
+  for (const r of rows) {
+    if (await deleteJob(r.providerJobId)) {
+      await prisma.transcriptPurge.deleteMany({ where: { id: r.id } });
+      out.deleted++;
+    } else if (Date.now() - r.createdAt.getTime() > PURGE_GIVE_UP_MS) {
+      console.warn(
+        `[transcription] giving up deleting provider job ${r.providerJobId}`,
+      );
+      await prisma.transcriptPurge.deleteMany({ where: { id: r.id } });
+      out.gaveUp++;
+    } else {
+      await prisma.transcriptPurge.update({
+        where: { id: r.id },
+        data: { attempts: { increment: 1 } },
+      });
+      out.retried++;
+    }
+  }
+  return out;
+}
 
 export type FinishOutcome = "completed" | "failed" | "pending" | "gone";
 
@@ -41,12 +91,22 @@ export async function finishTranscriptJob(
   const link = `${scopeBasePath(scope)}/documents/${t.document.id}`;
   const base = { matterId: t.document.matterId, leadId: t.document.leadId };
 
+  const refresh = () => {
+    try {
+      revalidatePath(link);
+    } catch {
+      // No request context (cron/webhook outside a render): nothing to refresh.
+    }
+  };
+
   const fail = async (message: string): Promise<FinishOutcome> => {
     const res = await prisma.transcript.updateMany({
       where: inFlight,
       data: { status: "failed", error: message, webhookSecret: null },
     });
     if (res.count === 0) return "pending";
+    if (t.providerJobId) await deleteProviderCopy(t.providerJobId);
+    refresh();
     await logActivity({
       ...base,
       userId: t.requestedById,
@@ -65,10 +125,12 @@ export async function finishTranscriptJob(
     return "failed";
   };
 
-  const timedOut = Date.now() - t.requestedAt.getTime() > JOB_TIMEOUT_MS;
+  const age = Date.now() - t.requestedAt.getTime();
+  const timedOut = age > JOB_TIMEOUT_MS;
 
   if (!t.providerJobId) {
-    return timedOut ? fail("Timed out") : "pending";
+    if (age > QUEUED_STALE_MS) return fail("Timed out");
+    return "pending";
   }
 
   let job: Awaited<ReturnType<typeof fetchJob>>;
@@ -128,7 +190,8 @@ export async function finishTranscriptJob(
   });
   if (!won) return "pending";
 
-  await deleteJob(t.providerJobId);
+  await deleteProviderCopy(t.providerJobId);
+  refresh();
   await logActivity({
     ...base,
     userId: t.requestedById,

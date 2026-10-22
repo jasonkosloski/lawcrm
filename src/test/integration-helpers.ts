@@ -97,6 +97,8 @@ export const TABLES_IN_DELETE_ORDER = [
   "flagged_moments",
   "evidence",
   "matter_agreements", // before documents (documentId) and matters
+  "transcript_segments",
+  "transcripts",
   "documents",
   // Portal: identities after documents (Document.portalUploaderId is Restrict);
   // document_requests after documents (SetNull) and before users/matters.
@@ -134,6 +136,9 @@ export const TABLES_IN_DELETE_ORDER = [
   "notifications",
   // Per-user saved searches reference users; drop before users.
   "saved_searches",
+  // Transcript purge queue: no FKs, but the transcripts delete trigger
+  // refills it, so it must be cleared after "documents".
+  "transcript_purges",
   // Users + firm at the bottom
   "users",
   "firms",

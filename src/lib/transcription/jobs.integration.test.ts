@@ -28,6 +28,7 @@ beforeAll(() => {
 beforeEach(async () => {
   await resetDb();
   vi.clearAllMocks();
+  vi.mocked(deleteJob).mockResolvedValue(true);
   const { firmId } = await seedFirm();
   ({ userId } = await seedUser({ firmId }));
   const { areaId, stageId } = await seedPracticeArea();
@@ -114,9 +115,55 @@ describe("finishTranscriptJob", () => {
     const t = await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } });
     expect(t.status).toBe("failed");
     expect(t.error).toBe("bad audio");
-    expect(deleteJob).not.toHaveBeenCalled();
+    // Failure still removes the provider copy; a refused delete is queued.
+    expect(deleteJob).toHaveBeenCalledWith("job-1");
+    expect(await prisma.transcriptPurge.count()).toBe(0);
     const n = await prisma.notification.findMany({ where: { userId } });
     expect(n.map((x) => x.type)).toEqual(["transcript_failed"]);
+  });
+
+  test("failure with a refused provider delete queues a purge row", async () => {
+    vi.mocked(deleteJob).mockResolvedValue(false);
+    vi.mocked(fetchJob).mockResolvedValue({ status: "error", error: "bad audio" });
+    await finishTranscriptJob(transcriptId);
+    const purges = await prisma.transcriptPurge.findMany();
+    expect(purges.map((p) => p.providerJobId)).toEqual(["job-1"]);
+  });
+
+  test("timeout deletes (or queues) the provider copy", async () => {
+    vi.mocked(deleteJob).mockResolvedValue(false);
+    await prisma.transcript.update({
+      where: { id: transcriptId },
+      data: { requestedAt: new Date(Date.now() - 7 * 3600_000) },
+    });
+    vi.mocked(fetchJob).mockResolvedValue({ status: "processing" });
+    expect(await finishTranscriptJob(transcriptId)).toBe("failed");
+    expect(deleteJob).toHaveBeenCalledWith("job-1");
+    expect(await prisma.transcriptPurge.count()).toBe(1);
+  });
+
+  test("queued row with no job id for over 10 minutes fails", async () => {
+    await prisma.transcript.update({
+      where: { id: transcriptId },
+      data: { status: "queued", providerJobId: null, requestedAt: new Date(Date.now() - 11 * 60_000) },
+    });
+    expect(await finishTranscriptJob(transcriptId)).toBe("failed");
+    expect(fetchJob).not.toHaveBeenCalled();
+    expect(deleteJob).not.toHaveBeenCalled();
+  });
+
+  test("a fresh queued row stays pending", async () => {
+    await prisma.transcript.update({
+      where: { id: transcriptId },
+      data: { status: "queued", providerJobId: null },
+    });
+    expect(await finishTranscriptJob(transcriptId)).toBe("pending");
+  });
+
+  test("deleting the document mid-job leaves a purge row (trigger)", async () => {
+    await prisma.document.delete({ where: { id: documentId } });
+    const purges = await prisma.transcriptPurge.findMany();
+    expect(purges.map((p) => p.providerJobId)).toEqual(["job-1"]);
   });
 
   test("still processing: pending, nothing written", async () => {

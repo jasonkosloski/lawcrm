@@ -33,6 +33,8 @@
  */
 
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Client } from "pg";
 import type { TestProject } from "vitest/node";
 import { assertTestDatabaseUrl } from "./test-db-guard";
@@ -223,9 +225,31 @@ export async function setup(project: TestProject): Promise<void> {
     stdio: "inherit",
   });
 
+  await applyMigrationTriggers();
+
   await refreshWorkerDatabases(
     project.vitest.config.maxWorkers || resolveMaxWorkers()
   );
+}
+
+/** `db push` creates tables only; raw-SQL triggers live in migrations.
+ *  Install the transcript purge trigger so tests see prod behaviour. */
+async function applyMigrationTriggers(): Promise<void> {
+  const sql = readFileSync(
+    join(
+      process.cwd(),
+      "prisma/migrations/20261021220000_transcript_purges/migration.sql"
+    ),
+    "utf8"
+  );
+  const trigger = sql.slice(sql.indexOf("-- transcript purge trigger"));
+  const client = new Client({ connectionString: TEST_DB_URL });
+  await client.connect();
+  try {
+    await client.query(trigger);
+  } finally {
+    await client.end();
+  }
 }
 
 export async function teardown(): Promise<void> {

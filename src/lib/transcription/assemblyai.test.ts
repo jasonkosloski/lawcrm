@@ -114,10 +114,17 @@ describe("fetchJob", () => {
 });
 
 describe("deleteJob", () => {
+  it("returns true on 2xx and on 404", async () => {
+    fetchMock.mockResolvedValue(res(200, {}));
+    await expect(deleteJob("j")).resolves.toBe(true);
+    fetchMock.mockResolvedValue(res(404, { error: "gone" }));
+    await expect(deleteJob("j")).resolves.toBe(true);
+  });
+
   it("resolves and warns on 500", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     fetchMock.mockResolvedValue(res(500, { error: "boom" }));
-    await expect(deleteJob("j")).resolves.toBeUndefined();
+    await expect(deleteJob("j")).resolves.toBe(false);
     expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
     expect(warn).toHaveBeenCalled();
   });
@@ -125,7 +132,7 @@ describe("deleteJob", () => {
   it("resolves when fetch rejects", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     fetchMock.mockRejectedValue(new Error("net"));
-    await expect(deleteJob("j")).resolves.toBeUndefined();
+    await expect(deleteJob("j")).resolves.toBe(false);
   });
 });
 

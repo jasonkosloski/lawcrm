@@ -3,13 +3,18 @@
  *
  * Sanctioned API-route exception to "mutations are server actions".
  * Finishes jobs whose webhook never arrived (local storage, no
- * AUTH_URL, or a lost delivery) and times out abandoned ones.
+ * AUTH_URL, or a lost delivery), times out abandoned ones, and retries
+ * queued provider-copy deletions (transcript_purges).
  * Authorized by the CRON_SECRET bearer; exempt in SELF_AUTHENTICATED_PATHS.
  */
 
 import { prisma } from "@/lib/prisma";
 import { isAuthorizedCron } from "@/lib/cron-auth";
-import { finishTranscriptJob } from "@/lib/transcription/jobs";
+import {
+  QUEUED_STALE_MS,
+  drainTranscriptPurges,
+  finishTranscriptJob,
+} from "@/lib/transcription/jobs";
 
 export const maxDuration = 60;
 
@@ -22,8 +27,17 @@ export async function GET(request: Request): Promise<Response> {
   }
   const rows = await prisma.transcript.findMany({
     where: {
-      status: "processing",
-      requestedAt: { lt: new Date(Date.now() - MIN_AGE_MS) },
+      OR: [
+        {
+          status: "processing",
+          requestedAt: { lt: new Date(Date.now() - MIN_AGE_MS) },
+        },
+        // Claimed but never submitted: the finisher fails these.
+        {
+          status: "queued",
+          requestedAt: { lt: new Date(Date.now() - QUEUED_STALE_MS) },
+        },
+      ],
     },
     select: { id: true },
     orderBy: { requestedAt: "asc" },
@@ -41,5 +55,13 @@ export async function GET(request: Request): Promise<Response> {
       });
     }
   }
-  return Response.json({ checked: rows.length, ...counts });
+  let purges = { deleted: 0, retried: 0, gaveUp: 0 };
+  try {
+    purges = await drainTranscriptPurges();
+  } catch (err) {
+    console.error("[transcription-sweep] purge drain failed", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+  return Response.json({ checked: rows.length, ...counts, purges });
 }
