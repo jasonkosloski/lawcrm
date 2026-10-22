@@ -46,3 +46,4 @@ Related: [ADR-015](../decisions/015-driver-based-document-storage-local-disk-in.
 ## Notes
 
 - Matter-team access (ADR-039) is enforced on document/attachment downloads and uploads.
+- react-pdf is patched (`patches/@react-pdf+textkit+7.0.1.patch`, applied by `patch-package` on install) so underlines use the font's own position and thickness, as Word does; its fixed offset sat on descenders. `src/lib/templates/pdf-underline.test.ts` fails if an upgrade drops the patch: regenerate it against the new version.

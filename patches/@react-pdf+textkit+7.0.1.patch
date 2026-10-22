@@ -1,0 +1,29 @@
+diff --git a/node_modules/@react-pdf/textkit/lib/textkit.js b/node_modules/@react-pdf/textkit/lib/textkit.js
+index 7bfe0d9..0a09edb 100644
+--- a/node_modules/@react-pdf/textkit/lib/textkit.js
++++ b/node_modules/@react-pdf/textkit/lib/textkit.js
+@@ -3005,11 +3005,22 @@ const textDecoration = () => (line) => {
+         const width = Math.min(maxX - x, advanceWidth$1(run));
+         const thickness = Math.max(0.5, Math.floor(run.attributes.fontSize / BASE_FONT_SIZE));
+         if (run.attributes.underline) {
++            // Patched (lawcrm, patches/@react-pdf+textkit): use the font's own
++            // underline position and thickness (as Word does) instead of a
++            // fixed offset that sits on the descenders.
++            const font = Array.isArray(run.attributes.font) ? run.attributes.font[0] : run.attributes.font;
++            const unitScale = font && font.unitsPerEm ? run.attributes.fontSize / font.unitsPerEm : 0;
++            const ulThickness = unitScale && font.underlineThickness
++                ? Math.max(0.25, font.underlineThickness * unitScale)
++                : thickness;
++            const ulCentre = unitScale && font.underlinePosition
++                ? -font.underlinePosition * unitScale + ulThickness / 2
++                : thickness * 2;
+             const rect = {
+                 x,
+-                y: ascent(line) + thickness * 2,
++                y: ascent(line) + ulCentre,
+                 width,
+-                height: thickness,
++                height: ulThickness,
+             };
+             const decorationLine = {
+                 rect,
