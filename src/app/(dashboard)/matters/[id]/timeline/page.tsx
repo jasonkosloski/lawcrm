@@ -32,21 +32,6 @@ import {
   formatDate,
   formatDayBucket} from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
-import {
-  Briefcase,
-  Check,
-  Circle,
-  Clock,
-  DollarSign,
-  FileText,
-  Gavel,
-  Mail,
-  Phone,
-  StickyNote,
-  Video,
-  Zap,
-  type LucideIcon,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireUser } from "@/lib/current-user";
@@ -58,20 +43,7 @@ import {
 } from "@/lib/queries/matter-detail";
 import { getMatterById } from "@/lib/queries/matters";
 import { assertMatterAccess } from "@/lib/matter-access";
-
-const ACTIVITY_ICONS: Record<string, LucideIcon> = {
-  gavel: Gavel,
-  mail: Mail,
-  phone: Phone,
-  video: Video,
-  check: Check,
-  zap: Zap,
-  note: StickyNote,
-  document: FileText,
-  clock: Clock,
-  dollar: DollarSign,
-  briefcase: Briefcase,
-};
+import { activityIcon } from "@/lib/activity-icons";
 
 /// Maps a filter pill key to the underlying ActivityLog.type values
 /// it surfaces. Key "all" is the default and skips filtering. Keep
@@ -230,7 +202,7 @@ export default async function MatterTimelinePage({
                   </div>
                   <ul className="flex flex-col">
                     {items.map((row) => {
-                      const Icon = ACTIVITY_ICONS[row.iconName] ?? Circle;
+                      const Icon = activityIcon(row.iconName);
                       return (
                         <li
                           key={row.id}

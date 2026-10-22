@@ -441,7 +441,7 @@ describe("encodeMimeForGmail", () => {
 describe("plainTextToHtml", () => {
   test("blank-line paragraphs and single-newline breaks", () => {
     expect(plainTextToHtml("Hi Alice,\n\nline one\nline two")).toBe(
-      "<p>Hi Alice,</p><p>line one<br />line two</p>"
+      "<p>Hi Alice,</p><p>line one<br>line two</p>"
     );
   });
 

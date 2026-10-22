@@ -27,17 +27,7 @@ import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { NOTE_TYPES } from "@/lib/note-constants";
 import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
-
-/** Escape THEN insert <br> — order matters; doing <br> first would
- *  get the angle brackets escaped away. Keeps the persisted HTML in
- *  the same shape every other note writer produces. */
-function textareaToHtml(raw: string): string {
-  const escaped = raw
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-  return escaped.replace(/\r?\n/g, "<br>");
-}
+import { textareaToHtml } from "@/lib/text-to-html";
 
 const noteSchema = z.object({
   content: z.string().trim().min(1, "Note can't be empty").max(20_000),

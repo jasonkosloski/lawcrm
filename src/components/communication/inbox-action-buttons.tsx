@@ -52,6 +52,8 @@ import {
   DEADLINE_KIND_LABEL,
 } from "@/lib/constants/deadline-status";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
+import { paragraphsToHtml } from "@/lib/text-to-html";
+import { escapeHtml } from "@/lib/email/escape";
 
 export type InboxSource =
   | { kind: "email"; id: string; subject: string; snippet: string }
@@ -207,15 +209,6 @@ function defaultNoteHtml(source: InboxSource): string {
   }
   const escaped = escapeHtml(source.preview);
   return `<p><em>From message: ${escapeHtml(source.contactLabel)}</em></p><blockquote>${escaped}</blockquote><p></p>`;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 // ── Dialogs ────────────────────────────────────────────────────────────
@@ -504,7 +497,7 @@ function CreateNoteDialog({
           <input
             type="hidden"
             name="content"
-            value={textareaToHtml(content)}
+            value={paragraphsToHtml(content)}
           />
 
           <NativeSelect
@@ -571,18 +564,3 @@ export function stripHtmlForTextarea(html: string): string {
     .trim();
 }
 
-function textareaToHtml(text: string): string {
-  return text
-    .split(/\n\n+/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0)
-    .map((p) => {
-      // Escape FIRST so the <br> we insert next isn't itself escaped.
-      const escaped = p
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-      return `<p>${escaped.replace(/\n/g, "<br>")}</p>`;
-    })
-    .join("");
-}

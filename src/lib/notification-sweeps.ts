@@ -58,6 +58,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { NotificationType } from "@/lib/notifications";
 import {
+  DAY_MS,
   daysBetweenKeys,
   dateOnlyKey,
   todayKey,
@@ -80,7 +81,6 @@ export type SweepResult = {
   created: number;
 };
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Arbitrary constant key for the sweep's advisory lock. */
 const SWEEP_LOCK_KEY = 7_302_026;

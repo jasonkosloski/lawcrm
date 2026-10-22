@@ -27,6 +27,7 @@ import { isLenientEmail } from "@/lib/email-shape";
 import { searchAttendeesAction } from "@/app/actions/attendee-search";
 import { EmailLink } from "@/components/ui/email-link";
 import type { AttendeeSearchResult } from "@/lib/queries/attendee-search";
+import { CONTACT_TYPE_LABEL } from "@/lib/contact-constants";
 
 /** A single attendee in the editor. The picker tags each entry
  *  with its source so the action can persist the right FK +
@@ -60,16 +61,9 @@ export const ATTENDEE_STATUS_LABEL: Record<string, string> = {
 };
 
 // Mapped to a contact `type` field; surfaced as the chip suffix.
-export const CONTACT_TYPE_LABEL: Record<string, string> = {
-  client: "Client",
-  opposing_counsel: "Opposing counsel",
-  witness: "Witness",
-  expert: "Expert",
-  judge: "Judge",
-  court: "Court",
-  vendor: "Vendor",
-  medical_provider: "Medical provider",
-  government: "Government",
+/** Attendee rows say "Contact" rather than "Other" for untyped contacts. */
+const ATTENDEE_TYPE_LABEL: Record<string, string> = {
+  ...CONTACT_TYPE_LABEL,
   other: "Contact",
 };
 
@@ -114,7 +108,7 @@ export function AttendeePicker({
                     {a.kind === "contact" && a.contactType && (
                       <span className="text-2xs text-ink-4 font-normal">
                         ·{" "}
-                        {CONTACT_TYPE_LABEL[a.contactType] ?? a.contactType}
+                        {ATTENDEE_TYPE_LABEL[a.contactType] ?? a.contactType}
                       </span>
                     )}
                   </span>
@@ -455,7 +449,7 @@ function AttendeeAutocomplete({
                 <span className="text-2xs text-ink-4 font-mono truncate">
                   {r.kind === "user"
                     ? `${r.jobTitle}${r.email ? ` · ${r.email}` : ""}`
-                    : `${CONTACT_TYPE_LABEL[r.type] ?? r.type}${r.organization ? ` · ${r.organization}` : ""}${r.email ? ` · ${r.email}` : ""}`}
+                    : `${ATTENDEE_TYPE_LABEL[r.type] ?? r.type}${r.organization ? ` · ${r.organization}` : ""}${r.email ? ` · ${r.email}` : ""}`}
                 </span>
               </div>
               <span className="text-3xs text-ink-4 shrink-0">

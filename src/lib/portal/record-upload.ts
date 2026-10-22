@@ -9,6 +9,7 @@ import {
   PORTAL_DAILY_UPLOAD_CAP,
   checkPortalUpload,
 } from "@/lib/portal/upload-policy";
+import { DAY_MS } from "@/lib/format-date";
 
 /**
  * Turn a stored client file into a matter document. Shared by the blob
@@ -52,7 +53,6 @@ export type RecordPortalUploadResult =
 export const PORTAL_UPLOADS_FOLDER_NAME = "From client";
 export const PORTAL_UPLOAD_NOTE_MAX = 500;
 const NO_ACCESS = "You no longer have access to this matter.";
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 

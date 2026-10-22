@@ -4,10 +4,7 @@
  * `ActivityLog.icon` is stored as a string (see `defaultIconFor()` in
  * `src/lib/activity-log.ts`, which owns the vocabulary). This is the
  * single name-to-component map for every surface that renders the feed
- * (dashboard "Recent activity" today; the audit page and matter
- * timeline keep private copies that should migrate here). It had
- * already drifted: the dashboard copy lacked dollar / briefcase /
- * shield, so those rows fell back to a plain circle.
+ * (dashboard "Recent activity", the audit page, the matter timeline).
  *
  * Client-safe (lucide icons only, no server imports). Unknown names
  * fall back via `activityIcon()`.

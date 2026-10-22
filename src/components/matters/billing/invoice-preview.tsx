@@ -25,16 +25,7 @@ import type { InvoiceDetail } from "@/lib/queries/billing";
 import { formatDate, formatDateOnly } from "@/lib/format-date";
 import { EditableLineItemRow } from "./editable-line-item-row";
 import { formatMoney } from "@/lib/format-money";
-
-const STATUS_META: Record<string, string> = {
-  draft: "bg-paper-2 text-ink-3 border-line",
-  approved: "bg-brand-soft/60 text-brand-700 border-brand-200",
-  sent: "bg-brand-soft text-brand-700 border-brand-200",
-  partial: "bg-warn-soft text-warn border-warn-border",
-  overdue: "bg-danger-soft text-danger border-line",
-  paid: "bg-ok-soft text-ok border-line",
-  void: "bg-paper-2 text-ink-4 border-line",
-};
+import { INVOICE_STATUS_CLASS } from "@/lib/constants/invoice-status";
 
 export function InvoicePreview({
   invoice,
@@ -77,7 +68,7 @@ export function InvoicePreview({
   const canEditLineItem = (lineItemUserId: string): boolean =>
     editingEnabled &&
     (canEditAnyTimeEntry || lineItemUserId === currentUserId);
-  const statusClass = STATUS_META[invoice.status] ?? STATUS_META.draft;
+  const statusClass = INVOICE_STATUS_CLASS[invoice.status] ?? INVOICE_STATUS_CLASS.draft;
   const isInternal = invoice.kind === "internal_record";
   // A voided invoice owes nothing: the stored balance is just
   // total - paid (= the full total, since void is refused once

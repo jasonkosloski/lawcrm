@@ -1,3 +1,4 @@
+import { paragraphsToHtml } from "@/lib/text-to-html";
 /**
  * RFC 2822/5322 MIME message builder for Gmail send — plus the
  * reply-recipient/subject derivation the send actions and the reply
@@ -394,26 +395,11 @@ export function filenameParams(filename: string): {
 
 // ── Plain text → minimal HTML ────────────────────────────────────────────
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 /** The composer's plain-text body as minimal HTML: blank-line-
  *  separated paragraphs → `<p>`, single newlines → `<br />`,
  *  everything HTML-escaped. Rich text is a documented follow-up. */
 export function plainTextToHtml(text: string): string {
-  const paragraphs = text
-    .replace(/\r\n/g, "\n")
-    .split(/\n{2,}/)
-    .map((p) => p.replace(/^\n+|\n+$/g, ""))
-    .filter((p) => p.length > 0)
-    .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br />")}</p>`);
-  return paragraphs.join("") || "<p></p>";
+  return paragraphsToHtml(text) || "<p></p>";
 }
 
 // ── Reply derivation ─────────────────────────────────────────────────────

@@ -220,7 +220,8 @@ export function formatDayBucket(
 /** A calendar date as `YYYY-MM-DD`. */
 export type DayKey = string;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+/** Milliseconds in a 24-hour day. */
+export const DAY_MS = 24 * 60 * 60 * 1000;
 const DAY_KEY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 function utcMsOfKey(key: DayKey): number {

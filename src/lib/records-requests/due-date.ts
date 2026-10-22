@@ -1,3 +1,4 @@
+import { DAY_MS } from "@/lib/format-date";
 /**
  * Response-due-date rules for records requests. Pure, no DB.
  *
@@ -7,7 +8,6 @@
 
 export type RecordsResponseUnit = "CALENDAR_DAYS" | "BUSINESS_DAYS";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Shift a date-only value by whole calendar days (negative goes back). */
 export function addCalendarDays(date: Date, days: number): Date {

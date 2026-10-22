@@ -29,6 +29,7 @@ import {
   useEventAttachmentsViewer,
 } from "./event-attachments-context";
 import { EventTimeEntryComposer } from "./event-time-entry-composer";
+import { TIME_ENTRY_STATUS_LABEL } from "@/lib/constants/time-entry-status";
 
 export function EventTimeEntriesSection({
   eventId,
@@ -189,18 +190,10 @@ function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
       )}
 
       <div className="flex items-center gap-2 pl-8 text-3xs text-ink-4 font-mono">
-        <span>{STATUS_LABEL[entry.status] ?? entry.status}</span>
+        <span>{(TIME_ENTRY_STATUS_LABEL as Record<string, string>)[entry.status]?.toLowerCase() ?? entry.status}</span>
         {!entry.billable && <span>· non-billable</span>}
         {entry.noCharge && <span>· no charge</span>}
       </div>
     </li>
   );
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: "draft",
-  submitted: "submitted",
-  billable: "billable",
-  billed: "billed",
-  written_off: "written off",
-};

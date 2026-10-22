@@ -17,11 +17,11 @@ import { isAuthorizedCron } from "@/lib/cron-auth";
 import { deleteFile } from "@/lib/file-storage";
 import { isStoredFileReferenced } from "@/lib/stored-file-refs";
 import { MATTER_DRAFT_RETENTION_DAYS } from "@/lib/draft-access";
+import { DAY_MS } from "@/lib/format-date";
 
 export const maxDuration = 60;
 
 const BATCH_SIZE = 100;
-const DAY_MS = 86_400_000;
 
 export async function GET(request: Request): Promise<Response> {
   if (!isAuthorizedCron(request)) {

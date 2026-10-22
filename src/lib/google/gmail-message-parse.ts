@@ -1,3 +1,4 @@
+import { paragraphsToHtml } from "@/lib/text-to-html";
 /**
  * Pure Gmail-payload parsing helpers for the sync engine.
  *
@@ -219,29 +220,12 @@ export function parseAddressList(
 
 // ── Plain-text → HTML fallback ───────────────────────────────────────────
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 /** Escape a text/plain body and wrap it into paragraph HTML:
  *  blank-line-separated blocks become `<p>`, single newlines become
  *  `<br>`. The output goes through the email sanitizer like any
  *  other body — this is layout, not a security step. */
 export function textToHtml(text: string): string {
-  const blocks = text
-    .replace(/\r\n/g, "\n")
-    .split(/\n{2,}/)
-    .map((b) => b.trim())
-    .filter(Boolean);
-  if (blocks.length === 0) return "";
-  return blocks
-    .map((b) => `<p>${escapeHtml(b).replace(/\n/g, "<br>")}</p>`)
-    .join("");
+  return paragraphsToHtml(text);
 }
 
 // ── MIME walk ────────────────────────────────────────────────────────────

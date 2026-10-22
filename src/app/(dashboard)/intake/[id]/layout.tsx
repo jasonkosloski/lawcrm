@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { IntakeTabs } from "@/components/intake/intake-tabs";
 import { ConvertLeadButton } from "@/components/intake/convert-lead-button";
 import { DeclineLeadButton } from "@/components/intake/decline-lead-button";
-import { getLeadById, LEAD_STAGE_LABEL } from "@/lib/queries/leads";
+import { getLeadById } from "@/lib/queries/leads";
 import { getPracticeAreaOptions } from "@/lib/queries/practice-area-options";
 import { prisma } from "@/lib/prisma";
 import { dateOnlyKey } from "@/lib/format-date";
@@ -24,25 +24,7 @@ import { requireUser } from "@/lib/current-user";
 import { assertLeadAccess } from "@/lib/lead-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { RestrictedBadge } from "@/components/shared/restricted-badge";
-
-function StageChip({ stage }: { stage: string }) {
-  // DB stage values arrive untyped — fall back to the raw slug
-  // for anything the label map doesn't know.
-  const label = (LEAD_STAGE_LABEL as Record<string, string>)[stage] ?? stage;
-  const cls =
-    stage === "new"
-      ? "bg-brand-soft text-brand-700"
-      : stage === "converted"
-        ? "bg-ok-soft text-ok"
-        : "bg-paper-2 text-ink-3";
-  return (
-    <span
-      className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full ${cls}`}
-    >
-      {label}
-    </span>
-  );
-}
+import { LeadStageChip } from "@/components/intake/lead-stage-chip";
 
 async function loadEngagementInputs(leadId: string, userId: string) {
   const [documents, firm, today] = await Promise.all([
@@ -103,7 +85,7 @@ export default async function LeadDetailLayout({
         title={lead.displayName}
         subtitle={
           <>
-            <StageChip stage={lead.stage} />
+            <LeadStageChip stage={lead.stage} />
             {lead.restricted && <RestrictedBadge />}
             {lead.score !== null && (
               <span className="text-2xs font-mono font-semibold text-ink-3">

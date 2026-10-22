@@ -106,6 +106,7 @@ import {
   stripZoomLine,
   type GoogleEventResource,
 } from "@/lib/google/calendar-shared";
+import { DAY_MS } from "@/lib/format-date";
 
 // ── Tuning constants ─────────────────────────────────────────────────────
 
@@ -122,7 +123,6 @@ const PRIMARY_CALENDAR_ID = "primary";
  *  email sync, whose notes we must not eat). */
 export const CALENDAR_SYNC_ERROR_PREFIX = "Last calendar sync failed: ";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** A pass where at least this many items failed and none succeeded is
  *  treated as systemic and aborted (see runPullPass). */

@@ -2,8 +2,8 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { hashSecret, newSecret } from "./secrets";
+import { DAY_MS } from "@/lib/format-date";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const IDLE_MS = 7 * DAY_MS;
 export const ABSOLUTE_MS = 30 * DAY_MS;
 const SLIDE_AFTER_MS = 60 * 1000;

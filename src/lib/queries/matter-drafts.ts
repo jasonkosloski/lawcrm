@@ -6,6 +6,7 @@ import {
   DRAFT_PERMISSION,
   draftAccessWhere,
 } from "@/lib/draft-access";
+import { DAY_MS } from "@/lib/format-date";
 
 export type MatterDraftListItem = {
   id: string;
@@ -18,7 +19,6 @@ export type MatterDraftListItem = {
   deletesInDays: number | null;
 };
 
-const DAY_MS = 86_400_000;
 
 function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";

@@ -17,22 +17,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { formatDate } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
-import {
-  Briefcase,
-  Check,
-  Circle,
-  Clock,
-  DollarSign,
-  FileText,
-  Gavel,
-  Mail,
-  Phone,
-  ShieldCheck,
-  StickyNote,
-  Video,
-  Zap,
-  type LucideIcon,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -50,21 +34,7 @@ import {
   ACTIVITY_FILTER_BUCKETS as FILTER_BUCKETS,
   ACTIVITY_PILL_ORDER as PILL_ORDER,
 } from "@/lib/constants/activity-filters";
-
-const ACTIVITY_ICONS: Record<string, LucideIcon> = {
-  gavel: Gavel,
-  mail: Mail,
-  phone: Phone,
-  video: Video,
-  check: Check,
-  zap: Zap,
-  note: StickyNote,
-  document: FileText,
-  clock: Clock,
-  dollar: DollarSign,
-  briefcase: Briefcase,
-  shield: ShieldCheck,
-};
+import { activityIcon } from "@/lib/activity-icons";
 
 // Date rendering routes through the centralized formatter.
 
@@ -251,7 +221,7 @@ export default async function FirmActivityPage({
           <CardContent className="px-0 py-0">
             <ul className="flex flex-col">
               {rows.map((row) => {
-                const Icon = ACTIVITY_ICONS[row.iconName] ?? Circle;
+                const Icon = activityIcon(row.iconName);
                 return (
                   <li
                     key={row.id}

@@ -13,10 +13,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { parseDateOnly } from "@/lib/format-date";
+import { formatHours } from "@/lib/time-entry-constants";
 import {
   aggregateByUser,
   CommTimeLoggedIndicator,
-  formatHours,
   type CommTimeEntryView,
 } from "./comm-time-logged-indicator";
 

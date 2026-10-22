@@ -1,8 +1,8 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { DAY_MS } from "@/lib/format-date";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Delete portal records that can no longer do anything. Run hourly from the

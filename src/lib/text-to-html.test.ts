@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { textareaToHtml } from "./text-to-html";
+import { paragraphsToHtml, textareaToHtml } from "./text-to-html";
 
 describe("textareaToHtml", () => {
   test("keeps line breaks as <br> (CRLF and LF)", () => {
@@ -16,5 +16,23 @@ describe("textareaToHtml", () => {
     expect(textareaToHtml("<script>alert(1)</script>")).not.toContain(
       "<script"
     );
+  });
+});
+
+describe("paragraphsToHtml", () => {
+  test("blank lines split paragraphs, single newlines become <br>", () => {
+    expect(paragraphsToHtml("Hi,\r\n\r\nline one\nline two\n\n\n")).toBe(
+      "<p>Hi,</p><p>line one<br>line two</p>"
+    );
+  });
+
+  test("escapes markup and quotes", () => {
+    expect(paragraphsToHtml(`<b>"Tom's"</b> & co`)).toBe(
+      "<p>&lt;b&gt;&quot;Tom&#39;s&quot;&lt;/b&gt; &amp; co</p>"
+    );
+  });
+
+  test("whitespace-only input is empty", () => {
+    expect(paragraphsToHtml("  \n\n ")).toBe("");
   });
 });

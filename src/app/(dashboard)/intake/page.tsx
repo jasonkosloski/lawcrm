@@ -27,7 +27,6 @@ import {
 import {
   getLeadSummary,
   LEAD_SOURCE_LABEL,
-  LEAD_STAGE_LABEL,
   listLeads,
   type LeadListRow,
 } from "@/lib/queries/leads";
@@ -41,6 +40,7 @@ import { parsePageParam } from "@/lib/pagination";
 import { Pager, TruncationNotice } from "@/components/shared/pager";
 import { describeStatuteRemaining } from "@/lib/lead-statute";
 import { RestrictedBadge } from "@/components/shared/restricted-badge";
+import { LeadStageChip } from "@/components/intake/lead-stage-chip";
 
 const ASSESSMENT_LABEL: Record<string, string> = {
   strong: "Strong",
@@ -61,25 +61,6 @@ function ScoreBadge({ score }: { score: number | null }) {
       className={`inline-block text-xs font-mono font-semibold px-2 py-0.5 rounded-full ${cls}`}
     >
       {score}
-    </span>
-  );
-}
-
-function StageChip({ stage }: { stage: string }) {
-  // DB stage values arrive untyped — fall back to the raw slug
-  // for anything the label map doesn't know.
-  const label = (LEAD_STAGE_LABEL as Record<string, string>)[stage] ?? stage;
-  const cls =
-    stage === "new"
-      ? "bg-brand-soft text-brand-700"
-      : stage === "converted"
-        ? "bg-ok-soft text-ok"
-        : "bg-paper-2 text-ink-3";
-  return (
-    <span
-      className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full ${cls}`}
-    >
-      {label}
     </span>
   );
 }
@@ -249,7 +230,7 @@ export default async function IntakePage({
                         </div>
                       )}
                       <div className="flex items-center gap-2 flex-wrap mt-1.5">
-                        <StageChip stage={lead.stage} />
+                        <LeadStageChip stage={lead.stage} />
                         {lead.restricted && <RestrictedBadge />}
                         <SourceLabel
                           source={lead.source}
@@ -336,7 +317,7 @@ export default async function IntakePage({
                       <ConflictDot status={lead.conflictCheck} />
                     </TableCell>
                     <TableCell>
-                      <StageChip stage={lead.stage} />
+                      <LeadStageChip stage={lead.stage} />
                     </TableCell>
                     <TableCell className="text-right pr-4 font-mono text-2xs text-ink-3">
                       {lead.ageDays === 0 ? "today" : `${lead.ageDays}d`}

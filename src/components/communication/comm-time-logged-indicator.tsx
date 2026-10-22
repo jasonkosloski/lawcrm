@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 // the server and the client alike. A zone-less formatDate here ran in
 // the browser's zone and showed the entry a day early west of UTC.
 import { formatDateOnly } from "@/lib/format-date";
+import { formatHours } from "@/lib/time-entry-constants";
 
 export type CommTimeEntryView = {
   id: string;
@@ -34,15 +35,6 @@ export type CommTimeEntryView = {
   userInitials: string;
   billable: boolean;
 };
-
-/** Hours for display. The firm bills in quarter-hour increments, so
- *  one decimal ("0.3h" for 0.25h) misstates entries and the parts stop
- *  summing to the total; show up to two decimals, keeping at least one
- *  ("1.0h", "0.5h", "0.25h", "0.75h"). */
-export function formatHours(hours: number): string {
-  const s = hours.toFixed(2);
-  return s.endsWith("0") ? s.slice(0, -1) : s;
-}
 
 export function CommTimeLoggedIndicator({
   entries,

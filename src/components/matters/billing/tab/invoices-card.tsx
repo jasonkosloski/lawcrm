@@ -22,7 +22,7 @@ import { type MatterBilling } from "@/lib/queries/billing";
 import { invoiceStatusLabel, type InvoiceKind } from "@/lib/billing-form";
 import { formatDate } from "@/lib/format-date";
 import { formatMoney } from "@/lib/format-money";
-import { STATUS_META } from "./shared";
+import { INVOICE_STATUS_CLASS } from "@/lib/constants/invoice-status";
 
 export function InvoicesCard({
   billing,
@@ -135,7 +135,7 @@ export function InvoicesCard({
                       {cellLink(
                         <span className="inline-flex items-center gap-1 flex-wrap">
                           <span
-                            className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${STATUS_META[inv.status] ?? STATUS_META.draft}`}
+                            className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${INVOICE_STATUS_CLASS[inv.status] ?? INVOICE_STATUS_CLASS.draft}`}
                           >
                             {invoiceStatusLabel(
                               inv.status,
