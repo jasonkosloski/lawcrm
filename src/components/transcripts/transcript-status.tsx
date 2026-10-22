@@ -34,6 +34,8 @@ export function useRequestTranscript(documentId: string) {
         return;
       }
       router.refresh();
+    } catch {
+      notifyError("Couldn't start the transcript. Try again.");
     } finally {
       setPending(false);
     }

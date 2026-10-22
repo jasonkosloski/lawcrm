@@ -31,10 +31,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 /** Next unused single capital letter, or null when all 26 are taken. */
-export function nextSpeakerLabel(speakers: Record<string, string>): string | null {
+export function nextSpeakerLabel(
+  speakers: Record<string, string>,
+  used: readonly string[] = [],
+): string | null {
   for (let c = 65; c <= 90; c++) {
     const l = String.fromCharCode(c);
-    if (!Object.hasOwn(speakers, l)) return l;
+    if (!Object.hasOwn(speakers, l) && !used.includes(l)) return l;
   }
   return null;
 }
@@ -45,17 +48,19 @@ export function SpeakerChip({
   revision,
   speaker,
   speakers,
+  usedSpeakers,
 }: {
   transcriptId: string;
   segmentId: string;
   revision: number;
   speaker: string;
   speakers: Record<string, string>;
+  usedSpeakers: readonly string[];
 }) {
   const name = speakers[speaker] ?? `Speaker ${speaker}`;
   const [renameOpen, setRenameOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const fresh = nextSpeakerLabel(speakers);
+  const fresh = nextSpeakerLabel(speakers, usedSpeakers);
 
   const assign = (label: string) =>
     startTransition(async () => {

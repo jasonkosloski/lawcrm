@@ -12,7 +12,10 @@ vi.mock("@/lib/feedback", () => ({
   notifySuccess: vi.fn(),
 }));
 
-import { SelectionToolbar, selectionToSpan } from "./selection-toolbar";
+import { buildFlagAnchor } from "@/components/evidence/build-flag-anchor";
+import { formatMediaTime } from "@/lib/media-time";
+import { SelectionToolbar, selectionToSpan, spanToComposerAnchor } from "./selection-toolbar";
+import { nextSpeakerLabel } from "./speaker-chip";
 
 function Doc() {
   return (
@@ -145,5 +148,33 @@ describe("SelectionToolbar", () => {
         '"officer arrived which" (Bodycam.mp4 at 0:04)',
       ),
     );
+  });
+});
+
+describe("spanToComposerAnchor", () => {
+  test("a sub-second selection becomes a whole-second span the composer accepts", () => {
+    const a = spanToComposerAnchor({ startSeconds: 4.2, endSeconds: 4.6, quote: "was" });
+    expect(a).toEqual({ kind: "time", timeSeconds: 4, endSeconds: 5, quote: "was" });
+    const text = {
+      timeText: formatMediaTime(a.timeSeconds),
+      endText: formatMediaTime(a.endSeconds),
+      pageText: "",
+      quoteText: a.quote,
+    };
+    expect(text.timeText).toBe("0:04");
+    expect(text.endText).toBe("0:05");
+    expect(buildFlagAnchor("time", text, false).ok).toBe(true);
+  });
+
+  test("the whole-second span covers the selected words", () => {
+    const a = spanToComposerAnchor({ startSeconds: 4.9, endSeconds: 7.1, quote: "x" });
+    expect(a.timeSeconds).toBe(4);
+    expect(a.endSeconds).toBe(8);
+  });
+});
+
+describe("nextSpeakerLabel", () => {
+  test("skips labels used by paragraphs even when absent from the map", () => {
+    expect(nextSpeakerLabel({ A: "x" }, ["B"])).toBe("C");
   });
 });

@@ -22,6 +22,7 @@ import { ReviewPanel } from "./review-panel";
 import type { ComposerAnchor } from "./flag-composer";
 import type { RailMoment } from "./moments-rail";
 import { MediaTranscript } from "@/components/transcripts/media-transcript";
+import { spanToComposerAnchor } from "@/components/transcripts/selection-toolbar";
 import type { TranscriptView } from "@/lib/queries/transcript";
 
 export function MediaReview({
@@ -142,12 +143,7 @@ export function MediaReview({
         canEdit={canEditTranscript}
         canFlag={canCreate}
         onFlagSelection={(span) =>
-          setComposerAnchor({
-            kind: "time",
-            timeSeconds: span.startSeconds,
-            endSeconds: span.endSeconds,
-            quote: span.quote,
-          })
+          setComposerAnchor(spanToComposerAnchor(span))
         }
         initialSeconds={initialSeconds}
       />

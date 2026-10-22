@@ -16,6 +16,20 @@ import { Copy, Flag } from "lucide-react";
 import { notifyError, notifySuccess } from "@/lib/feedback";
 import { formatShortTimecode } from "@/lib/transcription/timecode";
 
+/**
+ * The composer edits whole seconds, so widen the selection to whole seconds
+ * that still cover it (a sub-second selection becomes a one-second span).
+ */
+export function spanToComposerAnchor(span: SelectionSpan) {
+  const timeSeconds = Math.floor(span.startSeconds);
+  return {
+    kind: "time" as const,
+    timeSeconds,
+    endSeconds: Math.max(Math.ceil(span.endSeconds), timeSeconds + 1),
+    quote: span.quote,
+  };
+}
+
 export type SelectionSpan = {
   startSeconds: number;
   endSeconds: number;
@@ -76,8 +90,30 @@ export function SelectionToolbar({
         top: Math.max(8, rect.top - 40),
       });
     };
+    // The bar is position:fixed, so follow the selection as anything scrolls
+    // (capture catches the pane's own scroll); hide it when scrolled out of view.
+    const onScroll = () => {
+      const root = rootRef.current;
+      const sel = window.getSelection();
+      if (!root || !sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      const box = root.getBoundingClientRect();
+      if (rect.height > 0 && (rect.bottom < box.top || rect.top > box.bottom)) {
+        setShown(null);
+        return;
+      }
+      setShown((cur) =>
+        cur
+          ? { ...cur, left: Math.max(8, rect.left + rect.width / 2), top: Math.max(8, rect.top - 40) }
+          : cur,
+      );
+    };
     document.addEventListener("selectionchange", onChange);
-    return () => document.removeEventListener("selectionchange", onChange);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("selectionchange", onChange);
+      window.removeEventListener("scroll", onScroll, true);
+    };
   }, [rootRef]);
 
   if (!shown) return null;

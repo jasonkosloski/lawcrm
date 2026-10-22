@@ -85,6 +85,8 @@ export function TranscriptPane({
 }) {
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Until this time a scroll event is ours (follow/find/deep link), not the user's.
+  const ownScrollUntil = useRef(0);
   const [following, setFollowing] = useState(true);
   const [editMode, setEditMode] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
@@ -108,34 +110,54 @@ export function TranscriptPane({
   const decor = useMemo(() => {
     const out = new Map<string, SegmentDecor>();
     if (!segments) return out;
-    for (const seg of segments) {
-      const words = seg.words;
-      let d: SegmentDecor | undefined;
-      const ensure = (): SegmentDecor => (d ??= { tints: new Array(words.length).fill(null), markers: {} });
-      for (const f of flags) {
-        if (f.timeSeconds === null) continue;
-        if (f.endSeconds !== null && f.endSeconds > f.timeSeconds) {
-          if (seg.endSeconds <= f.timeSeconds || seg.startSeconds >= f.endSeconds) continue;
-          words.forEach((w, i) => {
-            if (w.s < f.endSeconds! && w.e > f.timeSeconds!) ensure().tints[i] = f.category;
+    const ensure = (seg: (typeof segments)[number]): SegmentDecor => {
+      let d = out.get(seg.id);
+      if (!d) {
+        d = { tints: new Array(seg.words.length).fill(null), markers: {} };
+        out.set(seg.id, d);
+      }
+      return d;
+    };
+    for (const f of flags) {
+      if (f.timeSeconds === null) continue;
+      const t = f.timeSeconds;
+      if (f.endSeconds !== null && f.endSeconds > t) {
+        for (const seg of segments) {
+          if (seg.endSeconds <= t || seg.startSeconds >= f.endSeconds) continue;
+          seg.words.forEach((w, i) => {
+            if (w.s < f.endSeconds! && w.e > t) ensure(seg).tints[i] = f.category;
           });
-        } else if (words.length > 0) {
-          const first = words[0].s;
-          const last = words[words.length - 1].e;
-          if (f.timeSeconds < first - 5 || f.timeSeconds > last + 5) continue;
-          // Nearest word start (the point may land between words).
-          let best = 0;
-          for (let i = 1; i < words.length; i++) {
-            if (Math.abs(words[i].s - f.timeSeconds) < Math.abs(words[best].s - f.timeSeconds)) best = i;
-          }
-          const m = ensure().markers;
-          (m[best] ??= []).push(f.id);
+        }
+      } else {
+        // A point flag marks the single nearest word across all paragraphs.
+        let bestSeg: (typeof segments)[number] | null = null;
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        for (const seg of segments) {
+          if (seg.words.length === 0) continue;
+          seg.words.forEach((w, i) => {
+            const d = Math.abs(w.s - t);
+            if (d < bestDist) {
+              bestDist = d;
+              bestSeg = seg;
+              bestIdx = i;
+            }
+          });
+        }
+        if (bestSeg && bestDist <= 5) {
+          const m = ensure(bestSeg).markers;
+          (m[bestIdx] ??= []).push(f.id);
         }
       }
-      if (d) out.set(seg.id, d);
     }
     return out;
   }, [segments, flags]);
+
+  // Speaker labels in use, so "New speaker" never reuses one.
+  const usedSpeakers = useMemo(
+    () => (segments ? [...new Set(segments.map((s) => s.speaker))] : []),
+    [segments],
+  );
 
   // ── Find ──
   const matches = useMemo(() => {
@@ -186,7 +208,7 @@ export function TranscriptPane({
   useEffect(() => {
     if (!findOpen) return;
     const el = scrollRef.current?.querySelector<HTMLElement>('[data-find="current"]');
-    if (el) scrollToEl(scrollRef.current!, el);
+    if (el) scrollToEl(scrollRef.current!, el, ownScrollUntil);
   }, [findOpen, current, matches]);
 
   const goToMatch = (n: number) => {
@@ -223,8 +245,10 @@ export function TranscriptPane({
   useEffect(() => {
     if (!following || findOpen) return;
     const box = scrollRef.current;
+    // Don't scroll under a selection in progress.
+    if (box && hasSelectionIn(box)) return;
     const el = box?.querySelector<HTMLElement>('[aria-current="true"]');
-    if (box && el) scrollToEl(box, el);
+    if (box && el) scrollToEl(box, el, ownScrollUntil);
   }, [following, findOpen, activeKey]);
 
   // ?t= deep link: scroll once to that moment.
@@ -236,7 +260,7 @@ export function TranscriptPane({
     for (const s of segments) if (s.startSeconds <= initialSeconds) seg = s;
     const i = Math.max(0, activeWordIndex(seg.words, initialSeconds));
     const el = box.querySelector<HTMLElement>(`[data-seg="${seg.id}"] [data-i="${i}"]`);
-    if (el) scrollToEl(box, el);
+    if (el) scrollToEl(box, el, ownScrollUntil);
     // Once per mount, like the media's own deep-link seek.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSeconds, segments?.length]);
@@ -265,12 +289,16 @@ export function TranscriptPane({
       destructive: true,
     });
     if (!ok) return;
-    const res = await deleteTranscript(documentId);
-    if (!res.ok) {
-      notifyError(res.error ?? "Couldn't delete the transcript.");
-      return;
+    try {
+      const res = await deleteTranscript(documentId);
+      if (!res.ok) {
+        notifyError(res.error ?? "Couldn't delete the transcript.");
+        return;
+      }
+      router.refresh();
+    } catch {
+      notifyError("Couldn't delete the transcript. Try again.");
     }
-    router.refresh();
   };
 
   // ── Render ──
@@ -281,8 +309,8 @@ export function TranscriptPane({
   }
 
   const hasText = !!segments && segments.length > 0;
-  const showMenu =
-    (canDelete || (canTranscribe && !inFlight)) && (status === "completed" || status === "failed");
+  // Delete stays reachable for a failed or in-flight transcript with no text.
+  const showMenu = canDelete || (canTranscribe && !inFlight);
 
   return (
     <section
@@ -295,7 +323,7 @@ export function TranscriptPane({
         <FailedBanner documentId={documentId} error={transcript.error} canTranscribe={canTranscribe} />
       )}
 
-      {(hasText || status === "completed") && (
+      {(hasText || status === "completed" || showMenu) && (
         <>
           <div className="flex items-center gap-2">
             <h2 className="text-xs font-semibold text-ink-2">Transcript</h2>
@@ -342,7 +370,7 @@ export function TranscriptPane({
                     }
                   />
                   <DropdownMenuContent align="end" className="min-w-44">
-                    {canTranscribe && (
+                    {canTranscribe && !inFlight && (
                       <DropdownMenuItem
                         disabled={retranscribing}
                         onClick={() => void retranscribe()}
@@ -391,6 +419,16 @@ export function TranscriptPane({
             tabIndex={-1}
             onWheel={() => setFollowing(false)}
             onTouchMove={() => setFollowing(false)}
+            // The pane itself (not a word) is the target of a scrollbar drag.
+            onPointerDown={(e) => e.target === e.currentTarget && setFollowing(false)}
+            onKeyDown={(e) => {
+              const t = e.target as HTMLElement;
+              if (t.tagName === "TEXTAREA" || t.tagName === "INPUT") return;
+              if (SCROLL_KEYS.has(e.key)) setFollowing(false);
+            }}
+            onScroll={() => {
+              if (performance.now() > ownScrollUntil.current) setFollowing(false);
+            }}
             className="relative max-h-[60vh] min-h-64 overflow-y-auto rounded-md border border-line bg-white px-3 py-1 outline-none"
           >
             {segments!.map((seg) => (
@@ -407,6 +445,7 @@ export function TranscriptPane({
                 onMarkerClick={handleMarker}
                 transcriptId={transcript.id}
                 speakers={transcript.speakers}
+                usedSpeakers={usedSpeakers}
                 canEdit={canEdit}
                 editMode={editMode}
               />
@@ -433,10 +472,29 @@ export function TranscriptPane({
   );
 }
 
-/** Center `el` in `box` without scrolling the page. */
-function scrollToEl(box: HTMLElement, el: HTMLElement) {
+const SCROLL_KEYS = new Set([
+  "PageUp",
+  "PageDown",
+  "Home",
+  "End",
+  "ArrowUp",
+  "ArrowDown",
+  " ",
+]);
+
+/** A non-collapsed selection that touches `box`. */
+function hasSelectionIn(box: HTMLElement): boolean {
+  const sel = typeof window !== "undefined" ? window.getSelection() : null;
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+  return box.contains(sel.anchorNode) || box.contains(sel.focusNode);
+}
+
+/** Center `el` in `box` without scrolling the page; marks the scroll as ours. */
+function scrollToEl(box: HTMLElement, el: HTMLElement, own: { current: number }) {
   const b = box.getBoundingClientRect();
   const r = el.getBoundingClientRect();
   if (r.top >= b.top + 24 && r.bottom <= b.bottom - 24) return;
+  // Smooth scrolling fires events for a while; none of them are the user's.
+  own.current = performance.now() + 1000;
   box.scrollTo?.({ top: box.scrollTop + (r.top - b.top) - b.height / 2, behavior: "smooth" });
 }

@@ -46,6 +46,8 @@ export type TranscriptSegmentProps = {
   transcriptId: string;
   /** Speaker label → display name (stable object from the transcript). */
   speakers: Record<string, string>;
+  /** Labels used by any paragraph (stable array). */
+  usedSpeakers: string[];
   /** The user may correct the transcript. */
   canEdit: boolean;
   /** Edit mode is on: pencils and speaker chips show. */
@@ -62,6 +64,7 @@ export const TranscriptSegmentView = memo(function TranscriptSegmentView({
   onMarkerClick,
   transcriptId,
   speakers,
+  usedSpeakers,
   canEdit,
   editMode,
 }: TranscriptSegmentProps) {
@@ -109,6 +112,7 @@ export const TranscriptSegmentView = memo(function TranscriptSegmentView({
             revision={segment.revision}
             speaker={segment.speaker}
             speakers={speakers}
+            usedSpeakers={usedSpeakers}
           />
         ) : (
           <span className="font-semibold text-ink-2">{speakerName}</span>
