@@ -1,4 +1,4 @@
-import { PDFDocument, PDFName, PDFDict } from "pdf-lib";
+import { PDFDocument, PDFName, PDFDict, PDFRawStream } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import { FONTS } from "./fonts";
 import { renderFixture } from "./converters-fixture";
@@ -23,7 +23,7 @@ const longBody = (): ResolvedDoc => ({
   })),
 });
 
-const png = (() => {
+const stubPng = (() => {
   const b = new Uint8Array(33);
   const v = new DataView(b.buffer);
   v.setUint32(0, 0x89504e47);
@@ -32,6 +32,29 @@ const png = (() => {
   v.setUint32(20, 100);
   return b;
 })();
+
+const realPng = new Uint8Array(
+  Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg==",
+    "base64",
+  ),
+);
+const realJpeg = new Uint8Array(
+  Buffer.from(
+    "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAgDAREAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDzqvjj+kT/2Q==",
+    "base64",
+  ),
+);
+
+const imageCount = async (buf: Buffer) => {
+  const pdf = await PDFDocument.load(buf);
+  let n = 0;
+  for (const [, obj] of pdf.context.enumerateIndirectObjects()) {
+    const dict = obj instanceof PDFRawStream ? obj.dict : obj instanceof PDFDict ? obj : null;
+    if (dict?.get(PDFName.of("Subtype")) === PDFName.of("Image")) n++;
+  }
+  return n;
+};
 
 const style = (kind: "letter" | "filing", over: Partial<PageStyle> = {}): PageStyle => ({
   ...resolvePageStyle(kind, DEFAULT_DOCUMENT_STYLE, null),
@@ -182,7 +205,7 @@ describe("resolvedToPdf", () => {
       style: style("letter", {
         letterhead: {
           blockId: null,
-          logo: { bytes: png, contentType: "image/png", position: "center" },
+          logo: { bytes: stubPng, contentType: "image/png", position: "center" },
         },
       }),
     });
@@ -221,5 +244,55 @@ describe("line spacing", () => {
     expect(single).toBeGreaterThan(13); // natural line height, not 1.0 x size
     expect(double / single).toBeGreaterThan(1.7);
     expect(double / single).toBeLessThan(2.3);
+  });
+});
+
+describe("logo embedding", () => {
+  const withLogo = (bytes: Uint8Array, contentType: "image/png" | "image/jpeg", block: boolean) =>
+    resolvedToPdf({
+      body: doc("Body"),
+      letterhead: block ? doc("LH") : null,
+      continuation: null,
+      style: style("letter", {
+        letterhead: {
+          blockId: block ? "b" : null,
+          logo: { bytes, contentType, position: "right" },
+        },
+      }),
+    });
+
+  it("embeds a real PNG and JPEG as image XObjects, alone or with a block", async () => {
+    for (const block of [false, true]) {
+      const a = await withLogo(realPng, "image/png", block);
+      const b = await withLogo(realJpeg, "image/jpeg", block);
+      expect(await imageCount(a.buffer), `png block=${block}`).toBeGreaterThan(0);
+      expect(await imageCount(b.buffer), `jpeg block=${block}`).toBeGreaterThan(0);
+      expect(a.warnings).toEqual([]);
+    }
+  });
+
+  it("skips an undecodable logo and warns", async () => {
+    const bad = new Uint8Array(40); // no PNG signature
+    const r = await withLogo(bad, "image/png", true);
+    expect(await imageCount(r.buffer)).toBe(0);
+    expect(r.warnings).toEqual(["Logo couldn't be loaded."]);
+    expect(text((await pages(r.buffer))[0])).toContain("LH");
+  });
+
+  it("stub PNG (valid header, undecodable body) is accepted without throwing", async () => {
+    const r = await withLogo(stubPng, "image/png", false);
+    expect(r.buffer.subarray(0, 5).toString()).toBe("%PDF-");
+  });
+});
+
+describe("glyph fallback", () => {
+  it("does not warn for accented Latin in Garamond", async () => {
+    const r = await resolvedToPdf({
+      body: doc("naïve café"),
+      letterhead: null,
+      continuation: null,
+      style: style("letter", { font: "garamond" }),
+    });
+    expect(r.warnings).toEqual([]);
   });
 });

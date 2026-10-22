@@ -202,6 +202,19 @@ describe("resolvedToDocx", () => {
     );
   });
 
+  it("skips an undecodable logo (no image, no blank box)", async () => {
+    const style = letterStyle({
+      letterhead: {
+        blockId: "b1",
+        logo: { bytes: new Uint8Array(40), contentType: "image/png", position: "left" },
+      },
+    });
+    const { headers, names } = await build({ style, letterhead: text("LH") });
+    expect(headers.some((h) => h.includes("<w:drawing>"))).toBe(false);
+    expect(names.some((n) => n.startsWith("word/media/"))).toBe(false);
+    expect(headers.some((h) => h.includes("LH"))).toBe(true);
+  });
+
   it("highlights an archived-block marker in the letterhead", async () => {
     const style = letterStyle({ letterhead: { blockId: "b1", logo: null } });
     const { headers } = await build({

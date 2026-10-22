@@ -61,6 +61,10 @@ const nextConfig: NextConfig = {
   // Don't advertise the framework (X-Powered-By: Next.js).
   poweredByHeader: false,
 
+  // fontkit is required at runtime by the letter PDF converter (glyph
+  // coverage); keep it out of the server bundle.
+  serverExternalPackages: ["fontkit"],
+
   // The invoice PDF reads its .ttf fonts from disk at runtime; the file
   // tracer can't see that, so ship them with every server route (invoices
   // are sent from server actions on many pages).

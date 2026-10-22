@@ -30,7 +30,6 @@ const registered = new Set<string>();
 
 function registerFamily(family: string, files: (typeof FONTS)[FontKey]["files"]) {
   if (registered.has(family)) return;
-  registered.add(family);
   Font.register({
     family,
     fonts: [
@@ -40,6 +39,7 @@ function registerFamily(family: string, files: (typeof FONTS)[FontKey]["files"])
       { src: fontFilePath(files.boldItalic), fontWeight: "bold", fontStyle: "italic" },
     ],
   });
+  registered.add(family);
 }
 
 function ensureFonts(key: FontKey) {
@@ -74,9 +74,10 @@ function collectText(doc: ResolvedDoc | null, out: string[]) {
   walk(doc);
 }
 
-/** True when any code point in the text has no glyph in the chosen font. */
+/** True when any code point has no glyph in the chosen font or the fallback. */
 function hasUnsupported(key: FontKey, strings: string[]): boolean {
   const font = glyphFont(key);
+  const fallback = glyphFont("arial"); // Liberation Sans, the registered fallback
   const seen = new Set<number>();
   for (const s of strings) {
     for (const ch of s) {
@@ -84,7 +85,7 @@ function hasUnsupported(key: FontKey, strings: string[]): boolean {
       if (seen.has(cp)) continue;
       seen.add(cp);
       if (cp <= 0x20 || (cp >= 0x7f && cp <= 0xa0) || cp === 0x200b) continue; // whitespace, controls
-      if (!font.hasGlyphForCodePoint(cp)) return true;
+      if (!font.hasGlyphForCodePoint(cp) && !fallback.hasGlyphForCodePoint(cp)) return true;
     }
   }
   return false;
@@ -219,13 +220,10 @@ const JUSTIFY = { left: "flex-start", center: "center", right: "flex-end" } as c
 
 function logo(l: LoadedLogo, ctx: Ctx) {
   const size = imageSize(l.bytes, l.contentType);
-  let w = LOGO_MAX_H_PT;
-  let h = LOGO_MAX_H_PT;
-  if (size) {
-    const scale = Math.min(1, LOGO_MAX_W_PT / size.width, LOGO_MAX_H_PT / size.height);
-    w = size.width * scale;
-    h = size.height * scale;
-  }
+  if (!size) return null; // undecodable: skipped, the caller warns
+  const scale = Math.min(1, LOGO_MAX_W_PT / size.width, LOGO_MAX_H_PT / size.height);
+  const w = size.width * scale;
+  const h = size.height * scale;
   return (
     <View
       key="logo"
@@ -261,13 +259,19 @@ export async function resolvedToPdf(input: {
     ? [`Some characters can't be shown in ${FONTS[style.font].label}.`]
     : [];
 
+  const lg = style.letterhead?.logo;
+  if (isLetter && lg && !imageSize(lg.bytes, lg.contentType)) {
+    warnings.push("Logo couldn't be loaded.");
+  }
+
   const family = [FONTS[style.font].pdfFamily, FALLBACK_FAMILY];
   const m = style.marginsIn;
   const pt = (n: number) => n * PT_PER_IN;
 
   const firstHeader = () => {
     const parts: ReactElement[] = [];
-    if (style.letterhead?.logo) parts.push(logo(style.letterhead.logo, ctx));
+    const mark = style.letterhead?.logo ? logo(style.letterhead.logo, ctx) : null;
+    if (mark) parts.push(mark);
     if (style.letterhead && input.letterhead) {
       parts.push(<View key="lh">{blocks(input.letterhead.content ?? [], ctx)}</View>);
     }

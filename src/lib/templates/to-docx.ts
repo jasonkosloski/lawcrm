@@ -134,19 +134,16 @@ const PX_PER_IN = 96; // docx ImageRun transformation is in pixels at 96 dpi
 const LOGO_MAX_W_IN = 3;
 const LOGO_MAX_H_IN = 1;
 
-function logoParagraph(logo: LoadedLogo): Paragraph {
+function logoParagraph(logo: LoadedLogo): Paragraph | null {
   const size = imageSize(logo.bytes, logo.contentType);
-  let wPx = PX_PER_IN;
-  let hPx = PX_PER_IN;
-  if (size) {
-    const scale = Math.min(
-      1,
-      (LOGO_MAX_W_IN * PX_PER_IN) / size.width,
-      (LOGO_MAX_H_IN * PX_PER_IN) / size.height,
-    );
-    wPx = size.width * scale;
-    hPx = size.height * scale;
-  }
+  if (!size) return null; // undecodable: skipped, same rule as the PDF
+  const scale = Math.min(
+    1,
+    (LOGO_MAX_W_IN * PX_PER_IN) / size.width,
+    (LOGO_MAX_H_IN * PX_PER_IN) / size.height,
+  );
+  const wPx = size.width * scale;
+  const hPx = size.height * scale;
   return new Paragraph({
     alignment: ALIGN[logo.position],
     children: [
@@ -202,7 +199,8 @@ export async function resolvedToDocx(input: {
   const headers: { first?: Header; default?: Header } = {};
   if (style.letterhead) {
     const parts: (Paragraph | Table)[] = [];
-    if (style.letterhead.logo) parts.push(logoParagraph(style.letterhead.logo));
+    const mark = style.letterhead.logo ? logoParagraph(style.letterhead.logo) : null;
+    if (mark) parts.push(mark);
     parts.push(...content(input.letterhead, ctx));
     if (parts.length) headers.first = new Header({ children: parts });
   }
