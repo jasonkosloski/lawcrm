@@ -157,13 +157,34 @@ export const ShowIfNode = Node.create<SectionOptions>({
   },
   addAttributes() {
     return {
-      path: { default: "" },
-      op: { default: "present" },
-      values: { default: [] },
+      path: {
+        default: "",
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-path") ?? "",
+        renderHTML: (a: Record<string, unknown>) => ({ "data-path": String(a.path ?? "") }),
+      },
+      op: {
+        default: "present",
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-op") ?? "present",
+        renderHTML: (a: Record<string, unknown>) => ({ "data-op": String(a.op ?? "present") }),
+      },
+      values: {
+        default: [],
+        parseHTML: (el: HTMLElement) => {
+          try {
+            const v: unknown = JSON.parse(el.getAttribute("data-values") ?? "[]");
+            return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+          } catch {
+            return [];
+          }
+        },
+        renderHTML: (a: Record<string, unknown>) => ({
+          "data-values": JSON.stringify(a.values ?? []),
+        }),
+      },
     };
   },
   parseHTML: () => [{ tag: "div[data-show-if]" }],
-  renderHTML: () => ["div", { "data-show-if": "" }, 0],
+  renderHTML: ({ HTMLAttributes }) => ["div", { ...HTMLAttributes, "data-show-if": "" }, 0],
   addNodeView: () => ReactNodeViewRenderer(ShowIfView),
   addCommands() {
     return {
@@ -184,10 +205,16 @@ export const RepeatNode = Node.create<SectionOptions>({
     return `(${this.options.blocks})+ repeatEmpty?`;
   },
   addAttributes() {
-    return { list: { default: "" } };
+    return {
+      list: {
+        default: "",
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-list") ?? "",
+        renderHTML: (a: Record<string, unknown>) => ({ "data-list": String(a.list ?? "") }),
+      },
+    };
   },
   parseHTML: () => [{ tag: "div[data-repeat]" }],
-  renderHTML: () => ["div", { "data-repeat": "" }, 0],
+  renderHTML: ({ HTMLAttributes }) => ["div", { ...HTMLAttributes, "data-repeat": "" }, 0],
   addNodeView: () => ReactNodeViewRenderer(RepeatView),
   addCommands() {
     return {

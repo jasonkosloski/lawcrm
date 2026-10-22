@@ -111,6 +111,34 @@ describe("round trip", () => {
   });
 });
 
+describe("clipboard and email", () => {
+  it("round trips every custom node through HTML (copy/paste)", () => {
+    const editor = make("letter", FULL_DOC);
+    const html = editor.getHTML();
+    editor.commands.setContent(html);
+    expect(editor.getJSON()).toEqual(FULL_DOC);
+    editor.destroy();
+  });
+
+  it("email keeps listField and drops pageBreak", () => {
+    const emailDoc = {
+      type: "doc",
+      content: [
+        p({
+          type: "listField",
+          attrs: { list: "parties.clients", itemPath: "name", join: "and" },
+        }),
+      ],
+    };
+    const editor = make("email", emailDoc);
+    expect(editor.getJSON()).toEqual(emailDoc);
+    expect(validateTemplateContent("email", editor.getJSON()).ok).toBe(true);
+    editor.commands.setContent("<p>a</p><hr data-page-break>");
+    expect(JSON.stringify(editor.getJSON())).not.toContain("pageBreak");
+    editor.destroy();
+  });
+});
+
 describe("sms", () => {
   it("has only document, paragraph, text, hardBreak and field in its schema", () => {
     const editor = make("sms", "<p>hi</p>");
@@ -129,6 +157,7 @@ describe("sms", () => {
     const editor = make("sms", "<h1>Hi</h1><p>there</p>");
     const json = JSON.stringify(editor.getJSON());
     expect(json).not.toContain("heading");
+    expect(json).toContain("Hi");
     expect(validateTemplateContent("sms", editor.getJSON()).ok).toBe(true);
     editor.destroy();
   });

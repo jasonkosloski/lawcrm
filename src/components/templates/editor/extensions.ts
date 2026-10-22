@@ -31,9 +31,8 @@ export type TemplateExtensionOptions = {
 /** Table cells carry only the attrs the schema allows (no `align`). */
 const withoutAlign = {
   addAttributes(this: { parent?: () => Record<string, unknown> }) {
-    const { align: _align, ...rest } = this.parent?.() ?? {};
-    void _align;
-    return rest;
+    const parent = this.parent?.() ?? {};
+    return { colspan: parent.colspan, rowspan: parent.rowspan, colwidth: parent.colwidth };
   },
 };
 
@@ -132,7 +131,7 @@ export function createTemplateExtensions(opts: TemplateExtensionOptions): Extens
     TableHeader.extend({ content: `(${blocks})+`, ...withoutAlign }),
     TableCell.extend({ content: `(${blocks})+`, ...withoutAlign }),
     field,
-    ...(kind === "email" ? [] : [ListFieldNode.configure({ onEditField: opts.onEditField })]),
+    ListFieldNode.configure({ onEditField: opts.onEditField }),
     ...(hasPageBreak ? [PageBreak] : []),
     ...(hasBlockRef
       ? [BlockNode.configure({ blocks: opts.blocks, onEditBlock: opts.onEditBlock })]

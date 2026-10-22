@@ -27,8 +27,16 @@ export function blockPreview(
   const block = blocks.find((b) => b.id === blockId);
   if (!block) return null;
   const map = new Map(blocks.map((b) => [b.id, b]));
-  const { doc } = renderTemplate(block.content, { data: SAMPLE_TEMPLATE_DATA, blocks: map });
-  return { name: block.name, html: resolvedToHtml(doc), archived: !block.isActive };
+  try {
+    const { doc } = renderTemplate(block.content, { data: SAMPLE_TEMPLATE_DATA, blocks: map });
+    return { name: block.name, html: resolvedToHtml(doc), archived: !block.isActive };
+  } catch {
+    return {
+      name: block.name,
+      html: "<p>[Block preview unavailable]</p>",
+      archived: !block.isActive,
+    };
+  }
 }
 
 function BlockView(props: NodeViewProps) {
