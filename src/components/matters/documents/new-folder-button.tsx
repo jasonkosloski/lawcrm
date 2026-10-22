@@ -42,7 +42,6 @@ export function NewFolderButton({
         size="sm"
         type="button"
         onClick={() => setOpen(true)}
-        className="hover:border-brand-300 hover:text-brand-700"
       >
         <FolderPlus size={13} />
         New folder

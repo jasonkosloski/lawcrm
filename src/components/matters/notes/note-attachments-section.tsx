@@ -734,7 +734,7 @@ function AddPill({
       size="xs"
       type="button"
       onClick={onClick}
-      className="text-2xs border-dashed hover:border-brand-300 hover:text-brand-700 hover:bg-brand-soft"
+      className="text-2xs border-dashed hover:bg-brand-soft"
     >
       <Plus size={10} />
       {icon}

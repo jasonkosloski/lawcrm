@@ -89,7 +89,7 @@ export function SyncNowButton() {
         onClick={run}
         disabled={pending}
         title="Fetch the latest mail from your connected accounts"
-        className={cn("text-2xs hover:border-brand-300 hover:text-brand-700 hover:bg-brand-soft", pending && "opacity-60 cursor-default")}
+        className={cn("text-2xs hover:bg-brand-soft", pending && "opacity-60 cursor-default")}
       >
         <RefreshCw size={12} className={cn(pending && "animate-spin")} />
         {pending ? "Syncing…" : "Sync now"}

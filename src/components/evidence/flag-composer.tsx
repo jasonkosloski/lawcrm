@@ -432,7 +432,6 @@ export function FlagComposer({
           type="button"
           onClick={onClose}
           disabled={pending}
-          className="hover:border-brand-300 hover:text-brand-700"
         >
           Cancel
         </Button>

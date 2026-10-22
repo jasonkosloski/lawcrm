@@ -178,7 +178,6 @@ export function EditDocumentButton({
         size="xs"
         type="button"
         onClick={() => setOpen(true)}
-        className="hover:border-brand-300 hover:text-brand-700"
       >
         <Pencil className="h-3.5 w-3.5" aria-hidden />
         Edit details

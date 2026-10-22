@@ -70,7 +70,6 @@ export function ExpenseComposer({ matterId }: { matterId: string }) {
         size="sm"
         type="button"
         onClick={() => setExpanded(true)}
-        className="hover:border-brand-300 hover:text-brand-700"
       >
         <Plus size={12} />
         Log expense

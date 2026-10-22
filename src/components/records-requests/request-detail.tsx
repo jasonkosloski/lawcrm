@@ -341,7 +341,7 @@ export function RequestDetail({
               type="button"
               disabled={linkPending || sel.length === 0}
               onClick={() => onLink(role)}
-              className="hover:border-brand-300 hover:text-brand-700 mt-2"
+              className="mt-2"
             >
               Link selected
             </Button>
@@ -465,7 +465,6 @@ export function RequestDetail({
                     type="button"
                     disabled={statusPending}
                     onClick={() => setStatus(s)}
-                    className="hover:border-brand-300 hover:text-brand-700"
                   >
                     {RECORDS_STATUS_LABEL[s]}
                   </Button>
@@ -546,7 +545,6 @@ export function RequestDetail({
                     type="button"
                     disabled={statusPending}
                     onClick={() => setStatus("partial")}
-                    className="hover:border-brand-300 hover:text-brand-700"
                   >
                     Mark partial
                   </Button>
@@ -557,7 +555,6 @@ export function RequestDetail({
                   type="button"
                   disabled={statusPending}
                   onClick={() => setStatus("complete")}
-                  className="hover:border-brand-300 hover:text-brand-700"
                 >
                   Mark complete
                 </Button>
@@ -594,7 +591,7 @@ export function RequestDetail({
                     className={field}
                   />
                 </div>
-                <Button variant="outline" size="sm" type="submit" disabled={followUp.pending} className="hover:border-brand-300 hover:text-brand-700">
+                <Button variant="outline" size="sm" type="submit" disabled={followUp.pending}>
                   Log follow-up
                 </Button>
                 <FormMessage state={followUp.state} />
@@ -753,7 +750,6 @@ export function RequestDetail({
                   size="sm"
                   type="submit"
                   disabled={fee.pending || detail.expenseLocked}
-                  className="hover:border-brand-300 hover:text-brand-700"
                 >
                   Save fee
                 </Button>

@@ -88,7 +88,7 @@ export function LogTimeOnCommButton({
         onClick={() => setOpen(true)}
         disabled={!isFiled}
         title={tooltip}
-        className="text-2xs hover:border-brand-300 hover:text-brand-700 hover:bg-brand-soft disabled:hover:border-line disabled:hover:text-ink-3 disabled:hover:bg-white"
+        className="text-2xs hover:bg-brand-soft disabled:hover:border-line disabled:hover:text-ink-3 disabled:hover:bg-white"
       >
         <Clock size={11} />
         Log time

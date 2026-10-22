@@ -65,7 +65,7 @@ export function SettlementLienForm({
         size="xs"
         type="button"
         onClick={() => setExpanded(true)}
-        className="text-2xs hover:border-brand-300 hover:text-brand-700"
+        className="text-2xs"
       >
         <Plus size={11} />
         Add lien

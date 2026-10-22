@@ -117,7 +117,8 @@ Clickable card: `card-hover` (the edge darkens; no lift, no blue glow).
 ### Button hierarchy
 ```
 Primary (default): brand-700 fill, white text, hover brand-900. One per screen.
-Outline: white, border-input, ink-2 text. Secondary actions.
+Outline: white, border-input, ink-2 text; on hover the border and text turn brand
+  (brand-300 / brand-700). Secondary actions.
 Ghost: transparent; tertiary and icon buttons.
 Destructive: white with danger text and a danger/30 border. The final confirm of
   a delete (confirm host, delete dialogs) adds a solid bg-danger fill.

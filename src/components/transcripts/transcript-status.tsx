@@ -63,7 +63,7 @@ export function TranscribeButton({
       type="button"
       onClick={run}
       disabled={pending}
-      className="self-start hover:border-brand-300 hover:text-brand-700"
+      className="self-start"
     >
       {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
       {label}

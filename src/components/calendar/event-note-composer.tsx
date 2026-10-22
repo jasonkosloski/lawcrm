@@ -81,7 +81,7 @@ export function EventNoteComposer({
         size="sm"
         type="button"
         onClick={() => setExpanded(true)}
-        className="flex gap-2 text-2xs text-ink-4 w-full border-dashed hover:border-brand-300 hover:text-brand-700 text-left"
+        className="flex gap-2 text-2xs text-ink-4 w-full border-dashed text-left"
       >
         <Plus size={12} />
         Add a note about this event…

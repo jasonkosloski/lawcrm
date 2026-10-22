@@ -70,7 +70,7 @@ export function InviteMemberComposer({
         variant="outline"
         type="button"
         onClick={() => setExpanded(true)}
-        className="gap-2 text-xs border-dashed hover:border-brand-300 hover:text-brand-700"
+        className="gap-2 text-xs border-dashed"
       >
         <Plus size={13} />
         Invite member

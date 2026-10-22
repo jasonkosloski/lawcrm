@@ -358,7 +358,7 @@ function InsertFieldMenu({
             variant="outline"
             size="xs"
             type="button"
-            className="text-2xs hover:text-brand-700 hover:border-brand-300"
+            className="text-2xs"
           >
             Insert field
             <ChevronDown size={11} />

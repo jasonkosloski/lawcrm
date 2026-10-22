@@ -78,7 +78,7 @@ export function NewRequestComposer({
         variant="outline"
         type="button"
         onClick={() => setExpanded(true)}
-        className="flex gap-2 text-xs w-full border-dashed hover:border-brand-300 hover:text-brand-700 text-left"
+        className="flex gap-2 text-xs w-full border-dashed text-left"
       >
         <Plus size={13} />
         New records request

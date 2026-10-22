@@ -265,7 +265,7 @@ export function DashboardCustomizer({
             size="xs"
             type="button"
             onClick={() => setEditing(true)}
-            className="flex border-line-2 hover:border-brand-300"
+            className="flex border-line-2"
           >
             <Settings2 size={13} />
             <span>Customize</span>

@@ -119,7 +119,7 @@ export function NoteComposer({
                 setState(noteInitialState);
                 setExpanded(true);
               }}
-              className="flex gap-2 text-xs text-ink-4 border-dashed hover:border-brand-300 hover:text-brand-700 text-left"
+              className="flex gap-2 text-xs text-ink-4 border-dashed text-left"
             >
               <Plus size={14} />
               {scope.kind === "matter"

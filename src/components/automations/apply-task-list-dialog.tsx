@@ -66,7 +66,6 @@ export function ApplyTaskListDialog({
           setResult(null);
           setOpen(true);
         }}
-        className="hover:border-brand-300 hover:text-brand-700"
       >
         <ListChecks size={13} />
         Apply task list

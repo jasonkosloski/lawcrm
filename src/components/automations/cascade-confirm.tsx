@@ -138,7 +138,6 @@ export function CascadeConfirm({
           name="cascadeDecision"
           value="skip"
           disabled={isPending}
-          className="hover:border-brand-300"
         >
           Save, don&apos;t change them
         </Button>

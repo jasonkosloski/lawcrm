@@ -93,7 +93,7 @@ export function BundleInternalRecordForm({
         variant="outline"
         type="button"
         onClick={() => setExpanded(true)}
-        className="gap-2 text-xs hover:border-brand-300 hover:text-brand-700"
+        className="gap-2 text-xs"
       >
         <Archive size={13} />
         Bundle as internal record
@@ -159,7 +159,6 @@ export function BundleInternalRecordForm({
           size="sm"
           type="submit"
           disabled={isPending}
-          className="hover:border-brand-300 hover:text-brand-700"
         >
           {isPending ? "Bundling…" : "Record without billing"}
         </Button>

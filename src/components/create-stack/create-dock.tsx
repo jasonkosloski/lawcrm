@@ -447,7 +447,6 @@ function PanelBody({
               size="xs"
               type="button"
               onClick={onClose}
-              className="hover:border-brand-300 hover:text-brand-700"
             >
               Cancel
             </Button>

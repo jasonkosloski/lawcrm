@@ -173,7 +173,6 @@ export function NotePanelBody({
           size="xs"
           type="button"
           onClick={() => close(panelId)}
-          className="hover:border-brand-300 hover:text-brand-700"
         >
           Cancel
         </Button>

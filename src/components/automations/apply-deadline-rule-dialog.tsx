@@ -91,7 +91,6 @@ export function ApplyDeadlineRuleDialog({
           reset();
           setOpen(true);
         }}
-        className="hover:border-brand-300 hover:text-brand-700"
       >
         <CalendarPlus size={13} />
         Apply deadline rule

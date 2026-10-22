@@ -92,7 +92,7 @@ export function TrustTransactionForm({
           setDefaultDate(todayKey(tz));
           setExpanded(true);
         }}
-        className="gap-2 border-dashed hover:border-brand-300 hover:text-brand-700"
+        className="gap-2 border-dashed"
       >
         <Plus size={12} />
         Add transaction

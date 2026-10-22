@@ -91,7 +91,6 @@ export function ReviewPanel({
             size="xs"
             type="button"
             onClick={() => onComposerAnchorChange(captureAnchor())}
-            className="hover:border-brand-300 hover:text-brand-700"
           >
             <Flag className="h-3.5 w-3.5" aria-hidden />
             {captureLabel}

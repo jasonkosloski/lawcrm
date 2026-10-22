@@ -87,7 +87,7 @@ export function CaptureComposerShell({
             variant="outline"
             type="button"
             onClick={onExpand}
-            className="flex gap-2 text-xs text-ink-4 w-full border-dashed hover:border-brand-300 hover:text-brand-700 text-left"
+            className="flex gap-2 text-xs text-ink-4 w-full border-dashed text-left"
           >
             <Plus size={14} />
             {collapsedLabel}

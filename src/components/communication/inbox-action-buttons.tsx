@@ -172,7 +172,7 @@ function Btn({
       disabled={disabled}
       title={tooltip}
       aria-label={label}
-      className="text-2xs hover:border-brand-300 hover:text-brand-700 hover:bg-brand-soft disabled:hover:border-line disabled:hover:text-ink-3 disabled:hover:bg-white"
+      className="text-2xs hover:bg-brand-soft disabled:hover:border-line disabled:hover:text-ink-3 disabled:hover:bg-white"
     >
       {icon}
       <span>{label}</span>

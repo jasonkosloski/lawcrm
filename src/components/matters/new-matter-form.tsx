@@ -1175,7 +1175,6 @@ export function NewMatterForm({
           type="button"
           onClick={() => void saveDraft()}
           disabled={isPending || autosave.status === "saving"}
-          className="hover:border-brand-300 hover:text-brand-700"
         >
           Save draft
         </Button>

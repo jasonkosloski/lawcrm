@@ -451,7 +451,6 @@ export function PdfDocumentViewer({
             type="button"
             disabled={!doc || zoom === 1}
             onClick={() => changeZoom(1)}
-            className="hover:border-brand-300 hover:text-brand-700"
           >
             Fit width
           </Button>
