@@ -1,7 +1,7 @@
 # Records requests
 
 Tracks requests for records (medical, CORA/CGIA, police, employment) to custodians on matters and intake leads, from draft to complete, with chase reminders, statutory due dates and fees. Shipped 2026-10-18 and hardened since.
-Related: [ADR-047](../decisions/047-records-requests-are-a-dedicated-model-with.md), [ADR-046](../decisions/046-intake-documents-share-document-and-documentfolder-scoped.md), [design spec](../superpowers/specs/2026-10-18-records-requests-design.md), [intake.md](intake.md), [PERMISSIONS.md](../PERMISSIONS.md)
+Related: [ADR-047](../decisions/047-records-requests-are-a-dedicated-model-with.md), [ADR-046](../decisions/046-intake-documents-share-document-and-documentfolder-scoped.md), [intake.md](intake.md), [PERMISSIONS.md](../PERMISSIONS.md)
 
 ## Open work
 
