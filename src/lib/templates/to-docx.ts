@@ -1,12 +1,16 @@
-/** ResolvedDoc -> .docx bytes with Word defaults (no house style). */
+/** ResolvedDoc -> .docx bytes, applying the firm's house PageStyle. */
 
 import {
   AlignmentType,
   Document,
+  Footer,
+  Header,
   HeadingLevel,
+  ImageRun,
   LevelFormat,
   Packer,
   PageBreak,
+  PageNumber,
   Paragraph,
   Table,
   TableCell,
@@ -15,6 +19,9 @@ import {
   WidthType,
   type ParagraphChild,
 } from "docx";
+import { FONTS } from "./fonts";
+import { imageSize } from "./image-size";
+import { headingSizePt, type LoadedLogo, type PageStyle } from "./page-style";
 import type { ResolvedBlock, ResolvedDoc, ResolvedInline, ResolvedTableCell } from "./render";
 
 const ALIGN = {
@@ -123,17 +130,134 @@ const levels = (format: (typeof LevelFormat)[keyof typeof LevelFormat], bullet: 
     style: { paragraph: { indent: { left: 720 * (level + 1), hanging: 360 } } },
   }));
 
-export async function resolvedToDocx(doc: ResolvedDoc): Promise<Buffer> {
+const EMU_PER_IN = 96; // docx ImageRun transformation is in pixels at 96 dpi
+const LOGO_MAX_W_IN = 3;
+const LOGO_MAX_H_IN = 1;
+
+function logoParagraph(logo: LoadedLogo): Paragraph {
+  const size = imageSize(logo.bytes, logo.contentType);
+  let wIn = 1;
+  let hIn = 1;
+  if (size) {
+    const scale = Math.min(LOGO_MAX_W_IN / size.width, LOGO_MAX_H_IN / size.height);
+    wIn = size.width * scale;
+    hIn = size.height * scale;
+  }
+  return new Paragraph({
+    alignment: ALIGN[logo.position],
+    children: [
+      new ImageRun({
+        type: logo.contentType === "image/png" ? "png" : "jpg",
+        data: logo.bytes,
+        transformation: {
+          width: Math.round(wIn * EMU_PER_IN),
+          height: Math.round(hIn * EMU_PER_IN),
+        },
+      }),
+    ],
+  });
+}
+
+const pageLine = (alignment: (typeof AlignmentType)[keyof typeof AlignmentType]) =>
+  new Paragraph({
+    alignment,
+    children: [new TextRun({ children: ["Page ", PageNumber.CURRENT] })],
+  });
+
+const content = (doc: ResolvedDoc | null, ctx: Ctx): (Paragraph | Table)[] =>
+  doc ? blocks(doc.content ?? [], ctx, 0) : [];
+
+export async function resolvedToDocx(input: {
+  body: ResolvedDoc;
+  letterhead: ResolvedDoc | null;
+  continuation: ResolvedDoc | null;
+  style: PageStyle;
+}): Promise<Buffer> {
+  const { style } = input;
   const ctx: Ctx = { instance: { n: 0 } };
-  const children = blocks(doc.content ?? [], ctx, 0);
+  const children = blocks(input.body.content ?? [], ctx, 0);
+  const isLetter = style.letterhead !== null || style.continuationBlockId !== null;
+  const font = FONTS[style.font].wordName;
+  const headingRun = (level: 1 | 2 | 3) => ({
+    font,
+    bold: true,
+    size: headingSizePt(style.sizePt, level) * 2,
+  });
+  const headingPara = {
+    spacing: {
+      after: style.spaceAfterPt * 20,
+      line: Math.round(240 * style.lineSpacing),
+      lineRule: "auto" as const,
+    },
+  };
+
+  const headers: { first?: Header; default?: Header } = {};
+  if (style.letterhead) {
+    const parts: (Paragraph | Table)[] = [];
+    if (style.letterhead.logo) parts.push(logoParagraph(style.letterhead.logo));
+    parts.push(...content(input.letterhead, ctx));
+    if (parts.length) headers.first = new Header({ children: parts });
+  }
+  if (isLetter) {
+    headers.default = new Header({
+      children: [...content(input.continuation, ctx), pageLine(AlignmentType.RIGHT)],
+    });
+  }
+
+  const footers: { default?: Footer; first?: Footer } = {};
+  if (style.pageNumbers !== "none") {
+    footers.default = new Footer({
+      children: [
+        pageLine(style.pageNumbers === "bottom_right" ? AlignmentType.RIGHT : AlignmentType.CENTER),
+      ],
+    });
+    // First page of letters carries no page number.
+    if (isLetter) footers.first = new Footer({ children: [new Paragraph("")] });
+  }
+
   const file = new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font, size: style.sizePt * 2 },
+          paragraph: {
+            spacing: {
+              after: style.spaceAfterPt * 20,
+              line: Math.round(240 * style.lineSpacing),
+              lineRule: "auto",
+            },
+          },
+        },
+        heading1: { run: headingRun(1), paragraph: headingPara },
+        heading2: { run: headingRun(2), paragraph: headingPara },
+        heading3: { run: headingRun(3), paragraph: headingPara },
+      },
+    },
     numbering: {
       config: [
         { reference: BULLET_REF, levels: levels(LevelFormat.BULLET, true) },
         { reference: NUMBER_REF, levels: levels(LevelFormat.DECIMAL, false) },
       ],
     },
-    sections: [{ children: children.length ? children : [new Paragraph("")] }],
+    sections: [
+      {
+        properties: {
+          titlePage: isLetter || undefined,
+          page: {
+            size: { width: 12240, height: 15840 },
+            margin: {
+              top: Math.round(style.marginsIn.top * 1440),
+              right: Math.round(style.marginsIn.right * 1440),
+              bottom: Math.round(style.marginsIn.bottom * 1440),
+              left: Math.round(style.marginsIn.left * 1440),
+            },
+          },
+        },
+        headers,
+        footers,
+        children: children.length ? children : [new Paragraph("")],
+      },
+    ],
   });
   return Packer.toBuffer(file);
 }

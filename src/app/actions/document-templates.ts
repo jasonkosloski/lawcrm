@@ -51,6 +51,7 @@ import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templ
 import { convertLegacyBody } from "@/lib/templates/legacy";
 import { resolvedToHtml } from "@/lib/templates/to-html";
 import { resolvedToText } from "@/lib/templates/to-text";
+import { DEFAULT_DOCUMENT_STYLE, resolvePageStyle } from "@/lib/templates/page-style";
 import { resolvedToDocx } from "@/lib/templates/to-docx";
 import { Prisma } from "@/generated/prisma/client";
 import {
@@ -445,7 +446,16 @@ export async function generateDocumentFromTemplate(
   if (!loaded.ok) return { ok: false, error: loaded.error };
 
   const { doc: resolved, report } = renderTemplate(doc, { data: loaded.data, blocks });
-  const buffer = await resolvedToDocx(resolved);
+  const buffer = await resolvedToDocx({
+    body: resolved,
+    letterhead: null,
+    continuation: null,
+    style: resolvePageStyle(
+      template.kind === "filing" ? "filing" : "letter",
+      DEFAULT_DOCUMENT_STYLE,
+      null,
+    ),
+  });
 
   // "<template name> — <date>.docx" — the date disambiguates repeat generations.
   const documentName = `${template.name} — ${formatDate(
