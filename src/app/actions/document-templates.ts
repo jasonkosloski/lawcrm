@@ -42,6 +42,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
 import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
+import { logTemplateChange } from "@/lib/template-activity";
 import { deleteFile, storeFile } from "@/lib/file-storage";
 import { toUserMessage } from "@/lib/user-facing-error";
 import { formatDate } from "@/lib/format-date";
@@ -111,23 +112,6 @@ function parseTemplateForm(
     return { ok: false, error: "Unknown category." };
   }
   return { ok: true, data: parsed.data };
-}
-
-/** Firm-scope audit entry (no matter) for library changes — a
- *  rewritten or deleted template changes every future letter. */
-async function logTemplateChange(
-  userId: string,
-  title: string,
-  detail: string | null,
-): Promise<void> {
-  await logActivity({
-    matterId: null,
-    userId,
-    type: "document",
-    title,
-    detail,
-    source: "Settings",
-  });
 }
 
 // ── Library CRUD ───────────────────────────────────────────────────────
@@ -231,7 +215,10 @@ const saveTemplateSchema = z.object({
   description: z.string().trim().max(MAX_TEMPLATE_DESCRIPTION).optional(),
   kind: z.enum(TEMPLATE_KINDS),
   appliesTo: z.enum(APPLIES_TO),
-  expectedUpdatedAt: z.string().optional(),
+  expectedUpdatedAt: z
+    .string()
+    .datetime({ message: "Invalid save timestamp — reload." })
+    .optional(),
 });
 
 /** Structured save (create or update). Content is ProseMirror JSON, so

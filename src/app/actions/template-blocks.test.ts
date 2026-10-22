@@ -118,6 +118,26 @@ describe("saveTemplateBlock", () => {
   });
 });
 
+describe("concurrency and input", () => {
+  test("two concurrent creates of one key: one ok, one friendly error", async () => {
+    const rs = await Promise.all([
+      saveTemplateBlock(blockInput({ name: "A" })),
+      saveTemplateBlock(blockInput({ name: "B" })),
+    ]);
+    expect(rs.filter((r) => r.ok)).toHaveLength(1);
+    expect(rs.filter((r) => !r.ok)).toEqual([
+      { ok: false, error: "That key is already used by another block." },
+    ]);
+  });
+
+  test("unparsable expectedUpdatedAt is a friendly error", async () => {
+    const c = await saveTemplateBlock(blockInput());
+    if (!c.ok) throw new Error(c.error);
+    const r = await saveTemplateBlock(blockInput({ id: c.id, expectedUpdatedAt: "garbage" }));
+    expect(r.ok).toBe(false);
+  });
+});
+
 describe("archive and delete", () => {
   test("archive asks for edit key, logs, and works while referenced", async () => {
     const c = await saveTemplateBlock(blockInput());

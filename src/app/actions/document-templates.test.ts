@@ -749,3 +749,25 @@ describe("saveDocumentTemplate", () => {
     expect(lr.subject).toBeNull();
   });
 });
+
+describe("template writes log one activity row", () => {
+  const count = (title: string) => prisma.activityLog.count({ where: { title } });
+
+  test("update, archive and delete each log once", async () => {
+    const c = await saveDocumentTemplate(saveInput());
+    if (!c.ok) throw new Error(c.error);
+    await saveDocumentTemplate(saveInput({ id: c.id }));
+    expect(await count('Template "Structured" updated')).toBe(1);
+    await setDocumentTemplateActive(c.id, false);
+    expect(await count('Template "Structured" archived')).toBe(1);
+    await deleteDocumentTemplate(c.id);
+    expect(await count('Template "Structured" deleted')).toBe(1);
+  });
+
+  test("unparsable expectedUpdatedAt is a friendly error", async () => {
+    const c = await saveDocumentTemplate(saveInput());
+    if (!c.ok) throw new Error(c.error);
+    const r = await saveDocumentTemplate(saveInput({ id: c.id, expectedUpdatedAt: "garbage" }));
+    expect(r.ok).toBe(false);
+  });
+});

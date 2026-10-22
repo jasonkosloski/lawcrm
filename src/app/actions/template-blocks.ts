@@ -15,13 +15,15 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
-import { logActivity } from "@/lib/activity-log";
+import { logTemplateChange } from "@/lib/template-activity";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 import { MAX_TEMPLATE_DESCRIPTION, MAX_TEMPLATE_NAME } from "@/lib/template-constants";
 import { collectBlockIds } from "@/lib/templates/inspect";
 import { validateTemplateContent, type TemplateDoc } from "@/lib/templates/schema";
 
 type Result = { ok: true; id: string } | { ok: false; error: string };
 
+const KEY_TAKEN = "That key is already used by another block.";
 const KEY_RE = /^[a-z][a-z0-9_]{1,39}$/;
 
 const blockSchema = z.object({
@@ -29,19 +31,11 @@ const blockSchema = z.object({
   key: z.string().regex(KEY_RE, "Key must be 2-40 lowercase letters, digits or underscores."),
   name: z.string().trim().min(1, "Name is required.").max(MAX_TEMPLATE_NAME),
   description: z.string().trim().max(MAX_TEMPLATE_DESCRIPTION).optional(),
-  expectedUpdatedAt: z.string().optional(),
+  expectedUpdatedAt: z
+    .string()
+    .datetime({ message: "Invalid save timestamp — reload." })
+    .optional(),
 });
-
-async function logBlockChange(userId: string, title: string, detail: string | null) {
-  await logActivity({
-    matterId: null,
-    userId,
-    type: "document",
-    title,
-    detail,
-    source: "Settings",
-  });
-}
 
 /** Templates (active and archived) whose content references the block. */
 async function usageOf(blockId: string): Promise<{ id: string; name: string }[]> {
@@ -86,14 +80,20 @@ export async function saveTemplateBlock(input: {
     where: { key, ...(input.id ? { id: { not: input.id } } : {}) },
     select: { id: true },
   });
-  if (clash) return { ok: false, error: "That key is already used by another block." };
+  if (clash) return { ok: false, error: KEY_TAKEN };
 
   if (!input.id) {
-    const created = await prisma.templateBlock.create({
-      data: { key, name, description, content, createdById: userId },
-      select: { id: true },
-    });
-    await logBlockChange(userId, `Block "${name}" created`, `Key: ${key} (id ${created.id})`);
+    let created: { id: string };
+    try {
+      created = await prisma.templateBlock.create({
+        data: { key, name, description, content, createdById: userId },
+        select: { id: true },
+      });
+    } catch (e) {
+      if (isUniqueViolation(e)) return { ok: false, error: KEY_TAKEN };
+      throw e;
+    }
+    await logTemplateChange(userId, `Block "${name}" created`, `Key: ${key} (id ${created.id})`);
     revalidatePath("/settings/templates");
     return { ok: true, id: created.id };
   }
@@ -104,19 +104,25 @@ export async function saveTemplateBlock(input: {
   });
   if (!existing) return { ok: false, error: "Block not found." };
 
-  const { count } = await prisma.templateBlock.updateMany({
-    where: {
-      id: input.id,
-      ...(parsed.data.expectedUpdatedAt
-        ? { updatedAt: new Date(parsed.data.expectedUpdatedAt) }
-        : {}),
-    },
-    data: { key, name, description, content },
-  });
+  let count: number;
+  try {
+    ({ count } = await prisma.templateBlock.updateMany({
+      where: {
+        id: input.id,
+        ...(parsed.data.expectedUpdatedAt
+          ? { updatedAt: new Date(parsed.data.expectedUpdatedAt) }
+          : {}),
+      },
+      data: { key, name, description, content },
+    }));
+  } catch (e) {
+    if (isUniqueViolation(e)) return { ok: false, error: KEY_TAKEN };
+    throw e;
+  }
   if (count === 0) {
     return { ok: false, error: "Someone else saved this block — reload to see their changes." };
   }
-  await logBlockChange(userId, `Block "${name}" updated`, `Key: ${key} (id ${input.id})`);
+  await logTemplateChange(userId, `Block "${name}" updated`, `Key: ${key} (id ${input.id})`);
   revalidatePath("/settings/templates");
   return { ok: true, id: input.id };
 }
@@ -134,7 +140,7 @@ export async function setTemplateBlockActive(
   if (!existing) return { ok: false, error: "Block not found." };
   await prisma.templateBlock.update({ where: { id }, data: { isActive: active } });
   if (existing.isActive !== active) {
-    await logBlockChange(
+    await logTemplateChange(
       userId,
       `Block "${existing.name}" ${active ? "restored" : "archived"}`,
       null,
@@ -144,7 +150,11 @@ export async function setTemplateBlockActive(
   return { ok: true };
 }
 
-/** HARD delete, refused while any template references the block. */
+/** HARD delete, refused while any template references the block.
+ *  Templates reference blocks by JSON id (no FK), so a template saved
+ *  concurrently with this delete can still point at the removed block.
+ *  That degrades visibly: the render engine shows `[Missing block]`
+ *  and reports it. Accepted by design. */
 export async function deleteTemplateBlock(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -162,7 +172,7 @@ export async function deleteTemplateBlock(
     };
   }
   await prisma.templateBlock.delete({ where: { id } });
-  await logBlockChange(userId, `Block "${existing.name}" deleted`, `Key: ${existing.key}`);
+  await logTemplateChange(userId, `Block "${existing.name}" deleted`, `Key: ${existing.key}`);
   revalidatePath("/settings/templates");
   return { ok: true };
 }
