@@ -52,6 +52,16 @@ import {
   loadRecordsRequest,
   type LoadedRecordsRequest,
 } from "@/lib/templates/load-data";
+import { Prisma } from "@/generated/prisma/client";
+import { checkTemplateFit, collectBlockIds } from "@/lib/templates/inspect";
+import {
+  APPLIES_TO,
+  TEMPLATE_KINDS,
+  validateSubject,
+  validateTemplateContent,
+  type AppliesTo,
+  type TemplateKind,
+} from "@/lib/templates/schema";
 import {
   MAX_TEMPLATE_BODY,
   MAX_TEMPLATE_DESCRIPTION,
@@ -63,6 +73,7 @@ import {
   type TemplateFormState,
 } from "@/lib/template-constants";
 
+// Legacy: removed with the editor dialog
 const templateSchema = z.object({
   name: z.string().trim().min(1, "Name is required.").max(MAX_TEMPLATE_NAME),
   // Category is a free string in the schema; v1 validates against
@@ -76,6 +87,7 @@ const templateSchema = z.object({
     .max(MAX_TEMPLATE_BODY, "Template body is too long."),
 });
 
+// Legacy: removed with the editor dialog
 function parseTemplateForm(
   formData: FormData,
   /** An existing row's category stays valid when unchanged even if
@@ -120,6 +132,7 @@ async function logTemplateChange(
 
 // ── Library CRUD ───────────────────────────────────────────────────────
 
+// Legacy: removed with the editor dialog
 export async function createDocumentTemplate(
   _prev: TemplateFormState,
   formData: FormData,
@@ -149,6 +162,7 @@ export async function createDocumentTemplate(
   return { ...templateFormInitialState, status: "ok" };
 }
 
+// Legacy: removed with the editor dialog
 export async function updateDocumentTemplate(
   templateId: string,
   _prev: TemplateFormState,
@@ -202,6 +216,127 @@ export async function updateDocumentTemplate(
 
   revalidatePath("/settings/templates");
   return { ...templateFormInitialState, status: "ok" };
+}
+
+const SCOPE_WORD: Record<AppliesTo, string> = {
+  matter: "matter",
+  lead: "lead",
+  both: "matter-and-lead",
+};
+
+const saveTemplateSchema = z.object({
+  id: z.string().min(1).optional(),
+  name: z.string().trim().min(1, "Name is required.").max(MAX_TEMPLATE_NAME),
+  category: z.string().min(1, "Category is required.").max(60),
+  description: z.string().trim().max(MAX_TEMPLATE_DESCRIPTION).optional(),
+  kind: z.enum(TEMPLATE_KINDS),
+  appliesTo: z.enum(APPLIES_TO),
+  expectedUpdatedAt: z.string().optional(),
+});
+
+/** Structured save (create or update). Content is ProseMirror JSON, so
+ *  inputs are plain objects rather than FormData. */
+export async function saveDocumentTemplate(input: {
+  id?: string;
+  name: string;
+  category: string;
+  description?: string;
+  kind: TemplateKind;
+  appliesTo: AppliesTo;
+  content: unknown;
+  subject?: unknown;
+  expectedUpdatedAt?: string;
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const userId = await requirePermission(
+    input.id ? "documents.template.edit" : "documents.template.create",
+  );
+  const parsed = saveTemplateSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid template." };
+  }
+  const { name, kind, appliesTo } = parsed.data;
+  const description = parsed.data.description?.trim() || null;
+
+  const existing = input.id
+    ? await prisma.documentTemplate.findUnique({
+        where: { id: input.id },
+        select: { id: true, category: true },
+      })
+    : null;
+  if (input.id && !existing) return { ok: false, error: "Template not found." };
+  if (!isTemplateCategory(parsed.data.category) && parsed.data.category !== existing?.category) {
+    return { ok: false, error: "Unknown category." };
+  }
+
+  const content = validateTemplateContent(kind, input.content);
+  if (!content.ok) return { ok: false, error: content.error };
+
+  let subjectDoc = null;
+  if (kind === "email" && input.subject != null) {
+    const s = validateSubject(input.subject);
+    if (!s.ok) return { ok: false, error: s.error };
+    subjectDoc = s.doc;
+  }
+
+  const fit = checkTemplateFit(content.doc, appliesTo, subjectDoc);
+  if (!fit.ok) {
+    const names = fit.invalid.map((i) => i.label ?? i.path).join(", ");
+    return {
+      ok: false,
+      error: `These fields don't fit a ${SCOPE_WORD[appliesTo]} template: ${names}.`,
+    };
+  }
+
+  const blockIds = collectBlockIds(content.doc);
+  if (blockIds.length > 0) {
+    const found = await prisma.templateBlock.count({ where: { id: { in: blockIds } } });
+    if (found !== blockIds.length) {
+      return { ok: false, error: "A referenced block no longer exists." };
+    }
+  }
+
+  const data = {
+    name,
+    category: parsed.data.category,
+    description,
+    kind,
+    appliesTo,
+    body: null,
+    content: content.doc as unknown as Prisma.InputJsonValue,
+    subject: subjectDoc ? (subjectDoc as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+  };
+
+  if (!input.id) {
+    const created = await prisma.documentTemplate.create({
+      data: { ...data, createdById: userId },
+      select: { id: true },
+    });
+    await logTemplateChange(
+      userId,
+      `Template "${name}" created`,
+      `Category: ${templateCategoryLabel(data.category)} (id ${created.id})`,
+    );
+    revalidatePath("/settings/templates");
+    return { ok: true, id: created.id };
+  }
+
+  // Atomic stale check: the write only matches the row version the
+  // editor loaded, so two concurrent saves cannot both win.
+  const { count } = await prisma.documentTemplate.updateMany({
+    where: {
+      id: input.id,
+      ...(parsed.data.expectedUpdatedAt
+        ? { updatedAt: new Date(parsed.data.expectedUpdatedAt) }
+        : {}),
+    },
+    data,
+  });
+  if (count === 0) {
+    return { ok: false, error: "Someone else saved this template — reload to see their changes." };
+  }
+  await logTemplateChange(userId, `Template "${name}" updated`, `id ${input.id}`);
+  revalidatePath("/settings/templates");
+  return { ok: true, id: input.id };
 }
 
 /** Archive (isActive=false) or restore (true). Soft state only —

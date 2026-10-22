@@ -35,11 +35,13 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
 import { deleteFile, storeFile } from "@/lib/file-storage";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import {
   createDocumentTemplate,
   deleteDocumentTemplate,
   generateDocumentFromTemplate,
   previewDocumentFromTemplate,
+  saveDocumentTemplate,
   setDocumentTemplateActive,
   updateDocumentTemplate,
 } from "@/app/actions/document-templates";
@@ -630,5 +632,120 @@ describe("records request letters", () => {
       error: "You don't have permission to view records requests.",
     });
     expect(currentUserHasPermission).toHaveBeenCalledWith("records.view");
+  });
+});
+
+// ── Structured save ────────────────────────────────────────────────────
+
+const para = (...content: unknown[]) => ({ type: "paragraph", content });
+const text = (t: string) => ({ type: "text", text: t });
+const fieldNode = (path: string) => ({ type: "field", attrs: { path } });
+const docOf = (...blocks: unknown[]) => ({ type: "doc", content: blocks });
+const jsonDoc = (...blocks: unknown[]) => docOf(...blocks) as unknown as Prisma.InputJsonValue;
+
+const saveInput = (over: Record<string, unknown> = {}) => ({
+  name: "Structured",
+  category: "correspondence",
+  kind: "letter" as const,
+  appliesTo: "matter" as const,
+  content: docOf(para(text("Hello "), fieldNode("client.name"))),
+  ...over,
+});
+
+describe("saveDocumentTemplate", () => {
+  test("create asks for create key, edit asks for edit key", async () => {
+    const r = await saveDocumentTemplate(saveInput());
+    expect(r.ok).toBe(true);
+    expect(requirePermission).toHaveBeenCalledWith("documents.template.create");
+    if (!r.ok) return;
+    vi.mocked(requirePermission).mockClear();
+    await saveDocumentTemplate(saveInput({ id: r.id }));
+    expect(requirePermission).toHaveBeenCalledWith("documents.template.edit");
+  });
+
+  test("create writes content, kind, appliesTo, null body, and logs once", async () => {
+    const r = await saveDocumentTemplate(saveInput());
+    if (!r.ok) throw new Error(r.error);
+    const row = await prisma.documentTemplate.findUniqueOrThrow({ where: { id: r.id } });
+    expect(row.body).toBeNull();
+    expect(row.kind).toBe("letter");
+    expect(row.appliesTo).toBe("matter");
+    expect(row.content).toMatchObject({ type: "doc" });
+    const logs = await prisma.activityLog.findMany({
+      where: { title: 'Template "Structured" created' },
+    });
+    expect(logs).toHaveLength(1);
+  });
+
+  test("update clears legacy body", async () => {
+    const t = await seedTemplate();
+    const r = await saveDocumentTemplate(saveInput({ id: t.id }));
+    expect(r.ok).toBe(true);
+    const row = await prisma.documentTemplate.findUniqueOrThrow({ where: { id: t.id } });
+    expect(row.body).toBeNull();
+    expect(row.content).not.toBeNull();
+  });
+
+  test("sms template with a heading is refused", async () => {
+    const r = await saveDocumentTemplate(
+      saveInput({
+        kind: "sms",
+        content: docOf({ type: "heading", attrs: { level: 1 }, content: [text("Hi")] }),
+      }),
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  test("lead template with matter.caseNumber is refused, naming the field", async () => {
+    const r = await saveDocumentTemplate(
+      saveInput({ appliesTo: "lead", content: docOf(para(fieldNode("matter.caseNumber"))) }),
+    );
+    expect(r).toMatchObject({ ok: false });
+    if (r.ok) return;
+    expect(r.error).toMatch(/^These fields don't fit a lead template: .+\.$/);
+  });
+
+  test("unknown block id is refused", async () => {
+    const r = await saveDocumentTemplate(
+      saveInput({ content: docOf({ type: "block", attrs: { blockId: "nope" } }) }),
+    );
+    expect(r).toEqual({ ok: false, error: "A referenced block no longer exists." });
+  });
+
+  test("archived block ids are accepted", async () => {
+    const b = await prisma.templateBlock.create({
+      data: { key: "sig_block", name: "Sig", content: jsonDoc(para(text("x"))), isActive: false },
+    });
+    const r = await saveDocumentTemplate(
+      saveInput({ content: docOf({ type: "block", attrs: { blockId: b.id } }) }),
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  test("stale expectedUpdatedAt is refused; fresh one saves", async () => {
+    const created = await saveDocumentTemplate(saveInput());
+    if (!created.ok) throw new Error(created.error);
+    const row = await prisma.documentTemplate.findUniqueOrThrow({ where: { id: created.id } });
+    const stale = new Date(row.updatedAt.getTime() - 5000).toISOString();
+    const bad = await saveDocumentTemplate(saveInput({ id: created.id, expectedUpdatedAt: stale }));
+    expect(bad).toEqual({
+      ok: false,
+      error: "Someone else saved this template — reload to see their changes.",
+    });
+    const good = await saveDocumentTemplate(
+      saveInput({ id: created.id, expectedUpdatedAt: row.updatedAt.toISOString() }),
+    );
+    expect(good.ok).toBe(true);
+  });
+
+  test("email keeps subject; letter drops it", async () => {
+    const subject = docOf(para(text("Re "), fieldNode("matter.name")));
+    const e = await saveDocumentTemplate(saveInput({ kind: "email", subject }));
+    const l = await saveDocumentTemplate(saveInput({ kind: "letter", subject }));
+    if (!e.ok || !l.ok) throw new Error("save failed");
+    const er = await prisma.documentTemplate.findUniqueOrThrow({ where: { id: e.id } });
+    const lr = await prisma.documentTemplate.findUniqueOrThrow({ where: { id: l.id } });
+    expect(er.subject).not.toBeNull();
+    expect(lr.subject).toBeNull();
   });
 });
