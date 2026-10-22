@@ -275,6 +275,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         description: "Edit firm name, EIN, contact info, address, logo, and other identity fields.",
       },
       {
+        key: "firm.edit_document_style",
+        label: "Edit document style",
+        description:
+          "Set the firm's letter and filing house style: font, spacing, margins, letterhead, logo and page numbers.",
+      },
+      {
         key: "firm.manage_practice_areas",
         label: "Manage practice areas + stages",
         description:

@@ -108,6 +108,7 @@ export const TABLES_IN_DELETE_ORDER = [
   // Template library rows reference users (createdById); drop
   // before users.
   "document_templates",
+  "document_styles",
   "template_blocks",
   // Matter membership
   "matter_team_members",

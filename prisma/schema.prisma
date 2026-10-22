@@ -238,10 +238,12 @@ model Firm {
   /// witnesses, experts, etc. Optional today (Contact.firmId is
   /// nullable for legacy rows); becomes the multi-tenancy scope
   /// once backfilled.
-  contacts      Contact[] @relation("FirmContacts")
+  contacts      Contact[]      @relation("FirmContacts")
   /// Master switch for the client portal. Off: the portal host serves
   /// "unavailable", invites are refused, and sessions do not authenticate.
-  portalEnabled Boolean   @default(false)
+  portalEnabled Boolean        @default(false)
+  /// The firm's letter/filing house style (one row, created lazily).
+  documentStyle DocumentStyle?
 
   @@map("firms")
 }
@@ -2390,7 +2392,50 @@ model TemplateBlock {
 
   createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
+  /// Document styles that use this block as their letterhead / continuation header.
+  letterheadForStyles   DocumentStyle[] @relation("DocumentStyleLetterhead")
+  continuationForStyles DocumentStyle[] @relation("DocumentStyleContinuation")
+
   @@map("template_blocks")
+}
+
+/// Firm-wide house style applied to generated .docx and PDF letters
+/// (font, spacing, margins, letterhead, logo, page numbers). One row per
+/// firm, created by the app on first read. Paper is US Letter only.
+model DocumentStyle {
+  id                  String   @id @default(cuid())
+  firmId              String   @unique
+  /// times | arial | garamond | schoolbook | palatino | courier
+  fontKey             String   @default("times")
+  /// Body size in half points (20-28 = 10-14 pt).
+  fontSizeHalfPt      Int      @default(24)
+  /// single | 1.15 | 1.5 | double
+  lineSpacing         String   @default("single")
+  /// Points of space after a paragraph (0-24).
+  spaceAfterPt        Int      @default(12)
+  /// Page margins in inches (0.50-2.00).
+  marginTopIn         Decimal  @default(1.00) @db.Decimal(3, 2)
+  marginRightIn       Decimal  @default(1.00) @db.Decimal(3, 2)
+  marginBottomIn      Decimal  @default(1.00) @db.Decimal(3, 2)
+  marginLeftIn        Decimal  @default(1.00) @db.Decimal(3, 2)
+  letterheadBlockId   String?
+  /// none | left | center | right
+  logoPosition        String   @default("none")
+  /// Private storage key of the uploaded logo (PNG/JPEG).
+  logoKey             String?
+  /// image/png | image/jpeg
+  logoContentType     String?
+  continuationBlockId String?
+  /// none | bottom_center | bottom_right; pages 2+ only.
+  pageNumbers         String   @default("bottom_center")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  firm              Firm           @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  letterheadBlock   TemplateBlock? @relation("DocumentStyleLetterhead", fields: [letterheadBlockId], references: [id], onDelete: SetNull)
+  continuationBlock TemplateBlock? @relation("DocumentStyleContinuation", fields: [continuationBlockId], references: [id], onDelete: SetNull)
+
+  @@map("document_styles")
 }
 
 /// A saved global-search query — per-user shortcut back to a
