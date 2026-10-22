@@ -19,7 +19,7 @@
 
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateDeadlineSurfaces } from "@/lib/revalidate-deadlines";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { assertChildMatterAccess } from "@/lib/matter-access";
@@ -58,13 +58,6 @@ const STATUS_LOG_TITLE: Record<string, string> = {
   open: "Deadline reopened",
   overdue: "Deadline marked overdue",
 };
-
-function revalidateForDeadline(matterId: string): void {
-  revalidatePath(`/matters/${matterId}/deadlines`);
-  revalidatePath(`/matters/${matterId}`);
-  revalidatePath("/"); // dashboard "Deadlines this week" card
-  revalidatePath("/calendar");
-}
 
 // ── Status ──────────────────────────────────────────────────────────────
 
@@ -109,7 +102,7 @@ export async function setDeadlineStatus(
     });
   }
 
-  revalidateForDeadline(deadline.matterId);
+  revalidateDeadlineSurfaces(deadline.matterId);
   return { ok: true };
 }
 
@@ -145,7 +138,7 @@ export async function deleteDeadline(
     detail: `${deadline.title} (was due ${dayLabel(deadline.dueDate)})`,
   });
 
-  revalidateForDeadline(deadline.matterId);
+  revalidateDeadlineSurfaces(deadline.matterId);
   return { ok: true };
 }
 
@@ -211,11 +204,11 @@ export async function updateDeadline(
     ? new Date(parsed.data.expectedUpdatedAt)
     : null;
   if (expected && Number.isNaN(expected.getTime())) {
-    revalidateForDeadline(deadline.matterId);
+    revalidateDeadlineSurfaces(deadline.matterId);
     return { status: "error", errors: { _form: [STALE_MESSAGE] } };
   }
   if (expected && expected.getTime() !== deadline.updatedAt.getTime()) {
-    revalidateForDeadline(deadline.matterId);
+    revalidateDeadlineSurfaces(deadline.matterId);
     return { status: "error", errors: { _form: [STALE_MESSAGE] } };
   }
   const where = expected
@@ -245,7 +238,7 @@ export async function updateDeadline(
       data: { status: newStatus, completedAt },
     });
     if (solWrite.count === 0) {
-      revalidateForDeadline(deadline.matterId);
+      revalidateDeadlineSurfaces(deadline.matterId);
       return { status: "error", errors: { _form: [STALE_MESSAGE] } };
     }
     if (deadline.status !== newStatus) {
@@ -257,7 +250,7 @@ export async function updateDeadline(
         detail: `${deadline.title} (due ${dayLabel(deadline.dueDate)}): ${deadline.status} → ${newStatus}`,
       });
     }
-    revalidateForDeadline(deadline.matterId);
+    revalidateDeadlineSurfaces(deadline.matterId);
     return { status: "ok" };
   }
 
@@ -312,7 +305,7 @@ export async function updateDeadline(
     return true;
   });
   if (!saved) {
-    revalidateForDeadline(deadline.matterId);
+    revalidateDeadlineSurfaces(deadline.matterId);
     return { status: "error", errors: { _form: [STALE_MESSAGE] } };
   }
 
@@ -362,6 +355,6 @@ export async function updateDeadline(
     });
   }
 
-  revalidateForDeadline(deadline.matterId);
+  revalidateDeadlineSurfaces(deadline.matterId);
   return { status: "ok" };
 }

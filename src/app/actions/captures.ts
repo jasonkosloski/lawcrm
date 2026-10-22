@@ -26,6 +26,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateDeadlineSurfaces } from "@/lib/revalidate-deadlines";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/prisma";
 import { assertMatterAccess } from "@/lib/matter-access";
@@ -266,7 +267,7 @@ function revalidateTouched(
     revalidatePath(`/matters/${matterId}/events`);
     revalidatePath(`/calendar`);
   }
-  if (kinds.has("deadline")) revalidatePath(`/matters/${matterId}/deadlines`);
+  if (kinds.has("deadline")) revalidateDeadlineSurfaces(matterId);
   if (kinds.has("time")) revalidatePath(`/matters/${matterId}/time`);
   if (kinds.has("note_sibling"))
     revalidatePath(`/matters/${matterId}/notes`);

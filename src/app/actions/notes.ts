@@ -37,6 +37,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateDeadlineSurfaces } from "@/lib/revalidate-deadlines";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/prisma";
 import {
@@ -334,7 +335,7 @@ export async function createNote(
     revalidatePath(`/calendar`);
   }
   if (validCaptures.some((c) => c.kind === "deadline"))
-    revalidatePath(`/matters/${matterId}/deadlines`);
+    revalidateDeadlineSurfaces(matterId);
   if (validCaptures.some((c) => c.kind === "time"))
     revalidatePath(`/matters/${matterId}/time`);
 

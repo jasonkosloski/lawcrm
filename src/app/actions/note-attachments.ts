@@ -15,6 +15,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateDeadlineSurfaces } from "@/lib/revalidate-deadlines";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { assertChildMatterAccess } from "@/lib/matter-access";
@@ -74,10 +75,7 @@ function revalidateForNote(matterId: string, kind: "task" | "deadline" | "time")
     revalidatePath(`/matters/${matterId}/tasks`);
     revalidatePath("/"); // dashboard "Your tasks"
   }
-  if (kind === "deadline") {
-    revalidatePath(`/matters/${matterId}/deadlines`);
-    revalidatePath("/"); // dashboard "Deadlines this week"
-  }
+  if (kind === "deadline") revalidateDeadlineSurfaces(matterId);
   if (kind === "time") {
     revalidatePath(`/matters/${matterId}/time`);
   }
