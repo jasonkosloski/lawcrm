@@ -540,6 +540,7 @@ export async function globalSearch(
         select: {
           text: true,
           speaker: true,
+          id: true,
           startSeconds: true,
           transcript: {
             select: {
@@ -582,7 +583,7 @@ export async function globalSearch(
         return [
           {
             type: "transcript" as const,
-            id: `${d.id}:${r.startSeconds}`,
+            id: r.id,
             title: d.name,
             snippet: makeSnippet(r.text, q),
             href: `${base}/documents/${d.id}?t=${Math.floor(r.startSeconds)}`,

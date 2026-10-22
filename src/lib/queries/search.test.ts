@@ -385,6 +385,7 @@ describe("globalSearch — transcripts", () => {
     expect(g.total).toBe(1);
     expect(g.hits[0]).toMatchObject({
       type: "transcript",
+      id: expect.any(String),
       title: "Bodycam.mp4",
       documentId: docId,
       speakerName: "Speaker B",

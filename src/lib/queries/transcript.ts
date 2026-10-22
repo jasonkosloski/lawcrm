@@ -89,12 +89,13 @@ export async function getDocumentTranscript(
 
 /**
  * Document name + caption (matter name, or the intake lead's name) for
- * the export header. Call only after `getDocumentTranscript` has
- * asserted access to the document.
+ * the export header. Asserts access to the document itself, so it is
+ * safe to call on its own.
  */
 export async function getTranscriptCaption(
   documentId: string,
 ): Promise<{ documentName: string; caption: string } | null> {
+  await assertChildMatterAccess("document", documentId);
   const d = await prisma.document.findUnique({
     where: { id: documentId },
     select: {

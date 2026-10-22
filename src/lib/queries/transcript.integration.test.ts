@@ -22,7 +22,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
-import { getDocumentTranscript } from "@/lib/queries/transcript";
+import { getDocumentTranscript, getTranscriptCaption } from "@/lib/queries/transcript";
 import {
   resetDb,
   seedDocument,
@@ -97,5 +97,18 @@ describe("getDocumentTranscript", () => {
     });
     sessionUser = bob;
     await expect(getDocumentTranscript(docId)).rejects.toThrow();
+  });
+});
+
+describe("getTranscriptCaption", () => {
+  test("returns the document name and matter caption", async () => {
+    const cap = await getTranscriptCaption(docId);
+    expect(cap?.documentName).toBeTruthy();
+    expect(cap?.caption).toBeTruthy();
+  });
+
+  test("a user walled off from the matter is refused", async () => {
+    sessionUser = bob;
+    await expect(getTranscriptCaption(docId)).rejects.toThrow();
   });
 });
