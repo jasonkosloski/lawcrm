@@ -13,11 +13,7 @@ export function loginEmail(link: string): Body {
 }
 
 /** First-time invitation. Names the firm and the matter being shared. */
-export function inviteEmail(
-  link: string,
-  firmName: string,
-  matterName: string
-): Body {
+export function inviteEmail(link: string, firmName: string, matterName: string): Body {
   return {
     subject: `${firmName} invited you to the client portal`,
     text: `${firmName} has given you access to the client portal for: ${matterName}.\n\nUse this link to get started:\n\n${link}\n\nIt works once and expires in 7 days.`,
@@ -25,47 +21,59 @@ export function inviteEmail(
   };
 }
 
+/** A notification that only says "something is waiting" and links to
+ *  the portal: `prompt` is the one sentence before the link. These
+ *  emails deliberately name no matter, title, file or amount — the
+ *  client reads the detail after signing in. */
+function portalNudge(link: string, subject: string, prompt: string): Body {
+  return {
+    subject,
+    text: `${prompt}:\n\n${link}`,
+    html: `<p>${prompt}:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
+  };
+}
+
 /** Names no matter, request title, or file. */
 export function documentRequestEmail(link: string): Body {
-  return {
-    subject: "Your legal team has requested documents",
-    text: `Your legal team has requested documents from you. Sign in to the client portal to see what is needed:\n\n${link}`,
-    html: `<p>Your legal team has requested documents from you. Sign in to the client portal to see what is needed:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
-  };
+  return portalNudge(
+    link,
+    "Your legal team has requested documents",
+    "Your legal team has requested documents from you. Sign in to the client portal to see what is needed",
+  );
 }
 
 /** Names no matter, request title, or file. */
 export function documentsSharedEmail(link: string): Body {
-  return {
-    subject: "Your legal team shared documents with you",
-    text: `Your legal team shared documents with you. Sign in to the client portal to view them:\n\n${link}`,
-    html: `<p>Your legal team shared documents with you. Sign in to the client portal to view them:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
-  };
+  return portalNudge(
+    link,
+    "Your legal team shared documents with you",
+    "Your legal team shared documents with you. Sign in to the client portal to view them",
+  );
 }
 
 /** Names no matter, stage, or update text. */
 export function statusUpdateEmail(link: string): Body {
-  return {
-    subject: "Your legal team posted an update",
-    text: `Your legal team posted an update on your case. Sign in to the client portal to read it:\n\n${link}`,
-    html: `<p>Your legal team posted an update on your case. Sign in to the client portal to read it:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
-  };
+  return portalNudge(
+    link,
+    "Your legal team posted an update",
+    "Your legal team posted an update on your case. Sign in to the client portal to read it",
+  );
 }
 
 /** Names no matter and carries no message text. */
 export function portalMessageEmail(link: string): Body {
-  return {
-    subject: "You have a new message from your legal team",
-    text: `You have a new message from your legal team. Sign in to the client portal to read it:\n\n${link}`,
-    html: `<p>You have a new message from your legal team. Sign in to the client portal to read it:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
-  };
+  return portalNudge(
+    link,
+    "You have a new message from your legal team",
+    "You have a new message from your legal team. Sign in to the client portal to read it",
+  );
 }
 
 /** Names no matter or amount. */
 export function invoicePostedEmail(link: string): Body {
-  return {
-    subject: "A new invoice is available in your client portal",
-    text: `A new invoice is available in your client portal. Sign in to view it:\n\n${link}`,
-    html: `<p>A new invoice is available in your client portal. Sign in to view it:</p><p><a href="${esc(link)}">Open the client portal</a></p>`,
-  };
+  return portalNudge(
+    link,
+    "A new invoice is available in your client portal",
+    "A new invoice is available in your client portal. Sign in to view it",
+  );
 }
