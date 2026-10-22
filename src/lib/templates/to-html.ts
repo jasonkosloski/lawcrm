@@ -46,11 +46,13 @@ const ESCAPES: Record<string, string> = {
 };
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ESCAPES[c]);
 
-// Outermost first: missing wraps everything, then bold > italic > underline.
-const MARK_TAGS: [string, string][] = [
-  ["bold", "strong"],
-  ["italic", "em"],
-  ["underline", "u"],
+// Outermost first: missing wraps everything, then bold > italic >
+// underline > small caps. [mark, opening tag body, closing tag].
+const MARK_TAGS: [string, string, string][] = [
+  ["bold", "strong", "strong"],
+  ["italic", "em", "em"],
+  ["underline", "u", "u"],
+  ["smallCaps", "span data-small-caps", "span"],
 ];
 
 function inline(nodes: ResolvedInline[] | undefined): string {
@@ -59,8 +61,8 @@ function inline(nodes: ResolvedInline[] | undefined): string {
       if (n.type === "hardBreak") return "<br />";
       const types = new Set((n.marks ?? []).map((m) => m.type));
       let out = esc(n.text);
-      for (const [type, tag] of [...MARK_TAGS].reverse()) {
-        if (types.has(type as never)) out = `<${tag}>${out}</${tag}>`;
+      for (const [type, open, close] of [...MARK_TAGS].reverse()) {
+        if (types.has(type as never)) out = `<${open}>${out}</${close}>`;
       }
       return types.has("missing") ? `<mark data-missing>${out}</mark>` : out;
     })

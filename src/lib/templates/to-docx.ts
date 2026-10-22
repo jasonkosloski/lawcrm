@@ -66,6 +66,7 @@ function runs(nodes: ResolvedInline[] | undefined): ParagraphChild[] {
       bold: types.has("bold") || undefined,
       italics: types.has("italic") || undefined,
       underline: types.has("underline") ? {} : undefined,
+      smallCaps: types.has("smallCaps") || undefined,
       highlight: types.has("missing") ? "yellow" : undefined,
     });
   });

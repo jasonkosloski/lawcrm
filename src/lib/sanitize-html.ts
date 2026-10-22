@@ -215,6 +215,7 @@ const DOCUMENT_OPTIONS: sanitizeHtml.IOptions = {
     th: ["colspan", "rowspan", "style", ...TEMPLATE_CELL_ATTRS],
     table: ["data-width"],
     col: ["span", "style"],
+    span: ["data-small-caps"],
     mark: ["data-missing"],
     hr: ["data-page-break"],
   },

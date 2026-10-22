@@ -425,3 +425,19 @@ describe("resolvedToDocx row spans", () => {
     expect(cells[1]).toMatch(/<w:vMerge(\/>| w:val="continue"\/>)/);
   });
 });
+
+describe("resolvedToDocx small caps", () => {
+  it("uses Word's small caps", async () => {
+    const body: ResolvedDoc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Plaintiff", marks: [{ type: "smallCaps" }] }],
+        },
+      ],
+    };
+    const { doc } = await build({ body, style: letterStyle() });
+    expect(doc).toMatch(/<w:smallCaps\/>.*Plaintiff/);
+  });
+});

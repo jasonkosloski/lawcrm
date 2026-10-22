@@ -649,3 +649,31 @@ describe("resolvedToPdf row spans", () => {
     expect(find(items, "MOTION").y).toBeLessThan(caseNo.y);
   });
 });
+
+describe("resolvedToPdf small caps", () => {
+  it("draws lowercase as smaller capitals", async () => {
+    const { buffer } = await resolvedToPdf({
+      body: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "Plaintiff", marks: [{ type: "smallCaps" }] }],
+          },
+        ],
+      },
+      letterhead: null,
+      continuation: null,
+      style: style("filing"),
+    });
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(buffer), verbosity: 0 }).promise;
+    const items = (await (await pdf.getPage(1)).getTextContent()).items
+      .filter((it): it is typeof it & { str: string } => "str" in it && it.str.trim() !== "")
+      .map((it) => ({ str: it.str, size: (it as { transform: number[] }).transform[0] }));
+    expect(items.map((i) => i.str).join("")).toBe("PLAINTIFF");
+    const big = items.find((i) => i.str === "P")!;
+    const small = items.find((i) => i.str === "LAINTIFF")!;
+    expect(small.size / big.size).toBeCloseTo(0.8, 2);
+  });
+});

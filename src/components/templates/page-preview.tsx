@@ -41,6 +41,7 @@ ${CELL_SIDES.map((side) => `[data-page] [${CELL_SIDE_ATTR[side]}=none]{border-${
 [data-page] [data-valign=bottom]{vertical-align:bottom;}
 [data-page] hr[data-page-break]{border:0;border-top:1px dashed #bbb;margin:0 0 var(--page-space-after);}
 [data-page] mark[data-missing]{background:#fde68a;color:inherit;}
+[data-page] [data-small-caps]{font-variant:small-caps;}
 [data-page] h1,[data-page] h2,[data-page] h3{font-weight:bold;margin:0 0 var(--page-space-after);}
 ${HEADING_PT.map((d, i) => `[data-page] h${i + 1}{font-size:calc(var(--page-font-size) + ${d * (96 / 72)}px);}`).join("\n")}
 [data-page2]{border-top:1px dashed #bbb;margin-top:var(--page-space-after);}

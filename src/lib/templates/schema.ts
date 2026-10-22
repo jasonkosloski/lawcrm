@@ -23,7 +23,7 @@ export type JoinStyle = (typeof JOIN_STYLES)[number];
 export const SHOW_IF_OPS = ["present", "empty", "true", "false", "in"] as const;
 export type ShowIfOp = (typeof SHOW_IF_OPS)[number];
 
-export type MarkType = "bold" | "italic" | "underline";
+export type MarkType = "bold" | "italic" | "underline" | "smallCaps";
 export type TemplateMark = { type: MarkType };
 
 export type TextNode = { type: "text"; text: string; marks?: TemplateMark[] };
@@ -136,7 +136,7 @@ const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !
 type Ctx = { kind: TemplateKind; isBlock: boolean };
 
 const ALIGNS = ["left", "center", "right", "justify"];
-const MARKS: MarkType[] = ["bold", "italic", "underline"];
+const MARKS: MarkType[] = ["bold", "italic", "underline", "smallCaps"];
 
 function str(v: unknown, what: string): string {
   if (typeof v !== "string" || v.length === 0) {

@@ -33,6 +33,7 @@ const FULL_DOC = {
       { type: "field", attrs: { path: "client.name", format: "full" }, marks: [{ type: "bold" }] },
       { type: "hardBreak" },
       t("styled", [{ type: "italic" }, { type: "underline" }]),
+      t(" Plaintiff", [{ type: "smallCaps" }]),
       { type: "field", attrs: { path: "matter.name", format: null } },
     ),
     p({

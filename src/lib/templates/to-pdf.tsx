@@ -20,6 +20,7 @@ import type { ReactElement, ReactNode } from "react";
 import { FONTS, type FontKey } from "./fonts";
 import { fontFilePath } from "./fonts-server";
 import { imageSize } from "./image-size";
+import { SMALL_CAPS_SCALE, smallCapsRuns } from "./small-caps";
 import {
   CELL_PAD_PT,
   HEADER_DISTANCE_PT,
@@ -148,11 +149,23 @@ function hasUnsupported(key: FontKey, strings: string[]): boolean {
 
 type Align = "left" | "center" | "right" | "justify";
 
-function inline(nodes: ResolvedInline[] | undefined): ReactNode[] {
+/** `sizePt`: the paragraph's size, which small caps scale from. */
+function inline(nodes: ResolvedInline[] | undefined, sizePt: number): ReactNode[] {
   if (!nodes?.length) return [" "];
   return nodes.map((n, i) => {
     if (n.type === "hardBreak") return "\n";
     const types = new Set((n.marks ?? []).map((m) => m.type));
+    const text = types.has("smallCaps")
+      ? smallCapsRuns(n.text).map((r, j) =>
+          r.small ? (
+            <Text key={j} style={{ fontSize: sizePt * SMALL_CAPS_SCALE }}>
+              {r.text}
+            </Text>
+          ) : (
+            r.text
+          ),
+        )
+      : n.text;
     return (
       <Text
         key={i}
@@ -163,7 +176,7 @@ function inline(nodes: ResolvedInline[] | undefined): ReactNode[] {
           ...(types.has("missing") ? { backgroundColor: "#FFFF00" } : {}),
         }}
       >
-        {n.text}
+        {text}
       </Text>
     );
   });
@@ -180,18 +193,19 @@ function paragraph(
   heading?: 1 | 2 | 3,
 ) {
   const { style } = ctx;
+  const size = heading ? headingSizePt(style.sizePt, heading) : style.sizePt;
   return (
     <Text
       key={key}
       style={{
-        fontSize: heading ? headingSizePt(style.sizePt, heading) : style.sizePt,
+        fontSize: size,
         fontWeight: heading ? "bold" : "normal",
         lineHeight: lineHeightFor(style),
         marginBottom: style.spaceAfterPt,
         textAlign: align ?? "left",
       }}
     >
-      {inline(content)}
+      {inline(content, size)}
     </Text>
   );
 }
@@ -297,7 +311,13 @@ function naturalWidth(c: ResolvedTableCell, ctx: Ctx): number {
               else {
                 const marks = new Set<string>((n.marks ?? []).map((m) => m.type));
                 if (b.type === "heading") marks.add("bold");
-                lines[lines.length - 1] += textWidth(n.text, marks, ctx, size);
+                lines[lines.length - 1] += marks.has("smallCaps")
+                  ? smallCapsRuns(n.text).reduce(
+                      (w, r) =>
+                        w + textWidth(r.text, marks, ctx, r.small ? size * SMALL_CAPS_SCALE : size),
+                      0,
+                    )
+                  : textWidth(n.text, marks, ctx, size);
               }
             }
             return indent + Math.max(...lines);

@@ -73,6 +73,7 @@ export function Toolbar({
       bold: e.isActive("bold"),
       italic: e.isActive("italic"),
       underline: e.isActive("underline"),
+      smallCaps: e.isActive("smallCaps"),
       h1: e.isActive("heading", { level: 1 }),
       h2: e.isActive("heading", { level: 2 }),
       bullet: e.isActive("bulletList"),
@@ -198,6 +199,13 @@ export function Toolbar({
             onClick={() => chain().toggleUnderline().run()}
           >
             <Underline size={13} />
+          </ToolButton>
+          <ToolButton
+            label="Small caps"
+            active={s?.smallCaps}
+            onClick={() => chain().toggleSmallCaps().run()}
+          >
+            <span className="text-xs font-semibold [font-variant:small-caps]">Sc</span>
           </ToolButton>
           <ToolButton
             label="Heading 1"

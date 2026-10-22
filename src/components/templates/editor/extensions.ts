@@ -26,6 +26,7 @@ import { BlockNode } from "./block-node";
 import { FieldNode, ListFieldNode } from "./field-node";
 import { PageBreak } from "./page-break";
 import { RepeatEmptyNode, RepeatNode, ShowIfNode } from "./section-nodes";
+import { SmallCaps } from "./small-caps";
 import { fillColumnWidths } from "./table-commands";
 
 export type TemplateExtensionOptions = {
@@ -219,6 +220,7 @@ export function createTemplateExtensions(opts: TemplateExtensionOptions): Extens
       },
     }),
     TextAlign.configure({ types: ["heading", "paragraph"] }),
+    SmallCaps,
     Table.extend({
       addAttributes() {
         return {

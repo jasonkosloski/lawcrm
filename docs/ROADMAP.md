@@ -34,7 +34,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [x] **Letters out**: firm house style (font, spacing, letterhead placement) and PDF output. → [documents](features/documents.md)
 - [x] **Emails and texts from templates**: "Use template" in compose and reply; "Text from template" copies (or copies and logs) until an SMS provider exists. → [email](features/communication-email.md)
 - [x] **Court-aware filings**: firm-defined court formats (formatting, paper size, block swaps) chosen per venue. → [documents](features/documents.md)
-- [x] **Caption tables**: full/fit width, column widths, merged cells, per-side borders, vertical alignment in templates. → [documents](features/documents.md)
+- [x] **Caption tables**: full/fit width, column widths, merged cells, per-side borders, vertical alignment, small caps in templates. → [documents](features/documents.md)
 - [~] **Search follow-ups**: within-list keyword filters; Postgres FTS when ILIKE stops scaling. → [search](features/search.md)
 
 ## P2: polish and follow-ups

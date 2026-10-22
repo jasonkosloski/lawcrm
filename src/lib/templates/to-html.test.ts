@@ -173,3 +173,20 @@ describe("resolvedToHtml row spans", () => {
     expect(html).toContain('<tr><td data-bt="thick" data-bb="thick"><p><strong>Plaintiff');
   });
 });
+
+describe("resolvedToHtml small caps", () => {
+  it("wraps small caps in a span the sanitizer keeps", () => {
+    const html = resolvedToHtml({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Plaintiff", marks: [{ type: "bold" }, { type: "smallCaps" }] },
+          ],
+        },
+      ],
+    });
+    expect(html).toBe("<p><strong><span data-small-caps>Plaintiff</span></strong></p>");
+  });
+});
