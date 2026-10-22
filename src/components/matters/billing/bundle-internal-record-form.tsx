@@ -30,6 +30,7 @@ import {
 } from "@/lib/billing-form";
 import { bundleCountLabel, bundleTotal } from "./bundle-summary";
 import { formatMoney } from "@/lib/format-money";
+import { inputClass } from "@/components/ui/field";
 
 export function BundleInternalRecordForm({
   matterId,
@@ -134,12 +135,7 @@ export function BundleInternalRecordForm({
           maxLength={2000}
           autoFocus
           placeholder="e.g. Settled — fees came out of settlement; pro-bono case completed; fee award collected separately"
-          className={cn(
-            "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-            "placeholder:text-ink-4",
-            errs.notes ? "border-warn" : "border-line"
-          )}
+          className={inputClass(!!errs.notes)}
         />
         {errs.notes && (
           <span className="text-2xs text-warn">{errs.notes[0]}</span>

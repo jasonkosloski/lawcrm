@@ -135,9 +135,10 @@ src/components/ui/native-select.tsx — never a raw <select> (ESLint enforces).
 ### Form fields (`ui/field`)
 ```
 src/components/ui/field.tsx — never a per-file inputCls / labelCls / Field copy.
-- inputClass(hasError, size): the compact control look for input, select
-  wrappers and textarea. Sizes: xs h-7 (dense inline rows), sm h-8 (default),
-  md h-9 (page-level forms). Add width/height-free extras with cn().
+- inputClass(hasError, size): the compact control look. Sizes: xs h-7 (dense
+  inline rows), sm h-8 (default), md h-9 (page-level forms). textareaClass is
+  the same look without a height. Add extras (width, font-mono, resize) with
+  cn(); don't restate the base classes.
 - labelClass: text-xs font-medium ink-2.
 - Field: label + control + first error (or hint). Pass htmlFor (the control's
   id) to get aria-invalid / aria-describedby wired; omit it and the label wraps

@@ -29,6 +29,7 @@ import {
   UTBMS_LITIGATION_TASK_CODES,
   computeHoursFromTimeRange,
 } from "@/lib/time-entry-constants";
+import { inputClass } from "@/components/ui/field";
 
 export function UtbmsCodeSelect({
   value,
@@ -143,12 +144,7 @@ export function DurationFields({
             onChange={(e) => onHoursChange(e.target.value)}
             placeholder="Hrs"
             autoFocus={autoFocus}
-            className={cn(
-              "h-8 w-16 px-2.5 rounded-md border bg-white text-xs text-ink font-mono",
-              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-              "placeholder:text-ink-4 placeholder:font-sans",
-              error ? "border-warn" : "border-line"
-            )}
+            className={cn(inputClass(!!error), "w-16 font-mono placeholder:font-sans")}
           />
         ) : (
           <>
@@ -159,11 +155,7 @@ export function DurationFields({
               value={start}
               onChange={(e) => applyRange(e.target.value, end)}
               aria-label="Start time"
-              className={cn(
-                "h-8 px-1.5 rounded-md border bg-white text-xs text-ink",
-                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                error ? "border-warn" : "border-line"
-              )}
+              className={cn(inputClass(!!error), "px-1.5")}
             />
             <span className="text-2xs text-ink-4">–</span>
             <input
@@ -171,11 +163,7 @@ export function DurationFields({
               value={end}
               onChange={(e) => applyRange(start, e.target.value)}
               aria-label="End time"
-              className={cn(
-                "h-8 px-1.5 rounded-md border bg-white text-xs text-ink",
-                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                error ? "border-warn" : "border-line"
-              )}
+              className={cn(inputClass(!!error), "px-1.5")}
             />
             <span
               className="text-2xs font-mono text-ink-3 whitespace-nowrap"

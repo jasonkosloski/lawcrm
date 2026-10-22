@@ -14,12 +14,12 @@ import { searchAttendeesAction } from "@/app/actions/attendee-search";
 import { createCustodianContact } from "@/app/actions/records-requests";
 import { cn } from "@/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { inputClass } from "@/components/ui/field";
 
 type Picked = { id: string; name: string };
 type Hit = { id: string; name: string; sub: string | null };
 
-const input =
-  "h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30";
+const input = inputClass();
 
 export function CustodianPicker({
   value,

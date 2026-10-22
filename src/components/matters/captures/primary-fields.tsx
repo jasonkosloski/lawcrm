@@ -11,6 +11,7 @@
 
 import { cn } from "@/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { inputClass, textareaClass } from "@/components/ui/field";
 
 export function TextField({
   name,
@@ -48,12 +49,7 @@ export function TextField({
         placeholder={placeholder}
         autoFocus={autoFocus}
         maxLength={maxLength}
-        className={cn(
-          "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          "placeholder:text-ink-4",
-          error ? "border-warn" : "border-line"
-        )}
+        className={inputClass(!!error)}
       />
       {error && <div className="text-2xs text-warn">{error}</div>}
     </div>
@@ -81,11 +77,7 @@ export function DateField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={placeholder ?? "Date"}
-        className={cn(
-          "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          error ? "border-warn" : "border-line"
-        )}
+        className={inputClass(!!error)}
       />
       {error && <div className="text-2xs text-warn">{error}</div>}
     </div>
@@ -114,11 +106,7 @@ export function DateTimeField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={label}
-        className={cn(
-          "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          error ? "border-warn" : "border-line"
-        )}
+        className={inputClass(!!error)}
       />
       {error && <div className="text-2xs text-warn">{error}</div>}
     </div>
@@ -187,12 +175,7 @@ export function TextareaField({
         placeholder={placeholder}
         rows={rows}
         maxLength={maxLength}
-        className={cn(
-          "px-2.5 py-1.5 rounded-md border bg-white text-xs text-ink leading-relaxed",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          "placeholder:text-ink-4 resize-y font-sans",
-          error ? "border-warn" : "border-line"
-        )}
+        className={cn(textareaClass(!!error), "leading-relaxed resize-y font-sans")}
       />
       {error && <div className="text-2xs text-warn">{error}</div>}
     </div>

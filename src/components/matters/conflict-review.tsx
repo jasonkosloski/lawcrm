@@ -16,6 +16,7 @@ import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ConflictPrompt } from "@/lib/conflict-gate-constants";
+import { textareaClass } from "@/components/ui/field";
 
 export function ConflictReview({
   conflict,
@@ -100,7 +101,7 @@ export function ConflictReview({
             rows={2}
             defaultValue={defaultReason ?? ""}
             aria-invalid={!!reasonError?.length || undefined}
-            className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 resize-y"
+            className={cn(textareaClass(), "resize-y")}
             placeholder="Informed-consent waiver signed; former client, no substantial relationship…"
           />
           {reasonError?.length ? (

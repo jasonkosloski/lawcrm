@@ -54,6 +54,7 @@ import {
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import { paragraphsToHtml } from "@/lib/text-to-html";
 import { escapeHtml } from "@/lib/email/escape";
+import { inputClass, textareaClass } from "@/components/ui/field";
 
 export type InboxSource =
   | { kind: "email"; id: string; subject: string; snippet: string }
@@ -260,11 +261,7 @@ function CreateTaskDialog({
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Task title"
               autoFocus
-              className={cn(
-                "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                errs.title ? "border-warn" : "border-line"
-              )}
+              className={inputClass(!!errs.title)}
             />
             {errs.title && (
               <div className="text-2xs text-warn">{errs.title[0]}</div>
@@ -279,11 +276,7 @@ function CreateTaskDialog({
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
                 aria-label="Due date"
-                className={cn(
-                  "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-                  "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                  errs.dueDate ? "border-warn" : "border-line"
-                )}
+                className={inputClass(!!errs.dueDate)}
               />
               {errs.dueDate && (
                 <div className="text-2xs text-warn">{errs.dueDate[0]}</div>
@@ -309,7 +302,7 @@ function CreateTaskDialog({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Details (optional)"
             rows={3}
-            className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink leading-relaxed focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 resize-y font-sans"
+            className={cn(textareaClass(), "leading-relaxed resize-y font-sans")}
           />
           {errs.description && (
             <div className="text-2xs text-warn">{errs.description[0]}</div>
@@ -376,11 +369,7 @@ function CreateDeadlineDialog({
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Deadline title"
               autoFocus
-              className={cn(
-                "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                errs.title ? "border-warn" : "border-line"
-              )}
+              className={inputClass(!!errs.title)}
             />
             {errs.title && (
               <div className="text-2xs text-warn">{errs.title[0]}</div>
@@ -396,11 +385,7 @@ function CreateDeadlineDialog({
                 onChange={(e) => setDueDate(e.target.value)}
                 aria-label="Due date"
                 required
-                className={cn(
-                  "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-                  "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                  errs.dueDate ? "border-warn" : "border-line"
-                )}
+                className={inputClass(!!errs.dueDate)}
               />
               {errs.dueDate && (
                 <div className="text-2xs text-warn">{errs.dueDate[0]}</div>
@@ -428,7 +413,7 @@ function CreateDeadlineDialog({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Why this deadline applies (optional)"
             rows={3}
-            className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink leading-relaxed focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 resize-y font-sans"
+            className={cn(textareaClass(), "leading-relaxed resize-y font-sans")}
           />
           {errs.description && (
             <div className="text-2xs text-warn">{errs.description[0]}</div>
@@ -518,7 +503,7 @@ function CreateNoteDialog({
             onChange={(e) => setContent(e.target.value)}
             rows={8}
             autoFocus
-            className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink leading-relaxed focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 resize-y font-sans"
+            className={cn(textareaClass(), "leading-relaxed resize-y font-sans")}
           />
           {errs.content && (
             <div className="text-2xs text-warn">{errs.content[0]}</div>

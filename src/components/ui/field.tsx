@@ -49,6 +49,16 @@ export function inputClass(
   );
 }
 
+/** Textarea classes: the input look without a fixed height. */
+export function textareaClass(hasError = false): string {
+  return cn(
+    "rounded-md border bg-white px-2.5 py-1.5 text-xs text-ink",
+    "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
+    "placeholder:text-ink-4",
+    hasError ? "border-warn" : "border-line"
+  );
+}
+
 export const labelClass = "text-xs font-medium text-ink-2";
 
 /** One inline field error; renders nothing without a message. */

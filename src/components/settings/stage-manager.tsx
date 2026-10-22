@@ -35,6 +35,7 @@ import {
   stageInitialState,
   type StageFormState,
 } from "@/lib/practice-area-constants";
+import { inputClass } from "@/components/ui/field";
 
 export type StageManagerStage = {
   id: string;
@@ -190,12 +191,7 @@ function StageRow({
           required
           aria-label={`Stage name (${stage.name})`}
           disabled={!stage.isActive}
-          className={cn(
-            "h-7 px-2 rounded-md border bg-white text-xs text-ink w-full",
-            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-            "disabled:bg-paper-2 disabled:cursor-not-allowed",
-            errs.name ? "border-warn" : "border-line"
-          )}
+          className={cn(inputClass(!!errs.name, "xs"), "w-full disabled:bg-paper-2 disabled:cursor-not-allowed")}
         />
         {errs.name && errs.name.length > 0 && (
           <div className="text-2xs text-warn">{errs.name[0]}</div>
@@ -301,12 +297,7 @@ function AddStageForm({ practiceAreaId }: { practiceAreaId: string }) {
           required
           aria-label="New stage name"
           placeholder="New stage name (e.g. Mediation)"
-          className={cn(
-            "h-7 px-2 rounded-md border bg-white text-xs text-ink w-full",
-            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-            "placeholder:text-ink-4",
-            errs.name ? "border-warn" : "border-line"
-          )}
+          className={cn(inputClass(!!errs.name, "xs"), "w-full")}
         />
         {errs.name && errs.name.length > 0 && (
           <div className="text-2xs text-warn">{errs.name[0]}</div>

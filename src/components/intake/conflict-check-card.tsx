@@ -34,6 +34,7 @@ import {
   runLeadConflictCheck,
 } from "@/app/actions/conflict-check";
 import type { ConflictMatch } from "@/lib/conflict-check";
+import { textareaClass } from "@/components/ui/field";
 
 type Status = "pending" | "clear" | "warn" | "conflict" | "override";
 
@@ -223,7 +224,7 @@ export function ConflictCheckCard({
             rows={3}
             maxLength={2000}
             placeholder="Justification…"
-            className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 resize-none"
+            className={cn(textareaClass(), "resize-none")}
           />
           <div className="flex justify-end gap-2">
             <Button

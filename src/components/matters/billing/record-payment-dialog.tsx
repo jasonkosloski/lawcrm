@@ -47,6 +47,7 @@ import { todayKey } from "@/lib/format-date";
 import { parseMoneyInput } from "@/lib/parse-money-input";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { formatMoney } from "@/lib/format-money";
+import { inputClass, textareaClass } from "@/components/ui/field";
 
 // Reference field placeholder hints at what the firm typically
 // captures per channel. Cosmetic — the field accepts anything.
@@ -275,13 +276,7 @@ function RecordPaymentForm({
           required
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          className={cn(
-            "h-9 px-3 rounded-md border bg-white text-sm text-ink font-mono",
-            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-            errs.amount || amountUnparseable || overBalance || overTrust
-              ? "border-warn"
-              : "border-line"
-          )}
+          className={cn(inputClass(!!(errs.amount || amountUnparseable || overBalance || overTrust), "md"), "text-sm font-mono")}
         />
         {errs.amount && (
           <span className="text-2xs text-warn">{errs.amount[0]}</span>
@@ -339,7 +334,7 @@ function RecordPaymentForm({
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+            className={inputClass()}
           />
         </div>
       </div>
@@ -359,7 +354,7 @@ function RecordPaymentForm({
           onChange={(e) => setReference(e.target.value)}
           placeholder={REFERENCE_PLACEHOLDER[source]}
           maxLength={120}
-          className="h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+          className={inputClass()}
         />
       </div>
 
@@ -378,7 +373,7 @@ function RecordPaymentForm({
           placeholder="Optional — appears on the invoice's payment row"
           rows={2}
           maxLength={400}
-          className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 resize-none"
+          className={cn(textareaClass(), "resize-none")}
         />
       </div>
 

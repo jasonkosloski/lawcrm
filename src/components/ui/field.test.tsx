@@ -1,6 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Field, FieldError, formErrorMessage, inputClass } from "./field";
+import {
+  Field,
+  FieldError,
+  formErrorMessage,
+  inputClass,
+  textareaClass,
+} from "./field";
 
 describe("Field", () => {
   it("with htmlFor, labels the control and wires the first error to it", () => {
@@ -67,6 +73,11 @@ describe("inputClass", () => {
     expect(inputClass(true, "md")).toContain("h-9");
     expect(inputClass(true)).toContain("border-warn");
     expect(inputClass(false)).toContain("border-line");
+  });
+
+  it("textareaClass has no fixed height", () => {
+    expect(textareaClass()).not.toMatch(/\bh-\d/);
+    expect(textareaClass(true)).toContain("border-warn");
   });
 });
 

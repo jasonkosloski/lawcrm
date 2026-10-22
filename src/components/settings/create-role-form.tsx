@@ -20,7 +20,7 @@ import {
   roleInitialState,
   type RoleFormState,
 } from "@/lib/role-form";
-import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
+import { Field, FormErrorBanner, formErrorMessage, inputClass, textareaClass } from "@/components/ui/field";
 
 export function CreateRoleForm() {
   const [state, formAction, isPending] = useActionState<
@@ -93,12 +93,7 @@ export function CreateRoleForm() {
             maxLength={400}
             defaultValue={v.description ?? ""}
             placeholder="What does this role mean for your firm?"
-            className={cn(
-              "px-3 py-2 rounded-md border bg-white text-xs text-ink",
-              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-              "placeholder:text-ink-4 resize-y",
-              errs.description ? "border-warn" : "border-line"
-            )}
+            className={cn(textareaClass(!!errs.description), "resize-y")}
           />
         )}
       </Field>

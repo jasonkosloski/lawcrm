@@ -43,6 +43,7 @@ import {
   searchMergeCandidatesAction,
 } from "@/app/actions/contacts";
 import type { MergeCandidateOption } from "@/lib/queries/contacts";
+import { inputClass } from "@/components/ui/field";
 
 const SEARCH_DEBOUNCE_MS = 200;
 
@@ -218,11 +219,7 @@ export function ContactMergeMenu({
                   }}
                   aria-label="Search contacts to merge into"
                   placeholder="Merge into… type to search contacts"
-                  className={cn(
-                    "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink w-full",
-                    "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                    "placeholder:text-ink-4"
-                  )}
+                  className={cn(inputClass(), "w-full")}
                 />
                 {suggestionsOpen && suggestions.length > 0 && (
                   <div

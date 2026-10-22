@@ -31,6 +31,7 @@ import {
 import { documentCategoryLabel } from "@/lib/document-display";
 import { MAX_DOCUMENT_NAME_LENGTH } from "@/app/api/documents/upload/upload-config";
 import { cn } from "@/lib/utils";
+import { inputClass } from "@/components/ui/field";
 
 export function EditDocumentDialog({
   open,
@@ -105,7 +106,7 @@ export function EditDocumentDialog({
               onChange={(e) => setNewName(e.target.value)}
               maxLength={MAX_DOCUMENT_NAME_LENGTH}
               autoFocus
-              className="h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+              className={inputClass()}
             />
           </div>
           <div className="flex flex-col gap-1">

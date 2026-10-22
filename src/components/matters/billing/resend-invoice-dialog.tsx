@@ -32,6 +32,7 @@ import {
   type BillingFormState,
 } from "@/lib/billing-form";
 import { notifySuccess, notifyWarning } from "@/lib/feedback";
+import { inputClass } from "@/components/ui/field";
 
 export function ResendInvoiceDialog({
   open,
@@ -121,11 +122,7 @@ function ResendInvoiceForm({
           value={recipient}
           onChange={(e) => setRecipient(e.target.value)}
           placeholder="client@example.com"
-          className={cn(
-            "h-9 px-3 rounded-md border bg-white text-sm text-ink",
-            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-            errs.recipient ? "border-warn" : "border-line"
-          )}
+          className={cn(inputClass(!!errs.recipient, "md"), "text-sm")}
         />
         {errs.recipient && (
           <span className="text-2xs text-warn">{errs.recipient[0]}</span>

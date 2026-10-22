@@ -61,6 +61,7 @@ import type { RecordsRequestDetail } from "@/lib/queries/records-requests";
 import { cn } from "@/lib/utils";
 import type { TypeOption, UserOption } from "./new-request-composer";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { inputClass } from "@/components/ui/field";
 
 export type RequestDetailPermissions = {
   /** records.edit */
@@ -74,8 +75,7 @@ export type RequestDetailPermissions = {
 };
 
 const ADHOC = "__adhoc";
-const field =
-  "h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 disabled:opacity-60";
+const field = cn(inputClass(), "disabled:opacity-60");
 const label = "text-xs font-medium text-ink-2";
 const primaryBtn =
   "h-8 px-3 rounded-md bg-brand-700 text-white text-xs font-medium hover:bg-brand-900 disabled:opacity-50";

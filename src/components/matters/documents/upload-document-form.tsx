@@ -45,6 +45,7 @@ import {
 import { makeStorageKey, type StorageDriver } from "@/lib/storage/storage-key";
 import { blobUploadErrorMessage } from "./upload-errors";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { inputClass } from "@/components/ui/field";
 
 const MAX_MB = Math.round(MAX_DOCUMENT_BYTES / (1024 * 1024));
 
@@ -253,7 +254,7 @@ export function UploadDocumentForm({
             type="text"
             placeholder={filename ?? "Falls back to the file's name"}
             maxLength={200}
-            className="h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+            className={inputClass()}
           />
         </div>
         <div className="flex flex-col gap-1">

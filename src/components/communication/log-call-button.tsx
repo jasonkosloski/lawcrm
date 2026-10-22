@@ -56,6 +56,7 @@ import {
   type EditableCallLog,
 } from "@/lib/call-log-form";
 import type { ContactPickerOption } from "@/lib/queries/contacts";
+import { inputClass } from "@/components/ui/field";
 
 export type CallMatterOption = { id: string; name: string };
 
@@ -366,12 +367,7 @@ function CallLogFormBody({
                 if (query.trim().length > 0) setSuggestionsOpen(true);
               }}
               placeholder="Who was the call with? Type to search contacts"
-              className={cn(
-                "h-8 px-2.5 rounded-md border bg-white text-xs text-ink w-full",
-                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-                "placeholder:text-ink-4",
-                errs.contactId ? "border-warn" : "border-line"
-              )}
+              className={cn(inputClass(!!errs.contactId), "w-full")}
             />
             {errs.contactId && (
               <div className="text-2xs text-warn mt-0.5">

@@ -26,6 +26,7 @@ import {
 import { todayKey } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { inputClass } from "@/components/ui/field";
 
 export function TrustTransactionForm({
   matterId,
@@ -143,12 +144,7 @@ export function TrustTransactionForm({
             inputMode="decimal"
             placeholder="0.00"
             required
-            className={cn(
-              "h-8 px-2.5 rounded-md border bg-white text-xs text-ink font-mono",
-              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-              "placeholder:text-ink-4",
-              errs.amount ? "border-warn" : "border-line"
-            )}
+            className={cn(inputClass(!!errs.amount), "font-mono")}
           />
           {errs.amount && (
             <span className="text-2xs text-warn">{errs.amount[0]}</span>
@@ -168,12 +164,7 @@ export function TrustTransactionForm({
             required
             maxLength={400}
             placeholder="e.g. Initial retainer · check #4421"
-            className={cn(
-              "h-8 px-2.5 rounded-md border bg-white text-xs text-ink",
-              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-              "placeholder:text-ink-4",
-              errs.description ? "border-warn" : "border-line"
-            )}
+            className={inputClass(!!errs.description)}
           />
           {errs.description && (
             <span className="text-2xs text-warn">{errs.description[0]}</span>
@@ -197,7 +188,7 @@ export function TrustTransactionForm({
             type="text"
             placeholder="Check #, wire ID, etc."
             maxLength={120}
-            className="h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+            className={inputClass()}
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -212,7 +203,7 @@ export function TrustTransactionForm({
             name="date"
             type="date"
             defaultValue={defaultDate}
-            className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+            className={inputClass()}
           />
         </div>
       </div>

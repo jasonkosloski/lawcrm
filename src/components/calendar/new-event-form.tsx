@@ -69,6 +69,8 @@ import {
   serializeAttendees,
   type EditableAttendee,
 } from "./attendee-picker";
+import { inputClass } from "@/components/ui/field";
+import { cn } from "@/lib/utils";
 
 export function NewEventForm({
   matters,
@@ -430,7 +432,7 @@ function MatterSelect({
           }}
           placeholder="Search matters — or leave empty for a personal event"
           aria-label="Search matters"
-          className="h-8 w-full pl-7 pr-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+          className={cn(inputClass(), "w-full pl-7 pr-2")}
         />
       </div>
 

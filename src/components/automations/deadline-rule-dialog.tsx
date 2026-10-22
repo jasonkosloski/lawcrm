@@ -38,7 +38,7 @@ import {
   type OffsetUnit,
 } from "@/lib/automations/deadline-plan";
 import type { DeadlineRuleRow } from "@/lib/queries/automations";
-import { Field, inputClass } from "@/components/ui/field";
+import { Field, inputClass, textareaClass } from "@/components/ui/field";
 
 export function DeadlineRuleDialog({
   open,
@@ -200,7 +200,7 @@ export function DeadlineRuleDialog({
             <input name="sourceRef" value={sourceRef} onChange={(e) => setSourceRef(e.target.value)} maxLength={200} placeholder="C.R.S. § 24-10-109" className={inputClass()} />
           </Field>
           <Field label="Notes (optional)" hint="Copied onto each generated deadline.">
-            <textarea name="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={4000} className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30" />
+            <textarea name="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={4000} className={textareaClass()} />
           </Field>
 
           {errs._form?.[0] && (

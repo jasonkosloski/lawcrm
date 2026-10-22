@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { renameFolder } from "@/app/actions/document-folders";
+import { inputClass } from "@/components/ui/field";
 
 export function RenameFolderDialog({
   open,
@@ -76,7 +77,7 @@ export function RenameFolderDialog({
             onFocus={(e) => e.currentTarget.select()}
             maxLength={120}
             autoFocus
-            className="h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+            className={inputClass()}
           />
           {error && (
             <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">

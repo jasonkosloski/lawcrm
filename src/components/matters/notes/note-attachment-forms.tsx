@@ -28,7 +28,7 @@ import {
 } from "@/lib/note-constants";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { FieldError, inputClass } from "@/components/ui/field";
+import { FieldError, inputClass, textareaClass } from "@/components/ui/field";
 
 function FormFooter({
   onCancel,
@@ -141,12 +141,7 @@ export function AddTaskForm({
         placeholder="Details (optional)"
         aria-label="Task details"
         rows={2}
-        className={cn(
-          "px-2 py-1.5 rounded-md border bg-white text-xs text-ink leading-relaxed",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          "placeholder:text-ink-4 resize-y font-sans",
-          errs.description ? "border-warn" : "border-line"
-        )}
+        className={cn(textareaClass(!!errs.description), "px-2 leading-relaxed resize-y font-sans")}
       />
 
       <FormFooter
@@ -238,12 +233,7 @@ export function AddDeadlineForm({
         placeholder="Why this deadline applies (optional)"
         aria-label="Why this deadline applies"
         rows={2}
-        className={cn(
-          "px-2 py-1.5 rounded-md border bg-white text-xs text-ink leading-relaxed",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          "placeholder:text-ink-4 resize-y font-sans",
-          errs.description ? "border-warn" : "border-line"
-        )}
+        className={cn(textareaClass(!!errs.description), "px-2 leading-relaxed resize-y font-sans")}
       />
 
       <FormFooter
@@ -338,12 +328,7 @@ export function AddTimeEntryForm({
         placeholder="Narrative (optional, client-facing)"
         aria-label="Narrative"
         rows={2}
-        className={cn(
-          "px-2 py-1.5 rounded-md border bg-white text-xs text-ink leading-relaxed",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          "placeholder:text-ink-4 resize-y font-sans",
-          errs.narrative ? "border-warn" : "border-line"
-        )}
+        className={cn(textareaClass(!!errs.narrative), "px-2 leading-relaxed resize-y font-sans")}
       />
 
       <div className="flex items-center justify-between gap-2">

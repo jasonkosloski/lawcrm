@@ -23,6 +23,7 @@ import {
 import { todayKey } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { useEventAttachmentsViewer } from "./event-attachments-context";
+import { inputClass, textareaClass } from "@/components/ui/field";
 
 export function EventTimeEntryComposer({
   matterId,
@@ -115,11 +116,7 @@ export function EventTimeEntryComposer({
             value={date}
             onChange={(e) => setDate(e.target.value)}
             aria-label="Date"
-            className={cn(
-              "h-7 px-2 rounded-md border bg-white text-xs text-ink",
-              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-              errs.date ? "border-warn" : "border-line"
-            )}
+            className={inputClass(!!errs.date, "xs")}
           />
           {errs.date && (
             <div className="text-2xs text-warn">{errs.date[0]}</div>
@@ -133,12 +130,7 @@ export function EventTimeEntryComposer({
             onChange={(e) => setHours(e.target.value)}
             placeholder="Hrs"
             inputMode="decimal"
-            className={cn(
-              "h-7 px-2 rounded-md border bg-white text-xs text-ink w-20 font-mono",
-              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-              "placeholder:text-ink-4",
-              errs.hours ? "border-warn" : "border-line"
-            )}
+            className={cn(inputClass(!!errs.hours, "xs"), "w-20 font-mono")}
           />
           {errs.hours && (
             <div className="text-2xs text-warn">{errs.hours[0]}</div>
@@ -151,12 +143,7 @@ export function EventTimeEntryComposer({
             value={activity}
             onChange={(e) => setActivity(e.target.value)}
             placeholder="Activity (e.g. 'Hearing attendance')"
-            className={cn(
-              "h-7 px-2 rounded-md border bg-white text-xs text-ink w-full",
-              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-              "placeholder:text-ink-4",
-              errs.activity ? "border-warn" : "border-line"
-            )}
+            className={cn(inputClass(!!errs.activity, "xs"), "w-full")}
           />
           {errs.activity && (
             <div className="text-2xs text-warn">{errs.activity[0]}</div>
@@ -170,12 +157,7 @@ export function EventTimeEntryComposer({
         onChange={(e) => setNarrative(e.target.value)}
         placeholder="Narrative (optional, client-facing)"
         rows={2}
-        className={cn(
-          "px-2 py-1.5 rounded-md border bg-white text-xs text-ink leading-relaxed",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          "placeholder:text-ink-4 resize-y font-sans",
-          errs.narrative ? "border-warn" : "border-line"
-        )}
+        className={cn(textareaClass(!!errs.narrative), "px-2 leading-relaxed resize-y font-sans")}
       />
 
       <div className="flex items-center justify-between gap-2">

@@ -35,6 +35,7 @@ import {
   ACTIVITY_PILL_ORDER as PILL_ORDER,
 } from "@/lib/constants/activity-filters";
 import { activityIcon } from "@/lib/activity-icons";
+import { inputClass } from "@/components/ui/field";
 
 // Date rendering routes through the centralized formatter.
 
@@ -173,7 +174,7 @@ export default async function FirmActivityPage({
             type="date"
             name="from"
             defaultValue={from ?? ""}
-            className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+            className={inputClass()}
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -188,7 +189,7 @@ export default async function FirmActivityPage({
             type="date"
             name="to"
             defaultValue={to ?? ""}
-            className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+            className={inputClass()}
           />
         </div>
         <div className="flex items-center gap-2">

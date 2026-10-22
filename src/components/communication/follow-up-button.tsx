@@ -35,6 +35,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { inputClass } from "@/components/ui/field";
 
 export type FollowUpAction = (
   threadId: string,
@@ -158,7 +159,7 @@ export function FollowUpButton({
             value={picked}
             min={today}
             onChange={(e) => setPicked(e.target.value)}
-            className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+            className={inputClass()}
           />
 
           <div className="flex items-center justify-between gap-2">

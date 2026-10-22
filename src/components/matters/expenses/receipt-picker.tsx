@@ -23,6 +23,7 @@ import {
   searchReceiptDocuments,
   type ReceiptCandidate,
 } from "@/app/actions/expenses";
+import { inputClass } from "@/components/ui/field";
 
 export function ReceiptPicker({
   id,
@@ -87,7 +88,7 @@ export function ReceiptPicker({
             <button
               type="button"
               id={id}
-              className="flex-1 min-w-0 h-8 px-2.5 inline-flex items-center gap-1.5 rounded-md border border-line bg-white text-xs text-left focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+              className={cn(inputClass(), "flex-1 min-w-0 inline-flex items-center gap-1.5 text-left")}
             >
               {documentId ? (
                 <>
@@ -117,7 +118,7 @@ export function ReceiptPicker({
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search this matter's documents…"
                 aria-label="Search documents"
-                className="h-8 w-full pl-7 pr-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+                className={cn(inputClass(), "w-full pl-7 pr-2")}
               />
             </div>
             <ul className="flex flex-col gap-px max-h-64 overflow-y-auto">

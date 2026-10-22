@@ -23,14 +23,14 @@ import type { RecordScope } from "@/lib/record-scope";
 import { cn } from "@/lib/utils";
 import { CustodianPicker } from "./custodian-picker";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { inputClass, textareaClass } from "@/components/ui/field";
 
 export type TypeOption = { id: string; name: string };
 export type UserOption = { id: string; name: string };
 
 const ADHOC = "__adhoc";
 
-const field =
-  "h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30";
+const field = inputClass();
 const label = "text-xs font-medium text-ink-2";
 
 export function NewRequestComposer({
@@ -209,7 +209,7 @@ export function NewRequestComposer({
           name="description"
           rows={2}
           maxLength={4000}
-          className="px-2 py-1.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
+          className={cn(textareaClass(), "px-2")}
         />
       </div>
 

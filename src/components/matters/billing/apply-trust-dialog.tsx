@@ -46,6 +46,7 @@ import { todayKey } from "@/lib/format-date";
 import { parseMoneyInput } from "@/lib/parse-money-input";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { formatMoney } from "@/lib/format-money";
+import { inputClass } from "@/components/ui/field";
 
 export function ApplyTrustDialog({
   open,
@@ -242,13 +243,7 @@ function ApplyTrustForm({
           required
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          className={cn(
-            "h-9 px-3 rounded-md border bg-white text-sm text-ink font-mono",
-            "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-            errs.amount || amountUnparseable || overTrust || overBalance
-              ? "border-warn"
-              : "border-line"
-          )}
+          className={cn(inputClass(!!(errs.amount || amountUnparseable || overTrust || overBalance), "md"), "text-sm font-mono")}
         />
         {errs.amount && (
           <span className="text-2xs text-warn">{errs.amount[0]}</span>
@@ -282,7 +277,7 @@ function ApplyTrustForm({
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 max-w-[12rem]"
+          className={cn(inputClass(), "max-w-[12rem]")}
         />
       </div>
 

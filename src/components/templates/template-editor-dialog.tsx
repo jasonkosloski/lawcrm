@@ -56,7 +56,7 @@ import {
   updateDocumentTemplate,
 } from "@/app/actions/document-templates";
 import type { TemplateListItem } from "@/components/templates/template-library";
-import { inputClass, labelClass } from "@/components/ui/field";
+import { inputClass, labelClass, textareaClass } from "@/components/ui/field";
 
 export function TemplateEditorDialog({
   open,
@@ -258,8 +258,8 @@ export function TemplateEditorDialog({
               }
               spellCheck={false}
               className={cn(
-                "px-2.5 py-2 rounded-md border border-line bg-white font-mono text-xs leading-relaxed text-ink",
-                "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4",
+                textareaClass(),
+                "py-2 font-mono leading-relaxed",
                 previewing && "hidden"
               )}
             />

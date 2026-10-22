@@ -23,6 +23,8 @@ import {
 import { CONTACT_LIST_LIMIT } from "@/lib/contact-constants";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { requireUser } from "@/lib/current-user";
+import { inputClass } from "@/components/ui/field";
+import { cn } from "@/lib/utils";
 
 export default async function ContactsPage({
   searchParams,
@@ -68,7 +70,7 @@ export default async function ContactsPage({
             aria-label="Search contacts"
             defaultValue={q ?? ""}
             placeholder="Search name, email, organization…"
-            className="h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink w-72 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+            className={cn(inputClass(), "w-72")}
           />
           {type && <input type="hidden" name="type" value={type} />}
           <Button type="submit" size="sm" variant="outline">

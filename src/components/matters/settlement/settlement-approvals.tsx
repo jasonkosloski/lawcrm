@@ -34,6 +34,7 @@ import { formatDate } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { Button } from "@/components/ui/button";
 import { setApprovalStepStatus } from "@/app/actions/settlements";
+import { inputClass } from "@/components/ui/field";
 
 type ApprovalRow = {
   id: string;
@@ -165,7 +166,7 @@ export function SettlementApprovals({
                         }
                         placeholder="Optional note"
                         maxLength={400}
-                        className="flex-1 h-7 px-2 rounded-md border border-line bg-white text-2xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+                        className={cn(inputClass(false, "xs"), "flex-1 text-2xs")}
                       />
                       <Button
                         type="button"

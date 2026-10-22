@@ -23,6 +23,7 @@ import type {
   ContactOption,
   RepresentationChoice,
 } from "@/lib/party-constants";
+import { inputClass } from "@/components/ui/field";
 
 const MAX_SUGGESTIONS = 6;
 
@@ -168,13 +169,7 @@ export function ContactTypeahead({
         }}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
-        className={cn(
-          compact ? "h-7 px-2" : "h-8 px-2.5",
-          "rounded-md border bg-white text-xs text-ink w-full",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          "placeholder:text-ink-4",
-          invalid ? "border-warn" : "border-line"
-        )}
+        className={cn(inputClass(invalid, compact ? "xs" : "sm"), "w-full")}
       />
       {listVisible && (
         <div className="rounded-md border border-line bg-white shadow-sm py-1">

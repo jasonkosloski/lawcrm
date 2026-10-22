@@ -19,7 +19,7 @@ import {
 } from "@/lib/expense-constants";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { ReceiptPicker } from "./receipt-picker";
-import { Field, FieldError, inputClass } from "@/components/ui/field";
+import { Field, FieldError, inputClass, textareaClass } from "@/components/ui/field";
 
 export type ExpenseDraft = {
   /** YYYY-MM-DD */
@@ -169,7 +169,7 @@ export function ExpenseFields({
           value={draft.notes}
           placeholder="Optional context for the bill or audit trail"
           onChange={(e) => onChange({ notes: e.target.value })}
-          className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4 resize-none"
+          className={cn(textareaClass(), "resize-none")}
         />
       </Field>
 

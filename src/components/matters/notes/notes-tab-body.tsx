@@ -34,6 +34,7 @@ import {
   summarizeRollup,
   type NoteNode as GenericNoteNode,
 } from "@/lib/note-threads";
+import { inputClass } from "@/components/ui/field";
 
 type NoteNode = GenericNoteNode<NoteCardNote>;
 
@@ -130,11 +131,7 @@ export function NotesTabBody({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search notes…"
-            className={cn(
-              "h-7 pl-7 pr-7 rounded-md border border-line bg-white text-xs text-ink w-full",
-              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-              "placeholder:text-ink-4"
-            )}
+            className={cn(inputClass(false, "xs"), "pl-7 pr-7 w-full")}
           />
           {query && (
             <button

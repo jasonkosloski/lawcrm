@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { createFolder } from "@/app/actions/document-folders";
+import { inputClass } from "@/components/ui/field";
 
 export function NewFolderButton({
   scope,
@@ -125,7 +126,7 @@ export function NewFolderDialog({
               placeholder="e.g. Production 1 — APD records"
               maxLength={120}
               autoFocus
-              className="h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+              className={inputClass()}
             />
             {error && (
               <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">

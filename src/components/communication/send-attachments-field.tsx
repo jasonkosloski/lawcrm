@@ -43,6 +43,7 @@ import {
   type AttachableDocument,
 } from "@/app/actions/email-send-attachments";
 import { blobUploadErrorMessage } from "@/components/matters/documents/upload-errors";
+import { inputClass } from "@/components/ui/field";
 
 const MAX_TOTAL_MB = Math.round(MAX_SEND_ATTACHMENT_BYTES / (1024 * 1024));
 
@@ -274,7 +275,7 @@ export function SendAttachmentsField({
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search this record's documents…"
                   aria-label="Search documents"
-                  className="h-8 w-full pl-7 pr-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4"
+                  className={cn(inputClass(), "w-full pl-7 pr-2")}
                 />
               </div>
               <ul className="flex flex-col gap-px max-h-64 overflow-y-auto">

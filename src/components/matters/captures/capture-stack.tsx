@@ -48,6 +48,7 @@ import { DEADLINE_KIND_LABEL } from "@/lib/constants/deadline-status";
 import { EVENT_TYPE_LABEL } from "@/lib/constants/calendar-event-type";
 import { TASK_PRIORITY_LABEL } from "@/lib/constants/priority";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { inputClass, textareaClass } from "@/components/ui/field";
 
 const KIND_ICON: Record<CaptureKind, typeof ListTodo> = {
   task: ListTodo,
@@ -422,12 +423,7 @@ function NoteSiblingFields({
         onChange={(e) => onUpdate({ content: e.target.value })}
         placeholder="Note content…"
         rows={3}
-        className={cn(
-          "px-2 py-1.5 rounded-md border bg-white text-xs text-ink leading-relaxed w-full",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          "placeholder:text-ink-4 resize-y font-sans",
-          errors?.content ? "border-warn" : "border-line"
-        )}
+        className={cn(textareaClass(!!errors?.content), "px-2 leading-relaxed w-full resize-y font-sans")}
       />
       {errors?.content && (
         <div className="text-2xs text-warn">{errors.content[0]}</div>
@@ -494,13 +490,7 @@ function TextInput({
         placeholder={placeholder}
         inputMode={inputMode}
         maxLength={maxLength}
-        className={cn(
-          "h-7 px-2 rounded-md border bg-white text-xs text-ink w-full",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          "placeholder:text-ink-4",
-          error ? "border-warn" : "border-line",
-          className
-        )}
+        className={cn(inputClass(!!error, "xs"), "w-full", className)}
       />
       {error && <div className="text-2xs text-warn">{error}</div>}
     </div>
@@ -525,11 +515,7 @@ function DateInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={placeholder ?? "Date"}
-        className={cn(
-          "h-7 px-2 rounded-md border bg-white text-xs text-ink w-full",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          error ? "border-warn" : "border-line"
-        )}
+        className={cn(inputClass(!!error, "xs"), "w-full")}
       />
       {error && <div className="text-2xs text-warn">{error}</div>}
     </div>
@@ -554,11 +540,7 @@ function DateTimeInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={label}
-        className={cn(
-          "h-7 px-2 rounded-md border bg-white text-xs text-ink w-full",
-          "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-          error ? "border-warn" : "border-line"
-        )}
+        className={cn(inputClass(!!error, "xs"), "w-full")}
       />
       {error && <div className="text-2xs text-warn">{error}</div>}
     </div>

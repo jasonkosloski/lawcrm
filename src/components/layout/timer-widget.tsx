@@ -60,6 +60,7 @@ import type {
   TimerMatterOption,
 } from "@/lib/queries/timer";
 import { StopTimerDialog } from "@/components/time-entries/stop-timer-dialog";
+import { inputClass } from "@/components/ui/field";
 
 const OPTIMISTIC_SESSION_ID = "optimistic";
 
@@ -281,11 +282,7 @@ export function TimerWidget({
             }}
             placeholder="What are you working on?"
             aria-label="Timer activity"
-            className={cn(
-              "h-9 px-2.5 rounded-md border border-input bg-white text-xs text-ink",
-              "placeholder:text-ink-5",
-              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
-            )}
+            className={cn(inputClass(false, "md"), "px-2.5 border-input placeholder:text-ink-5")}
           />
         </div>
       )}

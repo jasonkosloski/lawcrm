@@ -36,7 +36,7 @@ import {
   type RoleFormState,
 } from "@/lib/role-form";
 import type { FirmRoleRow } from "@/lib/queries/team";
-import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
+import { Field, FormErrorBanner, formErrorMessage, inputClass, textareaClass } from "@/components/ui/field";
 
 export function RoleRow({
   role,
@@ -205,12 +205,7 @@ function RoleEditForm({
             rows={2}
             maxLength={400}
             defaultValue={role.description ?? ""}
-            className={cn(
-              "px-2.5 py-1.5 rounded-md border bg-white text-xs text-ink",
-              "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-              "resize-y",
-              errs.description ? "border-warn" : "border-line"
-            )}
+            className={cn(textareaClass(!!errs.description), "resize-y")}
           />
         )}
       </Field>
