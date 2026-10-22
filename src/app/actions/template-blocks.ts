@@ -166,6 +166,17 @@ export async function deleteTemplateBlock(
     select: { name: true, key: true },
   });
   if (!existing) return { ok: false, error: "Block not found." };
+  const formats = await prisma.courtFormat.findMany({
+    where: { blocks: { some: { OR: [{ blockId: id }, { replacementBlockId: id }] } } },
+    select: { name: true },
+    orderBy: { name: "asc" },
+  });
+  if (formats.length > 0) {
+    return {
+      ok: false,
+      error: `This block is used by court format(s): ${formats.map((f) => f.name).join(", ")}. Remove it there first.`,
+    };
+  }
   const styleUse = await prisma.documentStyle.count({
     where: { OR: [{ letterheadBlockId: id }, { continuationBlockId: id }] },
   });

@@ -131,3 +131,71 @@ describe("deleteVenue / setVenueActive", () => {
     expect(all[0].matterCount).toBe(0);
   });
 });
+
+describe("venue court format and caption name", () => {
+  const mkFormat = (name: string, isActive = true) =>
+    prisma.courtFormat.create({ data: { name, isActive } });
+
+  test("create saves format and trimmed caption name", async () => {
+    const f = await mkFormat("CO District");
+    const res = await createVenue({
+      ...aurora,
+      courtFormatId: f.id,
+      captionName: "  Arapahoe County District Court ",
+    });
+    expect(res.ok).toBe(true);
+    const row = await prisma.venue.findFirstOrThrow();
+    expect(row).toMatchObject({
+      courtFormatId: f.id,
+      captionName: "Arapahoe County District Court",
+    });
+  });
+
+  test("blank caption becomes null, over 300 refused, unknown format refused", async () => {
+    await createVenue({ ...aurora, captionName: "   " });
+    expect((await prisma.venue.findFirstOrThrow()).captionName).toBeNull();
+    const long = await createVenue({ name: "X", state: "CO", captionName: "x".repeat(301) });
+    expect(long).toMatchObject({ ok: false, code: "invalid" });
+    const bad = await createVenue({ name: "Y", state: "CO", courtFormatId: "nope" });
+    expect(bad).toMatchObject({ ok: false, code: "invalid" });
+    expect(await prisma.venue.count()).toBe(1);
+  });
+
+  test("archived format accepted only when already the venue's format", async () => {
+    const archived = await mkFormat("Old", false);
+    const res = await createVenue({ ...aurora, courtFormatId: archived.id });
+    expect(res).toMatchObject({ ok: false, code: "invalid" });
+    const v = await prisma.venue.create({
+      data: { name: "Aurora", nameKey: "aurora", state: "CO", courtFormatId: archived.id },
+    });
+    const keep = await updateVenue(v.id, { ...aurora, courtFormatId: archived.id });
+    expect(keep.ok).toBe(true);
+    const other = await prisma.venue.create({
+      data: { name: "Other", nameKey: "other", state: "CO" },
+    });
+    const refused = await updateVenue(other.id, {
+      name: "Other",
+      state: "CO",
+      courtFormatId: archived.id,
+    });
+    expect(refused).toMatchObject({ ok: false, code: "invalid" });
+  });
+
+  test("update can clear the format", async () => {
+    const f = await mkFormat("CO District");
+    const v = await prisma.venue.create({
+      data: {
+        name: "Aurora",
+        nameKey: "aurora",
+        state: "CO",
+        courtFormatId: f.id,
+        captionName: "A",
+      },
+    });
+    await updateVenue(v.id, { ...aurora, courtFormatId: null, captionName: null });
+    expect(await prisma.venue.findUniqueOrThrow({ where: { id: v.id } })).toMatchObject({
+      courtFormatId: null,
+      captionName: null,
+    });
+  });
+});

@@ -220,3 +220,24 @@ describe("deleteTemplateBlock and the document style", () => {
     expect(await prisma.templateBlock.count({ where: { id: block.id } })).toBe(1);
   });
 });
+
+describe("deleteTemplateBlock court format protection", () => {
+  test("refused while a court format references the block on either side, before other checks", async () => {
+    const a = (await saveTemplateBlock(blockInput({ key: "blk_a", name: "A" }))) as { id: string };
+    const b = (await saveTemplateBlock(blockInput({ key: "blk_b", name: "B" }))) as { id: string };
+    const cf = await prisma.courtFormat.create({
+      data: {
+        name: "CO District",
+        blocks: { create: [{ blockId: a.id, replacementBlockId: b.id }] },
+      },
+    });
+    const firm = await prisma.firm.findFirstOrThrow();
+    await prisma.documentStyle.create({ data: { firmId: firm.id, letterheadBlockId: a.id } });
+    const msg = "This block is used by court format(s): CO District. Remove it there first.";
+    expect(await deleteTemplateBlock(a.id)).toEqual({ ok: false, error: msg });
+    expect(await deleteTemplateBlock(b.id)).toEqual({ ok: false, error: msg });
+    expect(await prisma.templateBlock.count()).toBeGreaterThanOrEqual(2);
+    await prisma.courtFormat.delete({ where: { id: cf.id } });
+    expect((await deleteTemplateBlock(b.id)).ok).toBe(true);
+  });
+});

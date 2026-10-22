@@ -18,7 +18,16 @@ import { logSettingsChange } from "@/lib/audit-entry";
 import type { VenueOption } from "@/lib/queries/venues";
 import { isForeignKeyViolation, isRecordNotFound, isUniqueViolation } from "@/lib/prisma-errors";
 
-export type VenueInput = { name: string; city?: string; county?: string; state: string };
+export type VenueInput = {
+  name: string;
+  city?: string;
+  county?: string;
+  state: string;
+  /** Court format applied to filings; undefined leaves it unchanged. */
+  courtFormatId?: string | null;
+  /** Name printed in the caption; undefined leaves it unchanged. */
+  captionName?: string | null;
+};
 
 type Invalid = { ok: false; code: "invalid"; errors: Record<string, string[]> };
 
@@ -27,7 +36,23 @@ const schema = z.object({
   city: z.string().trim().max(80, "City is too long (80 max).").optional(),
   county: z.string().trim().max(80, "County is too long (80 max).").optional(),
   state: z.string().trim().min(1, "State is required.").max(60, "State is too long (60 max)."),
+  courtFormatId: z.string().min(1).nullable().optional(),
+  captionName: z
+    .string()
+    .trim()
+    .max(300, "Caption name is too long (300 max).")
+    .nullable()
+    .optional(),
 });
+
+type VenueData = {
+  name: string;
+  city: string | null;
+  county: string | null;
+  state: string;
+  courtFormatId?: string | null;
+  captionName?: string | null;
+};
 
 const SELECT = {
   id: true,
@@ -38,11 +63,7 @@ const SELECT = {
   isActive: true,
 } as const;
 
-function parse(
-  input: VenueInput,
-):
-  | { ok: true; data: { name: string; city: string | null; county: string | null; state: string } }
-  | Invalid {
+function parse(input: VenueInput): { ok: true; data: VenueData } | Invalid {
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
     const errors: Record<string, string[]> = {};
@@ -54,8 +75,34 @@ function parse(
   const v = parsed.data;
   return {
     ok: true,
-    data: { name: v.name, city: v.city || null, county: v.county || null, state: v.state },
+    data: {
+      name: v.name,
+      city: v.city || null,
+      county: v.county || null,
+      state: v.state,
+      ...(v.courtFormatId !== undefined ? { courtFormatId: v.courtFormatId } : {}),
+      ...(v.captionName !== undefined ? { captionName: v.captionName?.trim() || null } : {}),
+    },
   };
+}
+
+/** The format must exist; an archived one is accepted only when it is
+ *  already this venue's format. */
+async function checkCourtFormat(
+  courtFormatId: string | null | undefined,
+  currentVenueFormatId: string | null,
+): Promise<Invalid | null> {
+  if (!courtFormatId) return null;
+  const format = await prisma.courtFormat.findUnique({
+    where: { id: courtFormatId },
+    select: { isActive: true },
+  });
+  const error = !format
+    ? "That court format no longer exists."
+    : !format.isActive && courtFormatId !== currentVenueFormatId
+      ? "That court format is archived."
+      : null;
+  return error ? { ok: false, code: "invalid", errors: { courtFormatId: [error] } } : null;
 }
 
 function revalidate() {
@@ -74,6 +121,8 @@ export async function createVenue(
   const userId = await requirePermission("venues.add");
   const p = parse(input);
   if (!p.ok) return p;
+  const bad = await checkCourtFormat(p.data.courtFormatId, null);
+  if (bad) return bad;
   const nameKey = p.data.name.toLowerCase();
   try {
     const venue = await prisma.venue.create({ data: { ...p.data, nameKey }, select: SELECT });
@@ -100,6 +149,13 @@ export async function updateVenue(
   const userId = await requirePermission("venues.edit");
   const p = parse(input);
   if (!p.ok) return p;
+  const current = await prisma.venue.findUnique({
+    where: { id },
+    select: { courtFormatId: true },
+  });
+  if (!current) return { ok: false, code: "notfound" };
+  const bad = await checkCourtFormat(p.data.courtFormatId, current.courtFormatId);
+  if (bad) return bad;
   const nameKey = p.data.name.toLowerCase();
   try {
     const venue = await prisma.venue.update({
