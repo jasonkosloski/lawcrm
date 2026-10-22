@@ -109,6 +109,9 @@ export const TABLES_IN_DELETE_ORDER = [
   // before users.
   "document_templates",
   "document_styles",
+  // Replacement rows reference blocks (Restrict): drop before template_blocks.
+  "court_format_blocks",
+  "court_formats",
   "template_blocks",
   // Matter membership
   "matter_team_members",

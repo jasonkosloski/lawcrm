@@ -487,6 +487,30 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
     ],
   },
   {
+    id: "court_formats",
+    label: "Court formats",
+    permissions: [
+      {
+        key: "court_formats.add",
+        label: "Add court formats",
+        description:
+          "Create court formats: per-court page setup (font, spacing, margins, paper size) and block replacements that venues apply to generated filings.",
+      },
+      {
+        key: "court_formats.edit",
+        label: "Edit court formats",
+        description:
+          "Change a court format's formatting and block replacements, and archive or restore it. Edits affect every future filing generated for venues using it.",
+      },
+      {
+        key: "court_formats.delete",
+        label: "Delete court formats",
+        description:
+          "Permanently remove a court format that no venue uses (archiving is under Edit court formats).",
+      },
+    ],
+  },
+  {
     id: "contacts",
     label: "Contacts",
     permissions: [

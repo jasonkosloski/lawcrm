@@ -539,18 +539,25 @@ model Matter {
 /// A court or forum a matter is venued in. Managed in Settings → Venues
 /// and addable inline from the matter form.
 model Venue {
-  id        String   @id @default(cuid())
-  name      String
+  id            String   @id @default(cuid())
+  name          String
   /// lower(trim(name)); case-insensitive uniqueness, includes archived rows
-  nameKey   String   @unique
-  city      String?
-  county    String?
-  state     String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  matters   Matter[]
+  nameKey       String   @unique
+  city          String?
+  county        String?
+  state         String
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  matters       Matter[]
+  /// Format applied to filings generated for matters in this venue.
+  courtFormatId String?
+  /// Name printed in the caption (matter.courtCaption); falls back to name.
+  captionName   String?
 
+  courtFormat CourtFormat? @relation(fields: [courtFormatId], references: [id], onDelete: SetNull)
+
+  @@index([courtFormatId])
   @@map("venues")
 }
 
@@ -2396,6 +2403,10 @@ model TemplateBlock {
   letterheadForStyles   DocumentStyle[] @relation("DocumentStyleLetterhead")
   continuationForStyles DocumentStyle[] @relation("DocumentStyleContinuation")
 
+  /// Court formats that replace this block / use it as the replacement.
+  courtFormatSources      CourtFormatBlock[] @relation("CourtFormatBlockSource")
+  courtFormatReplacements CourtFormatBlock[] @relation("CourtFormatBlockReplacement")
+
   @@map("template_blocks")
 }
 
@@ -2971,4 +2982,56 @@ model TranscriptPurge {
   attempts      Int      @default(0)
 
   @@map("transcript_purges")
+}
+
+/// Firm-defined court format: overrides the house style (null field = keep
+/// house value) and swaps blocks for filings in venues that pick it.
+model CourtFormat {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  /// state | federal | other
+  courtSystem    String   @default("state")
+  /// FONT_KEYS value; null = house style.
+  fontKey        String?
+  /// 20-28 half points.
+  fontSizeHalfPt Int?
+  /// single | 1.15 | 1.5 | double
+  lineSpacing    String?
+  /// 0-24 pt.
+  spaceAfterPt   Int?
+  /// 0.50-2.00 inches.
+  marginTopIn    Decimal? @db.Decimal(3, 2)
+  marginRightIn  Decimal? @db.Decimal(3, 2)
+  marginBottomIn Decimal? @db.Decimal(3, 2)
+  marginLeftIn   Decimal? @db.Decimal(3, 2)
+  /// none | bottom_center | bottom_right
+  pageNumbers    String?
+  /// letter | legal
+  paperSize      String   @default("letter")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  blocks CourtFormatBlock[]
+  venues Venue[]
+
+  @@map("court_formats")
+}
+
+/// One block swap in a court format: `blockId` renders as `replacementBlockId`.
+/// A block can be replaced once per format; self-replacement is refused in the action.
+model CourtFormatBlock {
+  id                 String @id @default(cuid())
+  courtFormatId      String
+  blockId            String
+  replacementBlockId String
+
+  courtFormat      CourtFormat   @relation(fields: [courtFormatId], references: [id], onDelete: Cascade)
+  block            TemplateBlock @relation("CourtFormatBlockSource", fields: [blockId], references: [id], onDelete: Restrict)
+  replacementBlock TemplateBlock @relation("CourtFormatBlockReplacement", fields: [replacementBlockId], references: [id], onDelete: Restrict)
+
+  @@unique([courtFormatId, blockId])
+  @@index([blockId])
+  @@index([replacementBlockId])
+  @@map("court_format_blocks")
 }
