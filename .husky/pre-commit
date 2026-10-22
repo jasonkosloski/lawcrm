@@ -2,7 +2,7 @@
 #   1. tsc — catch type errors before they hit the diff.
 #   2. eslint — `npm run lint`, zero warnings allowed.
 #      (1 + 2 are `npm run precommit`.)
-#   2b. prettier --check on staged files only (format-on-touch).
+#   2b. prettier --check on staged files (CI checks the whole repo).
 #   3. vitest, RELATED TESTS ONLY — `vitest related` runs just the test
 #      files whose import graph reaches a staged src/**/*.ts(x) file
 #      (deleted files excluded). Skipped entirely when no such file is
@@ -31,10 +31,8 @@
 # it a habit.
 npm run precommit || exit 1
 
-# Prettier, format-on-touch: every staged file must be formatted, but
-# the rest of the repo isn't (no big-bang reformat while other sessions
-# have edits in flight). Check, don't --write + re-add: re-adding would
-# stage another session's unstaged hunks in the same file.
+# Prettier on staged files. Check, don't --write + re-add: re-adding
+# would stage another session's unstaged hunks in the same file.
 staged_all=$(git diff --cached --name-only --diff-filter=ACMR || true)
 if [ -n "$staged_all" ]; then
   set -f

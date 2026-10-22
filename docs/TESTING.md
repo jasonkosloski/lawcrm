@@ -32,7 +32,7 @@ If you skip a test on a non-cosmetic change, say why in one line in the commit m
 `.husky/pre-commit` (header comment documents it):
 
 1. `npm run precommit` = `npm run typecheck` (`next typegen && tsc --noEmit`) + `npm run lint` (ESLint, `--max-warnings 0`).
-2. `prettier --check` on every staged file. Formatting is format-on-touch: the repo was never reformatted wholesale, so a file you edit must be formatted in full (`npm run format -- <files>`, or format-on-save from `lawcrm.code-workspace`). Keep that formatting in its own commit when it would bury a small change. ESLint's stylistic rules are off (`eslint-config-prettier`), so Prettier decides formatting.
+2. `prettier --check` on every staged file. Fix with `npm run format -- <files>`, or format-on-save from `lawcrm.code-workspace`. CI runs `prettier --check .` over the whole repo. ESLint's stylistic rules are off (`eslint-config-prettier`), so Prettier decides formatting.
 3. `npm run test:related -- <staged src .ts/.tsx files>` (`vitest related --run`): only test files whose import graph reaches a staged file. Skipped when no `src/` TypeScript is staged.
 4. Only when `prisma/schema.prisma` or `prisma/migrations/` is staged: `npm run check:migrations` (applies every migration to a scratch DB and diffs against `schema.prisma`, ADR-016).
 

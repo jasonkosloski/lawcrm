@@ -74,8 +74,8 @@ Rules that review rounds keep catching. Each links to its ADR.
 
 Every new feature ships with at least one test (Vitest, `*.test.ts(x)`
 beside the source). The pre-commit hook (`.husky/pre-commit`) runs
-typecheck, lint, `prettier --check` on staged files (format-on-touch:
-run `npm run format -- <files>` on what you edit), and only the tests
+typecheck, lint, `prettier --check` on staged files (fix with
+`npm run format -- <files>`), and only the tests
 related to staged `src/` files.
 Run the full `npm test` before pushing; CI runs it on every push. See
 **`docs/TESTING.md`** for the discipline.
