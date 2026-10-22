@@ -11,6 +11,7 @@ import {
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Button } from "@/components/ui/button";
 
 // ── Inline editors ─────────────────────────────────────────────────────
 
@@ -489,14 +490,10 @@ export function InlineTimeEditor({
       </div>
 
       <div className="flex items-center gap-2 mt-1">
-        <button
-          type="button"
-          onClick={save}
-          className="inline-flex items-center gap-1 text-2xs font-medium px-2 h-6 rounded-md bg-brand-700 text-white hover:bg-brand-900"
-        >
+        <Button size="xs" type="button" onClick={save}>
           <Check size={11} />
           Save
-        </button>
+        </Button>
         <button
           type="button"
           onClick={cancel}

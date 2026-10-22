@@ -131,24 +131,24 @@ export function SegmentEditor({
             >
               Use theirs
             </Button>
-            <button
+            <Button
+              size="xs"
               type="button"
               onClick={keepMine}
               disabled={pending}
-              className="h-7 rounded-md bg-brand-600 px-3 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
             >
               Keep mine and save
-            </button>
+            </Button>
           </>
         ) : (
-          <button
+          <Button
+            size="xs"
             type="button"
             onClick={save}
             disabled={pending}
-            className="h-7 rounded-md bg-brand-600 px-3 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
           >
             Save
-          </button>
+          </Button>
         )}
         <Button
           variant="ghost"

@@ -44,7 +44,6 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -298,18 +297,16 @@ export function InvoiceActionBar({
             </Button>
           )}
           {canRecordPayment && (
+            // Promote Apply-trust to primary when it's available — it's
+            // the more decisive one-click action, so Record payment
+            // becomes secondary in that case.
             <Button
-              variant="ghost"
+              variant={showApplyTrust ? "outline" : "default"}
               size="xs"
               type="button"
               onClick={() => setRecordOpen(true)}
               disabled={pending}
-              className={cn("text-2xs", // Promote Apply-trust to primary when it's available —
-                // it's the more decisive one-click action. Record payment
-                // becomes secondary in that case.
-                showApplyTrust
-                  ? "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700"
-                  : "bg-brand-700 text-white hover:bg-brand-900")}
+              className="text-2xs"
               title="Log a payment received against this invoice (check, ACH, cash, card, trust, etc.)"
             >
               <Receipt size={11} />

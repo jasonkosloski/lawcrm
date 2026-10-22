@@ -451,13 +451,14 @@ function PanelBody({
               Cancel
             </Button>
             {matterId && (
-              <Link
-                href={`/matters/${matterId}/${tab.slug}`}
-                onClick={onClose}
-                className="inline-flex items-center text-xs px-2.5 h-7 rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors"
+              <Button
+                size="xs"
+                render={
+                  <Link href={`/matters/${matterId}/${tab.slug}`} onClick={onClose} />
+                }
               >
                 Go to {tab.label}
-              </Link>
+              </Button>
             )}
           </footer>
         </>

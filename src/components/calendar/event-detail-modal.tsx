@@ -575,22 +575,16 @@ function EventDetailModalInner({
             </span>
           )}
           {event.matter && (
-            <Link
-              href={`/matters/${event.matter.id}`}
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors"
-            >
+            <Button size="xs" render={<Link href={`/matters/${event.matter.id}`} />}>
               Open matter
               <ArrowRight size={13} />
-            </Link>
+            </Button>
           )}
           {event.lead && (
-            <Link
-              href={`/intake/${event.lead.id}/events`}
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors"
-            >
+            <Button size="xs" render={<Link href={`/intake/${event.lead.id}/events`} />}>
               Open intake
               <ArrowRight size={13} />
-            </Link>
+            </Button>
           )}
         </footer>
       </div>
