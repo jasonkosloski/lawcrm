@@ -124,11 +124,15 @@ const flagSchema = z
       .max(500, "Keep the note under 500 characters"),
   })
   .superRefine((val, ctx) => {
-    // A quote rides WITH a page on PDFs (text selected on that page),
-    // so page + quote counts as one anchor; time + anything doesn't.
+    // A quote rides WITH a page on PDFs (text selected on that page)
+    // and WITH a time on audio/video (transcript text), so page +
+    // quote and time + quote each count as one anchor; time + page
+    // doesn't. A quote alone stays a "quote" anchor, which media
+    // documents refuse — it can't stand in for the time.
     const kinds = [
       val.timeSeconds !== undefined,
-      val.pageNumber !== undefined || val.quote !== undefined,
+      val.pageNumber !== undefined ||
+        (val.quote !== undefined && val.timeSeconds === undefined),
     ].filter(Boolean).length;
     if (kinds > 1) {
       ctx.addIssue({

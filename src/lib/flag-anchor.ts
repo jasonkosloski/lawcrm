@@ -6,7 +6,8 @@
  * `FlaggedMoment` and the fit check in
  * `src/app/actions/flagged-moments.ts`):
  *
- *   time  — `timeSeconds` (+ optional `endSeconds` span), audio/video
+ *   time  — `timeSeconds` (+ optional `endSeconds` span), audio/video —
+ *           optionally WITH a `quote` (selected transcript text)
  *   page  — `pageNumber` (1-based, + optional `endPageNumber` span),
  *           PDFs — optionally WITH a `quote`
  *           (text selected on that page in the built-in viewer; the
@@ -83,7 +84,8 @@ function quoteSnippet(quote: string): string {
  * Human label for a flag's anchor — the one notation shared by the
  * moments rail, the Evidence tab, and activity-log titles:
  *
- *   time  → "1:15" / "1:15–2:30"  (formatMediaSpan)
+ *   time  → "1:15" / "1:15–2:30"  (formatMediaSpan), + " “first 40 chars…”"
+ *           when the flag carries a transcript quote
  *   page  → "p. 12" / "pp. 12–13" (span), + " · “first 40 chars…”"
  *           when the flag carries a quote
  *   quote → "“first 40 chars…”"
@@ -92,7 +94,10 @@ function quoteSnippet(quote: string): string {
 export function flagAnchorLabel(flag: FlagAnchorFields): string {
   switch (flagAnchorKind(flag)) {
     case "time":
-      return formatMediaSpan(flag.timeSeconds as number, flag.endSeconds);
+    {
+      const span = formatMediaSpan(flag.timeSeconds as number, flag.endSeconds);
+      return flag.quote ? `${span} ${quoteSnippet(flag.quote)}` : span;
+    }
     case "page": {
       const pages =
         flag.endPageNumber != null && flag.endPageNumber > (flag.pageNumber as number)

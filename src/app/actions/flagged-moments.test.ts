@@ -254,12 +254,36 @@ describe("createFlaggedMoment — anchor × renderer fit", () => {
     expect(await prisma.flaggedMoment.count()).toBe(0);
   });
 
-  test("page + quote is PDF-only; time + quote is never valid", async () => {
+  test("page + quote is PDF-only; time + page is never valid", async () => {
     const onDocx = await createFlaggedMoment(docxDocId, { ...noteOnly, pageNumber: 2, quote: "x" });
     expect(onDocx.ok).toBe(false);
-    const timeQuote = await createFlaggedMoment(videoDocId, { ...noteOnly, timeSeconds: 5, quote: "x" });
-    expect(timeQuote.ok).toBe(false);
-    expect(timeQuote.error).toMatch(/at most one anchor/i);
+    const timePage = await createFlaggedMoment(videoDocId, { ...noteOnly, timeSeconds: 5, pageNumber: 2 });
+    expect(timePage.ok).toBe(false);
+    expect(timePage.error).toMatch(/at most one anchor/i);
+    expect(await prisma.flaggedMoment.count()).toBe(0);
+  });
+
+  test("a media flag stores time span + trimmed transcript quote", async () => {
+    const res = await createFlaggedMoment(videoDocId, {
+      ...noteOnly,
+      timeSeconds: 75,
+      endSeconds: 90,
+      quote: "  I never saw the light  ",
+    });
+    expect(res.ok).toBe(true);
+    const row = await prisma.flaggedMoment.findUnique({ where: { id: res.id! } });
+    expect(row).toMatchObject({
+      timeSeconds: 75,
+      endSeconds: 90,
+      quote: "I never saw the light",
+      pageNumber: null,
+    });
+  });
+
+  test("a quote alone never stands in for the time on a media document", async () => {
+    const res = await createFlaggedMoment(videoDocId, { ...noteOnly, quote: "some text" });
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/timestamp/i);
     expect(await prisma.flaggedMoment.count()).toBe(0);
   });
 
@@ -500,6 +524,23 @@ describe("updateFlaggedMoment — anchor kind lock", () => {
     expect(res.ok).toBe(true);
     const row = await prisma.flaggedMoment.findUnique({ where: { id: flagId } });
     expect(row?.quote).toBe("the corrected passage");
+  });
+
+  test("a media flag's quote can change without a kind switch (time → time)", async () => {
+    const { flagId } = await seedFlaggedMoment({
+      documentId: videoDocId,
+      flaggedById: userId,
+      timeSeconds: 10,
+      quote: "old words",
+    });
+    const res = await updateFlaggedMoment(flagId, {
+      ...noteOnly,
+      timeSeconds: 10,
+      quote: "new words",
+    });
+    expect(res.ok).toBe(true);
+    const row = await prisma.flaggedMoment.findUnique({ where: { id: flagId } });
+    expect(row).toMatchObject({ timeSeconds: 10, quote: "new words" });
   });
 
   test.each([

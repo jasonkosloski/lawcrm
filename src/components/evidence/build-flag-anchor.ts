@@ -48,8 +48,11 @@ export function buildFlagAnchor(
       if (timeSeconds === null) {
         return { ok: false, error: "Start time must be a clock time like 1:15" };
       }
+      // Transcript text selected for this moment rides with its time.
+      const mediaQuote = text.quoteText.trim().slice(0, MAX_QUOTE_CHARS);
+      const withQuote = mediaQuote ? { quote: mediaQuote } : {};
       if (text.endText.trim() === "") {
-        return { ok: true, anchor: { timeSeconds } };
+        return { ok: true, anchor: { timeSeconds, ...withQuote } };
       }
       const endSeconds = parseMediaTime(text.endText);
       if (endSeconds === null) {
@@ -61,7 +64,7 @@ export function buildFlagAnchor(
       if (endSeconds <= timeSeconds) {
         return { ok: false, error: "Span end must be after the start time" };
       }
-      return { ok: true, anchor: { timeSeconds, endSeconds } };
+      return { ok: true, anchor: { timeSeconds, endSeconds, ...withQuote } };
     }
     case "page": {
       const trimmed = text.pageText.trim();

@@ -36,6 +36,12 @@ describe("flagAnchorKind", () => {
 });
 
 describe("flagAnchorLabel", () => {
+  test("a media flag with a quote shows both parts", () => {
+    expect(
+      flagAnchorLabel({ timeSeconds: 75, endSeconds: 150, quote: "I never saw it" })
+    ).toBe("1:15–2:30 “I never saw it”");
+  });
+
   test("time anchors use the media clock notation", () => {
     expect(flagAnchorLabel({ timeSeconds: 75 })).toBe("1:15");
     expect(flagAnchorLabel({ timeSeconds: 42, endSeconds: 65 })).toBe(

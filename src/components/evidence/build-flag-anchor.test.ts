@@ -17,6 +17,32 @@ const text = (patch: Partial<FlagAnchorText>): FlagAnchorText => ({
   ...patch,
 });
 
+describe("buildFlagAnchor — time + transcript quote", () => {
+  test("a selected transcript passage rides with the span, trimmed and capped", () => {
+    expect(
+      buildFlagAnchor(
+        "time",
+        text({ timeText: "1:15", endText: "2:30", quoteText: "  red light " }),
+        false
+      )
+    ).toEqual({
+      ok: true,
+      anchor: { timeSeconds: 75, endSeconds: 150, quote: "red light" },
+    });
+    const res = buildFlagAnchor(
+      "time",
+      text({ timeText: "1:15", quoteText: "x".repeat(MAX_QUOTE_CHARS + 9) }),
+      false
+    );
+    expect(res.ok && res.anchor.quote).toHaveLength(MAX_QUOTE_CHARS);
+  });
+
+  test("a quote never stands in for the time", () => {
+    const res = buildFlagAnchor("time", text({ timeText: "", quoteText: "red light" }), false);
+    expect(res.ok).toBe(false);
+  });
+});
+
 describe("buildFlagAnchor — time", () => {
   test("point moment", () => {
     expect(buildFlagAnchor("time", text({ timeText: "1:15" }), false)).toEqual({
