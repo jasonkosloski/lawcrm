@@ -189,9 +189,26 @@ const DOCUMENT_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = 
   img: ["src", "alt"],
 };
 
+// Template converter output (src/lib/templates/to-html.ts) also needs
+// <mark data-missing>, <hr data-page-break> and a text-align style on
+// blocks. Added here on DOCUMENT_OPTIONS only, so the email profile
+// (which spreads the constants above) is not widened.
+const TEMPLATE_ALIGN_TAGS = ["p", "h1", "h2", "h3", "td", "th"];
+
 const DOCUMENT_OPTIONS: sanitizeHtml.IOptions = {
-  allowedTags: DOCUMENT_ALLOWED_TAGS,
-  allowedAttributes: DOCUMENT_ALLOWED_ATTRIBUTES,
+  allowedTags: [...DOCUMENT_ALLOWED_TAGS, "mark"],
+  allowedAttributes: {
+    ...DOCUMENT_ALLOWED_ATTRIBUTES,
+    ...Object.fromEntries(
+      TEMPLATE_ALIGN_TAGS.map((tag) => [
+        tag,
+        [...((DOCUMENT_ALLOWED_ATTRIBUTES as Record<string, string[]>)[tag] ?? []), "style"],
+      ]),
+    ),
+    mark: ["data-missing"],
+    hr: ["data-page-break"],
+  },
+  allowedStyles: { "*": { "text-align": [/^(left|right|center|justify)$/] } },
   allowedSchemes: ALLOWED_SCHEMES,
   // Images: data URIs only (mammoth inlines embedded media). No
   // remote fetches from inside a rendered document.

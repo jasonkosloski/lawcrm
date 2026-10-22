@@ -483,3 +483,18 @@ describe("sanitizeEmailHtml - head/title text does not leak (F203)", () => {
     ).toBe("<div>Body</div>");
   });
 });
+
+describe("sanitizeDocumentHtml — template converter output", () => {
+  test("keeps mark[data-missing], hr[data-page-break] and text-align on blocks", () => {
+    const html = '<p style="text-align:center"><mark data-missing>x</mark></p><hr data-page-break>';
+    expect(sanitizeDocumentHtml(html)).toBe(
+      '<p style="text-align:center"><mark data-missing>x</mark></p><hr data-page-break />',
+    );
+  });
+  test("still strips other styles and data attributes", () => {
+    const out = sanitizeDocumentHtml(
+      '<p style="position:fixed;text-align:left" data-x="1">a</p><span style="color:red">b</span>',
+    );
+    expect(out).toBe('<p style="text-align:left">a</p><span>b</span>');
+  });
+});

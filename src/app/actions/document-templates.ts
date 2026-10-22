@@ -46,7 +46,12 @@ import { deleteFile, storeFile } from "@/lib/file-storage";
 import { toUserMessage } from "@/lib/user-facing-error";
 import { formatDate } from "@/lib/format-date";
 import { resolveRecordsRoleFolder } from "@/lib/records-requests/folder";
-import { composeCityStateZip, mergeTemplate, type MergeContext } from "@/lib/template-merge";
+import { mergeTemplate, type MergeContext } from "@/lib/template-merge";
+import {
+  composeContactAddress,
+  loadRecordsRequest,
+  type LoadedRecordsRequest,
+} from "@/lib/templates/load-data";
 import {
   MAX_TEMPLATE_BODY,
   MAX_TEMPLATE_DESCRIPTION,
@@ -253,55 +258,7 @@ export async function deleteDocumentTemplate(
 
 // ── Generation ─────────────────────────────────────────────────────────
 
-/** Compose a contact's single-line mailing address. */
-function composeContactAddress(c: {
-  address: string | null;
-  city: string | null;
-  state: string | null;
-  zip: string | null;
-}): string | null {
-  return (
-    [c.address, composeCityStateZip(c.city, c.state, c.zip)].filter(Boolean).join(", ") || null
-  );
-}
-
 const REQUEST_NOT_FOUND = "Records request not found.";
-
-const recordsRequestSelect = {
-  id: true,
-  matterId: true,
-  leadId: true,
-  subject: true,
-  description: true,
-  adHocTypeName: true,
-  dateRangeStart: true,
-  dateRangeEnd: true,
-  responseDueDate: true,
-  sentAt: true,
-  type: { select: { name: true } },
-  custodian: {
-    select: {
-      name: true,
-      organization: true,
-      email: true,
-      phone: true,
-      address: true,
-      city: true,
-      state: true,
-      zip: true,
-    },
-  },
-} as const;
-
-type LoadedRecordsRequest = NonNullable<Awaited<ReturnType<typeof loadRecordsRequest>>>;
-
-/** The request, only if it belongs to `scope` (never trust a bare id). */
-function loadRecordsRequest(scope: RecordScope, id: string) {
-  return prisma.recordsRequest.findFirst({
-    where: { id, ...scopeWhere(scope) },
-    select: recordsRequestSelect,
-  });
-}
 
 /** Build the real MergeContext for a record scope. Matter: matter +
  *  client contact. Lead: matter fields are all null (name = the lead's
