@@ -16,6 +16,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getEmailSignature } from "@/lib/email-signature";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { SENDABLE_EMAIL_STATUSES } from "@/lib/email-send-status";
@@ -38,7 +39,7 @@ export async function ComposeEmailLauncher({
 
   const userId = await getCurrentUserId();
   // Record options load only past the send gate.
-  const [accounts, matters, leads, canUpload] = await Promise.all([
+  const [accounts, matters, leads, canUpload, signature] = await Promise.all([
     prisma.emailAccount.findMany({
       where: {
         userId,
@@ -51,6 +52,7 @@ export async function ComposeEmailLauncher({
     getFilingMatterOptions(),
     getFilingLeadOptions(),
     currentUserHasPermission("documents.upload"),
+    getEmailSignature(userId),
   ]);
 
   return (
@@ -61,6 +63,7 @@ export async function ComposeEmailLauncher({
       initialScope={initialScope}
       canUpload={canUpload}
       storageDriver={activeStorageDriver()}
+      signature={signature}
     />
   );
 }

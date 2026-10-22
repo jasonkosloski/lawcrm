@@ -11,3 +11,6 @@ export type ProfileFormState = {
 };
 
 export const profileInitialState: ProfileFormState = { status: "idle" };
+
+/** Result of `updateEmailSignatureAction` (Settings → Profile). */
+export type EmailSignatureResult = { ok: true } | { ok: false; error: string };

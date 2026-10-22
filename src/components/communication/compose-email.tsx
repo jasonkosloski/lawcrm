@@ -16,8 +16,8 @@
  * server action sanitizes it before the MIME builder) plus an
  * `htmlToText` downgrade as `bodyText`. Attachments are documents of
  * the chosen record (SendAttachmentsField); changing the record clears
- * them. Per-user signatures are a documented follow-up —
- * `getEmailSignature()` is the seam.
+ * them. The body starts with the user's signature (`signature`, loaded
+ * by the launcher) and resets to it after a send.
  */
 
 "use client";
@@ -42,7 +42,7 @@ import {
 import { RichTextEditor } from "@/components/shared/rich-text-editor-lazy";
 import { parseAddressList } from "@/lib/google/mime";
 import { htmlToText } from "@/lib/html-to-text";
-import { getEmailSignature } from "@/lib/email-signature";
+import { isBodyEmpty } from "@/lib/email-signature-body";
 import { sendEmail } from "@/app/actions/email-send";
 import { notifySuccess } from "@/lib/feedback";
 import type { RecordScope } from "@/lib/record-scope";
@@ -73,7 +73,10 @@ export function ComposeEmailButton({
   initialScope,
   canUpload = false,
   storageDriver,
+  signature = null,
 }: {
+  /** Composer-ready signature HTML (getEmailSignature); null = none. */
+  signature?: string | null;
   /** `documents.upload` - offers "Upload new…" in the attach picker. */
   canUpload?: boolean;
   storageDriver?: StorageDriver;
@@ -98,7 +101,7 @@ export function ComposeEmailButton({
   const [to, setTo] = useState("");
   const [cc, setCc] = useState("");
   const [subject, setSubject] = useState("");
-  const [body, setBody] = useState(() => getEmailSignature() ?? "");
+  const [body, setBody] = useState(signature ?? "");
   const [scope, setScope] = useState<RecordScope | null>(
     initialScope ?? null,
   );
@@ -133,7 +136,7 @@ export function ComposeEmailButton({
     setTo("");
     setCc("");
     setSubject("");
-    setBody(getEmailSignature() ?? "");
+    setBody(signature ?? "");
     setScope(initialScope ?? null);
     setChangingRecord(false);
     setAttachments([]);
@@ -387,7 +390,7 @@ export function ComposeEmailButton({
                   uploading ||
                   !scope ||
                   !to.trim() ||
-                  !bodyText.trim()
+                  isBodyEmpty(body, signature)
                 }
               >
                 {isPending ? "Sending…" : "Send"}

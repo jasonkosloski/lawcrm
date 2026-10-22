@@ -26,7 +26,10 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import { updateProfileAction } from "@/app/actions/profile";
+import {
+  updateEmailSignatureAction,
+  updateProfileAction,
+} from "@/app/actions/profile";
 import { profileInitialState } from "@/lib/profile-form";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
@@ -138,5 +141,65 @@ describe("updateProfileAction — self-only write", () => {
       where: { id: other.userId },
     });
     expect(otherRow.name).toBe("Other"); // untouched
+  });
+});
+
+describe("updateEmailSignatureAction", () => {
+  const stored = async (id = userId) =>
+    (await prisma.user.findUniqueOrThrow({ where: { id } })).emailSignature;
+
+  test("saves sanitized HTML: scripts, handlers and javascript: links are stripped", async () => {
+    const res = await updateEmailSignatureAction(
+      '<p><strong>Jane Doe</strong><script>alert(1)</script></p>' +
+        '<p><a href="javascript:alert(1)" onclick="x()">bad</a> ' +
+        '<a href="https://firm.example">Firm</a></p>'
+    );
+    expect(res).toEqual({ ok: true });
+    const sig = await stored();
+    expect(sig).toContain("<strong>Jane Doe</strong>");
+    expect(sig).toContain('href="https://firm.example"');
+    expect(sig).not.toMatch(/script|javascript:|onclick/);
+  });
+
+  test("an empty editor clears the signature", async () => {
+    await updateEmailSignatureAction("<p>Jane</p>");
+    expect(await stored()).toBe("<p>Jane</p>");
+    await updateEmailSignatureAction("<p></p>");
+    expect(await stored()).toBeNull();
+  });
+
+  test("refuses an over-long signature and leaves the old one", async () => {
+    await updateEmailSignatureAction("<p>Jane</p>");
+    const res = await updateEmailSignatureAction(
+      `<p>${"x".repeat(10_001)}</p>`
+    );
+    expect(res.ok).toBe(false);
+    expect(await stored()).toBe("<p>Jane</p>");
+  });
+
+  test("the length cap applies after sanitizing", async () => {
+    const bloated = `<p><span ${'data-x="y" '.repeat(2_000)}>Jane</span></p>`;
+    expect(bloated.length).toBeGreaterThan(10_000);
+    expect(await updateEmailSignatureAction(bloated)).toEqual({ ok: true });
+    expect(await stored()).toBe("<p><span>Jane</span></p>");
+  });
+
+  test("logs the change to the audit trail", async () => {
+    await updateEmailSignatureAction("<p>Jane</p>");
+    await updateEmailSignatureAction("<p></p>");
+    const rows = await prisma.activityLog.findMany({
+      where: { userId, type: "settings" },
+    });
+    expect(rows.map((r) => r.title).sort()).toEqual([
+      "Email signature removed",
+      "Email signature updated",
+    ]);
+  });
+
+  test("writes only the session user's row", async () => {
+    const other = await seedUser({ firmId, name: "Other", email: "o@x.com" });
+    await updateEmailSignatureAction("<p>Mine</p>");
+    expect(await stored()).toBe("<p>Mine</p>");
+    expect(await stored(other.userId)).toBeNull();
   });
 });

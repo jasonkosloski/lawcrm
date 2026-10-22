@@ -86,6 +86,9 @@ model User {
   /// publicly-visible-in-full unless overridden per-event. Set
   /// from /settings/profile.
   defaultEventVisibility    String                   @default("default") /// default | show_details
+  /// Email signature HTML, sanitized with the note profile on save AND
+  /// on read (src/lib/email-signature.ts). Null = no signature.
+  emailSignature            String?
   isActive                  Boolean                  @default(true)
   /// FK to the firm this user belongs to. Nullable in the schema
   /// only because SQLite can't add a non-null column without a

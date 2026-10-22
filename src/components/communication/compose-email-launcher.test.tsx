@@ -23,6 +23,9 @@ vi.mock("@/lib/queries/communication", () => ({
   getFilingMatterOptions: vi.fn().mockResolvedValue([{ id: "m1" }]),
   getFilingLeadOptions: vi.fn().mockResolvedValue([{ id: "l1" }]),
 }));
+vi.mock("@/lib/email-signature", () => ({
+  getEmailSignature: vi.fn(async () => "<p>SIG</p>"),
+}));
 vi.mock("./compose-email", () => ({ ComposeEmailButton: () => null }));
 
 import { prisma } from "@/lib/prisma";
@@ -60,6 +63,7 @@ describe("ComposeEmailLauncher", () => {
     expect(el.props.matters).toEqual([{ id: "m1" }]);
     expect(el.props.leads).toEqual([{ id: "l1" }]);
     expect(el.props.initialScope).toEqual(scope);
+    expect(el.props.signature).toBe("<p>SIG</p>");
   });
 
   test("lists only the caller's gmail accounts in a sendable status", async () => {

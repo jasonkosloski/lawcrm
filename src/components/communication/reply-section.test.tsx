@@ -26,6 +26,9 @@ vi.mock("@/lib/current-user", () => ({
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
+vi.mock("@/lib/email-signature", () => ({
+  getEmailSignature: vi.fn(async () => "<p>SIG</p>"),
+}));
 vi.mock("./reply-composer", () => ({
   ReplyComposer: () => null,
 }));
@@ -73,6 +76,7 @@ describe("ReplySection", () => {
     })) as { props: { needsRecord: boolean; canFile: boolean } };
     expect(el.props.needsRecord).toBe(true);
     expect(el.props.canFile).toBe(false);
+    expect((el.props as { signature?: string }).signature).toBe("<p>SIG</p>");
     const filed = (await ReplySection({
       ...PROPS,
       thread: { ...thread("t"), matter: { id: "m" } } as unknown as ThreadDetail,

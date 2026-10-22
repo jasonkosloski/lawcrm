@@ -74,6 +74,7 @@ function renderComposer(over?: {
   replyAll?: ReplyDefaults;
   needsRecord?: boolean;
   canFile?: boolean;
+  signature?: string | null;
 }) {
   return render(
     <ReplyComposer
@@ -85,6 +86,7 @@ function renderComposer(over?: {
       canFile={over?.canFile ?? true}
       matters={[{ id: "m1", name: "Smith v. Jones" } as never]}
       leads={[]}
+      signature={over?.signature}
     />
   );
 }
@@ -454,5 +456,43 @@ describe("ReplyComposer - unfiled thread", () => {
       screen.getByText("Ask someone who can file email to file this thread first.")
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^send$/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("ReplyComposer — signature", () => {
+  const SIG = "<p></p><p>-- </p><p>Jane Doe</p>";
+
+  test("Send stays disabled until the user writes more than the signature", async () => {
+    const user = setupUser();
+    renderComposer({ signature: SIG });
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    const send = screen.getByRole("button", { name: /^send$/i });
+    expect(send).toBeDisabled();
+    await user.type(bodyField(), "x");
+    expect(send).toBeEnabled();
+  });
+
+  test("the body starts with the signature and resets to it after a send", async () => {
+    const user = setupUser();
+    mockedReply.mockResolvedValue({ ok: true, threadId: "t1" });
+    renderComposer({ signature: SIG });
+
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    expect(await screen.findByDisplayValue(SIG)).toBeInTheDocument();
+
+    await user.clear(bodyField());
+    await user.type(bodyField(), "Thanks!");
+    await user.click(screen.getByRole("button", { name: /^send$/i }));
+    await waitFor(() => expect(mockedReply).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    expect(await screen.findByDisplayValue(SIG)).toBeInTheDocument();
+  });
+
+  test("no signature: the body starts empty", async () => {
+    const user = setupUser();
+    renderComposer();
+    await user.click(screen.getByRole("button", { name: /^reply$/i }));
+    expect((await waitFor(() => bodyField())).value).toBe("");
   });
 });

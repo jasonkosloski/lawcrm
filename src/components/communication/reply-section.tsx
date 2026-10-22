@@ -18,6 +18,7 @@
 import Link from "next/link";
 import { TriangleAlert } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { getEmailSignature } from "@/lib/email-signature";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { deriveReplyRecipients } from "@/lib/google/mime";
@@ -83,7 +84,10 @@ export async function ReplySection({
   }));
   const reply = deriveReplyRecipients(source, row.account.emailAddress, false);
   const replyAll = deriveReplyRecipients(source, row.account.emailAddress, true);
-  const canUpload = await currentUserHasPermission("documents.upload");
+  const [canUpload, signature] = await Promise.all([
+    currentUserHasPermission("documents.upload"),
+    getEmailSignature(userId),
+  ]);
   const recordScope = thread.matter
     ? ({ kind: "matter", matterId: thread.matter.id } as const)
     : thread.lead
@@ -107,6 +111,7 @@ export async function ReplySection({
       canFile={canFile}
       matters={matters}
       leads={leads}
+      signature={signature}
     />
   );
 }

@@ -23,8 +23,15 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import {
   profileInitialState,
+  type EmailSignatureResult,
   type ProfileFormState,
 } from "@/lib/profile-form";
+import {
+  EMAIL_SIGNATURE_MAX_INPUT_LENGTH,
+  EMAIL_SIGNATURE_MAX_LENGTH,
+  normalizeEmailSignature,
+} from "@/lib/email-signature";
+import { logAuditEntry } from "@/lib/audit-entry";
 
 const profileSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
@@ -115,4 +122,40 @@ export async function updateProfileAction(
   // needing a manual refresh.
   revalidatePath("/calendar");
   return { ...profileInitialState, status: "ok" };
+}
+
+/** Save the caller's email signature. Same self-edit model as the
+ *  profile: the row comes from the session, never the client. The HTML
+ *  is sanitized here (note profile) and an empty editor clears it. */
+export async function updateEmailSignatureAction(
+  html: string
+): Promise<EmailSignatureResult> {
+  const userId = await getCurrentUserId();
+  if (typeof html !== "string") {
+    return { ok: false, error: "Invalid signature." };
+  }
+  if (html.length > EMAIL_SIGNATURE_MAX_INPUT_LENGTH) {
+    return { ok: false, error: "Signature is too long." };
+  }
+  const signature = normalizeEmailSignature(html);
+  if (signature && signature.length > EMAIL_SIGNATURE_MAX_LENGTH) {
+    return { ok: false, error: "Signature is too long." };
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { emailSignature: signature },
+  });
+  await logAuditEntry({
+    matterId: null,
+    userId,
+    type: "settings",
+    source: "Settings",
+    title: signature ? "Email signature updated" : "Email signature removed",
+  });
+
+  revalidatePath("/settings/profile");
+  // Composers on the inbox, matter and lead pages read the signature.
+  revalidatePath("/", "layout");
+  return { ok: true };
 }

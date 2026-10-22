@@ -38,7 +38,7 @@ import { TextField } from "@/components/matters/captures/primary-fields";
 import { RichTextEditor } from "@/components/shared/rich-text-editor-lazy";
 import { parseAddressList } from "@/lib/google/mime";
 import { htmlToText } from "@/lib/html-to-text";
-import { getEmailSignature } from "@/lib/email-signature";
+import { isBodyEmpty } from "@/lib/email-signature-body";
 import { replyToThread } from "@/app/actions/email-send";
 import { REPLY_NEEDS_FILER_ERROR } from "@/lib/email-send-status";
 import { notifySuccess } from "@/lib/feedback";
@@ -81,8 +81,11 @@ export function ReplyComposer({
   storageDriver,
   matters,
   leads,
+  signature = null,
 }: {
   threadId: string;
+  /** Composer-ready signature HTML (getEmailSignature); null = none. */
+  signature?: string | null;
   /** The mailbox this reply sends from — display only. */
   accountEmail: string;
   /** Server-derived defaults for each mode (deriveReplyRecipients). */
@@ -107,7 +110,7 @@ export function ReplyComposer({
   const [ccInput, setCcInput] = useState("");
   // Editor HTML — survives collapse/mode switches (the editor
   // re-mounts from it) and only resets on a successful send.
-  const [body, setBody] = useState(() => getEmailSignature() ?? "");
+  const [body, setBody] = useState(signature ?? "");
   const [scope, setScope] = useState<RecordScope | null>(null);
   const [attachments, setAttachments] = useState<AttachableDocument[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -202,7 +205,7 @@ export function ReplyComposer({
         });
         if (result.ok) {
           if (result.notice) notifySuccess(result.notice);
-          setBody(getEmailSignature() ?? "");
+          setBody(signature ?? "");
           setAttachments([]);
           setMode(null);
           setEditing(false);
@@ -400,7 +403,7 @@ export function ReplyComposer({
                 disabled={
                   isPending ||
                   uploading ||
-                  !bodyText.trim() ||
+                  isBodyEmpty(body, signature) ||
                   (needsRecord && !scope)
                 }
               >
