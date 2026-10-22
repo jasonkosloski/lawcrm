@@ -34,7 +34,7 @@ Related: [ADR-049](../decisions/049-restricted-intake-is-an-opt-in-wall-carried-
 ## Notes
 
 - Scope pattern: lead-scoped records use "exactly one of (matterId, leadId)" (tasks/events: at most one) and a `RecordScope`; revalidation via `scopePaths(scope, ...)`. All lead tabs refuse writes on converted leads and carry their records forward in `convertLeadToMatter`.
-- Template generation on a lead: `resolveMergeContext` accepts a lead; `client.*` comes from the lead's contact, `matter.*` fields resolve to null and render as the engine's visible "[… — not on file]" placeholder (reported missing); `firm.*`, `user.*`, `today` unchanged.
+- Template generation on a lead: templates with `appliesTo` lead or both generate a `.docx` from the lead; `lead.*` and `client.*` (the lead's contact, falling back to its own name/email/phone) resolve, matter-only fields are out of scope, and missing data renders a visible "[… — not on file]" run (reported). See [documents](documents.md).
 - On lead documents, matter-only links (evidence links on flags) are hidden. Every reader of `Document.matterId` / `DocumentFolder.matterId` must tolerate null (search, `CHILD_RESOLVERS` in `matter-access.ts`, email-attachment and copy paths, flagged-moment queries).
 - Email attachments, "Copy to…", flags and delete reference-counting work unchanged on lead documents; copy targets must be in the same scope.
 - `matter-access-guards.test.ts` allowlist entries only where an action genuinely has no matter.

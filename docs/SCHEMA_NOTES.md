@@ -11,7 +11,7 @@ Rationale, invariants, and conventions for the Prisma schema. The models, column
 3. **No soft-delete pattern by default.** Where history matters, the model opts in (`MatterTeamMember.removedAt`, `Contact.mergedIntoId`/`isActive`, `DocumentTemplate.isActive`). If compliance requires more, add `deletedAt` per model.
 4. **Timestamps:** every model has `createdAt`; most have `updatedAt`. `ActivityLog` is append-only (no `updatedAt`).
 5. **Free-string enums** (`category`, `source`, `type`, `kind`, invoice `status`) are deliberate: adding a value is data/config, not a migration. True Postgres enums are used only where the set is closed (`SolPeriodUnit`, `MatterVisibility`, `RecordsPeriodUnit`).
-6. **Keep catalogs in code, not data**: permission keys (`src/lib/permissions.ts`), merge fields (`src/lib/template-merge.ts`), flag categories (`src/lib/constants/flag-category.ts`). Adding one is a code change.
+6. **Keep catalogs in code, not data**: permission keys (`src/lib/permissions.ts`), template fields (`src/lib/templates/catalog.ts`), flag categories (`src/lib/constants/flag-category.ts`). Adding one is a code change.
 7. **App-enforced invariants are deliberate** where a DB constraint can't express them (see below). Enforce them in the action layer and pure helpers, and add a test.
 
 ---
