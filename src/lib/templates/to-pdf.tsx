@@ -40,9 +40,11 @@ import {
   columnFractions,
   fitColumnWidths,
   spannedWidth,
+  splitLayout,
   tableGrid,
   verticalAlignOf,
   type GridCell,
+  type Layout,
 } from "./table-layout";
 
 const FALLBACK_FAMILY = "Liberation Sans";
@@ -317,13 +319,20 @@ function naturalWidth(c: ResolvedTableCell, ctx: Ctx): number {
   return widest(c.content, 0) + 2 * CELL_PAD_PT + 2 * BORDER_PT.thick + 1;
 }
 
+/** Bands of up to this many rows (a caption, a merged block) never
+ *  split across pages; taller ones may, rather than overflow a page. */
+const KEEP_TOGETHER_ROWS = 10;
+
 const VALIGN = { top: "flex-start", middle: "center", bottom: "flex-end" } as const;
 
 /**
- * Each cell draws its bottom and right rule; the first row also draws
- * the top and a row's first cell the left, so every edge is drawn once
- * and a table split across pages keeps its bottom line on each page.
- * `textWidth` is the width the table sits in (narrower in a list or cell).
+ * Drawn from `splitLayout`: stacked bands (each kept on one page) of
+ * side-by-side pieces that stretch to one height, so a cell spanning
+ * rows fills its rows. Pieces stacked beside a taller one share the
+ * extra height. Each cell draws its bottom and right rule; the top row
+ * also draws the top and the first column the left, so every edge is
+ * drawn once and a table split across pages keeps its bottom line on
+ * each page. `textWidth` is the width the table sits in.
  */
 function table(key: number, t: ResolvedTable, ctx: Ctx) {
   const grid = tableGrid(t);
@@ -331,21 +340,52 @@ function table(key: number, t: ResolvedTable, ctx: Ctx) {
     t.attrs?.width === "fit"
       ? fitColumnWidths(grid, (c) => naturalWidth(c, ctx), PT_PER_PX, ctx.textWidth)
       : columnFractions(grid).map((f) => f * ctx.textWidth);
+  // Saved content always splits (the schema checks); anything else falls
+  // back to plain rows: a row-spanning cell draws in its first row only,
+  // with blank space under it so later cells keep their columns.
+  const layout: Layout<GridCell> = splitLayout(grid.rows.flat(), grid.height, grid.cols) ?? {
+    kind: "rows",
+    box: { row: 0, col: 0, rowSpan: grid.height, span: grid.cols },
+    children: grid.owner.map((cells, row) => ({
+      kind: "cols",
+      box: { row, col: 0, rowSpan: 1, span: grid.cols },
+      children: cells.flatMap((g, col): Layout<GridCell>[] => {
+        if (g.col !== col) return [];
+        const box = { row, col, rowSpan: 1, span: g.span };
+        return [
+          g.row === row ? { kind: "cell", box: { ...g, rowSpan: 1 } } : { kind: "empty", box },
+        ];
+      }),
+    })),
+  };
+  const draw = (n: Layout<GridCell>, k: number, parent: "rows" | "cols"): ReactElement => {
+    const fill = parent === "rows" ? { flexGrow: 1 } : {};
+    if (n.kind === "cell") return cell(n.box, k, widths, fill, ctx);
+    const width = spannedWidth(n.box, widths);
+    if (n.kind === "empty") return <View key={k} style={{ width, ...fill }} />;
+    return (
+      <View key={k} style={{ width, flexDirection: n.kind === "rows" ? "column" : "row", ...fill }}>
+        {n.children.map((c, i) => draw(c, i, n.kind as "rows" | "cols"))}
+      </View>
+    );
+  };
+  const bands = layout.kind === "rows" ? layout.children : [layout];
   return (
     <View
       key={key}
       style={{ marginBottom: ctx.style.spaceAfterPt, width: widths.reduce((a, b) => a + b, 0) }}
     >
-      {grid.rows.map((r, j) => (
-        <View key={j} style={{ flexDirection: "row" }} wrap={false}>
-          {r.map((g, k) => cell(g, k, widths, j === 0, ctx))}
+      {bands.map((band, j) => (
+        // A band stays on one page unless it is so tall it may not fit.
+        <View key={j} wrap={band.box.rowSpan > KEEP_TOGETHER_ROWS} style={{ flexDirection: "row" }}>
+          {draw(band, 0, "cols")}
         </View>
       ))}
     </View>
   );
 }
 
-function cell(g: GridCell, key: number, widths: number[], firstRow: boolean, ctx: Ctx) {
+function cell(g: GridCell, key: number, widths: number[], fill: { flexGrow?: number }, ctx: Ctx) {
   const b = g.borders;
   const width = spannedWidth(g, widths);
   const inner = { ...ctx, textWidth: width - 2 * CELL_PAD_PT - BORDER_PT.thick * 2 };
@@ -354,12 +394,13 @@ function cell(g: GridCell, key: number, widths: number[], firstRow: boolean, ctx
       key={key}
       style={{
         width,
+        ...fill,
         paddingLeft: CELL_PAD_PT,
         paddingRight: CELL_PAD_PT,
         justifyContent: VALIGN[verticalAlignOf(g.cell)],
         borderColor: BORDER_COLOR,
-        borderTopWidth: firstRow ? BORDER_PT[b.top] : 0,
-        borderLeftWidth: key === 0 ? BORDER_PT[b.left] : 0,
+        borderTopWidth: g.row === 0 ? BORDER_PT[b.top] : 0,
+        borderLeftWidth: g.col === 0 ? BORDER_PT[b.left] : 0,
         borderBottomWidth: BORDER_PT[b.bottom],
         borderRightWidth: BORDER_PT[b.right],
       }}

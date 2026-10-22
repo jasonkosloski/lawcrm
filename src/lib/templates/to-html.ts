@@ -80,6 +80,7 @@ function cell(g: GridCell): string {
   const c = g.cell;
   const tag = c.type === "tableHeader" ? "th" : "td";
   let attrs = g.span > 1 ? ` colspan="${g.span}"` : "";
+  if (g.rowSpan > 1) attrs += ` rowspan="${g.rowSpan}"`;
   for (const side of CELL_SIDES) {
     const w = g.declared[side];
     if (w !== "thin") attrs += ` ${CELL_SIDE_ATTR[side]}="${w}"`;

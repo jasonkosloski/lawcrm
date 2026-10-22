@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolvedToHtml } from "./to-html";
-import { captionFixture, renderFixture } from "./converters-fixture";
+import { captionFixture, mergedCaptionFixture, renderFixture } from "./converters-fixture";
 
 describe("resolvedToHtml", () => {
   const html = resolvedToHtml(renderFixture());
@@ -162,5 +162,14 @@ describe("resolvedToHtml tables", () => {
     expect(out).toContain(
       '<colgroup><col style="width:400px" /><col style="width:200px" /></colgroup>',
     );
+  });
+});
+
+describe("resolvedToHtml row spans", () => {
+  it("writes rowspan on a cell merged down", () => {
+    const html = resolvedToHtml(mergedCaptionFixture());
+    expect(html).toContain('<td rowspan="2" data-bb="thick" data-valign="bottom">');
+    // The second row holds only the left cell.
+    expect(html).toContain('<tr><td data-bt="thick" data-bb="thick"><p><strong>Plaintiff');
   });
 });

@@ -1,16 +1,17 @@
 // @vitest-environment happy-dom
 /**
  * Table commands: borders stay in step across shared edges, merging is
- * row-only, width toggles, and every result is content the schema keeps.
+ * refused only when the PDF couldn't lay it out, width toggles, and
+ * every result is content the schema keeps.
  */
 import { describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
-import { CellSelection } from "@tiptap/pm/tables";
+import { CellSelection, TableMap } from "@tiptap/pm/tables";
 import { validateTemplateContent } from "@/lib/templates/schema";
 import { createTemplateExtensions, templateJSON } from "./extensions";
 import {
   bordersAre,
-  canMergeInRow,
+  mergeCheck,
   fillColumnWidths,
   setBorders,
   setTableWidth,
@@ -121,17 +122,76 @@ describe("setBorders", () => {
 });
 
 describe("merging", () => {
-  it("allows merging across one row only", () => {
-    const e = grid(2, 3);
-    select(e, 0, 1);
-    expect(canMergeInRow(e.state)).toBe(true);
-    select(e, 0, 3); // down a column
-    expect(canMergeInRow(e.state)).toBe(false);
-    select(e, 0);
-    expect(canMergeInRow(e.state)).toBe(false);
+  /** Select grid positions (r0, c0) to (r1, c1), inclusive. */
+  function selectRect(e: Editor, r0: number, c0: number, r1: number, c1: number) {
+    let tablePos = -1;
+    e.state.doc.descendants((n, pos) => {
+      if (tablePos < 0 && n.type.name === "table") tablePos = pos;
+    });
+    const table = e.state.doc.nodeAt(tablePos)!;
+    const map = TableMap.get(table);
+    const at = (r: number, c: number) => tablePos + 1 + map.map[r * map.width + c];
+    e.view.dispatch(
+      e.state.tr.setSelection(CellSelection.create(e.state.doc, at(r0, c0), at(r1, c1))),
+    );
+  }
+
+  it("merges down a column: two rows, left cells separate, right side one cell", () => {
+    const e = grid(2, 2);
+    selectRect(e, 0, 1, 1, 1);
+    expect(mergeCheck(e.state)).toBe("ok");
+    e.commands.mergeCells();
+    const c = cells(e);
+    expect(c).toHaveLength(3);
+    expect(c[1].attrs.rowspan).toBe(2);
+    expect(validateTemplateContent("filing", templateJSON(e)).ok).toBe(true);
   });
 
-  it("produces a colspan the schema accepts, and border edits skip the merged interior", () => {
+  it("merges a block across rows and columns", () => {
+    const e = grid(3, 3);
+    selectRect(e, 0, 0, 1, 1);
+    expect(mergeCheck(e.state)).toBe("ok");
+    e.commands.mergeCells();
+    expect(cells(e)[0].attrs).toMatchObject({ colspan: 2, rowspan: 2 });
+    expect(validateTemplateContent("filing", templateJSON(e)).ok).toBe(true);
+  });
+
+  it("needs more than one cell", () => {
+    const e = grid(2, 2);
+    select(e, 0);
+    expect(mergeCheck(e.state)).toBe("unavailable");
+    // Selecting one already-merged cell is still just one cell.
+    selectRect(e, 0, 1, 1, 1);
+    e.commands.mergeCells();
+    selectRect(e, 0, 1, 1, 1);
+    expect(mergeCheck(e.state)).toBe("unavailable");
+  });
+
+  it("refuses the merge that would make a pinwheel", () => {
+    const e = grid(3, 3);
+    selectRect(e, 0, 0, 0, 1); // top, across
+    e.commands.mergeCells();
+    selectRect(e, 0, 2, 1, 2); // right, down
+    e.commands.mergeCells();
+    selectRect(e, 2, 1, 2, 2); // bottom, across
+    e.commands.mergeCells();
+    selectRect(e, 1, 0, 2, 0); // left, down: closes the ring around the centre
+    expect(mergeCheck(e.state)).toBe("interlock");
+  });
+
+  it("border edits skip the inside of a merged cell", () => {
+    const e = grid(2, 2);
+    selectRect(e, 0, 1, 1, 1);
+    e.commands.mergeCells();
+    selectRect(e, 0, 0, 1, 0);
+    run(e, "none");
+    // The merged cell loses only its left side, never a phantom top/bottom
+    // between its own rows.
+    expect(borders(e)[1]).toEqual({ left: "none" });
+    expect(validateTemplateContent("filing", templateJSON(e)).ok).toBe(true);
+  });
+
+  it("produces a colspan the schema accepts", () => {
     const e = grid(2, 3);
     select(e, 0, 1);
     e.commands.mergeCells();

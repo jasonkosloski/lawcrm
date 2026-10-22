@@ -1,6 +1,6 @@
 /**
  * The toolbar's table controls: insert a table, then (with the cursor in
- * one) rows, columns, merging (across a row only), width, borders and
+ * one) rows, columns, merging, width, borders and
  * vertical alignment. Always shown, greyed out outside a table, so they
  * can be found. Horizontal alignment is the toolbar's own align
  * buttons, which apply to every selected cell.
@@ -32,11 +32,12 @@ import { cn } from "@/lib/utils";
 import type { CellSide, VerticalAlign } from "@/lib/templates/schema";
 import {
   bordersAre,
-  canMergeInRow,
+  mergeCheck,
   setBorders,
   setTableWidth,
   tableWidthAt,
   type BorderTarget,
+  type MergeCheck,
   type TableWidth,
   type Weight,
 } from "./table-commands";
@@ -115,7 +116,7 @@ const NO_SIDES = { top: false, bottom: false, left: false, right: false };
 const OUTSIDE = {
   inTable: false,
   width: "full" as TableWidth,
-  canMerge: false,
+  merge: "unavailable" as MergeCheck,
   canSplit: false,
   middle: false,
   bottom: false,
@@ -136,7 +137,7 @@ export function TableMenu({ editor }: { editor: Editor }) {
       return {
         inTable: true,
         width,
-        canMerge: canMergeInRow(e.state),
+        merge: mergeCheck(e.state),
         canSplit: e.can().splitCell(),
         middle: va("middle"),
         bottom: va("bottom"),
@@ -203,9 +204,15 @@ export function TableMenu({ editor }: { editor: Editor }) {
             Delete column
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={!t.canMerge} onClick={() => chain().mergeCells().run()}>
+          <DropdownMenuItem disabled={t.merge !== "ok"} onClick={() => chain().mergeCells().run()}>
             Merge cells
           </DropdownMenuItem>
+          {t.merge === "interlock" && (
+            <p className="max-w-52 px-1.5 py-1 text-2xs text-ink-4">
+              These cells would interlock with other merged cells in a way the PDF can&apos;t draw.
+              Split one of them first.
+            </p>
+          )}
           <DropdownMenuItem disabled={!t.canSplit} onClick={() => chain().splitCell().run()}>
             Split cell
           </DropdownMenuItem>

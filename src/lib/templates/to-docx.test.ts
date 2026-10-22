@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { resolvedToDocx } from "./to-docx";
-import { captionFixture, renderFixture } from "./converters-fixture";
+import { captionFixture, mergedCaptionFixture, renderFixture } from "./converters-fixture";
 import {
   CELL_PAD_TWIPS,
   DEFAULT_DOCUMENT_STYLE,
@@ -382,5 +382,46 @@ describe("resolvedToDocx tables", () => {
     expect(doc).toContain('<w:tblW w:type="auto" w:w="0"/>');
     // Set widths are kept as Word's starting grid (editor px x 15).
     expect(doc).toContain('<w:gridCol w:w="6000"/><w:gridCol w:w="3000"/>');
+  });
+});
+
+describe("resolvedToDocx row spans", () => {
+  it("fills a hole before a merged cell's continuation so Word keeps the columns", async () => {
+    const cell = (text: string, rowspan?: number) => ({
+      type: "tableCell" as const,
+      ...(rowspan ? { attrs: { rowspan } } : {}),
+      content: [{ type: "paragraph" as const, content: [{ type: "text" as const, text }] }],
+    });
+    const body: ResolvedDoc = {
+      type: "doc",
+      content: [
+        {
+          type: "table",
+          content: [
+            { type: "tableRow", content: [cell("A"), cell("B"), cell("C", 2)] },
+            { type: "tableRow", content: [cell("D")] },
+          ],
+        },
+      ],
+    };
+    const { doc } = await build({ body, style: letterStyle() });
+    const row2 = (doc.match(/<w:tr>.*?<\/w:tr>/g) ?? [])[1];
+    const cells = row2.match(/<w:tc>.*?<\/w:tc>/g) ?? [];
+    expect(cells).toHaveLength(3);
+    expect(cells[0]).toContain(">D<");
+    expect(cells[1]).not.toContain("vMerge");
+    expect(cells[2]).toContain("vMerge");
+  });
+
+  it("merges down with vMerge, the continuation keeping the column", async () => {
+    const { doc } = await build({ body: mergedCaptionFixture(), style: letterStyle() });
+    const rows = doc.match(/<w:tr>.*?<\/w:tr>/g) ?? [];
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toContain('<w:vMerge w:val="restart"/>');
+    expect(rows[0]).toContain('<w:vAlign w:val="bottom"/>');
+    // Row 2 has the parties cell plus Word's continuation cell.
+    const cells = rows[1].match(/<w:tc>.*?<\/w:tc>/g) ?? [];
+    expect(cells).toHaveLength(2);
+    expect(cells[1]).toMatch(/<w:vMerge(\/>| w:val="continue"\/>)/);
   });
 });

@@ -1,6 +1,6 @@
 /**
  * Table commands the template editor adds on top of TipTap's: width,
- * per-side borders and row-only merging. Borders apply to the selected
+ * per-side borders and the merge check. Borders apply to the selected
  * cells (or the cursor's cell) and keep a shared edge's two sides in
  * step, so turning off a line removes it from both neighbours.
  */
@@ -14,6 +14,7 @@ import {
   type TableRect,
 } from "@tiptap/pm/tables";
 import type { CellBorders, CellSide } from "@/lib/templates/schema";
+import { splitLayout, type Box } from "@/lib/templates/table-split";
 
 export type TableWidth = "full" | "fit";
 /** Where a border command draws: one side of the selection, or a preset. */
@@ -52,11 +53,43 @@ export function setTableWidth(state: EditorState, width: TableWidth): Transactio
   });
 }
 
-/** Cells may merge across one row only; the schema has no row spans. */
-export function canMergeInRow(state: EditorState): boolean {
-  if (!(state.selection instanceof CellSelection)) return false;
+export type MergeCheck = "ok" | "unavailable" | "interlock";
+
+/**
+ * Whether the selected cells can merge: a multi-cell selection that
+ * doesn't cut through another merged cell ("unavailable" otherwise),
+ * leaving a table the PDF can lay out ("interlock" when it couldn't;
+ * the schema refuses those too).
+ */
+export function mergeCheck(state: EditorState): MergeCheck {
+  if (!(state.selection instanceof CellSelection)) return "unavailable";
   const rect = selectedRect(state);
-  return rect.bottom - rect.top === 1 && rect.right - rect.left > 1;
+  const { map } = rect;
+  // A table the fixTables plugin hasn't normalized yet has holes.
+  if (map.problems?.length) return "unavailable";
+  const boxes: Box[] = [
+    {
+      row: rect.top,
+      col: rect.left,
+      rowSpan: rect.bottom - rect.top,
+      span: rect.right - rect.left,
+    },
+  ];
+  let selected = 0;
+  for (const pos of new Set(map.map)) {
+    const c = map.findCell(pos);
+    const inside =
+      c.left >= rect.left && c.right <= rect.right && c.top >= rect.top && c.bottom <= rect.bottom;
+    const outside =
+      c.right <= rect.left || c.left >= rect.right || c.bottom <= rect.top || c.top >= rect.bottom;
+    if (!inside && !outside) return "unavailable";
+    if (inside) selected++;
+    if (outside)
+      boxes.push({ row: c.top, col: c.left, rowSpan: c.bottom - c.top, span: c.right - c.left });
+  }
+  // One (already merged) cell has nothing to merge with.
+  if (selected < 2) return "unavailable";
+  return splitLayout(boxes, map.height, map.width) ? "ok" : "interlock";
 }
 
 type Edge = { row: number; col: number; side: CellSide };
@@ -67,7 +100,11 @@ function edgeSides(rect: TableRect, target: BorderTarget): Edge[] {
   const cellAt = (row: number, col: number) => map.map[row * map.width + col];
   const out: Edge[] = [];
   const horizontal = (row: number) => {
-    for (let col = left; col < right; col++) out.push({ row, col, side: "top" });
+    for (let col = left; col < right; col++) {
+      // Inside a merged cell there is no edge to draw.
+      if (row > 0 && row < map.height && cellAt(row, col) === cellAt(row - 1, col)) continue;
+      out.push({ row, col, side: "top" });
+    }
   };
   const vertical = (col: number) => {
     for (let row = top; row < bottom; row++) {

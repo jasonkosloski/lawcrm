@@ -6,6 +6,8 @@
  * normalized copy (unknown attrs stripped) on success.
  */
 
+import { placeTableCells, splitLayout } from "./table-split";
+
 export const TEMPLATE_KINDS = ["letter", "email", "sms", "filing"] as const;
 export type TemplateKind = (typeof TEMPLATE_KINDS)[number];
 
@@ -64,17 +66,18 @@ export type CellSide = (typeof CELL_SIDES)[number];
 export type CellBorders = Partial<Record<CellSide, "none" | "thick">>;
 export const VERTICAL_ALIGNS = ["top", "middle", "bottom"] as const;
 export type VerticalAlign = (typeof VERTICAL_ALIGNS)[number];
-/** Most columns a cell may span; well past any real caption. */
+/** Most columns or rows a cell may span; well past any real caption. */
 export const MAX_COLSPAN = 20;
+export const MAX_ROWSPAN = 1000;
 
 export type TableCellNode = {
   type: "tableCell" | "tableHeader";
-  /** Cells merge across a row (colspan) only; `colwidth` has one entry
-   *  per spanned column, in editor pixels (0 = unset). Absent
-   *  `verticalAlign` is top; absent `borders` sides are thin. */
+  /** `colwidth` has one entry per spanned column, in editor pixels
+   *  (0 = unset). Absent `verticalAlign` is top; absent `borders` sides
+   *  are thin. Merges must leave a table `splitLayout` can draw. */
   attrs?: {
     colspan?: number;
-    rowspan?: 1;
+    rowspan?: number;
     colwidth?: number[] | null;
     verticalAlign?: "middle" | "bottom";
     borders?: CellBorders;
@@ -324,6 +327,10 @@ function block(raw: unknown, depth: number, ctx: Ctx): BlockNode {
         type: "table",
         content: rows.map((r) => tableRow(r, depth + 1, ctx)),
       };
+      const placed = placeTableCells(out.content);
+      if (!splitLayout(placed.boxes.flat(), placed.height, placed.width)) {
+        return fail("Some merged cells interlock and can't be laid out. Split one and try again.");
+      }
       if (w === "fit") out.attrs = { width: "fit" };
       return out;
     }
@@ -394,23 +401,18 @@ function tableCell(raw: unknown, depth: number, ctx: Ctx): TableCellNode {
   }
   const a = attrsOf(n);
   const attrs: NonNullable<TableCellNode["attrs"]> = {};
-  if (a.rowspan !== undefined && a.rowspan !== null) {
-    if (a.rowspan !== 1) return fail("Cells can only be merged across a row.");
-    attrs.rowspan = 1;
-  }
-  let span = 1;
-  if (a.colspan !== undefined && a.colspan !== null) {
-    if (
-      typeof a.colspan !== "number" ||
-      !Number.isInteger(a.colspan) ||
-      a.colspan < 1 ||
-      a.colspan > MAX_COLSPAN
-    ) {
+  const spanAttr = (v: unknown, max: number): number | undefined => {
+    if (v === undefined || v === null) return undefined;
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > max) {
       return fail("Invalid merged cell.");
     }
-    span = a.colspan;
-    attrs.colspan = span;
-  }
+    return v;
+  };
+  const rowspan = spanAttr(a.rowspan, MAX_ROWSPAN);
+  if (rowspan !== undefined) attrs.rowspan = rowspan;
+  const colspan = spanAttr(a.colspan, MAX_COLSPAN);
+  if (colspan !== undefined) attrs.colspan = colspan;
+  const span = colspan ?? 1;
   if (a.colwidth !== undefined && a.colwidth !== null) {
     if (
       !Array.isArray(a.colwidth) ||

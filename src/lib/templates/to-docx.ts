@@ -189,6 +189,8 @@ function tableCell(g: GridCell, widths: number[], fit: boolean, ctx: Ctx): Table
     children: children.length ? children : [new Paragraph({ spacing: { after: 0 } })],
     margins: { left: CELL_PAD_TWIPS, right: CELL_PAD_TWIPS, top: 0, bottom: 0 },
     ...(g.span > 1 ? { columnSpan: g.span } : {}),
+    // docx writes the continuation cells (vMerge) in the rows below.
+    ...(g.rowSpan > 1 ? { rowSpan: g.rowSpan } : {}),
     width: sized ? { size: w, type: WidthType.DXA } : { size: 0, type: WidthType.AUTO },
     verticalAlign: VALIGN[verticalAlignOf(g.cell)],
     borders: {

@@ -1,7 +1,7 @@
 import { PDFDocument, PDFName, PDFDict, PDFRawStream } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import { FONTS } from "./fonts";
-import { captionFixture, renderFixture } from "./converters-fixture";
+import { captionFixture, mergedCaptionFixture, renderFixture } from "./converters-fixture";
 import {
   DEFAULT_DOCUMENT_STYLE,
   HEADER_DISTANCE_PT,
@@ -571,5 +571,81 @@ describe("resolvedToPdf tables", () => {
     // "Div." at 12pt is ~24pt wide, plus padding and rules.
     expect(find(fit, "Ctrm").x).toBeGreaterThan(find(fit, "Div").x + 20);
     expect(find(fit, "Ctrm").x).toBeLessThan(find(fit, "Div").x + 50);
+  });
+});
+
+describe("resolvedToPdf row spans", () => {
+  type Placed = { str: string; x: number; y: number };
+  async function placed(buf: Buffer): Promise<Placed[]> {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(buf), verbosity: 0 }).promise;
+    const tc = await (await pdf.getPage(1)).getTextContent();
+    return tc.items
+      .filter((it): it is typeof it & { str: string } => "str" in it && it.str.trim() !== "")
+      .map((it) => {
+        const m = (it as { transform: number[] }).transform;
+        return { str: it.str, x: m[4], y: m[5] };
+      });
+  }
+  const find = (items: Placed[], s: string) => {
+    const hit = items.find((i) => i.str.includes(s));
+    if (!hit) throw new Error(`"${s}" not on the page: ${items.map((i) => i.str).join(" | ")}`);
+    return hit;
+  };
+  const render = async (body: ResolvedDoc) =>
+    (await resolvedToPdf({ body, letterhead: null, continuation: null, style: style("filing") }))
+      .buffer;
+  const para = (text: string) => ({
+    type: "paragraph" as const,
+    content: [{ type: "text" as const, text }],
+  });
+
+  it("draws two rows beside one merged cell", async () => {
+    const body: ResolvedDoc = {
+      type: "doc",
+      content: [
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                { type: "tableCell", content: [para("left-one")] },
+                {
+                  type: "tableCell",
+                  attrs: { rowspan: 2, verticalAlign: "bottom" },
+                  content: [para("right-merged")],
+                },
+              ],
+            },
+            { type: "tableRow", content: [{ type: "tableCell", content: [para("left-two")] }] },
+          ],
+        },
+      ],
+    };
+    const items = await placed(await render(body));
+    const one = find(items, "left-one");
+    const two = find(items, "left-two");
+    const right = find(items, "right-merged");
+    expect(two.y).toBeLessThan(one.y);
+    expect(two.x).toBeCloseTo(one.x, 0);
+    // Right column, bottom-aligned to the second row's line.
+    expect(right.x).toBeGreaterThan(300);
+    expect(right.y).toBeCloseTo(two.y, 0);
+  });
+
+  it("lays out the merged caption: court-use box beside court and parties", async () => {
+    const items = await placed(await render(mergedCaptionFixture()));
+    const court = find(items, "County Court");
+    const defendant = find(items, "Defendant");
+    const box = find(items, "COURT USE ONLY");
+    const caseNo = find(items, "Case Number");
+    expect(box.x).toBeGreaterThan(384);
+    // Bottom of the merged box lines up with the last line of the parties.
+    expect(box.y).toBeCloseTo(defendant.y, 0);
+    expect(box.y).toBeLessThan(court.y);
+    // The next band starts below both.
+    expect(caseNo.y).toBeLessThan(defendant.y);
+    expect(find(items, "MOTION").y).toBeLessThan(caseNo.y);
   });
 });

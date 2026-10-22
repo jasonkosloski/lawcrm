@@ -139,27 +139,35 @@ describe("validateTemplateContent", () => {
     });
   });
 
-  it("allows cells merged across a row but not down a column", () => {
+  it("allows cells merged across a row and down a column", () => {
+    const cell = (attrs?: unknown) => ({ type: "tableCell", attrs, content: [para()] });
     const d = doc({
       type: "table",
       content: [
-        {
-          type: "tableRow",
-          content: [{ type: "tableCell", attrs: { colspan: 2 }, content: [para()] }],
-        },
+        { type: "tableRow", content: [cell({ colspan: 2 })] },
+        { type: "tableRow", content: [cell(), cell({ rowspan: 2 })] },
+        { type: "tableRow", content: [cell()] },
       ],
     });
-    expect(validateTemplateContent("letter", d).ok).toBe(true);
-    const d2 = doc({
+    const r = validateTemplateContent("letter", d);
+    expect(r.ok).toBe(true);
+  });
+
+  it("rejects merged cells that interlock", () => {
+    const cell = (attrs?: unknown) => ({ type: "tableCell", attrs, content: [para()] });
+    // A pinwheel round the centre cell: no clean row or column cut.
+    const d = doc({
       type: "table",
       content: [
-        {
-          type: "tableRow",
-          content: [{ type: "tableCell", attrs: { rowspan: 2 }, content: [para()] }],
-        },
+        { type: "tableRow", content: [cell({ colspan: 2 }), cell({ rowspan: 2 })] },
+        { type: "tableRow", content: [cell({ rowspan: 2 }), cell()] },
+        { type: "tableRow", content: [cell({ colspan: 2 })] },
       ],
     });
-    expect(validateTemplateContent("letter", d2).ok).toBe(false);
+    expect(validateTemplateContent("letter", d)).toEqual({
+      ok: false,
+      error: "Some merged cells interlock and can't be laid out. Split one and try again.",
+    });
   });
 
   describe("table layout attrs", () => {
@@ -222,7 +230,8 @@ describe("validateTemplateContent", () => {
       [undefined, { colspan: 1.5 }, "Invalid merged cell."],
       [undefined, { colspan: 21 }, "Invalid merged cell."],
       [undefined, { colwidth: [-5] }, "Invalid table column width."],
-      [undefined, { rowspan: 2 }, "Cells can only be merged across a row."],
+      [undefined, { rowspan: 0 }, "Invalid merged cell."],
+      [undefined, { rowspan: 1001 }, "Invalid merged cell."],
     ])("rejects table %j / cell %j", (t, cellAttrs, error) => {
       expect(validateTemplateContent("letter", table(t, cellAttrs))).toEqual({ ok: false, error });
     });

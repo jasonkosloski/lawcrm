@@ -133,3 +133,51 @@ export function captionFixture(): ResolvedDoc {
     ],
   };
 }
+
+/** The same caption with the court-use box as one cell spanning two rows. */
+export function mergedCaptionFixture(): ResolvedDoc {
+  return {
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              capCell({ colwidth: [400] }, p("☐ County Court ☒ District Court")),
+              capCell(
+                {
+                  colwidth: [200],
+                  rowspan: 2,
+                  verticalAlign: "bottom",
+                  borders: { bottom: "thick" },
+                },
+                p("▲ COURT USE ONLY ▲", true, "center"),
+              ),
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [
+              capCell(
+                { borders: { top: "thick", bottom: "thick" } },
+                p("Plaintiff: Sam Sample", true),
+                p("v."),
+                p("Defendant: Dana Doe", true),
+              ),
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [capCell({}, p("Attorney: Pat Lawyer")), capCell({}, p("Case Number:"))],
+          },
+          {
+            type: "tableRow",
+            content: [capCell({ colspan: 2 }, p("MOTION TO DISMISS", true, "center"))],
+          },
+        ],
+      },
+    ],
+  };
+}

@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { captionFixture } from "./converters-fixture";
 import type { ResolvedTable, ResolvedTableCell } from "./render";
 import type { TableCellNode } from "./schema";
-import { columnFractions, fitColumnWidths, tableGrid } from "./table-layout";
+import {
+  columnFractions,
+  fitColumnWidths,
+  splitLayout,
+  tableGrid,
+  type Box,
+  type Layout,
+} from "./table-layout";
 
 const c = (attrs?: TableCellNode["attrs"], text = "x"): ResolvedTableCell => ({
   type: "tableCell",
@@ -97,5 +104,95 @@ describe("fitColumnWidths", () => {
   it("shrinks proportionally to the text width", () => {
     const g = tableGrid(t([c({}, "a".repeat(30)), c({}, "a".repeat(10))]));
     expect(fitColumnWidths(g, byText, 1, 200)).toEqual([150, 50]);
+  });
+});
+
+describe("row spans", () => {
+  // Two rows: left cells separate, right side one merged cell.
+  const merged = () =>
+    t([c({}, "L1"), c({ rowspan: 2, borders: { left: "thick" } }, "R")], [c({}, "L2")]);
+
+  it("places later rows' cells around a cell spanning down", () => {
+    const g = tableGrid(merged());
+    expect(g.height).toBe(2);
+    expect(g.cols).toBe(2);
+    expect(g.rows[1][0]).toMatchObject({ row: 1, col: 0 });
+    expect(g.owner[1][1]).toBe(g.rows[0][1]);
+  });
+
+  it("resolves each side against every cell along it", () => {
+    const g = tableGrid(merged());
+    // Both left cells pick up the merged cell's thick left side.
+    expect(g.rows[0][0].borders.right).toBe("thick");
+    expect(g.rows[1][0].borders.right).toBe("thick");
+    expect(g.rows[0][0].borders.bottom).toBe("thin");
+  });
+
+  it("fills holes in a ragged row with empty cells, in column order", () => {
+    // Row 1 holds only D; C spans down into it at column 2, so column 1 is a hole.
+    const g = tableGrid(t([c({}, "A"), c({}, "B"), c({ rowspan: 2 }, "C")], [c({}, "D")]));
+    expect(g.rows[1].map((x) => x.col)).toEqual([0, 1]);
+    expect(g.rows[1][1].cell.content).toEqual([{ type: "paragraph" }]);
+    expect(g.owner[1][2]).toBe(g.rows[0][2]);
+    // The filler gives C's left side a neighbour, so the rule is drawn.
+    expect(g.rows[1][1].borders.right).toBe("thin");
+  });
+
+  it("cuts a span that runs past the last row", () => {
+    const g = tableGrid(t([c({ rowspan: 5 })]));
+    expect(g.rows[0][0].rowSpan).toBe(1);
+  });
+});
+
+describe("splitLayout", () => {
+  const box = (row: number, col: number, rowSpan = 1, span = 1): Box => ({
+    row,
+    col,
+    rowSpan,
+    span,
+  });
+  const shape = (l: Layout<Box> | null): unknown =>
+    !l
+      ? null
+      : l.kind === "cell"
+        ? `${l.box.row},${l.box.col}`
+        : l.kind === "empty"
+          ? "empty"
+          : { [l.kind]: l.children.map(shape) };
+
+  it("stacks plain rows into bands", () => {
+    expect(shape(splitLayout([box(0, 0), box(0, 1), box(1, 0), box(1, 1)], 2, 2))).toEqual({
+      rows: [{ cols: ["0,0", "0,1"] }, { cols: ["1,0", "1,1"] }],
+    });
+  });
+
+  it("puts a row-spanning cell beside the stack it spans", () => {
+    expect(shape(splitLayout([box(0, 0), box(0, 1, 2), box(1, 0)], 2, 2))).toEqual({
+      cols: [{ rows: ["0,0", "1,0"] }, "0,1"],
+    });
+  });
+
+  it("keeps rows no span crosses as separate bands (page breaks fall between them)", () => {
+    const l = splitLayout([box(0, 0), box(0, 1, 2), box(1, 0), box(2, 0, 1, 2)], 3, 2);
+    expect(shape(l)).toEqual({
+      rows: [{ cols: [{ rows: ["0,0", "1,0"] }, "0,1"] }, "2,0"],
+    });
+  });
+
+  it("fills holes in a ragged table", () => {
+    expect(shape(splitLayout([box(0, 0), box(0, 1), box(1, 0)], 2, 2))).toEqual({
+      rows: [{ cols: ["0,0", "0,1"] }, { cols: ["1,0", "empty"] }],
+    });
+  });
+
+  it("returns null for a pinwheel", () => {
+    const pinwheel = [
+      box(0, 0, 1, 2),
+      box(0, 2, 2, 1),
+      box(1, 1),
+      box(2, 1, 1, 2),
+      box(1, 0, 2, 1),
+    ];
+    expect(splitLayout(pinwheel, 3, 3)).toBeNull();
   });
 });
