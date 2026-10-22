@@ -10,7 +10,7 @@
  *     only rendered for holders of `documents.upload`, which the
  *     preview action requires.
  *   - "Save to documents" — calls the `documents.upload`-gated
- *     generate action, which stores the text as a .md file and
+ *     generate action, which stores the result as a .docx file and
  *     creates the Document row. The button renders only when the
  *     caller holds the permission (server re-checks regardless).
  */
@@ -133,12 +133,15 @@ export function GenerateFromTemplateDialog({
   };
 
   const onSave = () => {
-    if (!templateId) return;
+    if (!templateId || !preview?.ok) return;
     setSaveError(null);
     startSave(async () => {
-      const res = await (opts
-        ? generateDocumentFromTemplate(templateId, scope, opts)
-        : generateDocumentFromTemplate(templateId, scope));
+      // The preview's template version: generation refuses if the
+      // template changed after the user reviewed it.
+      const res = await generateDocumentFromTemplate(templateId, scope, {
+        ...opts,
+        expectedUpdatedAt: preview.templateUpdatedAt,
+      });
       if (res.ok) {
         // The action revalidated the documents route. The document is
         // filed at the root, which is invisible if a subfolder
@@ -158,7 +161,9 @@ export function GenerateFromTemplateDialog({
   }
 
   const warnings =
-    preview?.ok && (preview.missing.length > 0 || preview.unresolved.length > 0) ? preview : null;
+    preview?.ok && (preview.report.missing.length > 0 || preview.report.invalid.length > 0)
+      ? preview.report
+      : null;
 
   return (
     <>
@@ -235,10 +240,9 @@ export function GenerateFromTemplateDialog({
                             placeholders are left in the text.
                           </span>
                         )}
-                        {warnings.unresolved.length > 0 && (
+                        {warnings.invalid.length > 0 && (
                           <span>
-                            Unknown fields (left as-is):{" "}
-                            {warnings.unresolved.map((k) => `{{${k}}}`).join(", ")}
+                            Fields that don&apos;t apply here: {warnings.invalid.join(", ")}
                           </span>
                         )}
                       </div>

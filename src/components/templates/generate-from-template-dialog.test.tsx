@@ -32,8 +32,11 @@ const okPreview = (over: Record<string, unknown> = {}) => ({
   ok: true,
   templateName: "Demand letter",
   text: "Dear Maria Alvarez,",
-  unresolved: [],
-  missing: [],
+  html: "<p>Dear Maria Alvarez,</p>",
+  report: { missing: [], invalid: [], archivedBlocks: [] },
+  templateUpdatedAt: "2026-10-22T00:00:00.000Z",
+  needsSigner: false,
+  needsRecipient: false,
   ...over,
 });
 
@@ -50,7 +53,9 @@ beforeEach(() => {
 describe("GenerateFromTemplateDialog", () => {
   it("shows the merged preview with missing + unknown field warnings", async () => {
     previewMock.mockResolvedValue(
-      okPreview({ missing: ["client.phone"], unresolved: ["made.up"] }),
+      okPreview({
+        report: { missing: ["client.phone"], invalid: ["made.up"], archivedBlocks: [] },
+      }),
     );
     const user = userEvent.setup();
     render(
@@ -65,7 +70,7 @@ describe("GenerateFromTemplateDialog", () => {
     expect(await screen.findByText("Dear Maria Alvarez,")).toBeInTheDocument();
     expect(previewMock).toHaveBeenCalledWith("t1", { kind: "matter", matterId: "m1" });
     expect(screen.getByText(/Not on file for this matter/)).toHaveTextContent("client.phone");
-    expect(screen.getByText(/Unknown fields/)).toHaveTextContent("{{made.up}}");
+    expect(screen.getByText(/don.t apply here/)).toHaveTextContent("made.up");
   });
 
   it("groups non-curated categories under their raw label", async () => {
@@ -122,9 +127,8 @@ describe("GenerateFromTemplateDialog", () => {
     generateMock.mockResolvedValue({
       ok: true,
       documentId: "d1",
-      documentName: "Demand letter.md",
-      unresolved: [],
-      missing: [],
+      documentName: "Demand letter.docx",
+      report: { missing: [], invalid: [], archivedBlocks: [] },
     });
     const user = userEvent.setup();
     render(
@@ -147,9 +151,8 @@ describe("GenerateFromTemplateDialog", () => {
     generateMock.mockResolvedValue({
       ok: true,
       documentId: "d1",
-      documentName: "Demand letter — Apr 15, 2026.md",
-      unresolved: [],
-      missing: [],
+      documentName: "Demand letter — Apr 15, 2026.docx",
+      report: { missing: [], invalid: [], archivedBlocks: [] },
     });
     const user = userEvent.setup();
     render(
@@ -164,7 +167,7 @@ describe("GenerateFromTemplateDialog", () => {
     await user.click(screen.getByRole("button", { name: /save to documents/i }));
 
     const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent("Demand letter — Apr 15, 2026.md");
+    expect(status).toHaveTextContent("Demand letter — Apr 15, 2026.docx");
     expect(status).toHaveTextContent(/All documents/);
     // Can't double-save the same preview into a duplicate.
     expect(screen.queryByRole("button", { name: /save to documents/i })).not.toBeInTheDocument();
@@ -270,7 +273,7 @@ describe("GenerateFromTemplateDialog", () => {
     expect(generateMock).toHaveBeenCalledWith(
       "t2",
       { kind: "matter", matterId: "m1" },
-      { recordsRequestId: "rr1" },
+      { recordsRequestId: "rr1", expectedUpdatedAt: "2026-10-22T00:00:00.000Z" },
     );
   });
 

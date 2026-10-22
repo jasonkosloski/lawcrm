@@ -38,8 +38,6 @@ import {
   revalidateDocumentScope,
 } from "@/lib/scope-access";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
-import { getCurrentUserId } from "@/lib/current-user";
-import { getCurrentFirm } from "@/lib/firm";
 import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { logTemplateChange } from "@/lib/template-activity";
@@ -47,20 +45,27 @@ import { deleteFile, storeFile } from "@/lib/file-storage";
 import { toUserMessage } from "@/lib/user-facing-error";
 import { formatDate } from "@/lib/format-date";
 import { resolveRecordsRoleFolder } from "@/lib/records-requests/folder";
-import { mergeTemplate, type MergeContext } from "@/lib/template-merge";
-import {
-  composeContactAddress,
-  loadRecordsRequest,
-  type LoadedRecordsRequest,
-} from "@/lib/templates/load-data";
+import { loadRecordsRequest, loadTemplateData } from "@/lib/templates/load-data";
+import { SAMPLE_TEMPLATE_DATA, type TemplateData } from "@/lib/templates/catalog";
+import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templates/render";
+import { convertLegacyBody } from "@/lib/templates/legacy";
+import { resolvedToHtml } from "@/lib/templates/to-html";
+import { resolvedToText } from "@/lib/templates/to-text";
+import { resolvedToDocx } from "@/lib/templates/to-docx";
 import { Prisma } from "@/generated/prisma/client";
-import { checkTemplateFit, collectBlockIds } from "@/lib/templates/inspect";
+import {
+  checkTemplateFit,
+  collectBlockIds,
+  usesRecipient,
+  usesSigner,
+} from "@/lib/templates/inspect";
 import {
   APPLIES_TO,
   TEMPLATE_KINDS,
   validateSubject,
   validateTemplateContent,
   type AppliesTo,
+  type TemplateDoc,
   type TemplateKind,
 } from "@/lib/templates/schema";
 import {
@@ -381,179 +386,62 @@ export async function deleteDocumentTemplate(
 // ── Generation ─────────────────────────────────────────────────────────
 
 const REQUEST_NOT_FOUND = "Records request not found.";
+const NOT_A_DOCUMENT = "This template can't be saved as a document.";
+const STALE_TEMPLATE = "This template changed — review the preview again.";
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-/** Build the real MergeContext for a record scope. Matter: matter +
- *  client contact. Lead: matter fields are all null (name = the lead's
- *  display name); client = the lead's contact, falling back to the
- *  legacy name/email/phone columns. Firm + generating user + today
- *  are shared. Null when the record is gone. */
-async function resolveMergeContext(
-  scope: RecordScope,
-  request: LoadedRecordsRequest | null = null,
-): Promise<{
-  ctx: MergeContext;
-  matterName: string;
-} | null> {
-  const userId = await getCurrentUserId();
-  const contactSelect = {
-    name: true,
-    email: true,
-    phone: true,
-    address: true,
-    city: true,
-    state: true,
-    zip: true,
-  } as const;
-  const [record, firm, user] = await Promise.all([
-    scope.kind === "matter"
-      ? prisma.matter
-          .findUnique({
-            where: { id: scope.matterId },
-            select: {
-              name: true,
-              caseNumber: true,
-              court: true,
-              opposingParty: true,
-              incidentDate: true,
-              statuteOfLimitationsDate: true,
-              practiceArea: { select: { name: true } },
-              stage: { select: { name: true } },
-              client: { select: contactSelect },
-            },
-          })
-          .then((m) => ({ kind: "matter" as const, m }))
-      : prisma.lead
-          .findUnique({
-            where: { id: scope.leadId },
-            select: {
-              name: true,
-              email: true,
-              phone: true,
-              contact: { select: contactSelect },
-            },
-          })
-          .then((l) => ({ kind: "lead" as const, l })),
-    getCurrentFirm(),
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: { name: true, timeZone: true },
-    }),
-  ]);
+/** Kinds that produce a saved document (email and SMS are message drafts). */
+const isDocumentKind = (kind: string) => kind === "letter" || kind === "filing";
 
-  const firmCtx = {
-    name: firm.name,
-    addressLine1: firm.addressLine1,
-    addressLine2: firm.addressLine2,
-    city: firm.city,
-    state: firm.state,
-    zip: firm.zip,
-    phone: firm.phone,
-    email: firm.email,
-  };
-  const shared = {
-    firm: firmCtx,
-    user: { name: user?.name ?? null },
-    request: request
-      ? {
-          subject: request.subject,
-          description: request.description,
-          type: request.type?.name ?? request.adHocTypeName,
-          dateRangeStart: request.dateRangeStart,
-          dateRangeEnd: request.dateRangeEnd,
-          responseDueDate: request.responseDueDate,
-          sentDate: request.sentAt,
-        }
-      : null,
-    custodian: request
-      ? {
-          name: request.custodian.name,
-          organization: request.custodian.organization,
-          address: composeContactAddress(request.custodian),
-          email: request.custodian.email,
-          phone: request.custodian.phone,
-        }
-      : null,
-    today: new Date(),
-    timeZone: user?.timeZone ?? null,
-  };
-
-  if (record.kind === "lead") {
-    const lead = record.l;
-    if (!lead) return null;
-    const c = lead.contact;
-    const displayName = c?.name ?? lead.name;
-    return {
-      matterName: displayName,
-      ctx: {
-        matter: {
-          name: displayName,
-          caseNumber: null,
-          practiceArea: null,
-          stage: null,
-          court: null,
-          opposingParty: null,
-          incidentDate: null,
-          solDate: null,
-        },
-        client: {
-          name: displayName,
-          email: c?.email ?? lead.email,
-          phone: c?.phone ?? lead.phone,
-          address: c ? composeContactAddress(c) : null,
-        },
-        ...shared,
-      },
-    };
-  }
-
-  const matter = record.m;
-  if (!matter) return null;
-  return {
-    matterName: matter.name,
-    ctx: {
-      matter: {
-        name: matter.name,
-        caseNumber: matter.caseNumber,
-        practiceArea: matter.practiceArea?.name ?? null,
-        stage: matter.stage?.name ?? null,
-        court: matter.court,
-        opposingParty: matter.opposingParty,
-        incidentDate: matter.incidentDate,
-        solDate: matter.statuteOfLimitationsDate,
-      },
-      client: matter.client
-        ? {
-            name: matter.client.name,
-            email: matter.client.email,
-            phone: matter.client.phone,
-            address: composeContactAddress(matter.client),
-          }
-        : null,
-      ...shared,
-    },
-  };
+/** The blocks a doc references, active AND archived (archived ones render
+ *  a visible placeholder rather than vanishing). Unknown ids are absent
+ *  from the map, which the renderer reports as deleted. */
+async function loadBlockMap(doc: TemplateDoc): Promise<Map<string, BlockSource>> {
+  const ids = collectBlockIds(doc);
+  const map = new Map<string, BlockSource>();
+  if (ids.length === 0) return map;
+  const rows = await prisma.templateBlock.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, isActive: true, content: true },
+  });
+  for (const r of rows) map.set(r.id, { ...r, content: r.content as unknown as TemplateDoc });
+  return map;
 }
+
+/** Structured content, or the legacy `{{token}}` body converted on the fly. */
+const contentOf = (t: { content: Prisma.JsonValue | null; body: string | null }): TemplateDoc =>
+  t.content ? (t.content as unknown as TemplateDoc) : convertLegacyBody(t.body ?? "");
+
+type GenerateOpts = {
+  recordsRequestId?: string;
+  signerId?: string;
+  recipientContactId?: string;
+};
 
 export type TemplatePreviewResult =
   | {
       ok: true;
       templateName: string;
+      html: string;
       text: string;
-      unresolved: string[];
-      missing: string[];
+      report: RenderReport;
+      templateUpdatedAt: string;
+      needsSigner: boolean;
+      needsRecipient: boolean;
     }
   | { ok: false; error: string };
 
 /**
- * Merge a template against a real matter WITHOUT writing anything.
+ * Render a template against a real record WITHOUT writing anything.
  * Requires the same key as `generateDocumentFromTemplate`
  * (`documents.upload`) so a preview never shows more than the user
- * could produce.
+ * could produce. `templateUpdatedAt` is handed back so generation can
+ * refuse if the template changed after the user reviewed the preview.
  */
 export async function previewDocumentFromTemplate(
   templateId: string,
   scope: RecordScope,
-  opts?: { recordsRequestId?: string },
+  opts?: GenerateOpts,
 ): Promise<TemplatePreviewResult> {
   await assertScopeAccess(scope);
   if (!(await currentUserHasPermission("documents.upload"))) {
@@ -562,7 +450,7 @@ export async function previewDocumentFromTemplate(
       error: "You don't have permission to generate documents from templates.",
     };
   }
-  // The merged text exposes custodian + request details.
+  // The rendered text exposes custodian + request details.
   if (opts?.recordsRequestId && !(await currentUserHasPermission("records.view"))) {
     return {
       ok: false,
@@ -577,92 +465,128 @@ export async function previewDocumentFromTemplate(
   }
   const template = await prisma.documentTemplate.findUnique({
     where: { id: templateId },
-    select: { name: true, body: true, isActive: true },
+    select: { name: true, kind: true, content: true, body: true, isActive: true, updatedAt: true },
   });
   if (!template || !template.isActive) {
     return { ok: false, error: "Template not found or archived." };
   }
+  if (!isDocumentKind(template.kind)) return { ok: false, error: NOT_A_DOCUMENT };
 
-  const resolved = await resolveMergeContext(scope, request);
-  if (!resolved) return { ok: false, error: "Record not found." };
+  const doc = contentOf(template);
+  const blocks = await loadBlockMap(doc);
+  const loaded = await loadTemplateData({
+    scope,
+    signerId: opts?.signerId,
+    recipientContactId: opts?.recipientContactId,
+    request,
+  });
+  if (!loaded.ok) return { ok: false, error: loaded.error };
 
-  const merged = mergeTemplate(template.body ?? "", resolved.ctx);
+  const { doc: resolved, report } = renderTemplate(doc, { data: loaded.data, blocks });
   return {
     ok: true,
     templateName: template.name,
-    text: merged.text,
-    unresolved: merged.unresolved,
-    missing: merged.missing,
+    html: resolvedToHtml(resolved),
+    text: resolvedToText(resolved),
+    report,
+    templateUpdatedAt: template.updatedAt.toISOString(),
+    needsSigner: usesSigner(doc, blocks),
+    needsRecipient: usesRecipient(doc, blocks),
   };
 }
 
 export type GenerateDocumentResult =
-  | {
-      ok: true;
-      documentId: string;
-      documentName: string;
-      unresolved: string[];
-      missing: string[];
-    }
+  | { ok: true; documentId: string; documentName: string; report: RenderReport }
   | { ok: false; error: string };
 
 /**
- * Merge + SAVE: writes the merged text as a markdown file via the
- * file-storage lib and creates a Document row on the matter (source
- * "generated"), mirroring uploadDocument's storage + row + activity
- * shape. Gated on `documents.upload`.
+ * Render + SAVE: stores the result as a .docx via the file-storage lib
+ * and creates a Document row on the record (source "generated"),
+ * mirroring uploadDocument's storage + row + activity shape. Gated on
+ * `documents.upload`.
  *
- * Unresolved/missing fields do NOT block the save — the caller
- * previews first and the placeholders are visible in the output —
- * but they're returned so the UI can warn one last time.
+ * Missing/invalid fields do NOT block the save (the caller previews
+ * first and placeholders are visible in the output) but the render
+ * report is returned so the UI can warn one last time. A template that
+ * changed since the preview (`expectedUpdatedAt`) is refused.
  */
 export async function generateDocumentFromTemplate(
   templateId: string,
   scope: RecordScope,
-  opts?: { recordsRequestId?: string },
+  opts: GenerateOpts & { folderId?: string | null; expectedUpdatedAt: string },
 ): Promise<GenerateDocumentResult> {
   const userId = await requirePermission("documents.upload");
   // Tagging a document to a records request is a records edit.
-  if (opts?.recordsRequestId) await requirePermission("records.edit");
+  if (opts.recordsRequestId) await requirePermission("records.edit");
   await assertScopeAccess(scope);
   const readOnly = await assertScopeWritable(scope);
   if (readOnly) return { ok: false, error: readOnly };
-  const request = opts?.recordsRequestId
+  const request = opts.recordsRequestId
     ? await loadRecordsRequest(scope, opts.recordsRequestId)
     : null;
-  if (opts?.recordsRequestId && !request) {
+  if (opts.recordsRequestId && !request) {
     return { ok: false, error: REQUEST_NOT_FOUND };
   }
 
   const template = await prisma.documentTemplate.findUnique({
     where: { id: templateId },
-    select: { name: true, body: true, category: true, isActive: true },
+    select: {
+      name: true,
+      kind: true,
+      content: true,
+      body: true,
+      category: true,
+      isActive: true,
+      updatedAt: true,
+    },
   });
   if (!template || !template.isActive) {
     return { ok: false, error: "Template not found or archived." };
   }
+  if (!isDocumentKind(template.kind)) return { ok: false, error: NOT_A_DOCUMENT };
+  if (template.updatedAt.getTime() !== new Date(opts.expectedUpdatedAt).getTime()) {
+    return { ok: false, error: STALE_TEMPLATE };
+  }
 
-  const resolved = await resolveMergeContext(scope, request);
-  if (!resolved) return { ok: false, error: "Record not found." };
+  // Records requests file into their own role folder; otherwise the
+  // chosen folder must belong to this very record.
+  let folderId: string | null = null;
+  if (!request && opts.folderId) {
+    const folder = await prisma.documentFolder.findFirst({
+      where: { id: opts.folderId, ...scopeWhere(scope) },
+      select: { id: true },
+    });
+    if (!folder) return { ok: false, error: "Folder not found." };
+    folderId = folder.id;
+  }
 
-  const merged = mergeTemplate(template.body ?? "", resolved.ctx);
+  const doc = contentOf(template);
+  const blocks = await loadBlockMap(doc);
+  const loaded = await loadTemplateData({
+    scope,
+    signerId: opts.signerId,
+    recipientContactId: opts.recipientContactId,
+    request,
+  });
+  if (!loaded.ok) return { ok: false, error: loaded.error };
 
-  // "<template name> — <date>.md" — matches the naming the docs tab
-  // sorts/reads well, and the date disambiguates repeat generations.
+  const { doc: resolved, report } = renderTemplate(doc, { data: loaded.data, blocks });
+  const buffer = await resolvedToDocx(resolved);
+
+  // "<template name> — <date>.docx" — the date disambiguates repeat generations.
   const documentName = `${template.name} — ${formatDate(
-    resolved.ctx.today,
+    loaded.data.today,
     "medium",
-    resolved.ctx.timeZone,
-  )}.md`;
+    loaded.data.timeZone,
+  )}.docx`;
 
   // Node's global File — same shape uploadDocument receives from the
-  // browser, so storeFile needs no new entry point for text output.
-  // Infrastructure failures (blob 5xx, misconfigured driver, matter
-  // deleted mid-request) come back as {ok:false} so the dialog shows
-  // an inline error instead of the route error boundary.
+  // browser. Infrastructure failures (blob 5xx, misconfigured driver,
+  // matter deleted mid-request) come back as {ok:false} so the dialog
+  // shows an inline error instead of the route error boundary.
   let stored: Awaited<ReturnType<typeof storeFile>>;
   try {
-    stored = await storeFile(new File([merged.text], documentName, { type: "text/markdown" }));
+    stored = await storeFile(new File([new Uint8Array(buffer)], documentName, { type: DOCX_MIME }));
   } catch (err) {
     return {
       ok: false,
@@ -674,7 +598,7 @@ export async function generateDocumentFromTemplate(
     };
   }
 
-  let doc: { id: string };
+  let created: { id: string };
   try {
     const data = {
       ...scopeWhere(scope),
@@ -686,9 +610,9 @@ export async function generateDocumentFromTemplate(
       fileSize: stored.size,
       uploadedBy: userId,
     };
-    doc = request
+    created = request
       ? await prisma.$transaction(async (tx) => {
-          const folderId = await resolveRecordsRoleFolder(
+          const requestFolderId = await resolveRecordsRoleFolder(
             tx,
             {
               id: request.id,
@@ -702,14 +626,14 @@ export async function generateDocumentFromTemplate(
           return tx.document.create({
             data: {
               ...data,
-              folderId,
+              folderId: requestFolderId,
               recordsRequestId: request.id,
               recordsRequestRole: "request_letter",
             },
             select: { id: true },
           });
         })
-      : await prisma.document.create({ data, select: { id: true } });
+      : await prisma.document.create({ data: { ...data, folderId }, select: { id: true } });
   } catch (err) {
     // The file is already written; no row will ever point at it.
     await deleteFile(stored.key).catch(() => {});
@@ -733,11 +657,70 @@ export async function generateDocumentFromTemplate(
   });
 
   revalidateDocumentScope(scope);
+  return { ok: true, documentId: created.id, documentName, report };
+}
+
+// ── Editor draft preview ───────────────────────────────────────────────
+
+/**
+ * Render an unsaved editor draft against sample data or a real record.
+ * Gated on template edit/create (the editor's own keys); a real target
+ * still goes through the access-checked loader.
+ */
+export async function previewTemplateDraft(input: {
+  content: unknown;
+  subject?: unknown;
+  kind: TemplateKind;
+  appliesTo: AppliesTo;
+  target: { sample: true } | { scope: RecordScope };
+}): Promise<
+  | { ok: true; html: string; text: string; subjectText: string | null; report: RenderReport }
+  | { ok: false; error: string }
+> {
+  const allowed =
+    (await currentUserHasPermission("documents.template.edit")) ||
+    (await currentUserHasPermission("documents.template.create"));
+  if (!allowed) {
+    return { ok: false, error: "You don't have permission to preview templates." };
+  }
+
+  const content = validateTemplateContent(input.kind, input.content);
+  if (!content.ok) return { ok: false, error: content.error };
+  let subjectDoc: TemplateDoc | null = null;
+  if (input.kind === "email" && input.subject != null) {
+    const s = validateSubject(input.subject);
+    if (!s.ok) return { ok: false, error: s.error };
+    subjectDoc = s.doc;
+  }
+
+  const blocks = await loadBlockMap(content.doc);
+
+  let data: TemplateData;
+  if ("sample" in input.target) {
+    data = {
+      ...SAMPLE_TEMPLATE_DATA,
+      scope: input.appliesTo === "lead" ? "lead" : "matter",
+    };
+  } else {
+    const loaded = await loadTemplateData({ scope: input.target.scope });
+    if (!loaded.ok) return { ok: false, error: loaded.error };
+    data = loaded.data;
+  }
+
+  const { doc: resolved, report } = renderTemplate(content.doc, { data, blocks });
+  let subjectText: string | null = null;
+  if (subjectDoc) {
+    const rendered = renderTemplate(subjectDoc, { data, blocks });
+    subjectText = resolvedToText(rendered.doc);
+    for (const k of ["missing", "invalid", "archivedBlocks"] as const) {
+      for (const v of rendered.report[k]) if (!report[k].includes(v)) report[k].push(v);
+    }
+  }
   return {
     ok: true,
-    documentId: doc.id,
-    documentName,
-    unresolved: merged.unresolved,
-    missing: merged.missing,
+    html: resolvedToHtml(resolved),
+    text: resolvedToText(resolved),
+    subjectText,
+    report,
   };
 }
