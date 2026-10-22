@@ -344,6 +344,117 @@ describe("globalSearch — documents", () => {
   });
 });
 
+describe("globalSearch — transcripts", () => {
+  async function seedTranscript(
+    scope: { matterId: string } | { leadId: string },
+    docName: string,
+    segs: Array<{ text: string; start: number; speaker?: string }>,
+    status = "completed"
+  ) {
+    const doc = await prisma.document.create({
+      data: { ...scope, name: docName },
+      select: { id: true },
+    });
+    await prisma.transcript.create({
+      data: {
+        documentId: doc.id,
+        status,
+        requestedById: viewerId,
+        speakers: { A: "Officer Diaz" },
+        segments: {
+          create: segs.map((s, i) => ({
+            index: i,
+            speaker: s.speaker ?? "A",
+            startSeconds: s.start,
+            endSeconds: s.start + 5,
+            text: s.text,
+            words: [],
+          })),
+        },
+      },
+    });
+    return doc.id;
+  }
+
+  test("finds a segment with speaker, timecode and a viewer deep link", async () => {
+    const docId = await seedTranscript({ matterId }, "Bodycam.mp4", [
+      { text: "nothing here", start: 1 },
+      { text: "I read him his Miranda rights", start: 3725.6, speaker: "B" },
+    ]);
+    const g = groupOf(await globalSearch("miranda"), "transcript")!;
+    expect(g.total).toBe(1);
+    expect(g.hits[0]).toMatchObject({
+      type: "transcript",
+      title: "Bodycam.mp4",
+      documentId: docId,
+      speakerName: "Speaker B",
+      startSeconds: 3725.6,
+      href: `/matters/${matterId}/documents/${docId}?t=3725`,
+      context: "Alvarez v. City of Aurora",
+    });
+    expect(g.hits[0].snippet).toContain(marked("Miranda"));
+  });
+
+  test("uses the mapped speaker display name", async () => {
+    await seedTranscript({ matterId }, "a.mp4", [
+      { text: "the Quokkaword", start: 2 },
+    ]);
+    const g = groupOf(await globalSearch("quokkaword"), "transcript")!;
+    expect(g.hits[0].speakerName).toBe("Officer Diaz");
+  });
+
+  test("only completed transcripts are searchable", async () => {
+    await seedTranscript(
+      { matterId },
+      "p.mp4",
+      [{ text: "Zorblat partial", start: 1 }],
+      "processing"
+    );
+    expect(groupOf(await globalSearch("zorblat"), "transcript")).toBeUndefined();
+  });
+
+  test("a lead document's transcript links to the intake viewer", async () => {
+    const { leadId } = await seedLead({ name: "Test Lead" });
+    const docId = await seedTranscript({ leadId }, "Call.mp3", [
+      { text: "Flumpernickel said so", start: 61 },
+    ]);
+    const g = groupOf(await globalSearch("flumpernickel"), "transcript")!;
+    expect(g.hits[0]).toMatchObject({
+      href: `/intake/${leadId}/documents/${docId}?t=61`,
+      context: "Intake · Test Lead",
+    });
+  });
+
+  test("TEAM mode: a transcript on a walled matter is not found", async () => {
+    await prisma.firm.updateMany({ data: { matterVisibility: "TEAM" } });
+    const mine = await seedTranscript({ matterId }, "mine.mp4", [
+      { text: "Wobblequack mine", start: 1 },
+    ]);
+    await seedTranscript({ matterId: otherMatterId }, "walled.mp4", [
+      { text: "Wobblequack secret", start: 1 },
+    ]);
+    const res = await globalSearch("wobblequack");
+    const g = groupOf(res, "transcript")!;
+    expect(g.total).toBe(1);
+    expect(g.hits.map((h) => h.documentId)).toEqual([mine]);
+    expect(JSON.stringify(res)).not.toContain("walled.mp4");
+  });
+
+  test("group is capped like documents, with the full total", async () => {
+    await seedTranscript(
+      { matterId },
+      "long.mp4",
+      Array.from({ length: SEARCH_GROUP_TAKE + 3 }, (_, i) => ({
+        text: `Gribblefrap number ${i}`,
+        start: i * 10,
+      }))
+    );
+    const g = groupOf(await globalSearch("gribblefrap"), "transcript")!;
+    expect(g.hits).toHaveLength(SEARCH_GROUP_TAKE);
+    expect(g.total).toBe(SEARCH_GROUP_TAKE + 3);
+  });
+});
+
 describe("globalSearch — tasks", () => {
   test("matter tasks deep-link to the matter's tasks tab; firm-wide tasks are unlinked", async () => {
     const matterTask = await prisma.task.create({

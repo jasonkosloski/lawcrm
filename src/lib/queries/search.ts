@@ -109,6 +109,10 @@ export type SearchHit = {
   href: string | null;
   /** Context label — matter name where applicable, org for contacts. */
   context: string | null;
+  /** Transcript hits only: the document, speaker and moment found. */
+  documentId?: string;
+  speakerName?: string;
+  startSeconds?: number;
 };
 
 export type SearchGroup = {
@@ -513,6 +517,83 @@ export async function globalSearch(
             href: `${base}/documents/${d.id}`,
             context:
               d.matter?.name ?? (d.lead ? `Intake · ${d.lead.name}` : "Intake"),
+          },
+        ];
+      }),
+    };
+  };
+
+  const searchTranscripts = async (): Promise<SearchGroup> => {
+    // Same Document read model as searchDocuments (matter walls + lead
+    // scope), reached through segment -> transcript -> document. Only
+    // completed transcripts; a partial/failed one is not a record.
+    const where = {
+      text: ci,
+      transcript: {
+        status: "completed",
+        document: { AND: [...accessOpt] },
+      },
+    };
+    const [rows, total] = await Promise.all([
+      prisma.transcriptSegment.findMany({
+        where,
+        select: {
+          text: true,
+          speaker: true,
+          startSeconds: true,
+          transcript: {
+            select: {
+              speakers: true,
+              document: {
+                select: {
+                  id: true,
+                  name: true,
+                  matterId: true,
+                  leadId: true,
+                  matter: { select: { name: true } },
+                  lead: { select: { name: true } },
+                },
+              },
+            },
+          },
+        },
+        orderBy: [{ transcript: { completedAt: "desc" } }, { startSeconds: "asc" }],
+        take,
+      }),
+      prisma.transcriptSegment.count({ where }),
+    ]);
+    return {
+      type: "transcript",
+      total,
+      hits: rows.flatMap((r) => {
+        const d = r.transcript.document;
+        let base: string;
+        try {
+          base = scopeBasePath(scopeOf(d));
+        } catch (err) {
+          console.warn("[search] skipping transcript with no derivable scope", {
+            id: d.id,
+            err,
+          });
+          return [];
+        }
+        const names = (r.transcript.speakers ?? {}) as Record<string, unknown>;
+        const mapped = names[r.speaker];
+        return [
+          {
+            type: "transcript" as const,
+            id: `${d.id}:${r.startSeconds}`,
+            title: d.name,
+            snippet: makeSnippet(r.text, q),
+            href: `${base}/documents/${d.id}?t=${Math.floor(r.startSeconds)}`,
+            context:
+              d.matter?.name ?? (d.lead ? `Intake · ${d.lead.name}` : "Intake"),
+            documentId: d.id,
+            speakerName:
+              typeof mapped === "string" && mapped
+                ? mapped
+                : `Speaker ${r.speaker}`,
+            startSeconds: r.startSeconds,
           },
         ];
       }),
@@ -984,6 +1065,7 @@ export async function globalSearch(
     lead: searchLeads,
     note: searchNotes,
     document: searchDocuments,
+    transcript: searchTranscripts,
     task: searchTasks,
     deadline: searchDeadlines,
     event: searchEvents,

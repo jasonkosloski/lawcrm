@@ -17,6 +17,7 @@ import {
   Clock,
   FileText,
   FolderSearch,
+  Mic,
   Gavel,
   Inbox,
   Mail,
@@ -33,6 +34,7 @@ import type {
   SearchHitType,
 } from "@/lib/queries/search";
 import { EmptyState } from "@/components/shared/empty-state";
+import { formatTimecode } from "@/lib/transcription/timecode";
 import { SearchSnippet } from "./snippet";
 
 export const TYPE_META: Record<
@@ -44,6 +46,7 @@ export const TYPE_META: Record<
   lead: { label: "Leads", icon: Inbox },
   note: { label: "Notes", icon: StickyNote },
   document: { label: "Documents", icon: FileText },
+  transcript: { label: "Transcripts", icon: Mic },
   task: { label: "Tasks", icon: CheckSquare },
   deadline: { label: "Deadlines", icon: AlarmClock },
   event: { label: "Events", icon: Calendar },
@@ -154,6 +157,11 @@ function HitRow({ hit }: { hit: SearchHit }) {
     <>
       <div className="min-w-0 flex-1 flex flex-col gap-0.5">
         <span className="text-sm text-ink truncate">{hit.title}</span>
+        {hit.type === "transcript" && hit.startSeconds != null && (
+          <span className="font-mono text-2xs text-ink-3">
+            [{formatTimecode(hit.startSeconds)}] {hit.speakerName}
+          </span>
+        )}
         {hit.snippet && (
           <span className="line-clamp-2">
             <SearchSnippet snippet={hit.snippet} />

@@ -14,6 +14,7 @@ export const SEARCH_HIT_TYPES = [
   "lead",
   "note",
   "document",
+  "transcript",
   "task",
   "deadline",
   "event",
