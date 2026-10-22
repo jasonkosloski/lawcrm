@@ -44,6 +44,8 @@ const ALLOWLIST: Record<string, string> = {
     "Firm-wide contact directory operation (contacts.merge); re-points party rows across matters by contact id, not a matter-scoped write.",
   "email-filing.ts:setEmailThreadRecord":
     "Delegates to fileEmailThread (src/lib/email-filing.ts), which asserts scope access on the thread's current record and on the target; runtime-tested in email-filing.test.ts.",
+  "document-templates.ts:searchTemplatePreviewRecords":
+    "Read-only search: builds scopes from globalSearch hits, which already filter by matterAccessWhere / leadAccessWhere (restricted-matter case runtime-tested in document-templates.test.ts); the picked record is then access-checked by previewTemplateDraft's loader.",
   "email-send.ts:sendEmail":
     "Composes a NEW unfiled thread on the sender's own mailbox; takes no matter input. (replyToThread asserts the thread's matter.)",
   "email-thread-flags.ts:toggleEmailThreadStar":
@@ -213,6 +215,8 @@ const LEAD_ACCESS_CALL =
 const LEAD_ALLOWLIST: Record<string, string> = {
   "email-filing.ts:setEmailThreadRecord":
     "Delegates to fileEmailThread (src/lib/email-filing.ts), which asserts scope access on the thread's current record and on the target; runtime-tested in email-filing.test.ts.",
+  "document-templates.ts:searchTemplatePreviewRecords":
+    "Read-only search: builds scopes from globalSearch hits, which already filter by matterAccessWhere / leadAccessWhere (restricted-matter case runtime-tested in document-templates.test.ts); the picked record is then access-checked by previewTemplateDraft's loader.",
   "leads.ts:createLead":
     "Creates a brand-new, unrestricted lead; `leadId` is only the new row's id on its activity entry.",
 };

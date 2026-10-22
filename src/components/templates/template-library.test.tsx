@@ -1,8 +1,7 @@
 /**
- * TemplateLibrary — category ordering, archived section, and the
- * per-row menu gating (edit / archive / delete by permission flag).
- * Actions are mocked; the editor dialog is stubbed out (covered in
- * template-editor-dialog.test.tsx).
+ * TemplateLibrary — Templates / Blocks tabs, kind and applies-to
+ * filters, category ordering, rows linking to the editor pages, and
+ * per-row menu gating. Actions are mocked.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
@@ -10,24 +9,26 @@ import userEvent from "@testing-library/user-event";
 
 const setActive = vi.fn();
 const deleteTemplate = vi.fn();
+const setBlockActive = vi.fn();
+const deleteBlock = vi.fn();
 vi.mock("@/app/actions/document-templates", () => ({
   setDocumentTemplateActive: (...a: unknown[]) => setActive(...a),
   deleteDocumentTemplate: (...a: unknown[]) => deleteTemplate(...a),
-  createDocumentTemplate: vi.fn(),
-  updateDocumentTemplate: vi.fn(),
 }));
-vi.mock("@/components/templates/template-editor-dialog", () => ({
-  TemplateEditorDialog: () => null,
+vi.mock("@/app/actions/template-blocks", () => ({
+  setTemplateBlockActive: (...a: unknown[]) => setBlockActive(...a),
+  deleteTemplateBlock: (...a: unknown[]) => deleteBlock(...a),
 }));
 
-import { TemplateLibrary, type TemplateListItem } from "./template-library";
+import { TemplateLibrary, type BlockListItem, type TemplateListItem } from "./template-library";
 
 const row = (over: Partial<TemplateListItem>): TemplateListItem => ({
   id: "x",
   name: "Template",
   category: "general",
   description: null,
-  body: "",
+  kind: "letter",
+  appliesTo: "matter",
   isActive: true,
   updatedAtLabel: "Apr 15, 2026",
   createdByName: null,
@@ -36,68 +37,127 @@ const row = (over: Partial<TemplateListItem>): TemplateListItem => ({
 
 const TEMPLATES = [
   row({ id: "1", name: "Stray one", category: "intake" }),
-  row({ id: "2", name: "General one", category: "general" }),
+  row({ id: "2", name: "General one", category: "general", kind: "email", appliesTo: "lead" }),
   row({ id: "3", name: "Demand one", category: "demand_letter" }),
   row({ id: "4", name: "Old demand", category: "demand_letter", isActive: false }),
 ];
 
+const BLOCKS: BlockListItem[] = [
+  {
+    id: "b1",
+    key: "signature",
+    name: "Signature",
+    description: null,
+    isActive: true,
+    updatedAtLabel: "Apr 15, 2026",
+  },
+  {
+    id: "b2",
+    key: "old_footer",
+    name: "Old footer",
+    description: null,
+    isActive: false,
+    updatedAtLabel: "Apr 1, 2026",
+  },
+];
+
+const lib = (over: Partial<Parameters<typeof TemplateLibrary>[0]> = {}) => (
+  <TemplateLibrary
+    templates={TEMPLATES}
+    blocks={BLOCKS}
+    canCreate={false}
+    canEdit={false}
+    canDelete={false}
+    {...over}
+  />
+);
+
 beforeEach(() => {
   setActive.mockReset().mockResolvedValue({ ok: true });
   deleteTemplate.mockReset().mockResolvedValue({ ok: true });
+  setBlockActive.mockReset().mockResolvedValue({ ok: true });
+  deleteBlock.mockReset().mockResolvedValue({ ok: true });
 });
 
 describe("TemplateLibrary", () => {
   it("lists curated categories in catalog order, then stray categories, then archived", () => {
-    render(
-      <TemplateLibrary templates={TEMPLATES} canCreate={false} canEdit={false} canDelete={false} />,
-    );
+    render(lib());
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(headings).toEqual(["Demand letters", "General", "intake", "Archived (1)"]);
   });
 
-  it("renders no manage affordances for a read-only viewer", () => {
-    render(
-      <TemplateLibrary templates={TEMPLATES} canCreate={false} canEdit={false} canDelete={false} />,
+  it("rows link to the editor page", () => {
+    render(lib());
+    expect(screen.getByRole("link", { name: "Demand one" })).toHaveAttribute(
+      "href",
+      "/settings/templates/3",
     );
-    expect(screen.queryByRole("button", { name: /new template/i })).not.toBeInTheDocument();
+  });
+
+  it("filters by kind and applies-to", async () => {
+    const user = userEvent.setup();
+    render(lib());
+    await user.selectOptions(screen.getByLabelText("Kind"), "email");
+    expect(screen.getByRole("link", { name: "General one" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Demand one" })).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Kind"), "all");
+    await user.selectOptions(screen.getByLabelText("Applies to"), "matter");
+    expect(screen.queryByRole("link", { name: "General one" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Demand one" })).toBeInTheDocument();
+  });
+
+  it("the Blocks tab lists blocks linking to the block editor", async () => {
+    const user = userEvent.setup();
+    render(lib({ canCreate: true }));
+    expect(screen.getByRole("tab", { name: "Templates" })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: "Blocks" }));
+    expect(screen.getByRole("link", { name: "Signature" })).toHaveAttribute(
+      "href",
+      "/settings/templates/blocks/b1",
+    );
+    expect(screen.getByText("Archived (1)")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /new block/i })).toHaveAttribute(
+      "href",
+      "/settings/templates/blocks/new",
+    );
+    expect(screen.queryByRole("link", { name: "Demand one" })).not.toBeInTheDocument();
+  });
+
+  it("renders no manage affordances for a read-only viewer", () => {
+    render(lib());
+    expect(screen.queryByRole("link", { name: /new template/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /actions for/i })).not.toBeInTheDocument();
   });
 
-  it("offers Edit + Archive but not Delete when only canEdit", async () => {
+  it("offers Archive but not Delete when only canEdit", async () => {
     const user = userEvent.setup();
-    render(<TemplateLibrary templates={TEMPLATES} canCreate={false} canEdit canDelete={false} />);
+    render(lib({ canEdit: true }));
     await user.click(screen.getByRole("button", { name: "Actions for Demand one" }));
     const menu = within(screen.getByRole("menu"));
-    expect(menu.getByText("Edit")).toBeInTheDocument();
     expect(menu.getByText("Archive")).toBeInTheDocument();
     expect(menu.queryByText(/delete permanently/i)).not.toBeInTheDocument();
   });
 
-  it("offers only Delete when only canDelete, and archived rows offer Restore", async () => {
+  it("archives and restores templates and blocks through their actions", async () => {
     const user = userEvent.setup();
-    render(<TemplateLibrary templates={TEMPLATES} canCreate={false} canEdit={false} canDelete />);
-    await user.click(screen.getByRole("button", { name: "Actions for Demand one" }));
-    const menu = within(screen.getByRole("menu"));
-    expect(menu.getByText(/delete permanently/i)).toBeInTheDocument();
-    expect(menu.queryByText("Edit")).not.toBeInTheDocument();
-    expect(menu.queryByText("Archive")).not.toBeInTheDocument();
-  });
-
-  it("archives and restores through the action", async () => {
-    const user = userEvent.setup();
-    render(<TemplateLibrary templates={TEMPLATES} canCreate={false} canEdit canDelete={false} />);
+    render(lib({ canEdit: true }));
     await user.click(screen.getByRole("button", { name: "Actions for Demand one" }));
     await user.click(screen.getByText("Archive"));
     expect(setActive).toHaveBeenCalledWith("3", false);
 
-    await user.click(screen.getByRole("button", { name: "Actions for Old demand" }));
+    await user.click(screen.getByRole("tab", { name: "Blocks" }));
+    await user.click(screen.getByRole("button", { name: "Actions for Old footer" }));
     await user.click(screen.getByText("Restore"));
-    expect(setActive).toHaveBeenCalledWith("4", true);
+    expect(setBlockActive).toHaveBeenCalledWith("b2", true);
   });
 
-  it("shows the create button and empty state to a creator", () => {
-    render(<TemplateLibrary templates={[]} canCreate canEdit={false} canDelete={false} />);
-    expect(screen.getByRole("button", { name: /new template/i })).toBeInTheDocument();
+  it("shows the create link and empty state to a creator", () => {
+    render(lib({ templates: [], canCreate: true }));
+    expect(screen.getByRole("link", { name: /new template/i })).toHaveAttribute(
+      "href",
+      "/settings/templates/new",
+    );
     expect(screen.getByText("No templates yet")).toBeInTheDocument();
   });
 });

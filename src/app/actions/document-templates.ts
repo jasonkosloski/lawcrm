@@ -69,143 +69,15 @@ import {
   type TemplateKind,
 } from "@/lib/templates/schema";
 import {
-  MAX_TEMPLATE_BODY,
   MAX_TEMPLATE_DESCRIPTION,
   MAX_TEMPLATE_NAME,
   documentCategoryForTemplate,
   isTemplateCategory,
   templateCategoryLabel,
-  templateFormInitialState,
-  type TemplateFormState,
 } from "@/lib/template-constants";
-
-// Legacy: removed with the editor dialog
-const templateSchema = z.object({
-  name: z.string().trim().min(1, "Name is required.").max(MAX_TEMPLATE_NAME),
-  // Category is a free string in the schema; v1 validates against
-  // the curated list so the picker + grouping stay coherent. When
-  // firm-defined categories land, loosen here only.
-  category: z.string().min(1, "Category is required.").max(60),
-  description: z.string().trim().max(MAX_TEMPLATE_DESCRIPTION).optional().or(z.literal("")),
-  body: z
-    .string()
-    .min(1, "Template body is required.")
-    .max(MAX_TEMPLATE_BODY, "Template body is too long."),
-});
-
-// Legacy: removed with the editor dialog
-function parseTemplateForm(
-  formData: FormData,
-  /** An existing row's category stays valid when unchanged even if
-   *  it isn't in the curated list (imported / pre-validation rows),
-   *  so fixing a typo in the body doesn't force a re-categorize. */
-  keepCategory?: string,
-): { ok: true; data: z.infer<typeof templateSchema> } | { ok: false; error: string } {
-  const parsed = templateSchema.safeParse({
-    name: (formData.get("name") as string | null) ?? "",
-    category: (formData.get("category") as string | null) ?? "general",
-    description: (formData.get("description") as string | null) ?? "",
-    body: (formData.get("body") as string | null) ?? "",
-  });
-  if (!parsed.success) {
-    return {
-      ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid template — check the fields.",
-    };
-  }
-  if (!isTemplateCategory(parsed.data.category) && parsed.data.category !== keepCategory) {
-    return { ok: false, error: "Unknown category." };
-  }
-  return { ok: true, data: parsed.data };
-}
+import { globalSearch } from "@/lib/queries/search";
 
 // ── Library CRUD ───────────────────────────────────────────────────────
-
-// Legacy: removed with the editor dialog
-export async function createDocumentTemplate(
-  _prev: TemplateFormState,
-  formData: FormData,
-): Promise<TemplateFormState> {
-  const userId = await requirePermission("documents.template.create");
-  const parsed = parseTemplateForm(formData);
-  if (!parsed.ok) return { status: "error", error: parsed.error };
-
-  const created = await prisma.documentTemplate.create({
-    data: {
-      name: parsed.data.name,
-      category: parsed.data.category,
-      description: parsed.data.description?.trim() || null,
-      body: parsed.data.body,
-      createdById: userId,
-    },
-    select: { id: true },
-  });
-
-  await logTemplateChange(
-    userId,
-    `Template "${parsed.data.name}" created`,
-    `Category: ${templateCategoryLabel(parsed.data.category)} (id ${created.id})`,
-  );
-
-  revalidatePath("/settings/templates");
-  return { ...templateFormInitialState, status: "ok" };
-}
-
-// Legacy: removed with the editor dialog
-export async function updateDocumentTemplate(
-  templateId: string,
-  _prev: TemplateFormState,
-  formData: FormData,
-): Promise<TemplateFormState> {
-  const userId = await requirePermission("documents.template.edit");
-
-  const existing = await prisma.documentTemplate.findUnique({
-    where: { id: templateId },
-    select: {
-      id: true,
-      name: true,
-      category: true,
-      description: true,
-      body: true,
-    },
-  });
-  if (!existing) {
-    return { status: "error", error: "Template not found." };
-  }
-
-  const parsed = parseTemplateForm(formData, existing.category);
-  if (!parsed.ok) return { status: "error", error: parsed.error };
-
-  await prisma.documentTemplate.update({
-    where: { id: templateId },
-    data: {
-      name: parsed.data.name,
-      category: parsed.data.category,
-      description: parsed.data.description?.trim() || null,
-      body: parsed.data.body,
-    },
-  });
-
-  // Old -> new for the small fields; the body can be 50k chars, so
-  // only record THAT it changed (the audit trail answers who/when).
-  const newDescription = parsed.data.description?.trim() || null;
-  const changes = [
-    existing.name !== parsed.data.name ? `name "${existing.name}" -> "${parsed.data.name}"` : null,
-    existing.category !== parsed.data.category
-      ? `category ${existing.category} -> ${parsed.data.category}`
-      : null,
-    existing.description !== newDescription ? "description changed" : null,
-    existing.body !== parsed.data.body ? "body changed" : null,
-  ].filter((c): c is string => c !== null);
-  await logTemplateChange(
-    userId,
-    `Template "${parsed.data.name}" updated`,
-    changes.length > 0 ? changes.join("; ") : "No field changes",
-  );
-
-  revalidatePath("/settings/templates");
-  return { ...templateFormInitialState, status: "ok" };
-}
 
 const SCOPE_WORD: Record<AppliesTo, string> = {
   matter: "matter",
@@ -238,7 +110,7 @@ export async function saveDocumentTemplate(input: {
   content: unknown;
   subject?: unknown;
   expectedUpdatedAt?: string;
-}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+}): Promise<{ ok: true; id: string; updatedAt: string } | { ok: false; error: string }> {
   const userId = await requirePermission(
     input.id ? "documents.template.edit" : "documents.template.create",
   );
@@ -301,7 +173,7 @@ export async function saveDocumentTemplate(input: {
   if (!input.id) {
     const created = await prisma.documentTemplate.create({
       data: { ...data, createdById: userId },
-      select: { id: true },
+      select: { id: true, updatedAt: true },
     });
     await logTemplateChange(
       userId,
@@ -309,11 +181,13 @@ export async function saveDocumentTemplate(input: {
       `Category: ${templateCategoryLabel(data.category)} (id ${created.id})`,
     );
     revalidatePath("/settings/templates");
-    return { ok: true, id: created.id };
+    return { ok: true, id: created.id, updatedAt: created.updatedAt.toISOString() };
   }
 
   // Atomic stale check: the write only matches the row version the
-  // editor loaded, so two concurrent saves cannot both win.
+  // editor loaded, so two concurrent saves cannot both win. The new
+  // version is set explicitly so it can be handed back to the editor.
+  const updatedAt = new Date();
   const { count } = await prisma.documentTemplate.updateMany({
     where: {
       id: input.id,
@@ -321,14 +195,14 @@ export async function saveDocumentTemplate(input: {
         ? { updatedAt: new Date(parsed.data.expectedUpdatedAt) }
         : {}),
     },
-    data,
+    data: { ...data, updatedAt },
   });
   if (count === 0) {
     return { ok: false, error: "Someone else saved this template — reload to see their changes." };
   }
   await logTemplateChange(userId, `Template "${name}" updated`, `id ${input.id}`);
   revalidatePath("/settings/templates");
-  return { ok: true, id: input.id };
+  return { ok: true, id: input.id, updatedAt: updatedAt.toISOString() };
 }
 
 /** Archive (isActive=false) or restore (true). Soft state only —
@@ -662,6 +536,43 @@ export async function generateDocumentFromTemplate(
 
 // ── Editor draft preview ───────────────────────────────────────────────
 
+/** The editor's own keys: anyone who may author templates may preview. */
+async function canPreviewDrafts(): Promise<boolean> {
+  return (
+    (await currentUserHasPermission("documents.template.edit")) ||
+    (await currentUserHasPermission("documents.template.create"))
+  );
+}
+
+const PREVIEW_RECORD_TAKE = 8;
+
+/**
+ * Matters and leads to preview a draft against. Wraps `globalSearch`, so
+ * the viewer's matter/lead access scoping (ethical walls, restricted
+ * leads) applies unchanged. `appliesTo` narrows the kinds searched.
+ */
+export async function searchTemplatePreviewRecords(
+  query: string,
+  appliesTo: AppliesTo = "both",
+): Promise<{ scope: RecordScope; label: string }[]> {
+  if (!(await canPreviewDrafts())) return [];
+  const out: { scope: RecordScope; label: string }[] = [];
+  if (appliesTo !== "lead") {
+    const res = await globalSearch(query, { type: "matter", take: PREVIEW_RECORD_TAKE });
+    for (const g of res.groups) {
+      for (const h of g.hits)
+        out.push({ scope: { kind: "matter", matterId: h.id }, label: h.title });
+    }
+  }
+  if (appliesTo !== "matter") {
+    const res = await globalSearch(query, { type: "lead", take: PREVIEW_RECORD_TAKE });
+    for (const g of res.groups) {
+      for (const h of g.hits) out.push({ scope: { kind: "lead", leadId: h.id }, label: h.title });
+    }
+  }
+  return out;
+}
+
 /**
  * Render an unsaved editor draft against sample data or a real record.
  * Gated on template edit/create (the editor's own keys); a real target
@@ -677,10 +588,7 @@ export async function previewTemplateDraft(input: {
   | { ok: true; html: string; text: string; subjectText: string | null; report: RenderReport }
   | { ok: false; error: string }
 > {
-  const allowed =
-    (await currentUserHasPermission("documents.template.edit")) ||
-    (await currentUserHasPermission("documents.template.create"));
-  if (!allowed) {
+  if (!(await canPreviewDrafts())) {
     return { ok: false, error: "You don't have permission to preview templates." };
   }
 

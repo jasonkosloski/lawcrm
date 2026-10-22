@@ -37,16 +37,14 @@ import { deleteFile, storeFile } from "@/lib/file-storage";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import {
-  createDocumentTemplate,
   deleteDocumentTemplate,
   generateDocumentFromTemplate,
   previewDocumentFromTemplate,
   previewTemplateDraft,
   saveDocumentTemplate,
+  searchTemplatePreviewRecords,
   setDocumentTemplateActive,
-  updateDocumentTemplate,
 } from "@/app/actions/document-templates";
-import { templateFormInitialState } from "@/lib/template-constants";
 import {
   resetDb,
   seedContact,
@@ -138,15 +136,6 @@ async function gen(
   });
 }
 
-const buildForm = (over: Record<string, string> = {}) => {
-  const fd = new FormData();
-  fd.set("name", over.name ?? "Demand letter");
-  fd.set("category", over.category ?? "demand_letter");
-  fd.set("description", over.description ?? "Standard demand");
-  fd.set("body", over.body ?? "Dear {{client.name}}, re {{matter.name}}.");
-  return fd;
-};
-
 const seedTemplate = (
   over: Partial<{ body: string; isActive: boolean; kind: string; appliesTo: string }> = {},
 ) =>
@@ -164,17 +153,8 @@ const seedTemplate = (
   });
 
 describe("permission gates", () => {
-  test("create asks for documents.template.create", async () => {
-    await createDocumentTemplate(templateFormInitialState, buildForm());
-    expect(requirePermission).toHaveBeenCalledWith("documents.template.create");
-  });
-
-  test("update + archive ask for documents.template.edit", async () => {
+  test("archive asks for documents.template.edit", async () => {
     const t = await seedTemplate();
-    await updateDocumentTemplate(t.id, templateFormInitialState, buildForm());
-    expect(requirePermission).toHaveBeenCalledWith("documents.template.edit");
-
-    vi.mocked(requirePermission).mockClear();
     await setDocumentTemplateActive(t.id, false);
     expect(requirePermission).toHaveBeenCalledWith("documents.template.edit");
   });
@@ -209,73 +189,6 @@ describe("permission gates", () => {
 });
 
 describe("library CRUD", () => {
-  test("create persists the row with the creator attributed", async () => {
-    const res = await createDocumentTemplate(templateFormInitialState, buildForm());
-    expect(res.status).toBe("ok");
-    const row = await prisma.documentTemplate.findFirstOrThrow();
-    expect(row.name).toBe("Demand letter");
-    expect(row.category).toBe("demand_letter");
-    expect(row.createdById).toBe(userId);
-    expect(row.isActive).toBe(true);
-  });
-
-  test("create rejects a category outside the curated list", async () => {
-    const res = await createDocumentTemplate(
-      templateFormInitialState,
-      buildForm({ category: "nonsense" }),
-    );
-    expect(res.status).toBe("error");
-    expect(await prisma.documentTemplate.count()).toBe(0);
-  });
-
-  test("update rewrites fields; unknown id errors", async () => {
-    const t = await seedTemplate();
-    const res = await updateDocumentTemplate(
-      t.id,
-      templateFormInitialState,
-      buildForm({ name: "Demand letter v2", body: "{{today}}" }),
-    );
-    expect(res.status).toBe("ok");
-    const row = await prisma.documentTemplate.findUniqueOrThrow({
-      where: { id: t.id },
-    });
-    expect(row.name).toBe("Demand letter v2");
-    expect(row.body).toBe("{{today}}");
-
-    const miss = await updateDocumentTemplate("nope", templateFormInitialState, buildForm());
-    expect(miss.status).toBe("error");
-  });
-
-  test("update keeps an existing non-curated category but refuses to move to a new unknown one", async () => {
-    const legacy = await prisma.documentTemplate.create({
-      data: {
-        name: "Imported memo",
-        category: "intake",
-        body: "old",
-        createdById: userId,
-      },
-      select: { id: true },
-    });
-    const kept = await updateDocumentTemplate(
-      legacy.id,
-      templateFormInitialState,
-      buildForm({ category: "intake", body: "typo fixed" }),
-    );
-    expect(kept.status).toBe("ok");
-    const row = await prisma.documentTemplate.findUniqueOrThrow({
-      where: { id: legacy.id },
-    });
-    expect(row.category).toBe("intake");
-    expect(row.body).toBe("typo fixed");
-
-    const moved = await updateDocumentTemplate(
-      legacy.id,
-      templateFormInitialState,
-      buildForm({ category: "other-unknown" }),
-    );
-    expect(moved.status).toBe("error");
-  });
-
   test("archive flips isActive off, restore flips it back", async () => {
     const t = await seedTemplate();
     expect((await setDocumentTemplateActive(t.id, false)).ok).toBe(true);
@@ -619,17 +532,14 @@ describe("audit log", () => {
     });
 
   test("create, update, archive, restore and delete each write a firm-scope entry", async () => {
-    await createDocumentTemplate(templateFormInitialState, buildForm());
-    const t = await prisma.documentTemplate.findFirstOrThrow();
-
-    await updateDocumentTemplate(
-      t.id,
-      templateFormInitialState,
-      buildForm({ name: "Demand letter v2", body: "{{today}}" }),
+    const c = await saveDocumentTemplate(saveInput({ name: "Demand letter" }));
+    if (!c.ok) throw new Error(c.error);
+    await saveDocumentTemplate(
+      saveInput({ id: c.id, name: "Demand letter v2", expectedUpdatedAt: c.updatedAt }),
     );
-    await setDocumentTemplateActive(t.id, false);
-    await setDocumentTemplateActive(t.id, true);
-    await deleteDocumentTemplate(t.id);
+    await setDocumentTemplateActive(c.id, false);
+    await setDocumentTemplateActive(c.id, true);
+    await deleteDocumentTemplate(c.id);
 
     const rows = await firmEntries();
     expect(rows.map((r) => r.title)).toEqual([
@@ -640,10 +550,6 @@ describe("audit log", () => {
       'Template "Demand letter v2" deleted',
     ]);
     expect(rows.every((r) => r.userId === userId)).toBe(true);
-    // Old -> new on the small fields; the body is never copied in.
-    expect(rows[1]!.detail).toContain('name "Demand letter" -> "Demand letter v2"');
-    expect(rows[1]!.detail).toContain("body changed");
-    expect(rows[1]!.detail).not.toContain("{{today}}");
   });
 
   test("a no-op archive (already archived) writes nothing", async () => {
@@ -653,7 +559,7 @@ describe("audit log", () => {
   });
 
   test("a rejected save writes no entry", async () => {
-    await createDocumentTemplate(templateFormInitialState, buildForm({ category: "nonsense" }));
+    await saveDocumentTemplate(saveInput({ category: "nonsense" }));
     expect(await firmEntries()).toHaveLength(0);
   });
 });
@@ -940,6 +846,15 @@ describe("saveDocumentTemplate", () => {
       saveInput({ id: created.id, expectedUpdatedAt: row.updatedAt.toISOString() }),
     );
     expect(good.ok).toBe(true);
+    if (!good.ok) return;
+    // The returned version is the row's new updatedAt, so the editor can
+    // keep saving without a reload.
+    const after = await prisma.documentTemplate.findUniqueOrThrow({ where: { id: created.id } });
+    expect(good.updatedAt).toBe(after.updatedAt.toISOString());
+    const again = await saveDocumentTemplate(
+      saveInput({ id: created.id, expectedUpdatedAt: good.updatedAt }),
+    );
+    expect(again.ok).toBe(true);
   });
 
   test("email keeps subject; letter drops it", async () => {
@@ -973,5 +888,49 @@ describe("template writes log one activity row", () => {
     if (!c.ok) throw new Error(c.error);
     const r = await saveDocumentTemplate(saveInput({ id: c.id, expectedUpdatedAt: "garbage" }));
     expect(r.ok).toBe(false);
+  });
+});
+
+describe("searchTemplatePreviewRecords", () => {
+  test("finds visible matters and leads; never a restricted matter the user is not on", async () => {
+    const { firmId } = (await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { firmId: true },
+    })) as { firmId: string };
+    const other = await seedUser({ firmId, name: "Other Attorney" });
+    const { areaId, stageId } = await seedPracticeArea({ name: "Torts" });
+    const hidden = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: other.userId,
+      name: "Alvarez secret matter",
+    });
+    await prisma.matter.update({ where: { id: hidden.matterId }, data: { restricted: true } });
+    const { leadId } = await seedLead({ name: "Alvarez intake" });
+
+    const res = await searchTemplatePreviewRecords("alvarez");
+    expect(res).toContainEqual({
+      scope: { kind: "matter", matterId },
+      label: "Alvarez v. City of Aurora",
+    });
+    expect(res).toContainEqual({ scope: { kind: "lead", leadId }, label: "Alvarez intake" });
+    expect(res.some((r) => r.scope.kind === "matter" && r.scope.matterId === hidden.matterId)).toBe(
+      false,
+    );
+  });
+
+  test("appliesTo narrows the record kinds searched", async () => {
+    await seedLead({ name: "Alvarez intake" });
+    const leads = await searchTemplatePreviewRecords("alvarez", "lead");
+    expect(leads.every((r) => r.scope.kind === "lead")).toBe(true);
+    expect(leads).toHaveLength(1);
+    const matters = await searchTemplatePreviewRecords("alvarez", "matter");
+    expect(matters.every((r) => r.scope.kind === "matter")).toBe(true);
+    expect(matters).toHaveLength(1);
+  });
+
+  test("returns nothing without template edit or create", async () => {
+    vi.mocked(currentUserHasPermission).mockResolvedValue(false);
+    expect(await searchTemplatePreviewRecords("alvarez")).toEqual([]);
   });
 });

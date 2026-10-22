@@ -9,6 +9,8 @@
  * the action-layer validation later requires no read-side change.
  */
 
+import type { AppliesTo, TemplateKind } from "@/lib/templates/schema";
+
 export const TEMPLATE_CATEGORIES = [
   "demand_letter",
   "discovery",
@@ -62,15 +64,16 @@ export function documentCategoryForTemplate(category: string): string {
 // as input maxLength hints in the editor.
 export const MAX_TEMPLATE_NAME = 120;
 export const MAX_TEMPLATE_DESCRIPTION = 500;
-export const MAX_TEMPLATE_BODY = 50_000;
 
-/** Shared useActionState shape for the create/edit template forms. */
-export type TemplateFormState = {
-  status: "idle" | "ok" | "error";
-  error: string | null;
+export const TEMPLATE_KIND_LABEL: Record<TemplateKind, string> = {
+  letter: "Letter",
+  email: "Email",
+  sms: "Text message",
+  filing: "Filing",
 };
 
-export const templateFormInitialState: TemplateFormState = {
-  status: "idle",
-  error: null,
+export const APPLIES_TO_LABEL: Record<AppliesTo, string> = {
+  matter: "Matters",
+  lead: "Leads",
+  both: "Matters and leads",
 };

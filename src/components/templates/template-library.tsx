@@ -1,74 +1,124 @@
 /**
- * Template Library — grouped list for /settings/templates.
+ * Template Library — the /settings/templates list.
  *
- * Active templates grouped by category (curated order first, any
- * stray categories after), archived section below. Manage buttons
- * render only when the corresponding permission flag is passed in;
- * the server actions re-check regardless. Editing happens in
- * TemplateEditorDialog, kept mounted here so create + edit share
- * one instance.
+ * Two tabs: Templates (active grouped by category, curated order first,
+ * then stray categories, archived below; filterable by kind and
+ * applies-to) and Blocks (reusable fragments). Rows link to the
+ * full-page editors; manage affordances render only for the matching
+ * permission flags and every action re-checks server-side.
  */
 
 "use client";
 
-import { useState, useTransition } from "react";
-import {
-  Archive,
-  ArchiveRestore,
-  FileText,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
+import { Blocks, FileText, Plus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/empty-state";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { cn } from "@/lib/utils";
-import { confirmAction, notifyError } from "@/lib/feedback";
-import { TEMPLATE_CATEGORIES, templateCategoryLabel } from "@/lib/template-constants";
+import {
+  APPLIES_TO_LABEL,
+  TEMPLATE_CATEGORIES,
+  TEMPLATE_KIND_LABEL,
+  templateCategoryLabel,
+} from "@/lib/template-constants";
+import { APPLIES_TO, TEMPLATE_KINDS } from "@/lib/templates/schema";
 import {
   deleteDocumentTemplate,
   setDocumentTemplateActive,
 } from "@/app/actions/document-templates";
-import { TemplateEditorDialog } from "@/components/templates/template-editor-dialog";
-import { Button } from "@/components/ui/button";
+import { deleteTemplateBlock, setTemplateBlockActive } from "@/app/actions/template-blocks";
+import { LibraryRow } from "./library-row";
 
 export type TemplateListItem = {
   id: string;
   name: string;
   category: string;
   description: string | null;
-  body: string;
+  kind: string;
+  appliesTo: string;
   isActive: boolean;
   /** Preformatted server-side (viewer's TZ). */
   updatedAtLabel: string;
   createdByName: string | null;
 };
 
+export type BlockListItem = {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  updatedAtLabel: string;
+};
+
+type Tab = "templates" | "blocks";
+
+type Flags = { canCreate: boolean; canEdit: boolean; canDelete: boolean };
+
 export function TemplateLibrary({
+  templates,
+  blocks,
+  initialTab = "templates",
+  ...flags
+}: Flags & {
+  templates: TemplateListItem[];
+  blocks: BlockListItem[];
+  initialTab?: Tab;
+}) {
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "templates", label: "Templates" },
+    { id: "blocks", label: "Blocks" },
+  ];
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div role="tablist" className="flex gap-4 border-b border-line">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "-mb-px border-b-2 pb-2 text-xs font-medium",
+              tab === t.id ? "border-ink text-ink" : "border-transparent text-ink-3 hover:text-ink",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === "templates" ? (
+        <TemplatesTab templates={templates} {...flags} />
+      ) : (
+        <BlocksTab blocks={blocks} {...flags} />
+      )}
+    </div>
+  );
+}
+
+function TemplatesTab({
   templates,
   canCreate,
   canEdit,
   canDelete,
-}: {
+}: Flags & {
   templates: TemplateListItem[];
-  canCreate: boolean;
-  canEdit: boolean;
-  canDelete: boolean;
 }) {
-  const [editorOpen, setEditorOpen] = useState(false);
-  // null = create mode; a row = edit mode.
-  const [editing, setEditing] = useState<TemplateListItem | null>(null);
+  const [kind, setKind] = useState("all");
+  const [appliesTo, setAppliesTo] = useState("all");
 
-  const active = templates.filter((t) => t.isActive);
-  const archived = templates.filter((t) => !t.isActive);
+  const shown = templates.filter(
+    (t) =>
+      (kind === "all" || t.kind === kind) && (appliesTo === "all" || t.appliesTo === appliesTo),
+  );
+  const active = shown.filter((t) => t.isActive);
+  const archived = shown.filter((t) => !t.isActive);
 
   // Curated category order first, then whatever else exists in data.
   const categories = [
@@ -78,27 +128,74 @@ export function TemplateLibrary({
     ),
   ];
 
-  const openCreate = () => {
-    setEditing(null);
-    setEditorOpen(true);
-  };
-  const openEdit = (t: TemplateListItem) => {
-    setEditing(t);
-    setEditorOpen(true);
-  };
+  const row = (t: TemplateListItem) => (
+    <LibraryRow
+      key={t.id}
+      href={`/settings/templates/${t.id}`}
+      name={t.name}
+      icon={FileText}
+      description={t.description}
+      tags={
+        <span className="text-2xs text-ink-4 shrink-0">
+          {TEMPLATE_KIND_LABEL[t.kind as keyof typeof TEMPLATE_KIND_LABEL] ?? t.kind} ·{" "}
+          {APPLIES_TO_LABEL[t.appliesTo as keyof typeof APPLIES_TO_LABEL] ?? t.appliesTo}
+        </span>
+      }
+      meta={
+        <>
+          <span>updated {t.updatedAtLabel}</span>
+          {t.createdByName && <span>by {t.createdByName}</span>}
+        </>
+      }
+      isActive={t.isActive}
+      canEdit={canEdit}
+      canDelete={canDelete}
+      deleteNoun="template"
+      onSetActive={(a) => setDocumentTemplateActive(t.id, a)}
+      onDelete={() => deleteDocumentTemplate(t.id)}
+    />
+  );
 
   return (
     <div className="flex flex-col gap-6">
-      {canCreate && (
-        <div>
-          <Button type="button" onClick={openCreate} className="gap-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        {canCreate && (
+          <Button render={<Link href="/settings/templates/new" />} className="gap-2 text-xs">
             <Plus size={13} />
             New template
           </Button>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <NativeSelect
+            size="sm"
+            aria-label="Kind"
+            value={kind}
+            onChange={(e) => setKind(e.target.value)}
+          >
+            <NativeSelectOption value="all">All kinds</NativeSelectOption>
+            {TEMPLATE_KINDS.map((k) => (
+              <NativeSelectOption key={k} value={k}>
+                {TEMPLATE_KIND_LABEL[k]}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+          <NativeSelect
+            size="sm"
+            aria-label="Applies to"
+            value={appliesTo}
+            onChange={(e) => setAppliesTo(e.target.value)}
+          >
+            <NativeSelectOption value="all">All records</NativeSelectOption>
+            {APPLIES_TO.map((a) => (
+              <NativeSelectOption key={a} value={a}>
+                {APPLIES_TO_LABEL[a]}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
         </div>
-      )}
+      </div>
 
-      {active.length === 0 && archived.length === 0 && (
+      {templates.length === 0 && (
         <Card>
           <CardContent className="p-0">
             <EmptyState
@@ -113,6 +210,9 @@ export function TemplateLibrary({
           </CardContent>
         </Card>
       )}
+      {templates.length > 0 && shown.length === 0 && (
+        <EmptyState framed icon={FileText} title="No templates match these filters" />
+      )}
 
       {categories.map((category) => {
         const rows = active.filter((t) => t.category === category);
@@ -122,17 +222,7 @@ export function TemplateLibrary({
               <h2 className="text-2xs font-medium text-ink-3">{templateCategoryLabel(category)}</h2>
               <span className="text-2xs font-mono text-ink-4">{rows.length}</span>
             </div>
-            <div className="flex flex-col gap-1.5">
-              {rows.map((t) => (
-                <TemplateRow
-                  key={t.id}
-                  template={t}
-                  canEdit={canEdit}
-                  canDelete={canDelete}
-                  onEdit={() => openEdit(t)}
-                />
-              ))}
-            </div>
+            <div className="flex flex-col gap-1.5">{rows.map(row)}</div>
           </section>
         );
       })}
@@ -140,131 +230,70 @@ export function TemplateLibrary({
       {archived.length > 0 && (
         <section className="flex flex-col gap-2">
           <h2 className="text-2xs font-medium text-ink-3">Archived ({archived.length})</h2>
-          <div className="flex flex-col gap-1.5">
-            {archived.map((t) => (
-              <TemplateRow
-                key={t.id}
-                template={t}
-                canEdit={canEdit}
-                canDelete={canDelete}
-                onEdit={() => openEdit(t)}
-                muted
-              />
-            ))}
-          </div>
+          <div className="flex flex-col gap-1.5">{archived.map(row)}</div>
         </section>
       )}
-
-      <TemplateEditorDialog open={editorOpen} onOpenChange={setEditorOpen} template={editing} />
     </div>
   );
 }
 
-function TemplateRow({
-  template,
+function BlocksTab({
+  blocks,
+  canCreate,
   canEdit,
   canDelete,
-  onEdit,
-  muted,
-}: {
-  template: TemplateListItem;
-  canEdit: boolean;
-  canDelete: boolean;
-  onEdit: () => void;
-  muted?: boolean;
+}: Flags & {
+  blocks: BlockListItem[];
 }) {
-  const [pending, startTransition] = useTransition();
+  const active = blocks.filter((b) => b.isActive);
+  const archived = blocks.filter((b) => !b.isActive);
 
-  const onToggleArchive = () => {
-    startTransition(async () => {
-      const res = await setDocumentTemplateActive(template.id, !template.isActive);
-      if (!res.ok) notifyError(res.error ?? "Couldn't update template.");
-    });
-  };
-
-  const onDelete = async () => {
-    if (
-      !(await confirmAction({
-        title: `Permanently delete "${template.name}"?`,
-        description:
-          "This can't be undone. Documents already generated from it are untouched. Prefer Archive unless the template was a mistake.",
-        confirmLabel: "Delete template",
-        destructive: true,
-      }))
-    ) {
-      return;
-    }
-    startTransition(async () => {
-      const res = await deleteDocumentTemplate(template.id);
-      if (!res.ok) notifyError(res.error ?? "Couldn't delete template.");
-    });
-  };
-
-  const showMenu = canEdit || canDelete;
+  const row = (b: BlockListItem) => (
+    <LibraryRow
+      key={b.id}
+      href={`/settings/templates/blocks/${b.id}`}
+      name={b.name}
+      icon={Blocks}
+      description={b.description}
+      tags={<span className="text-2xs text-ink-4 font-mono shrink-0">{b.key}</span>}
+      meta={<span>updated {b.updatedAtLabel}</span>}
+      isActive={b.isActive}
+      canEdit={canEdit}
+      canDelete={canDelete}
+      deleteNoun="block"
+      onSetActive={(a) => setTemplateBlockActive(b.id, a)}
+      onDelete={() => deleteTemplateBlock(b.id)}
+    />
+  );
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-3 px-3 py-2.5 rounded-md border border-line bg-white",
-        muted && "opacity-70",
-      )}
-    >
-      <FileText size={14} className="text-ink-4 shrink-0" />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-ink truncate">{template.name}</span>
-          {!template.isActive && (
-            <span className="text-2xs text-ink-4 font-mono shrink-0">archived</span>
-          )}
+    <div className="flex flex-col gap-6">
+      <p className="text-xs text-ink-4 leading-relaxed max-w-2xl">
+        Blocks are reusable pieces (a signature, a letterhead, a standard paragraph) that templates
+        include. Editing a block changes every template that uses it.
+      </p>
+      {canCreate && (
+        <div>
+          <Button render={<Link href="/settings/templates/blocks/new" />} className="gap-2 text-xs">
+            <Plus size={13} />
+            New block
+          </Button>
         </div>
-        {template.description && (
-          <div className="text-2xs text-ink-4 truncate">{template.description}</div>
-        )}
-      </div>
-
-      <div className="hidden sm:flex flex-col items-end text-2xs text-ink-4 font-mono shrink-0">
-        <span>updated {template.updatedAtLabel}</span>
-        {template.createdByName && <span>by {template.createdByName}</span>}
-      </div>
-
-      {showMenu && (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                aria-label={`Actions for ${template.name}`}
-                disabled={pending}
-                className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:bg-paper-2 hover:text-ink disabled:opacity-50"
-              >
-                <MoreHorizontal size={14} />
-              </button>
-            }
-          />
-          <DropdownMenuContent align="end" className="min-w-44">
-            {canEdit && (
-              <DropdownMenuItem onClick={onEdit}>
-                <Pencil />
-                Edit
-              </DropdownMenuItem>
-            )}
-            {canEdit && (
-              <DropdownMenuItem onClick={onToggleArchive}>
-                {template.isActive ? <Archive /> : <ArchiveRestore />}
-                {template.isActive ? "Archive" : "Restore"}
-              </DropdownMenuItem>
-            )}
-            {canDelete && (
-              <>
-                {canEdit && <DropdownMenuSeparator />}
-                <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                  <Trash2 />
-                  Delete permanently
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+      )}
+      {blocks.length === 0 && (
+        <EmptyState
+          framed
+          icon={Blocks}
+          title="No blocks yet"
+          description="Blocks you create appear here and in the template editor's Insert block menu."
+        />
+      )}
+      {active.length > 0 && <div className="flex flex-col gap-1.5">{active.map(row)}</div>}
+      {archived.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-2xs font-medium text-ink-3">Archived ({archived.length})</h2>
+          <div className="flex flex-col gap-1.5">{archived.map(row)}</div>
+        </section>
       )}
     </div>
   );

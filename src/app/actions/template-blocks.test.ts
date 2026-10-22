@@ -116,6 +116,19 @@ describe("saveTemplateBlock", () => {
       error: "Someone else saved this block — reload to see their changes.",
     });
   });
+
+  test("a save returns the new version, which the next save can send", async () => {
+    const c = await saveTemplateBlock(blockInput());
+    if (!c.ok) throw new Error(c.error);
+    const row = await prisma.templateBlock.findUniqueOrThrow({ where: { id: c.id } });
+    expect(c.updatedAt).toBe(row.updatedAt.toISOString());
+    const u = await saveTemplateBlock(blockInput({ id: c.id, expectedUpdatedAt: c.updatedAt }));
+    if (!u.ok) throw new Error(u.error);
+    const again = await saveTemplateBlock(
+      blockInput({ id: c.id, name: "Renamed", expectedUpdatedAt: u.updatedAt }),
+    );
+    expect(again.ok).toBe(true);
+  });
 });
 
 describe("concurrency and input", () => {

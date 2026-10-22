@@ -21,7 +21,7 @@ import { MAX_TEMPLATE_DESCRIPTION, MAX_TEMPLATE_NAME } from "@/lib/template-cons
 import { collectBlockIds } from "@/lib/templates/inspect";
 import { validateTemplateContent, type TemplateDoc } from "@/lib/templates/schema";
 
-type Result = { ok: true; id: string } | { ok: false; error: string };
+type Result = { ok: true; id: string; updatedAt: string } | { ok: false; error: string };
 
 const KEY_TAKEN = "That key is already used by another block.";
 const KEY_RE = /^[a-z][a-z0-9_]{1,39}$/;
@@ -83,11 +83,11 @@ export async function saveTemplateBlock(input: {
   if (clash) return { ok: false, error: KEY_TAKEN };
 
   if (!input.id) {
-    let created: { id: string };
+    let created: { id: string; updatedAt: Date };
     try {
       created = await prisma.templateBlock.create({
         data: { key, name, description, content, createdById: userId },
-        select: { id: true },
+        select: { id: true, updatedAt: true },
       });
     } catch (e) {
       if (isUniqueViolation(e)) return { ok: false, error: KEY_TAKEN };
@@ -95,7 +95,7 @@ export async function saveTemplateBlock(input: {
     }
     await logTemplateChange(userId, `Block "${name}" created`, `Key: ${key} (id ${created.id})`);
     revalidatePath("/settings/templates");
-    return { ok: true, id: created.id };
+    return { ok: true, id: created.id, updatedAt: created.updatedAt.toISOString() };
   }
 
   const existing = await prisma.templateBlock.findUnique({
@@ -104,6 +104,8 @@ export async function saveTemplateBlock(input: {
   });
   if (!existing) return { ok: false, error: "Block not found." };
 
+  // Set explicitly so the new version can be handed back to the editor.
+  const updatedAt = new Date();
   let count: number;
   try {
     ({ count } = await prisma.templateBlock.updateMany({
@@ -113,7 +115,7 @@ export async function saveTemplateBlock(input: {
           ? { updatedAt: new Date(parsed.data.expectedUpdatedAt) }
           : {}),
       },
-      data: { key, name, description, content },
+      data: { key, name, description, content, updatedAt },
     }));
   } catch (e) {
     if (isUniqueViolation(e)) return { ok: false, error: KEY_TAKEN };
@@ -124,7 +126,7 @@ export async function saveTemplateBlock(input: {
   }
   await logTemplateChange(userId, `Block "${name}" updated`, `Key: ${key} (id ${input.id})`);
   revalidatePath("/settings/templates");
-  return { ok: true, id: input.id };
+  return { ok: true, id: input.id, updatedAt: updatedAt.toISOString() };
 }
 
 /** Archive (false) or restore (true). Allowed while referenced. */

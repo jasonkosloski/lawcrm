@@ -68,7 +68,7 @@ export function DeadlineRuleDialog({
   const [sourceRef, setSourceRef] = useState("");
   const [description, setDescription] = useState("");
 
-  // Reseed on each open (render-phase reset, like TemplateEditorDialog).
+  // Reseed on each open (render-phase reset).
   // Starts "closed" so a dialog first rendered already open seeds too.
   const [prev, setPrev] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
   if (open !== prev.open || (rule?.id ?? null) !== prev.id) {
