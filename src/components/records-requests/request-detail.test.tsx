@@ -40,7 +40,9 @@ vi.mock("@/components/matters/documents/multi-file-upload", () => ({
   ),
 }));
 vi.mock("@/components/templates/generate-from-template-dialog", () => ({
-  GenerateFromTemplateDialog: () => <div data-testid="generate" />,
+  GenerateFromTemplateDialog: (p: { team?: unknown[]; contacts?: unknown[] }) => (
+    <div data-testid="generate" data-team={p.team?.length} data-contacts={p.contacts?.length} />
+  ),
 }));
 
 import { RequestDetail } from "./request-detail";
@@ -83,6 +85,11 @@ function renderDetail(
   can: Partial<typeof CAN> = {},
   writable = true,
   daysUntilDue: number | null = null,
+  generateOptions?: {
+    team: { id: string; name: string }[];
+    contacts: { id: string; name: string; role: string | null }[];
+    currentUserId: string;
+  },
 ) {
   return render(
     <RequestDetail
@@ -97,6 +104,7 @@ function renderDetail(
       can={{ ...CAN, ...can }}
       writable={writable}
       daysUntilDue={daysUntilDue}
+      generateOptions={generateOptions}
     />,
   );
 }
@@ -408,5 +416,15 @@ describe("RequestDetail", () => {
       );
       expect(screen.getByTestId("due-tile")).not.toHaveTextContent("overdue");
     });
+  });
+
+  test("the letter dialog receives signer and recipient options", () => {
+    renderDetail(detail(), {}, true, null, {
+      team: [{ id: "u1", name: "Me" }],
+      contacts: [{ id: "c1", name: "Pat", role: null }],
+      currentUserId: "u1",
+    });
+    expect(screen.getByTestId("generate")).toHaveAttribute("data-team", "1");
+    expect(screen.getByTestId("generate")).toHaveAttribute("data-contacts", "1");
   });
 });

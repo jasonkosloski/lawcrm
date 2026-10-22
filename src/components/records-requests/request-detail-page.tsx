@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { getRecordsRequestDetail, listRecordsRequestTypes } from "@/lib/queries/records-requests";
 import { responsePeriodLabel } from "@/lib/records-requests/date-labels";
+import { loadGenerateOptions } from "@/lib/templates/generate-options";
 import { RequestDetail } from "./request-detail";
 
 export async function RequestDetailPage({
@@ -50,7 +51,7 @@ export async function RequestDetailPage({
       : null;
 
   const editable = canEdit && writable;
-  const [users, templates, linkable] = await Promise.all([
+  const [users, templates, linkable, generateOptions] = await Promise.all([
     editable
       ? prisma.user.findMany({
           where: { isActive: true },
@@ -60,7 +61,12 @@ export async function RequestDetailPage({
       : [],
     editable
       ? prisma.documentTemplate.findMany({
-          where: { isActive: true },
+          // Letters and filings that fit this record; email/SMS never generate files.
+          where: {
+            isActive: true,
+            kind: { in: ["letter", "filing"] },
+            appliesTo: { in: scope.kind === "lead" ? ["lead", "both"] : ["matter", "both"] },
+          },
           orderBy: [{ category: "asc" }, { name: "asc" }],
           select: { id: true, name: true, category: true, description: true },
         })
@@ -73,6 +79,7 @@ export async function RequestDetailPage({
           select: { id: true, name: true },
         })
       : [],
+    editable && canUpload ? loadGenerateOptions(scope) : undefined,
   ]);
 
   return (
@@ -83,6 +90,7 @@ export async function RequestDetailPage({
       types={types.map((t) => ({ id: t.id, name: t.name }))}
       users={users}
       templates={templates}
+      generateOptions={generateOptions}
       defaultTemplateId={types.find((t) => t.id === detail.typeId)?.defaultTemplateId ?? null}
       storageDriver={activeStorageDriver()}
       linkableDocuments={linkable}

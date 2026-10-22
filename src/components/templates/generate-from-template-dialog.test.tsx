@@ -27,6 +27,12 @@ const TEMPLATES = [
   { id: "t1", name: "Demand letter", category: "demand_letter", description: null },
   { id: "t2", name: "Intake memo", category: "intake", description: "Odd category" },
 ];
+const TEAM = [
+  { id: "u1", name: "Me Attorney" },
+  { id: "u2", name: "Zed Paralegal" },
+];
+const CONTACTS = [{ id: "c1", name: "Pat Counsel", role: "opposing counsel" }];
+const M1 = { kind: "matter", matterId: "m1" } as const;
 
 const okPreview = (over: Record<string, unknown> = {}) => ({
   ok: true,
@@ -69,7 +75,7 @@ describe("GenerateFromTemplateDialog", () => {
 
     expect(await screen.findByText("Dear Maria Alvarez,")).toBeInTheDocument();
     expect(previewMock).toHaveBeenCalledWith("t1", { kind: "matter", matterId: "m1" });
-    expect(screen.getByText(/Not on file for this matter/)).toHaveTextContent("client.phone");
+    expect(screen.getByText(/Missing:/)).toHaveTextContent("client.phone");
     expect(screen.getByText(/don.t apply here/)).toHaveTextContent("made.up");
   });
 
@@ -290,5 +296,155 @@ describe("GenerateFromTemplateDialog", () => {
     await user.click(screen.getByRole("button", { name: /generate from template/i }));
     expect(screen.getByLabelText("Template")).toHaveValue("");
     expect(previewMock).not.toHaveBeenCalled();
+  });
+
+  it("hides email/sms and wrong-scope templates", async () => {
+    const user = userEvent.setup();
+    render(
+      <GenerateFromTemplateDialog
+        scope={{ kind: "lead", leadId: "l1" }}
+        templates={[
+          { ...TEMPLATES[0]!, kind: "letter", appliesTo: "both" },
+          {
+            id: "t3",
+            name: "Matter only",
+            category: "general",
+            description: null,
+            kind: "letter",
+            appliesTo: "matter",
+          },
+          {
+            id: "t4",
+            name: "An email",
+            category: "general",
+            description: null,
+            kind: "email",
+            appliesTo: "both",
+          },
+          {
+            id: "t5",
+            name: "A text",
+            category: "general",
+            description: null,
+            kind: "sms",
+            appliesTo: "lead",
+          },
+        ]}
+        canUpload
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /generate from template/i }));
+    expect(screen.getByRole("option", { name: "Demand letter" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Matter only" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "An email" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "A text" })).not.toBeInTheDocument();
+  });
+
+  it("shows signer and recipient selects only when the preview needs them", async () => {
+    previewMock.mockResolvedValue(okPreview());
+    const user = userEvent.setup();
+    render(
+      <GenerateFromTemplateDialog
+        scope={M1}
+        templates={TEMPLATES}
+        canUpload
+        team={TEAM}
+        contacts={CONTACTS}
+        currentUserId="u1"
+      />,
+    );
+    await openAndPick(user);
+    await screen.findByText("Dear Maria Alvarez,");
+    expect(screen.queryByLabelText("Signer")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Recipient")).not.toBeInTheDocument();
+
+    previewMock.mockResolvedValue(okPreview({ needsSigner: true, needsRecipient: true }));
+    await user.selectOptions(screen.getByLabelText("Template"), "t2");
+    expect(await screen.findByLabelText("Signer")).toHaveValue("u1");
+    expect(screen.getByLabelText("Recipient")).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Pat Counsel — opposing counsel" }),
+    ).toBeInTheDocument();
+  });
+
+  it("changing signer or recipient re-runs the preview with the choice", async () => {
+    previewMock.mockResolvedValue(okPreview({ needsSigner: true, needsRecipient: true }));
+    const user = userEvent.setup();
+    render(
+      <GenerateFromTemplateDialog
+        scope={M1}
+        templates={TEMPLATES}
+        canUpload
+        team={TEAM}
+        contacts={CONTACTS}
+        currentUserId="u1"
+      />,
+    );
+    await openAndPick(user);
+    await user.selectOptions(await screen.findByLabelText("Signer"), "u2");
+    await waitFor(() => expect(previewMock).toHaveBeenLastCalledWith("t1", M1, { signerId: "u2" }));
+    await user.selectOptions(screen.getByLabelText("Recipient"), "c1");
+    await waitFor(() =>
+      expect(previewMock).toHaveBeenLastCalledWith("t1", M1, {
+        signerId: "u2",
+        recipientContactId: "c1",
+      }),
+    );
+  });
+
+  it("save sends folderId, signer, recipient and expectedUpdatedAt", async () => {
+    previewMock.mockResolvedValue(okPreview({ needsSigner: true, needsRecipient: true }));
+    generateMock.mockResolvedValue({ ok: true, documentId: "d1", documentName: "X.docx" });
+    const user = userEvent.setup();
+    render(
+      <GenerateFromTemplateDialog
+        scope={M1}
+        templates={TEMPLATES}
+        canUpload
+        folderId="f1"
+        team={TEAM}
+        contacts={CONTACTS}
+        currentUserId="u1"
+      />,
+    );
+    await openAndPick(user);
+    await user.selectOptions(await screen.findByLabelText("Recipient"), "c1");
+    await user.click(screen.getByRole("button", { name: /save to documents/i }));
+    await screen.findByRole("status");
+    expect(generateMock).toHaveBeenCalledWith("t1", M1, {
+      folderId: "f1",
+      signerId: "u1",
+      recipientContactId: "c1",
+      expectedUpdatedAt: "2026-10-22T00:00:00.000Z",
+    });
+  });
+
+  it("on a stale refusal re-runs the preview and shows the copy above it", async () => {
+    previewMock.mockResolvedValueOnce(okPreview());
+    previewMock.mockResolvedValueOnce(
+      okPreview({ html: "<p>Newer text</p>", templateUpdatedAt: "2026-10-23T00:00:00.000Z" }),
+    );
+    generateMock.mockResolvedValue({
+      ok: false,
+      error: "This template changed — review the preview again.",
+    });
+    const user = userEvent.setup();
+    render(<GenerateFromTemplateDialog scope={M1} templates={TEMPLATES} canUpload />);
+    await openAndPick(user);
+    await screen.findByText("Dear Maria Alvarez,");
+    await user.click(screen.getByRole("button", { name: /save to documents/i }));
+    expect(await screen.findByText("Newer text")).toBeInTheDocument();
+    expect(screen.getByText(/This template changed/)).toBeInTheDocument();
+    expect(previewMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("lists archived blocks in the report", async () => {
+    previewMock.mockResolvedValue(
+      okPreview({ report: { missing: [], invalid: [], archivedBlocks: ["Old footer"] } }),
+    );
+    const user = userEvent.setup();
+    render(<GenerateFromTemplateDialog scope={M1} templates={TEMPLATES} canUpload />);
+    await openAndPick(user);
+    expect(await screen.findByText(/Archived blocks:/)).toHaveTextContent("Old footer");
   });
 });

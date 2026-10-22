@@ -24,6 +24,13 @@ vi.mock("@/lib/prisma", () => ({
     document: { findMany: vi.fn(async () => []) },
   },
 }));
+vi.mock("@/lib/templates/generate-options", () => ({
+  loadGenerateOptions: vi.fn(async () => ({
+    team: [{ id: "u1", name: "Me" }],
+    contacts: [{ id: "c1", name: "Pat", role: "opposing counsel" }],
+    currentUserId: "u1",
+  })),
+}));
 vi.mock("@/lib/queries/records-requests", () => ({
   getRecordsRequestDetail: vi.fn(),
   listRecordsRequestTypes: vi.fn(async () => []),
@@ -94,5 +101,33 @@ describe("RequestDetailPage", () => {
     await render(SCOPE, true);
     expect(prisma.documentTemplate.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.document.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  test("offers only active letter/filing templates that fit the scope, plus signer/recipient options", async () => {
+    const el = await render(SCOPE, true);
+    expect(prisma.documentTemplate.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: {
+          isActive: true,
+          kind: { in: ["letter", "filing"] },
+          appliesTo: { in: ["matter", "both"] },
+        },
+      }),
+    );
+    expect(el.props.generateOptions).toEqual({
+      team: [{ id: "u1", name: "Me" }],
+      contacts: [{ id: "c1", name: "Pat", role: "opposing counsel" }],
+      currentUserId: "u1",
+    });
+    await render(LEAD, true);
+    expect(prisma.documentTemplate.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: {
+          isActive: true,
+          kind: { in: ["letter", "filing"] },
+          appliesTo: { in: ["lead", "both"] },
+        },
+      }),
+    );
   });
 });

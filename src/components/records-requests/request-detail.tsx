@@ -131,6 +131,7 @@ export function RequestDetail({
   daysUntilDue = null,
   daysSinceSent = null,
   deadlineRule = null,
+  generateOptions,
 }: {
   detail: RecordsRequestDetail;
   scope: RecordScope;
@@ -143,6 +144,12 @@ export function RequestDetail({
   /** Scope documents not already on this request, for "Link existing". */
   linkableDocuments: { id: string; name: string }[];
   can: RequestDetailPermissions;
+  /** Signer / recipient choices for the letter dialog. */
+  generateOptions?: {
+    team: { id: string; name: string }[];
+    contacts: { id: string; name: string; role: string | null }[];
+    currentUserId: string;
+  };
   /** False on a converted lead: nothing is editable. */
   writable: boolean;
   /** Days to the response due date in the viewer's zone (list-row badge). */
@@ -465,6 +472,9 @@ export function RequestDetail({
                   recordsRequestId={detail.id}
                   defaultTemplateId={defaultTemplateId}
                   triggerLabel="Generate letter"
+                  team={generateOptions?.team}
+                  contacts={generateOptions?.contacts}
+                  currentUserId={generateOptions?.currentUserId}
                 />
               )}
               {can.upload && writable && (

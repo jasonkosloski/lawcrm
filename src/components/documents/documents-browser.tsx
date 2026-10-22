@@ -36,6 +36,7 @@ import {
 import { isProtectedFolder } from "@/lib/records-requests/folder-kinds";
 import { FolderSourceBadge } from "@/components/documents/folder-source-badge";
 import { GenerateFromTemplateDialog } from "@/components/templates/generate-from-template-dialog";
+import { loadGenerateOptions, type GenerateOptions } from "@/lib/templates/generate-options";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -88,6 +89,7 @@ export async function DocumentsBrowser({
     canViewPortal,
     templates,
     tz,
+    generateOptions,
   ] = await Promise.all([
     getDocumentFolders(scope),
     getFolderDocumentCounts(scope),
@@ -107,7 +109,12 @@ export async function DocumentsBrowser({
     // Active templates only — the generation picker never offers
     // archived ones (soft-archive semantics on DocumentTemplate).
     prisma.documentTemplate.findMany({
-      where: { isActive: true },
+      // Letters and filings that fit this record; email/SMS never generate files.
+      where: {
+        isActive: true,
+        kind: { in: ["letter", "filing"] },
+        appliesTo: { in: scope.kind === "lead" ? ["lead", "both"] : ["matter", "both"] },
+      },
       orderBy: [{ category: "asc" }, { name: "asc" }],
       select: {
         id: true,
@@ -119,6 +126,8 @@ export async function DocumentsBrowser({
     // Upload timestamps are real instants — render them on the
     // viewer's calendar, not the server's (UTC in prod).
     getCurrentUserTimeZone(),
+    // Signer / recipient choices; access-checked via assertScopeAccess.
+    loadGenerateOptions(scope),
   ]);
 
   const isMatter = scope.kind === "matter";
@@ -303,6 +312,8 @@ export async function DocumentsBrowser({
         <DocumentComposerRow
           scope={scope}
           templates={templates}
+          generateOptions={generateOptions}
+          folderId={selectedId}
           canUpload={canUpload}
           storageDriver={activeStorageDriver()}
         />
@@ -320,6 +331,8 @@ export async function DocumentsBrowser({
 function DocumentComposerRow({
   scope,
   templates,
+  generateOptions,
+  folderId,
   canUpload,
   storageDriver,
 }: {
@@ -330,6 +343,9 @@ function DocumentComposerRow({
     category: string;
     description: string | null;
   }[];
+  generateOptions: GenerateOptions;
+  /** Folder open in the browser; generated files are saved into it. */
+  folderId: string | null;
   canUpload: boolean;
   storageDriver: StorageDriver;
 }) {
@@ -344,7 +360,15 @@ function DocumentComposerRow({
       )}
       {/* Preview shares generate's documents.upload key. */}
       {canUpload && (
-        <GenerateFromTemplateDialog scope={scope} templates={templates} canUpload={canUpload} />
+        <GenerateFromTemplateDialog
+          scope={scope}
+          templates={templates}
+          canUpload={canUpload}
+          folderId={folderId}
+          team={generateOptions.team}
+          contacts={generateOptions.contacts}
+          currentUserId={generateOptions.currentUserId}
+        />
       )}
     </div>
   );

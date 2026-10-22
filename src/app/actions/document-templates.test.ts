@@ -320,6 +320,29 @@ describe("generate", () => {
     expect(activity.detail).toContain("Demand letter");
   });
 
+  test("the saved .docx text contains the rendered client and custodian names", async () => {
+    const custodian = await prisma.contact.create({
+      data: { name: "Memorial Hospital", type: "medical_provider" },
+      select: { id: true },
+    });
+    const request = await prisma.recordsRequest.create({
+      data: { matterId, custodianContactId: custodian.id, adHocTypeName: "CORA", subject: "Chart" },
+      select: { id: true },
+    });
+    const t = await seedTemplate({
+      body: "Dear {{client.name}}: records from {{custodian.name}}.",
+    });
+    const res = await gen(t.id, M, { recordsRequestId: request.id });
+    expect(res.ok).toBe(true);
+    const file = vi.mocked(storeFile).mock.calls.at(-1)![0] as File;
+    const { default: mammoth } = await import("mammoth");
+    const { value } = await mammoth.extractRawText({
+      buffer: Buffer.from(await file.arrayBuffer()),
+    });
+    expect(value).toContain("Dear Maria Alvarez");
+    expect(value).toContain("records from Memorial Hospital");
+  });
+
   test("returns the render report without blocking the save", async () => {
     const t = await seedTemplate({ body: "SOL: {{matter.solDate}}" });
     const res = await gen(t.id, M);

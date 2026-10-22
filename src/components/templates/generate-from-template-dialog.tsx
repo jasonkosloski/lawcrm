@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import type { RecordScope } from "@/lib/record-scope";
-import { templateCategoryLabel } from "@/lib/template-constants";
+import { STALE_TEMPLATE, templateCategoryLabel } from "@/lib/template-constants";
 import {
   generateDocumentFromTemplate,
   previewDocumentFromTemplate,
@@ -47,7 +47,15 @@ export type TemplateOption = {
   name: string;
   category: string;
   description: string | null;
+  /** When present, the picker only offers document kinds that fit the scope. */
+  kind?: string;
+  appliesTo?: string;
 };
+
+export type SignerOption = { id: string; name: string };
+export type RecipientOption = { id: string; name: string; role: string | null };
+
+const DOCUMENT_KINDS = ["letter", "filing"];
 
 export function GenerateFromTemplateDialog({
   scope,
@@ -56,6 +64,10 @@ export function GenerateFromTemplateDialog({
   recordsRequestId,
   defaultTemplateId,
   triggerLabel = "Generate from template",
+  folderId = null,
+  team = [],
+  contacts = [],
+  currentUserId = "",
 }: {
   scope: RecordScope;
   /** Active templates only — the picker never offers archived ones. */
@@ -69,8 +81,31 @@ export function GenerateFromTemplateDialog({
   /** Template to preselect (and preview) on open, when still offered. */
   defaultTemplateId?: string | null;
   triggerLabel?: string;
+  /** Folder the document is saved into (the one open in the browser). */
+  folderId?: string | null;
+  /** Active team members plus the current user - signer choices. */
+  team?: SignerOption[];
+  /** Contacts the server accepts as a recipient on this record. */
+  contacts?: RecipientOption[];
+  /** Default signer. */
+  currentUserId?: string;
 }) {
-  const opts = recordsRequestId ? { recordsRequestId } : undefined;
+  const fitting = scope.kind === "lead" ? ["lead", "both"] : ["matter", "both"];
+  const offered = templates.filter(
+    (t) =>
+      (t.kind === undefined || DOCUMENT_KINDS.includes(t.kind)) &&
+      (t.appliesTo === undefined || fitting.includes(t.appliesTo)),
+  );
+  const [signerId, setSignerId] = useState("");
+  const [recipientId, setRecipientId] = useState("");
+  const [staleNotice, setStaleNotice] = useState<string | null>(null);
+  const buildOpts = (signer: string, recipient: string) => {
+    const o: { recordsRequestId?: string; signerId?: string; recipientContactId?: string } = {};
+    if (recordsRequestId) o.recordsRequestId = recordsRequestId;
+    if (signer) o.signerId = signer;
+    if (recipient) o.recipientContactId = recipient;
+    return Object.keys(o).length > 0 ? o : undefined;
+  };
   const [open, setOpen] = useState(false);
   const [templateId, setTemplateId] = useState("");
   const noun = scope.kind === "lead" ? "intake" : "matter";
@@ -84,20 +119,37 @@ export function GenerateFromTemplateDialog({
   const [previewPending, startPreview] = useTransition();
   const [savePending, startSave] = useTransition();
 
+  const runPreview = (id: string, signer: string, recipient: string) => {
+    startPreview(async () => {
+      const o = buildOpts(signer, recipient);
+      const res = await (o
+        ? previewDocumentFromTemplate(id, scope, o)
+        : previewDocumentFromTemplate(id, scope));
+      setPreview(res);
+    });
+  };
+
   const onPick = (id: string) => {
     setTemplateId(id);
     setPreview(null);
     setSaveError(null);
+    setStaleNotice(null);
     setSavedName(null);
     setCopied(false);
     setCopyError(false);
+    setSignerId("");
+    setRecipientId("");
     if (!id) return;
-    startPreview(async () => {
-      const res = await (opts
-        ? previewDocumentFromTemplate(id, scope, opts)
-        : previewDocumentFromTemplate(id, scope));
-      setPreview(res);
-    });
+    runPreview(id, "", "");
+  };
+
+  const onSigner = (id: string) => {
+    setSignerId(id);
+    if (templateId) runPreview(templateId, id, recipientId);
+  };
+  const onRecipient = (id: string) => {
+    setRecipientId(id);
+    if (templateId) runPreview(templateId, signerId, id);
   };
 
   // Reset per open so a stale preview never flashes; a request's
@@ -109,8 +161,11 @@ export function GenerateFromTemplateDialog({
     setCopyError(false);
     setSaveError(null);
     setSavedName(null);
+    setStaleNotice(null);
+    setSignerId("");
+    setRecipientId("");
     setOpen(true);
-    if (defaultTemplateId && templates.some((t) => t.id === defaultTemplateId)) {
+    if (defaultTemplateId && offered.some((t) => t.id === defaultTemplateId)) {
       onPick(defaultTemplateId);
     }
   };
@@ -139,7 +194,9 @@ export function GenerateFromTemplateDialog({
       // The preview's template version: generation refuses if the
       // template changed after the user reviewed it.
       const res = await generateDocumentFromTemplate(templateId, scope, {
-        ...opts,
+        ...(recordsRequestId ? { recordsRequestId } : { folderId }),
+        ...(preview.needsSigner ? { signerId: signerId || currentUserId || undefined } : {}),
+        ...(preview.needsRecipient && recipientId ? { recipientContactId: recipientId } : {}),
         expectedUpdatedAt: preview.templateUpdatedAt,
       });
       if (res.ok) {
@@ -147,6 +204,10 @@ export function GenerateFromTemplateDialog({
         // filed at the root, which is invisible if a subfolder
         // is open - so confirm by name instead of closing silently.
         setSavedName(res.documentName);
+      } else if (res.error === STALE_TEMPLATE) {
+        // Refresh the preview (and its version) so the next save is valid.
+        setStaleNotice(res.error);
+        runPreview(templateId, signerId, recipientId);
       } else {
         setSaveError(res.error);
       }
@@ -155,13 +216,16 @@ export function GenerateFromTemplateDialog({
 
   // Group the picker's options by category, data order preserved.
   const grouped = new Map<string, TemplateOption[]>();
-  for (const t of templates) {
+  for (const t of offered) {
     if (!grouped.has(t.category)) grouped.set(t.category, []);
     grouped.get(t.category)!.push(t);
   }
 
   const warnings =
-    preview?.ok && (preview.report.missing.length > 0 || preview.report.invalid.length > 0)
+    preview?.ok &&
+    (preview.report.missing.length > 0 ||
+      preview.report.invalid.length > 0 ||
+      preview.report.archivedBlocks.length > 0)
       ? preview.report
       : null;
 
@@ -187,7 +251,7 @@ export function GenerateFromTemplateDialog({
             </DialogDescription>
           </DialogHeader>
 
-          {templates.length === 0 ? (
+          {offered.length === 0 ? (
             <div className="px-3 py-6 rounded-md border border-line bg-paper-2/40 text-xs text-ink-3 text-center">
               No active templates yet. Add some under{" "}
               <span className="font-medium text-ink-2">Settings → Document templates</span>.
@@ -218,6 +282,54 @@ export function GenerateFromTemplateDialog({
                 </NativeSelect>
               </div>
 
+              {preview?.ok && (preview.needsSigner || preview.needsRecipient) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {preview.needsSigner && (
+                    <div className="flex flex-col gap-1">
+                      <label htmlFor="generate-signer" className="text-xs font-medium text-ink-2">
+                        Signer
+                      </label>
+                      <NativeSelect
+                        id="generate-signer"
+                        value={signerId || currentUserId}
+                        onChange={(e) => onSigner(e.target.value)}
+                        className="w-full"
+                      >
+                        {team.map((u) => (
+                          <NativeSelectOption key={u.id} value={u.id}>
+                            {u.name}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                    </div>
+                  )}
+                  {preview.needsRecipient && (
+                    <div className="flex flex-col gap-1">
+                      <label
+                        htmlFor="generate-recipient"
+                        className="text-xs font-medium text-ink-2"
+                      >
+                        Recipient
+                      </label>
+                      <NativeSelect
+                        id="generate-recipient"
+                        value={recipientId}
+                        onChange={(e) => onRecipient(e.target.value)}
+                        className="w-full"
+                      >
+                        <NativeSelectOption value="">Pick a recipient…</NativeSelectOption>
+                        {contacts.map((c) => (
+                          <NativeSelectOption key={c.id} value={c.id}>
+                            {c.name}
+                            {c.role ? ` — ${c.role}` : ""}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {previewPending && (
                 <div className="px-3 py-6 rounded-md border border-line bg-paper-2/40 text-xs text-ink-4 text-center">
                   Merging {noun} data…
@@ -228,6 +340,8 @@ export function GenerateFromTemplateDialog({
                 <FormErrorBanner message={preview.error} />
               )}
 
+              <FormErrorBanner message={staleNotice} />
+
               {!previewPending && preview?.ok && (
                 <>
                   {warnings && (
@@ -236,8 +350,8 @@ export function GenerateFromTemplateDialog({
                       <div className="flex flex-col gap-0.5">
                         {warnings.missing.length > 0 && (
                           <span>
-                            Not on file for this {noun}: {warnings.missing.join(", ")} — visible
-                            placeholders are left in the text.
+                            Missing: {warnings.missing.join(", ")} — visible placeholders are left
+                            in the document.
                           </span>
                         )}
                         {warnings.invalid.length > 0 && (
@@ -245,13 +359,18 @@ export function GenerateFromTemplateDialog({
                             Fields that don&apos;t apply here: {warnings.invalid.join(", ")}
                           </span>
                         )}
+                        {warnings.archivedBlocks.length > 0 && (
+                          <span>Archived blocks: {warnings.archivedBlocks.join(", ")}</span>
+                        )}
                       </div>
                     </div>
                   )}
                   <div className="px-3 py-2.5 rounded-md border border-line bg-paper-2/40 max-h-72 overflow-y-auto">
-                    <div className="text-xs text-ink whitespace-pre-wrap leading-relaxed">
-                      {preview.text}
-                    </div>
+                    <div
+                      className="prose prose-sm max-w-none text-xs text-ink"
+                      // Sanitized by resolvedToHtml (sanitizeDocumentHtml).
+                      dangerouslySetInnerHTML={{ __html: preview.html }}
+                    />
                   </div>
                 </>
               )}
@@ -270,8 +389,10 @@ export function GenerateFromTemplateDialog({
                 >
                   <Check size={12} className="shrink-0 mt-px" />
                   <span>
-                    Saved as <span className="font-medium">{savedName}</span> in All documents (the{" "}
-                    {noun}&apos;s root list — switch folders to see it).
+                    Saved as <span className="font-medium">{savedName}</span>{" "}
+                    {folderId && !recordsRequestId
+                      ? "in the folder you have open."
+                      : `in All documents (the ${noun}'s root list — switch folders to see it).`}
                   </span>
                 </div>
               )}
@@ -284,7 +405,7 @@ export function GenerateFromTemplateDialog({
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               {savedName ? "Done" : "Cancel"}
             </Button>
-            {templates.length > 0 && (
+            {offered.length > 0 && (
               <>
                 <Button
                   type="button"

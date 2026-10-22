@@ -72,6 +72,7 @@ import {
   MAX_TEMPLATE_DESCRIPTION,
   MAX_TEMPLATE_NAME,
   documentCategoryForTemplate,
+  STALE_TEMPLATE,
   isTemplateCategory,
   templateCategoryLabel,
 } from "@/lib/template-constants";
@@ -261,7 +262,6 @@ export async function deleteDocumentTemplate(
 
 const REQUEST_NOT_FOUND = "Records request not found.";
 const NOT_A_DOCUMENT = "This template can't be saved as a document.";
-const STALE_TEMPLATE = "This template changed — review the preview again.";
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 /** Kinds that produce a saved document (email and SMS are message drafts). */

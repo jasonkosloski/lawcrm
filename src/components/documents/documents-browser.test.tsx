@@ -48,11 +48,21 @@ vi.mock("@/components/matters/documents/new-folder-button", () => ({
   NewFolderButton: () => <div data-testid="new-folder" />,
 }));
 vi.mock("@/components/templates/generate-from-template-dialog", () => ({
-  GenerateFromTemplateDialog: () => <div data-testid="generate" />,
+  GenerateFromTemplateDialog: (p: { folderId?: string | null; contacts?: unknown[] }) => (
+    <div data-testid="generate" data-folder={p.folderId ?? ""} data-contacts={p.contacts?.length} />
+  ),
+}));
+vi.mock("@/lib/templates/generate-options", () => ({
+  loadGenerateOptions: vi.fn(async () => ({
+    team: [{ id: "user_1", name: "Me" }],
+    contacts: [{ id: "c1", name: "Lee", role: "client" }],
+    currentUserId: "user_1",
+  })),
 }));
 
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { getDocumentFolders } from "@/lib/queries/matter-detail";
+import { prisma } from "@/lib/prisma";
 import { getFolderListing } from "@/lib/queries/document-listing";
 import { matterHasLivePortalAccess } from "@/lib/queries/document-requests";
 import userEvent from "@testing-library/user-event";
@@ -75,6 +85,39 @@ describe("DocumentsBrowser", () => {
     await renderBrowser();
     expect(getFolderListing).toHaveBeenCalledWith(LEAD, null);
     expect(JSON.parse(screen.getByTestId("tree").getAttribute("data-scope")!)).toEqual(LEAD);
+  });
+
+  test("offers only active letter/filing templates that fit the scope", async () => {
+    grant(ALL);
+    await renderBrowser();
+    expect(prisma.documentTemplate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          isActive: true,
+          kind: { in: ["letter", "filing"] },
+          appliesTo: { in: ["lead", "both"] },
+        },
+      }),
+    );
+  });
+
+  test("the dialog gets the open folder and the record's recipients", async () => {
+    grant(ALL);
+    vi.mocked(getDocumentFolders).mockResolvedValueOnce([
+      {
+        id: "f9",
+        parentId: null,
+        name: "Open",
+        order: 0,
+        systemKind: null,
+        clientShared: false,
+        recordsRequestId: null,
+        sourceTitle: null,
+      },
+    ]);
+    render(await DocumentsBrowser({ scope: LEAD, folderParam: "f9" }));
+    expect(screen.getByTestId("generate")).toHaveAttribute("data-folder", "f9");
+    expect(screen.getByTestId("generate")).toHaveAttribute("data-contacts", "1");
   });
 
   test("documents.upload + folder.create show the write controls", async () => {

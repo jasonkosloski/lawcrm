@@ -77,3 +77,6 @@ export const APPLIES_TO_LABEL: Record<AppliesTo, string> = {
   lead: "Leads",
   both: "Matters and leads",
 };
+
+/** Refusal copy when a template changed after the user previewed it. */
+export const STALE_TEMPLATE = "This template changed — review the preview again.";
