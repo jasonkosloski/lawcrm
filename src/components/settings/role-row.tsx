@@ -36,7 +36,7 @@ import {
   type RoleFormState,
 } from "@/lib/role-form";
 import type { FirmRoleRow } from "@/lib/queries/team";
-import { Field, FormErrorBanner, formErrorMessage, inputClass } from "./form-field";
+import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
 
 export function RoleRow({
   role,

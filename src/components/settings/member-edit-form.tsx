@@ -33,7 +33,7 @@ import {
 } from "@/lib/team-form";
 import { DEFAULT_ROLE_NAME } from "@/lib/role-constants";
 import type { FirmUserRow, RoleChip } from "@/lib/queries/team";
-import { Field, FormErrorBanner, formErrorMessage, inputClass } from "./form-field";
+import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
 
 export function MemberEditForm({
   member,

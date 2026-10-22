@@ -31,6 +31,7 @@ import {
   SETTLEMENT_STATUS_LABEL,
   type SettlementStatus,
 } from "@/lib/constants/settlement-status";
+import { Field, FieldError, inputClass } from "@/components/ui/field";
 
 type SettlementInitial = {
   grossAmount: number;
@@ -205,7 +206,7 @@ export function SettlementComposer({
             value={grossAmount}
             placeholder="0.00"
             onChange={(e) => setGrossAmount(e.target.value)}
-            className={cn(inputClass, "font-mono", errs.grossAmount && "border-warn")}
+            className={cn(inputClass(), "font-mono", errs.grossAmount && "border-warn")}
           />
           {errs.grossAmount && <FieldError>{errs.grossAmount[0]}</FieldError>}
         </Field>
@@ -218,7 +219,7 @@ export function SettlementComposer({
             value={firmFeePercent}
             placeholder="33.33"
             onChange={(e) => setFirmFeePercent(e.target.value)}
-            className={cn(inputClass, "font-mono", errs.firmFeePercent && "border-warn")}
+            className={cn(inputClass(), "font-mono", errs.firmFeePercent && "border-warn")}
           />
           {errs.firmFeePercent && (
             <FieldError>{errs.firmFeePercent[0]}</FieldError>
@@ -236,7 +237,7 @@ export function SettlementComposer({
             value={advancedCosts}
             placeholder="0.00"
             onChange={(e) => setAdvancedCosts(e.target.value)}
-            className={cn(inputClass, "font-mono", errs.advancedCosts && "border-warn")}
+            className={cn(inputClass(), "font-mono", errs.advancedCosts && "border-warn")}
           />
           {errs.advancedCosts && (
             <FieldError>{errs.advancedCosts[0]}</FieldError>
@@ -314,40 +315,3 @@ export function SettlementComposer({
   );
 }
 
-const inputClass =
-  "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
-
-const labelClass = "text-2xs font-medium text-ink-3";
-
-function Field({
-  label,
-  htmlFor,
-  required,
-  children,
-}: {
-  label: string;
-  /** id of the control this label names. Omit for a read-only value
-   *  (a div isn't labelable): the label then renders as plain text. */
-  htmlFor?: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      {htmlFor ? (
-        <label htmlFor={htmlFor} className={labelClass}>
-          {label} {required && <span className="text-warn">*</span>}
-        </label>
-      ) : (
-        <span className={labelClass}>
-          {label} {required && <span className="text-warn">*</span>}
-        </span>
-      )}
-      {children}
-    </div>
-  );
-}
-
-function FieldError({ children }: { children: React.ReactNode }) {
-  return <span className="text-2xs text-warn">{children}</span>;
-}

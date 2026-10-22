@@ -18,7 +18,7 @@ import {
   type AgreementFormState,
 } from "@/app/actions/matter-agreement";
 import { AgreementFields } from "./agreement-fields";
-import { Field } from "./form-primitives";
+import { Field } from "@/components/ui/field";
 
 const STATUS_LABELS: Record<string, string> = {
   not_sent: "Not sent",
@@ -101,7 +101,7 @@ export function AgreementCard({
             />
             <Field
               label="Document"
-              name="documentId"
+              htmlFor="documentId"
               required={required}
               error={errs.documentId}
             >

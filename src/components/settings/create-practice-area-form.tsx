@@ -14,8 +14,6 @@ import { useActionState, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { createPracticeArea } from "@/app/actions/practice-areas";
 import {
-  Field,
-  inputCls,
   OriginatingDocField,
   RequiredFieldsGroup,
 } from "@/components/settings/practice-area-form-parts";
@@ -25,6 +23,7 @@ import {
   practiceAreaInitialState,
   type PracticeAreaFormState,
 } from "@/lib/practice-area-constants";
+import { Field, inputClass } from "@/components/ui/field";
 
 const DEFAULT_COLOR = "#2563a8";
 
@@ -71,7 +70,7 @@ export function CreatePracticeAreaForm({
             onChange={(e) => setName(e.target.value)}
             required
             placeholder="§1983, Employment/CADA, Guardianships…"
-            className={inputCls(!!errs.name)}
+            className={inputClass(!!errs.name)}
           />
         </Field>
 
@@ -83,7 +82,7 @@ export function CreatePracticeAreaForm({
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="§1983 · Civil rights"
-            className={inputCls(!!errs.label)}
+            className={inputClass(!!errs.label)}
           />
         </Field>
 
@@ -102,7 +101,7 @@ export function CreatePracticeAreaForm({
               type="text"
               value={color}
               onChange={(e) => setColor(e.target.value)}
-              className={cn(inputCls(!!errs.color), "font-mono w-[94px]")}
+              className={cn(inputClass(!!errs.color), "font-mono w-[94px]")}
               pattern="^#[0-9a-fA-F]{6}$"
             />
           </div>

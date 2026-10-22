@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/format-phone";
 import { updateContactPhones } from "@/app/actions/contacts";
 import type { ContactPhoneEntry } from "@/lib/contact-form";
+import { inputClass } from "@/components/ui/field";
 
 export type ContactPhoneRow = {
   id: string;
@@ -34,11 +35,6 @@ export type ContactPhoneRow = {
   number: string;
   isPrimary: boolean;
 };
-
-const inputClass =
-  "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink w-full " +
-  "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 " +
-  "placeholder:text-ink-4";
 
 export function ContactPhonesCard({
   contactId,
@@ -275,7 +271,7 @@ function ManagePhonesBody({
               onChange={(e) => patch(i, { number: e.target.value })}
               placeholder="(555) 555-5555"
               aria-label="Phone number"
-              className={cn(inputClass, "flex-1 font-mono")}
+              className={cn(cn(inputClass(), "w-full"), "flex-1 font-mono")}
             />
             <input
               type="text"
@@ -283,7 +279,7 @@ function ManagePhonesBody({
               onChange={(e) => patch(i, { label: e.target.value })}
               placeholder="Label"
               aria-label="Phone label"
-              className={cn(inputClass, "w-24")}
+              className={cn(cn(inputClass(), "w-full"), "w-24")}
             />
             <div className="flex flex-col shrink-0">
               <button

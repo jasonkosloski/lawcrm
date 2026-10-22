@@ -37,6 +37,7 @@ import {
 } from "@/lib/constants/settlement-status";
 import { confirmAction } from "@/lib/feedback";
 import { formatMoney } from "@/lib/format-money";
+import { inputClass } from "@/components/ui/field";
 
 export type SettlementLienListRow = {
   id: string;
@@ -202,7 +203,7 @@ function LienRow({
                 value={negotiated}
                 placeholder={`Original ${lien.originalAmount.toFixed(2)}`}
                 onChange={(e) => setNegotiated(e.target.value)}
-                className={cn(inputClass, "font-mono", errs.negotiatedAmount && "border-warn")}
+                className={cn(inputClass(), "font-mono", errs.negotiatedAmount && "border-warn")}
               />
               {errs.negotiatedAmount && (
                 <span className="text-2xs text-warn">
@@ -256,5 +257,3 @@ function LienRow({
   );
 }
 
-const inputClass =
-  "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";

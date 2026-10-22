@@ -24,8 +24,8 @@ import {
   type TeamFormState,
 } from "@/lib/team-form";
 import { RoleMultiSelect } from "./member-edit-form";
-import { Field, FormErrorBanner, formErrorMessage, inputClass } from "./form-field";
 import type { RoleChip } from "@/lib/queries/team";
+import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
 
 // No roles checked by default — server adds "default" automatically.
 const NONE_SELECTED = new Set<string>();

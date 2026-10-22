@@ -19,6 +19,7 @@ import {
 } from "@/lib/expense-constants";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { ReceiptPicker } from "./receipt-picker";
+import { Field, FieldError, inputClass } from "@/components/ui/field";
 
 export type ExpenseDraft = {
   /** YYYY-MM-DD */
@@ -52,9 +53,6 @@ export function blankExpenseDraft(todayKey: string): ExpenseDraft {
   };
 }
 
-const inputClass =
-  "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
-
 export function ExpenseFields({
   matterId,
   draft,
@@ -79,7 +77,7 @@ export function ExpenseFields({
             required
             value={draft.date}
             onChange={(e) => onChange({ date: e.target.value })}
-            className={cn(inputClass, errors.date && "border-warn")}
+            className={cn(inputClass(), errors.date && "border-warn")}
           />
           {errors.date && <FieldError>{errors.date[0]}</FieldError>}
         </Field>
@@ -93,7 +91,7 @@ export function ExpenseFields({
             value={draft.amount}
             placeholder="0.00"
             onChange={(e) => onChange({ amount: e.target.value })}
-            className={cn(inputClass, "font-mono", errors.amount && "border-warn")}
+            className={cn(inputClass(), "font-mono", errors.amount && "border-warn")}
           />
           {errors.amount && <FieldError>{errors.amount[0]}</FieldError>}
         </Field>
@@ -124,7 +122,7 @@ export function ExpenseFields({
           value={draft.description}
           placeholder="Court filing fee — motion to compel"
           onChange={(e) => onChange({ description: e.target.value })}
-          className={cn(inputClass, errors.description && "border-warn")}
+          className={cn(inputClass(), errors.description && "border-warn")}
         />
         {errors.description && <FieldError>{errors.description[0]}</FieldError>}
       </Field>
@@ -139,7 +137,7 @@ export function ExpenseFields({
             value={draft.utbmsCode}
             placeholder="E.g. E102"
             onChange={(e) => onChange({ utbmsCode: e.target.value })}
-            className={inputClass}
+            className={inputClass()}
           />
         </Field>
         <label className="flex items-center gap-2 text-xs text-ink mt-5">
@@ -190,31 +188,3 @@ export function ExpenseFields({
   );
 }
 
-function Field({
-  label,
-  htmlFor,
-  required,
-  children,
-}: {
-  label: string;
-  /** id of the control this label names. */
-  htmlFor: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label
-        htmlFor={htmlFor}
-        className="text-2xs font-medium text-ink-3"
-      >
-        {label} {required && <span className="text-warn">*</span>}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function FieldError({ children }: { children: React.ReactNode }) {
-  return <span className="text-2xs text-warn">{children}</span>;
-}

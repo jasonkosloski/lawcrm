@@ -132,6 +132,20 @@ src/components/ui/native-select.tsx — never a raw <select> (ESLint enforces).
 - Errors: aria-invalid, not a conditional border class.
 ```
 
+### Form fields (`ui/field`)
+```
+src/components/ui/field.tsx — never a per-file inputCls / labelCls / Field copy.
+- inputClass(hasError, size): the compact control look for input, select
+  wrappers and textarea. Sizes: xs h-7 (dense inline rows), sm h-8 (default),
+  md h-9 (page-level forms). Add width/height-free extras with cn().
+- labelClass: text-xs font-medium ink-2.
+- Field: label + control + first error (or hint). Pass htmlFor (the control's
+  id) to get aria-invalid / aria-describedby wired; omit it and the label wraps
+  the control; or pass a render prop to get a useId-generated id.
+- FieldError for one-off inline errors; FormErrorBanner + formErrorMessage for
+  the form-level (_form) error.
+```
+
 ### Action feedback (toasts and confirmations)
 ```
 src/lib/feedback.ts — never window.alert/confirm/prompt (ESLint no-alert).
@@ -523,10 +537,8 @@ an icon (no nested link). Hide menu items the server would refuse
   for other mailto links.
 - Command palette: cmdk `value` is row identity, so every row needs a unique uid
   (`paletteValue(kind, text, uid)`); recents are per user in localStorage.
-- Shared form helpers: `components/matters/form-primitives.tsx` `Field` wires
-  `aria-invalid`/`aria-describedby` to its control; settings forms use the shared
-  settings `Field` and `FormErrorBanner`; the client typeahead is an ARIA
-  combobox (`matters/parties/party-pickers.tsx`).
+- Shared form helpers live in `components/ui/field.tsx` (see Form fields); the
+  client typeahead is an ARIA combobox (`matters/parties/party-pickers.tsx`).
 - Event modal: focus moves in on open, Tab is trapped, focus is restored, Escape
   layers via a document-level handler that stops propagation; remounts per event
   id; `[data-modal-composer]` blurs first.

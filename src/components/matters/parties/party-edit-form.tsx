@@ -37,6 +37,7 @@ import {
   SelectedContactChip,
   collectOtherErrors,
 } from "./party-pickers";
+import { inputClass } from "@/components/ui/field";
 
 type PhoneDraft = {
   tempId: string;
@@ -47,9 +48,6 @@ type PhoneDraft = {
 
 const CONTACT_LOCKED_HINT =
   "Editing the shared contact (name, email, organization, phones) needs the contacts.edit permission.";
-
-const INPUT_CLASS =
-  "h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
 
 /** Phones — hydrate from the loaded contact.phones. A contact that
  *  predates ContactPhone rows only has the denormalized legacy
@@ -302,7 +300,7 @@ export function PartyEditForm({
           readOnly={!canEditContact}
           title={canEditContact ? undefined : CONTACT_LOCKED_HINT}
           placeholder="Name"
-          className={cn(INPUT_CLASS, errs.contactName && "border-warn")}
+          className={cn(inputClass(false, "xs"), errs.contactName && "border-warn")}
         />
         {errs.contactName && (
           <div className="text-2xs text-warn">{errs.contactName[0]}</div>
@@ -317,7 +315,7 @@ export function PartyEditForm({
           readOnly={!canEditContact}
           title={canEditContact ? undefined : CONTACT_LOCKED_HINT}
           placeholder="Email (optional)"
-          className={cn(INPUT_CLASS, errs.contactEmail && "border-warn")}
+          className={cn(inputClass(false, "xs"), errs.contactEmail && "border-warn")}
         />
         <input
           type="text"
@@ -329,7 +327,7 @@ export function PartyEditForm({
           readOnly={!canEditContact}
           title={canEditContact ? undefined : CONTACT_LOCKED_HINT}
           placeholder="Organization (optional)"
-          className={INPUT_CLASS}
+          className={inputClass(false, "xs")}
         />
 
         {/* Phones — multi-entry editor. Star marks the primary. */}
@@ -395,7 +393,7 @@ export function PartyEditForm({
                     }
                     readOnly={!canEditContact}
                     placeholder="Label (Mobile…)"
-                    className={INPUT_CLASS}
+                    className={inputClass(false, "xs")}
                   />
                   <input
                     type="tel"
@@ -407,7 +405,7 @@ export function PartyEditForm({
                     }
                     readOnly={!canEditContact}
                     placeholder="(303) 555-0000"
-                    className={cn(INPUT_CLASS, "font-mono")}
+                    className={cn(inputClass(false, "xs"), "font-mono")}
                   />
                   <button
                     type="button"
@@ -449,7 +447,7 @@ export function PartyEditForm({
             value={role}
             onChange={(e) => setRole(e.target.value)}
             placeholder="Subrole (optional)"
-            className={cn(INPUT_CLASS, errs.role && "border-warn")}
+            className={cn(inputClass(false, "xs"), errs.role && "border-warn")}
           />
           <input
             type="text"
@@ -459,7 +457,7 @@ export function PartyEditForm({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Notes about this party"
-            className={cn(INPUT_CLASS, errs.notes && "border-warn")}
+            className={cn(inputClass(false, "xs"), errs.notes && "border-warn")}
           />
         </div>
       </div>
@@ -554,7 +552,7 @@ export function PartyEditForm({
                     value={repFirm}
                     onChange={(e) => setRepFirm(e.target.value)}
                     placeholder="Firm (optional)"
-                    className={INPUT_CLASS}
+                    className={inputClass(false, "xs")}
                   />
                   <input
                     type="email"
@@ -564,7 +562,7 @@ export function PartyEditForm({
                     onChange={(e) => setRepEmail(e.target.value)}
                     placeholder="Email (optional)"
                     className={cn(
-                      INPUT_CLASS,
+                      inputClass(false, "xs"),
                       errs.newRepresentationEmail && "border-warn"
                     )}
                   />
@@ -575,7 +573,7 @@ export function PartyEditForm({
                     value={repPhone}
                     onChange={(e) => setRepPhone(e.target.value)}
                     placeholder="Phone (optional)"
-                    className={cn(INPUT_CLASS, "col-span-2")}
+                    className={cn(inputClass(false, "xs"), "col-span-2")}
                   />
                 </div>
               )}

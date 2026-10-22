@@ -32,12 +32,10 @@ import {
   updateVenue,
 } from "@/app/actions/venues";
 import type { VenueOption } from "@/lib/queries/venues";
+import { inputClass, labelClass } from "@/components/ui/field";
 
 type VenueRow = VenueOption & { matterCount: number };
 
-const labelCls = "text-xs font-medium text-ink-2";
-const inputCls =
-  "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30";
 const iconBtn =
   "inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-3 hover:text-brand-700 hover:bg-brand-soft disabled:opacity-60";
 
@@ -249,29 +247,29 @@ function VenueForm({
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <label htmlFor="venue-name" className={labelCls}>
+        <label htmlFor="venue-name" className={labelClass}>
           Name <span className="text-warn">*</span>
         </label>
-        <input id="venue-name" required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
+        <input id="venue-name" required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} className={inputClass()} />
         {errP("name")}
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
-          <label htmlFor="venue-city" className={labelCls}>City</label>
-          <input id="venue-city" maxLength={80} value={city} onChange={(e) => setCity(e.target.value)} className={inputCls} />
+          <label htmlFor="venue-city" className={labelClass}>City</label>
+          <input id="venue-city" maxLength={80} value={city} onChange={(e) => setCity(e.target.value)} className={inputClass()} />
           {errP("city")}
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="venue-county" className={labelCls}>County</label>
-          <input id="venue-county" maxLength={80} value={county} onChange={(e) => setCounty(e.target.value)} className={inputCls} />
+          <label htmlFor="venue-county" className={labelClass}>County</label>
+          <input id="venue-county" maxLength={80} value={county} onChange={(e) => setCounty(e.target.value)} className={inputClass()} />
           {errP("county")}
         </div>
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor="venue-state" className={labelCls}>
+        <label htmlFor="venue-state" className={labelClass}>
           State <span className="text-warn">*</span>
         </label>
-        <input id="venue-state" required maxLength={60} value={state} onChange={(e) => setState(e.target.value)} className={inputCls} />
+        <input id="venue-state" required maxLength={60} value={state} onChange={(e) => setState(e.target.value)} className={inputClass()} />
         {errP("state")}
       </div>
       {formError && (

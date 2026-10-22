@@ -28,21 +28,7 @@ import {
 } from "@/lib/note-constants";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-
-// ── Shared input primitives ────────────────────────────────────────────
-
-const inputClass = cn(
-  "h-7 px-2 rounded-md border border-line bg-white text-xs text-ink",
-  "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-  "placeholder:text-ink-4"
-);
-
-const inputErrorClass = "border-warn";
-
-function FieldError({ msg }: { msg?: string }) {
-  if (!msg) return null;
-  return <div className="text-2xs text-warn">{msg}</div>;
-}
+import { FieldError, inputClass } from "@/components/ui/field";
 
 function FormFooter({
   onCancel,
@@ -118,9 +104,9 @@ export function AddTaskForm({
             placeholder="Task title"
             aria-label="Task title"
             autoFocus
-            className={cn(inputClass, "w-full", errs.title && inputErrorClass)}
+            className={cn(inputClass(!!errs.title, "xs"), "w-full")}
           />
-          <FieldError msg={errs.title?.[0]} />
+          <FieldError>{errs.title?.[0]}</FieldError>
         </div>
         <div className="flex flex-col gap-0.5">
           <input
@@ -129,9 +115,9 @@ export function AddTaskForm({
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
             aria-label="Due date"
-            className={cn(inputClass, errs.dueDate && inputErrorClass)}
+            className={cn(inputClass(!!errs.dueDate, "xs"))}
           />
-          <FieldError msg={errs.dueDate?.[0]} />
+          <FieldError>{errs.dueDate?.[0]}</FieldError>
         </div>
         <NativeSelect
           className="[&_select]:capitalize"
@@ -213,9 +199,9 @@ export function AddDeadlineForm({
             placeholder="Deadline title (e.g. 'CGIA notice due')"
             aria-label="Deadline title"
             autoFocus
-            className={cn(inputClass, "w-full", errs.title && inputErrorClass)}
+            className={cn(inputClass(!!errs.title, "xs"), "w-full")}
           />
-          <FieldError msg={errs.title?.[0]} />
+          <FieldError>{errs.title?.[0]}</FieldError>
         </div>
         <div className="flex flex-col gap-0.5">
           <input
@@ -224,9 +210,9 @@ export function AddDeadlineForm({
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
             aria-label="Due date"
-            className={cn(inputClass, errs.dueDate && inputErrorClass)}
+            className={cn(inputClass(!!errs.dueDate, "xs"))}
           />
-          <FieldError msg={errs.dueDate?.[0]} />
+          <FieldError>{errs.dueDate?.[0]}</FieldError>
         </div>
         <NativeSelect
           className="[&_select]:capitalize"
@@ -314,9 +300,9 @@ export function AddTimeEntryForm({
             value={date}
             onChange={(e) => setDate(e.target.value)}
             aria-label="Date"
-            className={cn(inputClass, errs.date && inputErrorClass)}
+            className={cn(inputClass(!!errs.date, "xs"))}
           />
-          <FieldError msg={errs.date?.[0]} />
+          <FieldError>{errs.date?.[0]}</FieldError>
         </div>
         <div className="flex flex-col gap-0.5">
           <input
@@ -327,13 +313,9 @@ export function AddTimeEntryForm({
             placeholder="Hrs"
             aria-label="Hours"
             inputMode="decimal"
-            className={cn(
-              inputClass,
-              "w-20 font-mono",
-              errs.hours && inputErrorClass
-            )}
+            className={cn(inputClass(!!errs.hours, "xs"), "w-20 font-mono")}
           />
-          <FieldError msg={errs.hours?.[0]} />
+          <FieldError>{errs.hours?.[0]}</FieldError>
         </div>
         <div className="flex flex-col gap-0.5 min-w-0">
           <input
@@ -343,9 +325,9 @@ export function AddTimeEntryForm({
             onChange={(e) => setActivity(e.target.value)}
             placeholder="Activity (e.g. 'Strategy memo · drafting')"
             aria-label="Activity"
-            className={cn(inputClass, "w-full", errs.activity && inputErrorClass)}
+            className={cn(inputClass(!!errs.activity, "xs"), "w-full")}
           />
-          <FieldError msg={errs.activity?.[0]} />
+          <FieldError>{errs.activity?.[0]}</FieldError>
         </div>
       </div>
 

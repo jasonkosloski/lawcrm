@@ -24,15 +24,9 @@ import {
 } from "@/lib/new-intake-form";
 import { LEAD_SOURCES, LEAD_SOURCE_LABEL } from "@/lib/constants/lead-stage";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Field, inputClass, labelClass } from "@/components/ui/field";
 
 const MAX_SUGGESTIONS = 6;
-const labelCls = "text-xs font-medium text-ink-2";
-const inputCls = (err?: boolean) =>
-  cn(
-    "h-9 px-3 rounded-md border bg-white text-xs text-ink placeholder:text-ink-4",
-    "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-    err ? "border-warn" : "border-line"
-  );
 
 export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] }) {
   const [state, formAction, isPending] = useActionState<NewIntakeFormState, FormData>(
@@ -108,7 +102,7 @@ export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] })
             {/* Not a <Field>: a <label> wrapping the suggestion buttons
                 would fold them into the input's accessible name. */}
             <div className="flex flex-col gap-1">
-              <label htmlFor="intake-name" className={labelCls}>
+              <label htmlFor="intake-name" className={labelClass}>
                 Name<span className="text-warn ml-1">*</span>
               </label>
               <div className="relative">
@@ -125,7 +119,7 @@ export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] })
                   autoComplete="off"
                   maxLength={200}
                   placeholder="Start typing to find an existing contact"
-                  className={cn(inputCls(!!errs.name), "w-full")}
+                  className={cn(inputClass(!!errs.name, "md"), "w-full")}
                 />
                 {showSuggestions && suggestions.length > 0 && (
                   <ul
@@ -161,11 +155,11 @@ export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] })
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   maxLength={200}
-                  className={inputCls(!!errs.email)}
+                  className={inputClass(!!errs.email, "md")}
                 />
               </Field>
               <Field label="Phone" error={errs.phone?.[0]}>
-                <input name="phone" type="tel" defaultValue={v.phone ?? ""} maxLength={40} placeholder="(555) 555-5555" className={inputCls(!!errs.phone)} />
+                <input name="phone" type="tel" defaultValue={v.phone ?? ""} maxLength={40} placeholder="(555) 555-5555" className={inputClass(!!errs.phone, "md")} />
               </Field>
             </div>
             {emailMatch && (
@@ -196,22 +190,22 @@ export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] })
             </NativeSelect>
           </Field>
           <Field label="Source detail" error={errs.sourceDetail?.[0]}>
-            <input name="sourceDetail" defaultValue={v.sourceDetail ?? ""} maxLength={200} placeholder="e.g. referred by …" className={inputCls(!!errs.sourceDetail)} />
+            <input name="sourceDetail" defaultValue={v.sourceDetail ?? ""} maxLength={200} placeholder="e.g. referred by …" className={inputClass(!!errs.sourceDetail, "md")} />
           </Field>
         </div>
         <Field label="What happened" error={errs.summary?.[0]}>
-          <textarea name="summary" defaultValue={v.summary ?? ""} rows={4} maxLength={4000} className={cn(inputCls(!!errs.summary), "h-auto py-2 leading-relaxed")} />
+          <textarea name="summary" defaultValue={v.summary ?? ""} rows={4} maxLength={4000} className={cn(inputClass(!!errs.summary, "md"), "h-auto py-2 leading-relaxed")} />
         </Field>
         <div className="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-3">
           <Field label="Date of incident" error={errs.dateOfIncident?.[0]}>
-            <input name="dateOfIncident" type="date" defaultValue={v.dateOfIncident ?? ""} className={inputCls(!!errs.dateOfIncident)} />
+            <input name="dateOfIncident" type="date" defaultValue={v.dateOfIncident ?? ""} className={inputClass(!!errs.dateOfIncident, "md")} />
           </Field>
           <Field label="Location" error={errs.location?.[0]}>
-            <input name="location" defaultValue={v.location ?? ""} maxLength={200} className={inputCls(!!errs.location)} />
+            <input name="location" defaultValue={v.location ?? ""} maxLength={200} className={inputClass(!!errs.location, "md")} />
           </Field>
         </div>
         <Field label="Injuries / harm" error={errs.injuries?.[0]}>
-          <input name="injuries" defaultValue={v.injuries ?? ""} maxLength={2000} className={inputCls(!!errs.injuries)} />
+          <input name="injuries" defaultValue={v.injuries ?? ""} maxLength={2000} className={inputClass(!!errs.injuries, "md")} />
         </Field>
         <label className="flex items-center gap-2 text-xs text-ink-2">
           <input type="checkbox" name="priorCounsel" defaultChecked={v.priorCounsel === "on"} />
@@ -248,25 +242,3 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({
-  label,
-  required,
-  error,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className={labelCls}>
-        {label}
-        {required && <span className="text-warn ml-1">*</span>}
-      </span>
-      {children}
-      {error && <span className="text-2xs text-warn">{error}</span>}
-    </label>
-  );
-}

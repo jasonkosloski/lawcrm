@@ -9,7 +9,8 @@
 
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { AGREEMENT_STATUSES } from "@/lib/originating-doc";
-import { Field, Row, inputCls } from "./form-primitives";
+import { Row } from "./form-primitives";
+import { Field, inputClass } from "@/components/ui/field";
 
 const STATUS_LABELS: Record<string, string> = {
   not_sent: "Not sent",
@@ -37,7 +38,7 @@ export function AgreementFields({
     <Row>
       <Field
         label="Status"
-        name="agreementStatus"
+        htmlFor="agreementStatus"
         required={required}
         error={errors?.agreementStatus}
       >
@@ -58,7 +59,7 @@ export function AgreementFields({
       </Field>
       <Field
         label="Date signed"
-        name="agreementSignedDate"
+        htmlFor="agreementSignedDate"
         required={required}
         error={errors?.agreementSignedDate}
       >
@@ -68,7 +69,7 @@ export function AgreementFields({
           type="date"
           value={signedDate}
           onChange={(e) => onSignedDateChange(e.target.value)}
-          className={inputCls(!!err("agreementSignedDate"))}
+          className={inputClass(!!err("agreementSignedDate"))}
         />
       </Field>
     </Row>

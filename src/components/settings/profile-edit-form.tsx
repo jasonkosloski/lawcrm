@@ -29,6 +29,7 @@ import {
   type ProfileFormState,
 } from "@/lib/profile-form";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { inputClass, labelClass } from "@/components/ui/field";
 
 export type EditableProfile = {
   name: string;
@@ -96,7 +97,7 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
             type="text"
             required
             defaultValue={vals.name ?? profile.name}
-            className={inputClass(!!errs.name)}
+            className={inputClass(!!errs.name, "md")}
           />
         </Field>
         <Field
@@ -113,7 +114,7 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
             required
             maxLength={3}
             defaultValue={vals.initials ?? profile.initials}
-            className={cn(inputClass(!!errs.initials), "uppercase font-mono")}
+            className={cn(inputClass(!!errs.initials, "md"), "uppercase font-mono")}
           />
         </Field>
         <Field label="Phone" name="phone" error={errs.phone?.[0]}>
@@ -124,7 +125,7 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
             maxLength={40}
             defaultValue={vals.phone ?? profile.phone ?? ""}
             placeholder="(555) 555-5555"
-            className={inputClass(!!errs.phone)}
+            className={inputClass(!!errs.phone, "md")}
           />
         </Field>
         <Field
@@ -139,7 +140,7 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
             type="text"
             maxLength={40}
             defaultValue={vals.barNumber ?? profile.barNumber ?? ""}
-            className={inputClass(!!errs.barNumber)}
+            className={inputClass(!!errs.barNumber, "md")}
           />
         </Field>
         <Field
@@ -155,7 +156,7 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
             type="url"
             defaultValue={vals.avatarUrl ?? profile.avatarUrl ?? ""}
             placeholder="https://example.com/me.jpg"
-            className={inputClass(!!errs.avatarUrl)}
+            className={inputClass(!!errs.avatarUrl, "md")}
           />
         </Field>
         <Field
@@ -246,8 +247,6 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
   );
 }
 
-const LABEL_CLASS = "text-xs font-medium text-ink-2";
-
 function Field({
   label,
   name,
@@ -283,7 +282,7 @@ function Field({
       <fieldset
         className={cn("flex flex-col gap-1 border-0 p-0 m-0 min-w-0", className)}
       >
-        <legend className={cn(LABEL_CLASS, "p-0 mb-1")}>
+        <legend className={cn(labelClass, "p-0 mb-1")}>
           {label}
           {marker}
         </legend>
@@ -294,7 +293,7 @@ function Field({
   }
   return (
     <div className={cn("flex flex-col gap-1", className)}>
-      <label htmlFor={name} className={LABEL_CLASS}>
+      <label htmlFor={name} className={labelClass}>
         {label}
         {marker}
       </label>
@@ -304,11 +303,3 @@ function Field({
   );
 }
 
-function inputClass(hasError: boolean): string {
-  return cn(
-    "h-9 px-3 rounded-md border bg-white text-xs text-ink",
-    "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
-    "placeholder:text-ink-4",
-    hasError ? "border-warn" : "border-line"
-  );
-}

@@ -20,7 +20,7 @@ import {
   roleInitialState,
   type RoleFormState,
 } from "@/lib/role-form";
-import { Field, FormErrorBanner, formErrorMessage, inputClass } from "./form-field";
+import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
 
 export function CreateRoleForm() {
   const [state, formAction, isPending] = useActionState<

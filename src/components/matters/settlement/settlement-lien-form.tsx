@@ -19,6 +19,7 @@ import {
   settlementInitialState,
   type SettlementFormState,
 } from "@/lib/settlement-constants";
+import { FieldError, inputClass } from "@/components/ui/field";
 
 export function SettlementLienForm({
   settlementId,
@@ -105,7 +106,7 @@ export function SettlementLienForm({
             value={lienholder}
             placeholder="Denver Health"
             onChange={(e) => setLienholder(e.target.value)}
-            className={cn(inputClass, errs.lienholder && "border-warn")}
+            className={cn(inputClass(), errs.lienholder && "border-warn")}
           />
           {errs.lienholder && <FieldError>{errs.lienholder[0]}</FieldError>}
         </div>
@@ -150,7 +151,7 @@ export function SettlementLienForm({
             value={originalAmount}
             placeholder="0.00"
             onChange={(e) => setOriginalAmount(e.target.value)}
-            className={cn(inputClass, "font-mono", errs.originalAmount && "border-warn")}
+            className={cn(inputClass(), "font-mono", errs.originalAmount && "border-warn")}
           />
           {errs.originalAmount && (
             <FieldError>{errs.originalAmount[0]}</FieldError>
@@ -169,9 +170,3 @@ export function SettlementLienForm({
   );
 }
 
-const inputClass =
-  "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
-
-function FieldError({ children }: { children: React.ReactNode }) {
-  return <span className="text-2xs text-warn">{children}</span>;
-}

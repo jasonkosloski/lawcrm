@@ -54,12 +54,11 @@ import {
   VenueField,
 } from "./required-field-ui";
 import {
-  Field,
   Row,
   Section,
-  inputCls,
 } from "./form-primitives";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Field, inputClass } from "@/components/ui/field";
 
 export type MatterForEdit = {
   id: string;
@@ -349,21 +348,21 @@ export function EditMatterForm({
   return (
     <form ref={formRef} onSubmit={onSubmit} className="flex flex-col gap-6">
       <Section title="Core">
-        <Field label="Matter name" name="name" required error={errs.name}>
+        <Field label="Matter name" htmlFor="name" required error={errs.name}>
           <input
             id="name"
             name="name"
             type="text"
             defaultValue={init.name}
             required
-            className={inputCls(!!errs.name)}
+            className={inputClass(!!errs.name)}
           />
         </Field>
 
         <Row>
           <Field
             label="Practice area"
-            name="practiceAreaId"
+            htmlFor="practiceAreaId"
             required
             error={errs.practiceAreaId}
           >
@@ -384,7 +383,7 @@ export function EditMatterForm({
             </NativeSelect>
           </Field>
 
-          <Field label="Stage" name="stageId" error={errs.stageId}>
+          <Field label="Stage" htmlFor="stageId" error={errs.stageId}>
             <NativeSelect
               className="w-full"
               id="stageId"
@@ -410,7 +409,7 @@ export function EditMatterForm({
         <Row>
           <Field
             label="Case number"
-            name="caseNumber"
+            htmlFor="caseNumber"
             required={isRequired("caseNumber")}
             hint={reqHint("caseNumber")}
             error={errs.caseNumber}
@@ -420,14 +419,14 @@ export function EditMatterForm({
               name="caseNumber"
               type="text"
               defaultValue={init.caseNumber}
-              className={inputCls(!!errs.caseNumber)}
+              className={inputClass(!!errs.caseNumber)}
               placeholder="2026-CV-00481"
             />
           </Field>
 
           <Field
             label="Billing type"
-            name="billingType"
+            htmlFor="billingType"
             error={errs.billingType}
           >
             {canEditBillingType ? (
@@ -462,7 +461,7 @@ export function EditMatterForm({
         <Row>
           <Field
             label="Client"
-            name="clientId"
+            htmlFor="clientId"
             required={isRequired("client")}
             error={errs.clientId}
             hint={reqHint(
@@ -491,7 +490,7 @@ export function EditMatterForm({
 
           <Field
             label="Lead attorney"
-            name="leadUserId"
+            htmlFor="leadUserId"
             required={canChangeLead}
             error={errs.leadUserId}
             hint={
@@ -535,7 +534,7 @@ export function EditMatterForm({
         <Row>
           <Field
             label="Opposing party"
-            name="opposingParty"
+            htmlFor="opposingParty"
             required={isRequired("opposingParty")}
             hint={reqHint("opposingParty")}
             error={errs.opposingParty}
@@ -545,13 +544,13 @@ export function EditMatterForm({
               name="opposingParty"
               type="text"
               defaultValue={init.opposingParty}
-              className={inputCls(!!errs.opposingParty)}
+              className={inputClass(!!errs.opposingParty)}
             />
           </Field>
 
           <Field
             label="Opposing firm"
-            name="opposingFirm"
+            htmlFor="opposingFirm"
             required={isRequired("opposingFirm")}
             hint={reqHint("opposingFirm")}
             error={errs.opposingFirm}
@@ -561,7 +560,7 @@ export function EditMatterForm({
               name="opposingFirm"
               type="text"
               defaultValue={init.opposingFirm}
-              className={inputCls(!!errs.opposingFirm)}
+              className={inputClass(!!errs.opposingFirm)}
             />
           </Field>
         </Row>
@@ -587,7 +586,7 @@ export function EditMatterForm({
 
         <Field
           label="Court"
-          name="court"
+          htmlFor="court"
           required={isRequired("court")}
           hint={reqHint("court")}
           error={errs.court}
@@ -597,7 +596,7 @@ export function EditMatterForm({
             name="court"
             type="text"
             defaultValue={init.court}
-            className={inputCls(!!errs.court)}
+            className={inputClass(!!errs.court)}
             placeholder="D. Colorado · Hon. L. Martinez"
           />
         </Field>
@@ -605,7 +604,7 @@ export function EditMatterForm({
         <Row>
           <Field
             label="Filed date"
-            name="filedDate"
+            htmlFor="filedDate"
             required={isRequired("filedDate")}
             hint={reqHint("filedDate")}
             error={errs.filedDate}
@@ -615,12 +614,12 @@ export function EditMatterForm({
               name="filedDate"
               type="date"
               defaultValue={init.filedDate}
-              className={inputCls(!!errs.filedDate)}
+              className={inputClass(!!errs.filedDate)}
             />
           </Field>
           <Field
             label="Trial date"
-            name="trialDate"
+            htmlFor="trialDate"
             required={isRequired("trialDate")}
             hint={reqHint("trialDate")}
             error={errs.trialDate}
@@ -630,14 +629,14 @@ export function EditMatterForm({
               name="trialDate"
               type="date"
               defaultValue={init.trialDate}
-              className={inputCls(!!errs.trialDate)}
+              className={inputClass(!!errs.trialDate)}
             />
           </Field>
         </Row>
 
         <Field
           label="Summary"
-          name="description"
+          htmlFor="description"
           required={isRequired("description")}
           hint={reqHint("description")}
           error={errs.description}
@@ -648,7 +647,7 @@ export function EditMatterForm({
             defaultValue={init.description}
             rows={5}
             className={cn(
-              inputCls(!!errs.description),
+              inputClass(!!errs.description),
               "py-2 resize-y min-h-24 font-sans"
             )}
           />
@@ -668,7 +667,7 @@ export function EditMatterForm({
           <Row>
             <Field
               label="Incident / accrual date"
-              name="incidentDate"
+              htmlFor="incidentDate"
               required={isRequired("incidentDate")}
               error={errs.incidentDate}
               hint={reqHint(
@@ -684,12 +683,12 @@ export function EditMatterForm({
                 type="date"
                 value={incidentDateInput}
                 onChange={(e) => setIncidentDateInput(e.target.value)}
-                className={inputCls(!!errs.incidentDate)}
+                className={inputClass(!!errs.incidentDate)}
               />
             </Field>
             <Field
               label="Deadline date"
-              name="statuteOfLimitationsDate"
+              htmlFor="statuteOfLimitationsDate"
               error={errs.statuteOfLimitationsDate}
               hint={
                 solOverride
@@ -705,7 +704,7 @@ export function EditMatterForm({
                 type="date"
                 value={solOverride}
                 onChange={(e) => setSolOverride(e.target.value)}
-                className={inputCls(!!errs.statuteOfLimitationsDate)}
+                className={inputClass(!!errs.statuteOfLimitationsDate)}
               />
               {solOverride && (
                 <div className="flex items-center gap-2 text-2xs text-ink-3">
@@ -724,7 +723,7 @@ export function EditMatterForm({
           <Row>
             <Field
               label="Notes"
-              name="statuteOfLimitationsNotes"
+              htmlFor="statuteOfLimitationsNotes"
               error={errs.statuteOfLimitationsNotes}
               hint="Tolling agreement, notice waiver, jurisdictional quirks…"
             >
@@ -733,7 +732,7 @@ export function EditMatterForm({
                 name="statuteOfLimitationsNotes"
                 type="text"
                 defaultValue={init.statuteOfLimitationsNotes}
-                className={inputCls(!!errs.statuteOfLimitationsNotes)}
+                className={inputClass(!!errs.statuteOfLimitationsNotes)}
               />
             </Field>
           </Row>

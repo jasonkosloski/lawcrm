@@ -22,7 +22,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { createVenue } from "@/app/actions/venues";
 import type { VenueOption } from "@/lib/queries/venues";
-import { inputCls } from "./form-primitives";
+import { inputClass } from "@/components/ui/field";
 
 export function venueLabel(v: VenueOption): string {
   const place = [v.city, v.county, v.state].filter(Boolean).join(", ");
@@ -162,7 +162,7 @@ export function VenueCombobox({
     }
   }
 
-  const fieldCls = inputCls(false);
+  const fieldCls = inputClass(false);
   const err = (k: string) =>
     fieldErrors[k]?.[0] ? (
       <div className="text-2xs text-warn">{fieldErrors[k][0]}</div>

@@ -38,11 +38,9 @@ import {
   SelectedContactChip,
   collectOtherErrors,
 } from "./party-pickers";
+import { inputClass } from "@/components/ui/field";
 
 export type { ContactOption };
-
-const INPUT_CLASS =
-  "h-7 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
 
 export function PartyComposer({
   matterId,
@@ -243,7 +241,7 @@ export function PartyComposer({
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email (optional)"
             className={cn(
-              INPUT_CLASS,
+              inputClass(false, "xs"),
               errs.newContactEmail && "border-warn"
             )}
           />
@@ -255,7 +253,7 @@ export function PartyComposer({
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="Phone (optional)"
-            className={cn(INPUT_CLASS, errs.newContactPhone && "border-warn")}
+            className={cn(inputClass(false, "xs"), errs.newContactPhone && "border-warn")}
           />
           <input
             type="text"
@@ -266,7 +264,7 @@ export function PartyComposer({
             onChange={(e) => setOrganization(e.target.value)}
             placeholder="Organization (optional)"
             className={cn(
-              INPUT_CLASS,
+              inputClass(false, "xs"),
               "col-span-2",
               errs.newContactOrganization && "border-warn"
             )}
@@ -284,7 +282,7 @@ export function PartyComposer({
           value={role}
           onChange={(e) => setRole(e.target.value)}
           placeholder={rolePlaceholder(category)}
-          className={cn(INPUT_CLASS, errs.role && "border-warn")}
+          className={cn(inputClass(false, "xs"), errs.role && "border-warn")}
         />
         <input
           type="text"
@@ -294,7 +292,7 @@ export function PartyComposer({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Notes about this party's role in the matter (optional)"
-          className={cn(INPUT_CLASS, errs.notes && "border-warn")}
+          className={cn(inputClass(false, "xs"), errs.notes && "border-warn")}
         />
       </div>
 
@@ -398,7 +396,7 @@ export function PartyComposer({
                     value={repFirm}
                     onChange={(e) => setRepFirm(e.target.value)}
                     placeholder="Firm (optional)"
-                    className={INPUT_CLASS}
+                    className={inputClass(false, "xs")}
                   />
                   <input
                     type="email"
@@ -408,7 +406,7 @@ export function PartyComposer({
                     onChange={(e) => setRepEmail(e.target.value)}
                     placeholder="Email (optional)"
                     className={cn(
-                      INPUT_CLASS,
+                      inputClass(false, "xs"),
                       errs.newRepresentationEmail && "border-warn"
                     )}
                   />
@@ -419,7 +417,7 @@ export function PartyComposer({
                     value={repPhone}
                     onChange={(e) => setRepPhone(e.target.value)}
                     placeholder="Phone (optional)"
-                    className={cn(INPUT_CLASS, "col-span-2")}
+                    className={cn(inputClass(false, "xs"), "col-span-2")}
                   />
                 </div>
               )}

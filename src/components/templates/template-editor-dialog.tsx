@@ -56,11 +56,7 @@ import {
   updateDocumentTemplate,
 } from "@/app/actions/document-templates";
 import type { TemplateListItem } from "@/components/templates/template-library";
-
-const fieldLabelCls =
-  "text-xs font-medium text-ink-2";
-const inputCls =
-  "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
+import { inputClass, labelClass } from "@/components/ui/field";
 
 export function TemplateEditorDialog({
   open,
@@ -156,7 +152,7 @@ export function TemplateEditorDialog({
         <form action={formAction} className="flex flex-col gap-3">
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_180px] gap-3">
             <div className="flex flex-col gap-1">
-              <label htmlFor="template-name" className={fieldLabelCls}>
+              <label htmlFor="template-name" className={labelClass}>
                 Name <span className="text-warn">*</span>
               </label>
               <input
@@ -168,11 +164,11 @@ export function TemplateEditorDialog({
                 onChange={(e) => setName(e.target.value)}
                 maxLength={MAX_TEMPLATE_NAME}
                 placeholder='e.g. "Demand letter — UM/UIM"'
-                className={inputCls}
+                className={inputClass()}
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label htmlFor="template-category" className={fieldLabelCls}>
+              <label htmlFor="template-category" className={labelClass}>
                 Category
               </label>
               <NativeSelect
@@ -204,7 +200,7 @@ export function TemplateEditorDialog({
           </div>
 
           <div className="flex flex-col gap-1">
-            <label htmlFor="template-description" className={fieldLabelCls}>
+            <label htmlFor="template-description" className={labelClass}>
               Description (optional)
             </label>
             <input
@@ -215,13 +211,13 @@ export function TemplateEditorDialog({
               onChange={(e) => setDescription(e.target.value)}
               maxLength={MAX_TEMPLATE_DESCRIPTION}
               placeholder="When to use this template"
-              className={inputCls}
+              className={inputClass()}
             />
           </div>
 
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between gap-2">
-              <label htmlFor="template-body" className={fieldLabelCls}>
+              <label htmlFor="template-body" className={labelClass}>
                 Body <span className="text-warn">*</span>
               </label>
               <div className="flex items-center gap-1.5">

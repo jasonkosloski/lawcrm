@@ -31,7 +31,7 @@ import type { FirmGoals, FirmProfile } from "@/lib/firm";
 import { dateOnlyKey } from "@/lib/format-date";
 import { MatterNameTemplateField } from "./matter-name-template-field";
 import { DEFAULT_MATTER_NAME_TEMPLATE } from "@/lib/matter-name-template";
-import { Field, FormErrorBanner, formErrorMessage, inputClass } from "./form-field";
+import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
 
 export function FirmEditForm({
   firm,

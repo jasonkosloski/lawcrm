@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { AgreementFields } from "@/components/matters/agreement-fields";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { Field, Section } from "@/components/matters/form-primitives";
+import { Section } from "@/components/matters/form-primitives";
 import {
   SelectField,
   TextField,
@@ -52,6 +52,7 @@ import {
 } from "@/lib/originating-doc";
 import { BILLING_TYPE_OPTIONS } from "@/lib/billing-type";
 import type { PracticeAreaOption } from "@/lib/queries/practice-area-options";
+import { Field } from "@/components/ui/field";
 
 // Default stage for a freshly converted matter: terminal stages
 // ("Closed", "Declined", …) make no sense as a starting point, so skip
@@ -278,7 +279,7 @@ export function ConvertLeadButton({
                 />
                 <Field
                   label={`This is the ${agreementLabel}`}
-                  name="originatingDocumentId"
+                  htmlFor="originatingDocumentId"
                   required={requireOriginatingDoc}
                   error={engagementErrors.originatingDocumentId}
                 >

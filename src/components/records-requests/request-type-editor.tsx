@@ -27,10 +27,7 @@ import {
 } from "@/app/actions/records-request-types";
 import { recordsRequestInitialState } from "@/lib/records-requests/form";
 import type { RecordsRequestTypeRow } from "@/lib/queries/records-requests";
-
-const labelCls = "text-xs font-medium text-ink-2";
-const inputCls =
-  "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30";
+import { inputClass, labelClass } from "@/components/ui/field";
 
 type TemplateOption = { id: string; name: string };
 
@@ -232,7 +229,7 @@ function TypeDialog({
           className="flex flex-col gap-3"
         >
           <div className="flex flex-col gap-1">
-            <label htmlFor="rrt-name" className={labelCls}>
+            <label htmlFor="rrt-name" className={labelClass}>
               Name <span className="text-warn">*</span>
             </label>
             <input
@@ -241,13 +238,13 @@ function TypeDialog({
               required
               maxLength={80}
               defaultValue={v?.name ?? type?.name ?? ""}
-              className={inputCls}
+              className={inputClass()}
             />
             {errP("name")}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
-              <label htmlFor="rrt-amount" className={labelCls}>
+              <label htmlFor="rrt-amount" className={labelClass}>
                 Response period (days)
               </label>
               <input
@@ -256,12 +253,12 @@ function TypeDialog({
                 inputMode="numeric"
                 placeholder="none"
                 defaultValue={v?.responseAmount ?? type?.responseAmount?.toString() ?? ""}
-                className={inputCls}
+                className={inputClass()}
               />
               {errP("responseAmount")}
             </div>
             <div className="flex flex-col gap-1">
-              <label htmlFor="rrt-unit" className={labelCls}>
+              <label htmlFor="rrt-unit" className={labelClass}>
                 Day type
               </label>
               <NativeSelect
@@ -278,7 +275,7 @@ function TypeDialog({
             </div>
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="rrt-follow" className={labelCls}>
+            <label htmlFor="rrt-follow" className={labelClass}>
               Chase every (days) <span className="text-warn">*</span>
             </label>
             <input
@@ -287,12 +284,12 @@ function TypeDialog({
               inputMode="numeric"
               required
               defaultValue={v?.followUpDays ?? type?.followUpDays?.toString() ?? "7"}
-              className={inputCls}
+              className={inputClass()}
             />
             {errP("followUpDays")}
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="rrt-template" className={labelCls}>
+            <label htmlFor="rrt-template" className={labelClass}>
               Default letter template
             </label>
             <NativeSelect

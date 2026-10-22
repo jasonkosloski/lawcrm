@@ -12,8 +12,6 @@ import { useActionState, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { updatePracticeArea } from "@/app/actions/practice-areas";
 import {
-  Field,
-  inputCls,
   OriginatingDocField,
   RequiredFieldsGroup,
 } from "@/components/settings/practice-area-form-parts";
@@ -26,6 +24,7 @@ import {
 } from "@/lib/practice-area-constants";
 import { BILLING_TYPE_OPTIONS } from "@/lib/billing-type";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Field, inputClass } from "@/components/ui/field";
 
 export function EditPracticeAreaForm({
   area,
@@ -115,7 +114,7 @@ export function EditPracticeAreaForm({
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            className={inputCls(!!errs.name)}
+            className={inputClass(!!errs.name)}
           />
         </Field>
 
@@ -126,7 +125,7 @@ export function EditPracticeAreaForm({
             type="text"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            className={inputCls(!!errs.label)}
+            className={inputClass(!!errs.label)}
           />
         </Field>
 
@@ -145,7 +144,7 @@ export function EditPracticeAreaForm({
               type="text"
               value={color}
               onChange={(e) => setColor(e.target.value)}
-              className={cn(inputCls(!!errs.color), "font-mono w-[94px]")}
+              className={cn(inputClass(!!errs.color), "font-mono w-[94px]")}
               pattern="^#[0-9a-fA-F]{6}$"
             />
           </div>
@@ -197,7 +196,7 @@ export function EditPracticeAreaForm({
               step={1}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className={inputCls(!!errs.statutePeriodAmount)}
+              className={inputClass(!!errs.statutePeriodAmount)}
             />
           </Field>
           <Field
@@ -233,7 +232,7 @@ export function EditPracticeAreaForm({
             value={citation}
             onChange={(e) => setCitation(e.target.value)}
             maxLength={120}
-            className={inputCls(false)}
+            className={inputClass(false)}
           />
         </Field>
         <p className="text-2xs text-ink-4 leading-relaxed">

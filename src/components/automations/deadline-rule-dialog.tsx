@@ -38,10 +38,7 @@ import {
   type OffsetUnit,
 } from "@/lib/automations/deadline-plan";
 import type { DeadlineRuleRow } from "@/lib/queries/automations";
-
-const labelCls = "text-xs font-medium text-ink-2";
-const inputCls =
-  "h-8 px-2.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
+import { Field, inputClass } from "@/components/ui/field";
 
 export function DeadlineRuleDialog({
   open,
@@ -131,7 +128,7 @@ export function DeadlineRuleDialog({
 
         <form action={formAction} className="flex flex-col gap-3">
           <Field label="Deadline title" error={errs.title?.[0]}>
-            <input name="title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} placeholder='e.g. "CGIA notice due"' className={inputCls} />
+            <input name="title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} placeholder='e.g. "CGIA notice due"' className={inputClass()} />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
@@ -172,13 +169,13 @@ export function DeadlineRuleDialog({
           )}
           {anchor === "prompt" && (
             <Field label="What date to ask for" error={errs.anchorLabel?.[0]} hint="Shown when someone applies the rule, e.g. “Date of service”.">
-              <input name="anchorLabel" value={anchorLabel} onChange={(e) => setAnchorLabel(e.target.value)} maxLength={80} placeholder="Date of service" className={inputCls} />
+              <input name="anchorLabel" value={anchorLabel} onChange={(e) => setAnchorLabel(e.target.value)} maxLength={80} placeholder="Date of service" className={inputClass()} />
             </Field>
           )}
 
           <Field label="Offset" error={errs.amount?.[0]}>
             <div className="grid grid-cols-[90px_1fr_1fr] gap-2">
-              <input name="amount" type="number" min={0} max={36500} value={amount} onChange={(e) => setAmount(e.target.value)} required className={inputCls} aria-label="Amount" />
+              <input name="amount" type="number" min={0} max={36500} value={amount} onChange={(e) => setAmount(e.target.value)} required className={inputClass()} aria-label="Amount" />
               <NativeSelect name="unit" value={unit} onChange={(e) => setUnit(e.target.value as OffsetUnit)} className="w-full" aria-label="Unit">
                 {OFFSET_UNITS.map((u) => <NativeSelectOption key={u} value={u}>{u}</NativeSelectOption>)}
               </NativeSelect>
@@ -200,7 +197,7 @@ export function DeadlineRuleDialog({
           )}
 
           <Field label="Citation (optional)">
-            <input name="sourceRef" value={sourceRef} onChange={(e) => setSourceRef(e.target.value)} maxLength={200} placeholder="C.R.S. § 24-10-109" className={inputCls} />
+            <input name="sourceRef" value={sourceRef} onChange={(e) => setSourceRef(e.target.value)} maxLength={200} placeholder="C.R.S. § 24-10-109" className={inputClass()} />
           </Field>
           <Field label="Notes (optional)" hint="Copied onto each generated deadline.">
             <textarea name="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={4000} className="px-2.5 py-1.5 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30" />
@@ -224,23 +221,3 @@ export function DeadlineRuleDialog({
   );
 }
 
-function Field({
-  label,
-  error,
-  hint,
-  children,
-}: {
-  label: string;
-  error?: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className={labelCls}>{label}</span>
-      {children}
-      {hint && !error && <span className="text-3xs text-ink-4">{hint}</span>}
-      {error && <span className="text-2xs text-warn">{error}</span>}
-    </label>
-  );
-}

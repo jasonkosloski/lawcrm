@@ -58,10 +58,8 @@ import {
   VenueField,
 } from "./required-field-ui";
 import {
-  Field,
   Row,
   Section,
-  inputCls,
 } from "./form-primitives";
 import {
   createMatterInitialState,
@@ -76,6 +74,7 @@ import { useDraftAutosave, type AutosaveStatus } from "./use-draft-autosave";
 import type { DraftValues } from "@/app/actions/matter-drafts";
 import { agreementGateErrors } from "@/lib/originating-doc";
 import type { StorageDriver } from "@/lib/storage/storage-key";
+import { Field, inputClass } from "@/components/ui/field";
 
 type ClientOption = {
   id: string;
@@ -596,7 +595,7 @@ export function NewMatterForm({
               setIsNameDirty(true);
             }}
             required
-            className={inputCls(!!errs.name)}
+            className={inputClass(!!errs.name)}
             placeholder="Fill in the fields below — or type your own"
           />
           {errs.name && errs.name.length > 0 ? (
@@ -612,7 +611,7 @@ export function NewMatterForm({
         <Row>
           <Field
             label="Practice area"
-            name="practiceAreaId"
+            htmlFor="practiceAreaId"
             required
             error={errs.practiceAreaId}
           >
@@ -638,7 +637,7 @@ export function NewMatterForm({
             </NativeSelect>
           </Field>
 
-          <Field label="Stage" name="stageId" error={errs.stageId}>
+          <Field label="Stage" htmlFor="stageId" error={errs.stageId}>
             <NativeSelect
               className="w-full"
               id="stageId"
@@ -664,7 +663,7 @@ export function NewMatterForm({
         <Row>
           <Field
             label="Case number"
-            name="caseNumber"
+            htmlFor="caseNumber"
             required={isRequired("caseNumber")}
             hint={reqHint("caseNumber")}
             error={errs.caseNumber}
@@ -675,7 +674,7 @@ export function NewMatterForm({
               type="text"
               value={caseNumber}
               onChange={(e) => setCaseNumber(e.target.value)}
-              className={inputCls(!!errs.caseNumber)}
+              className={inputClass(!!errs.caseNumber)}
               placeholder="2026-CV-00481"
             />
           </Field>
@@ -698,7 +697,7 @@ export function NewMatterForm({
           </VenueField>
         </Row>
 
-        <Field label="Billing type" name="billingType" error={errs.billingType}>
+        <Field label="Billing type" htmlFor="billingType" error={errs.billingType}>
           <NativeSelect
             className="w-full"
             id="billingType"
@@ -784,7 +783,7 @@ export function NewMatterForm({
                   onFocus={() => {
                     if (clientName.trim().length > 0) setSuggestionsOpen(true);
                   }}
-                  className={inputCls(
+                  className={inputClass(
                     !!errs.newClientName || !!errs.clientId
                   )}
                   placeholder="Client name (First Last — type to search or create)"
@@ -861,7 +860,7 @@ export function NewMatterForm({
 
           <Field
             label="Lead attorney"
-            name="leadUserId"
+            htmlFor="leadUserId"
             required
             error={errs.leadUserId}
           >
@@ -898,7 +897,7 @@ export function NewMatterForm({
             <Row>
               <Field
                 label="Client email"
-                name="newClientEmail"
+                htmlFor="newClientEmail"
                 error={errs.newClientEmail}
                 hint="Email or phone required to reach the client."
               >
@@ -907,13 +906,13 @@ export function NewMatterForm({
                   name="newClientEmail"
                   type="email"
                   defaultValue={vals.newClientEmail ?? ""}
-                  className={inputCls(!!errs.newClientEmail)}
+                  className={inputClass(!!errs.newClientEmail)}
                   placeholder="maria.alvarez@example.com"
                 />
               </Field>
               <Field
                 label="Client phone"
-                name="newClientPhone"
+                htmlFor="newClientPhone"
                 error={errs.newClientPhone}
               >
                 <input
@@ -921,14 +920,14 @@ export function NewMatterForm({
                   name="newClientPhone"
                   type="tel"
                   defaultValue={vals.newClientPhone ?? ""}
-                  className={inputCls(!!errs.newClientPhone)}
+                  className={inputClass(!!errs.newClientPhone)}
                   placeholder="(303) 555-0182"
                 />
               </Field>
             </Row>
             <Field
               label="Client organization"
-              name="newClientOrganization"
+              htmlFor="newClientOrganization"
               error={errs.newClientOrganization}
               hint="Optional — for business or institutional clients."
             >
@@ -937,7 +936,7 @@ export function NewMatterForm({
                 name="newClientOrganization"
                 type="text"
                 defaultValue={vals.newClientOrganization ?? ""}
-                className={inputCls(!!errs.newClientOrganization)}
+                className={inputClass(!!errs.newClientOrganization)}
               />
             </Field>
           </div>
@@ -946,7 +945,7 @@ export function NewMatterForm({
         <Row>
           <Field
             label="Opposing party"
-            name="opposingParty"
+            htmlFor="opposingParty"
             required={isRequired("opposingParty")}
             hint={reqHint("opposingParty")}
             error={errs.opposingParty}
@@ -957,14 +956,14 @@ export function NewMatterForm({
               type="text"
               value={opposingParty}
               onChange={(e) => setOpposingParty(e.target.value)}
-              className={inputCls(!!errs.opposingParty)}
+              className={inputClass(!!errs.opposingParty)}
               placeholder="City of Aurora, Officer J. Doe"
             />
           </Field>
 
           <Field
             label="Opposing firm"
-            name="opposingFirm"
+            htmlFor="opposingFirm"
             required={isRequired("opposingFirm")}
             hint={reqHint("opposingFirm")}
             error={errs.opposingFirm}
@@ -974,7 +973,7 @@ export function NewMatterForm({
               name="opposingFirm"
               type="text"
               defaultValue={vals.opposingFirm ?? ""}
-              className={inputCls(!!errs.opposingFirm)}
+              className={inputClass(!!errs.opposingFirm)}
               placeholder="Aurora City Attorney's Office"
             />
           </Field>
@@ -985,7 +984,7 @@ export function NewMatterForm({
       <Section title="Details">
         <Field
           label="Court"
-          name="court"
+          htmlFor="court"
           required={isRequired("court")}
           hint={reqHint("court")}
           error={errs.court}
@@ -995,7 +994,7 @@ export function NewMatterForm({
             name="court"
             type="text"
             defaultValue={vals.court ?? ""}
-            className={inputCls(!!errs.court)}
+            className={inputClass(!!errs.court)}
             placeholder="D. Colorado · Hon. L. Martinez"
           />
         </Field>
@@ -1003,7 +1002,7 @@ export function NewMatterForm({
         <Row>
           <Field
             label="Filed date"
-            name="filedDate"
+            htmlFor="filedDate"
             required={isRequired("filedDate")}
             hint={reqHint("filedDate")}
             error={errs.filedDate}
@@ -1013,12 +1012,12 @@ export function NewMatterForm({
               name="filedDate"
               type="date"
               defaultValue={vals.filedDate ?? ""}
-              className={inputCls(!!errs.filedDate)}
+              className={inputClass(!!errs.filedDate)}
             />
           </Field>
           <Field
             label="Trial date"
-            name="trialDate"
+            htmlFor="trialDate"
             required={isRequired("trialDate")}
             hint={reqHint("trialDate")}
             error={errs.trialDate}
@@ -1028,14 +1027,14 @@ export function NewMatterForm({
               name="trialDate"
               type="date"
               defaultValue={vals.trialDate ?? ""}
-              className={inputCls(!!errs.trialDate)}
+              className={inputClass(!!errs.trialDate)}
             />
           </Field>
         </Row>
 
         <Field
           label="Summary"
-          name="description"
+          htmlFor="description"
           required={isRequired("description")}
           hint={reqHint("description")}
           error={errs.description}
@@ -1046,7 +1045,7 @@ export function NewMatterForm({
             defaultValue={vals.description ?? ""}
             rows={4}
             className={cn(
-              inputCls(!!errs.description),
+              inputClass(!!errs.description),
               "py-2 resize-y min-h-20 font-sans"
             )}
             placeholder="Brief case summary — what the claim is, what's at stake."
@@ -1090,7 +1089,7 @@ export function NewMatterForm({
           <Row>
             <Field
               label="Incident / accrual date"
-              name="incidentDate"
+              htmlFor="incidentDate"
               required={isRequired("incidentDate")}
               error={errs.incidentDate}
               hint={reqHint(
@@ -1105,12 +1104,12 @@ export function NewMatterForm({
                 name="incidentDate"
                 type="date"
                 defaultValue={vals.incidentDate ?? ""}
-                className={inputCls(!!errs.incidentDate)}
+                className={inputClass(!!errs.incidentDate)}
               />
             </Field>
             <Field
               label="Deadline date"
-              name="statuteOfLimitationsDate"
+              htmlFor="statuteOfLimitationsDate"
               error={errs.statuteOfLimitationsDate}
               hint="Manual override — wins over auto-compute."
             >
@@ -1119,14 +1118,14 @@ export function NewMatterForm({
                 name="statuteOfLimitationsDate"
                 type="date"
                 defaultValue={vals.statuteOfLimitationsDate ?? ""}
-                className={inputCls(!!errs.statuteOfLimitationsDate)}
+                className={inputClass(!!errs.statuteOfLimitationsDate)}
               />
             </Field>
           </Row>
           <Row>
             <Field
               label="Notes"
-              name="statuteOfLimitationsNotes"
+              htmlFor="statuteOfLimitationsNotes"
               error={errs.statuteOfLimitationsNotes}
               hint="Tolling agreement, jurisdictional quirks, prior CRS exposure…"
             >
@@ -1135,7 +1134,7 @@ export function NewMatterForm({
                 name="statuteOfLimitationsNotes"
                 type="text"
                 defaultValue={vals.statuteOfLimitationsNotes ?? ""}
-                className={inputCls(!!errs.statuteOfLimitationsNotes)}
+                className={inputClass(!!errs.statuteOfLimitationsNotes)}
               />
             </Field>
           </Row>

@@ -13,7 +13,7 @@ import {
   parseTemplate,
   renderMatterName,
 } from "@/lib/matter-name-template";
-import { Field, inputCls } from "@/components/settings/practice-area-form-parts";
+import { Field, inputClass } from "@/components/ui/field";
 
 const TOKEN_HELP: { token: string; meaning: string }[] = [
   { token: "client_first", meaning: "client first name" },
@@ -81,7 +81,7 @@ export function MatterNameTemplateField({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={placeholder ?? DEFAULT_MATTER_NAME_TEMPLATE}
-        className={inputCls(!!error?.length || !parsed.ok) + " font-mono"}
+        className={inputClass(!!error?.length || !parsed.ok) + " font-mono"}
       />
       {!parsed.ok ? (
         <div className="text-2xs text-warn" role="alert">

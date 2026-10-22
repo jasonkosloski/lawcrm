@@ -30,10 +30,7 @@ import {
 } from "@/lib/automation-form";
 import { TASK_PRIORITIES, TASK_PRIORITY_LABEL } from "@/lib/constants/priority";
 import type { TaskListRow } from "@/lib/queries/automations";
-
-const labelCls = "text-xs font-medium text-ink-2";
-const inputCls =
-  "h-8 px-2 rounded-md border border-line bg-white text-xs text-ink focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 placeholder:text-ink-4";
+import { inputClass, labelClass } from "@/components/ui/field";
 
 type DraftItem = {
   key: number;
@@ -142,29 +139,29 @@ export function TaskListDialog({
           <input type="hidden" name="items" value={JSON.stringify(payload)} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="flex flex-col gap-1">
-              <span className={labelCls}>Name</span>
-              <input name="name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} placeholder="§1983 intake checklist" className={inputCls} />
+              <span className={labelClass}>Name</span>
+              <input name="name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} placeholder="§1983 intake checklist" className={inputClass()} />
               {errs.name?.[0] && <span className="text-2xs text-warn">{errs.name[0]}</span>}
             </label>
             <label className="flex flex-col gap-1">
-              <span className={labelCls}>Description (optional)</span>
-              <input name="description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} className={inputCls} />
+              <span className={labelClass}>Description (optional)</span>
+              <input name="description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} className={inputClass()} />
             </label>
           </div>
 
           <div className="flex flex-col gap-1.5">
             <div className="hidden sm:grid grid-cols-[1fr_96px_120px_88px_76px] gap-2 px-1">
-              <span className={labelCls}>Task</span>
-              <span className={labelCls}>Priority</span>
-              <span className={labelCls}>Assign to</span>
-              <span className={labelCls}>Due (days)</span>
+              <span className={labelClass}>Task</span>
+              <span className={labelClass}>Priority</span>
+              <span className={labelClass}>Assign to</span>
+              <span className={labelClass}>Due (days)</span>
               <span />
             </div>
             <div className="flex flex-col gap-2 max-h-[45vh] overflow-y-auto pr-1">
               {items.map((item, idx) => (
                 <div key={item.key} className="flex flex-col gap-1 p-1.5 rounded-md border border-line bg-paper">
                   <div className="grid grid-cols-1 sm:grid-cols-[1fr_96px_120px_88px_76px] gap-2 items-center">
-                    <input aria-label="Task title" value={item.title} onChange={(e) => update(item.key, { title: e.target.value })} maxLength={200} placeholder={`Task ${idx + 1}`} className={inputCls} />
+                    <input aria-label="Task title" value={item.title} onChange={(e) => update(item.key, { title: e.target.value })} maxLength={200} placeholder={`Task ${idx + 1}`} className={inputClass()} />
                     <NativeSelect aria-label="Priority" value={item.priority} onChange={(e) => update(item.key, { priority: e.target.value as DraftItem["priority"] })} className="w-full">
                       {TASK_PRIORITIES.map((p) => <NativeSelectOption key={p} value={p}>{TASK_PRIORITY_LABEL[p]}</NativeSelectOption>)}
                     </NativeSelect>
@@ -172,14 +169,14 @@ export function TaskListDialog({
                       <NativeSelectOption value="lead">Lead attorney</NativeSelectOption>
                       <NativeSelectOption value="unassigned">Unassigned</NativeSelectOption>
                     </NativeSelect>
-                    <input aria-label="Due days after applied" type="number" min={0} max={3650} value={item.due} onChange={(e) => update(item.key, { due: e.target.value })} placeholder="none" className={inputCls} />
+                    <input aria-label="Due days after applied" type="number" min={0} max={3650} value={item.due} onChange={(e) => update(item.key, { due: e.target.value })} placeholder="none" className={inputClass()} />
                     <div className="flex items-center gap-0.5 justify-end">
                       <IconBtn label="Move up" onClick={() => move(idx, -1)} disabled={idx === 0}><ArrowUp size={13} /></IconBtn>
                       <IconBtn label="Move down" onClick={() => move(idx, 1)} disabled={idx === items.length - 1}><ArrowDown size={13} /></IconBtn>
                       <IconBtn label="Remove task" onClick={() => setItems((xs) => xs.filter((x) => x.key !== item.key))} disabled={items.length === 1}><Trash2 size={13} /></IconBtn>
                     </div>
                   </div>
-                  <input aria-label="Task details" value={item.description} onChange={(e) => update(item.key, { description: e.target.value })} maxLength={4000} placeholder="Details (optional)" className={`${inputCls} h-7 text-2xs`} />
+                  <input aria-label="Task details" value={item.description} onChange={(e) => update(item.key, { description: e.target.value })} maxLength={4000} placeholder="Details (optional)" className={`${inputClass()} h-7 text-2xs`} />
                 </div>
               ))}
             </div>
