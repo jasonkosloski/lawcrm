@@ -2336,13 +2336,12 @@ model TimerSession {
 }
 
 /// Reusable document template (demand letter, discovery responses,
-/// retainer agreement, …). Body is plain text / Markdown carrying
-/// {{merge.fields}} — the field catalog and the merge engine live
-/// in src/lib/template-merge.ts (code owns the field list; adding a
-/// field is a code change, not data). Generation resolves fields
-/// from a matter + its client/firm context and either copies the
-/// result or saves it as a matter Document through the normal
-/// file-storage path.
+/// retainer agreement, …). Structured TipTap `content` carries field
+/// nodes; the field catalog lives in src/lib/templates/catalog.ts
+/// (code owns the field list; adding a field is a code change, not
+/// data). Generation resolves fields from a matter or lead + its
+/// client/firm context and saves the result as a Document through
+/// the normal file-storage path. Legacy rows keep a plain-text `body`.
 model DocumentTemplate {
   id                  String               @id @default(cuid())
   name                String
@@ -2353,13 +2352,13 @@ model DocumentTemplate {
   description         String?
   /// Legacy plain-text body; null for structured templates (`content`).
   body                String?
-  /// letter | email | document — what the template generates.
+  /// letter | email | sms | filing — what the template generates.
   kind                String               @default("letter")
   /// TipTap/ProseMirror JSON document (structured body).
   content             Json?
   /// TipTap JSON for the subject line (email templates).
   subject             Json?
-  /// matter | lead — which record scope the template merges against.
+  /// matter | lead | both — which record scope the template merges against.
   appliesTo           String               @default("matter")
   /// Soft-archive — generation pickers hide inactive templates but
   /// history stays intact.

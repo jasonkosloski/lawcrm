@@ -20,7 +20,7 @@ export default async function RecordsTypesPage() {
   const [types, templates] = await Promise.all([
     listRecordsRequestTypes({ activeOnly: false }),
     prisma.documentTemplate.findMany({
-      where: { isActive: true },
+      where: { isActive: true, kind: { in: ["letter", "filing"] } },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),

@@ -6,6 +6,7 @@
  * has already enforced auth, the matter wall and `records.view`.
  */
 
+import { generatableTemplateWhere } from "@/lib/templates/picker";
 import { notFound } from "next/navigation";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { activeStorageDriver } from "@/lib/file-storage";
@@ -62,11 +63,7 @@ export async function RequestDetailPage({
     editable
       ? prisma.documentTemplate.findMany({
           // Letters and filings that fit this record; email/SMS never generate files.
-          where: {
-            isActive: true,
-            kind: { in: ["letter", "filing"] },
-            appliesTo: { in: scope.kind === "lead" ? ["lead", "both"] : ["matter", "both"] },
-          },
+          where: generatableTemplateWhere(scope.kind),
           orderBy: [{ category: "asc" }, { name: "asc" }],
           select: { id: true, name: true, category: true, description: true },
         })

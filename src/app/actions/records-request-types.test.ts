@@ -119,6 +119,19 @@ describe("createRecordsRequestType", () => {
     const ok = await createRecordsRequestType(IDLE, fd({ defaultTemplateId: t.id }));
     expect(ok.status).toBe("ok");
   });
+
+  test("default template must be a letter or filing", async () => {
+    const email = await prisma.documentTemplate.create({
+      data: { name: "E", category: "general", kind: "email", body: "x", createdById: userId },
+    });
+    const res = await createRecordsRequestType(IDLE, fd({ defaultTemplateId: email.id }));
+    expect(res.errors?.defaultTemplateId).toBeTruthy();
+    const filing = await prisma.documentTemplate.create({
+      data: { name: "F", category: "general", kind: "filing", body: "x", createdById: userId },
+    });
+    const ok = await createRecordsRequestType(IDLE, fd({ defaultTemplateId: filing.id }));
+    expect(ok.status).toBe("ok");
+  });
 });
 
 describe("update / archive / move", () => {

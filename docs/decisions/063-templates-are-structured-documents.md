@@ -7,7 +7,7 @@
 
 **Decision:**
 
-- A template's `content` is ProseMirror (TipTap) JSON with real `field`, `block`, `showIf`, `repeat` and `listField` nodes, validated by a zod schema (allowed nodes per `kind`, depth and size caps) on every save. Not text tags, not Markdown.
+- A template's `content` is ProseMirror (TipTap) JSON with real `field`, `block`, `showIf`, `repeat` and `listField` nodes, validated by a hand-written validator (`src/lib/templates/schema.ts`: allowed nodes per `kind`, depth and size caps) on every save. Not text tags, not Markdown.
 - Reusable pieces (letterhead, signature, closing, certificate of service) are firm-editable `TemplateBlock` rows. Templates reference a block by id inside `content`; "used by" is computed by scanning content, and a block still referenced cannot be deleted.
 - Logic is fields, lists and simple conditions only (present / empty / true / false / in). No free-form expressions, comparisons or math.
 - Templates hold content, never formatting. Formatting layers: firm house style (font, spacing, margins, letterhead placement), overridden by court rules for filings. Until those ship, `.docx` output uses plain defaults.

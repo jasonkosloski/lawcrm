@@ -6,6 +6,12 @@ ADD COLUMN     "kind" TEXT NOT NULL DEFAULT 'letter',
 ADD COLUMN     "subject" JSONB,
 ALTER COLUMN "body" DROP NOT NULL;
 
+-- Backfill: before this migration lead generation offered every template
+-- (matter.* fields rendered "not on file"). Keep legacy templates available
+-- on leads unless they reference {{matter.*}} fields.
+UPDATE "document_templates" SET "appliesTo" = 'both'
+WHERE "content" IS NULL AND ("body" IS NULL OR "body" !~ '\{\{\s*matter\.');
+
 -- CreateTable
 CREATE TABLE "template_blocks" (
     "id" TEXT NOT NULL,

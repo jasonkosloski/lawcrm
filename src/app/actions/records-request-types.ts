@@ -102,10 +102,14 @@ async function validate(
   }
   if (values.defaultTemplateId !== "") {
     const t = await prisma.documentTemplate.findFirst({
-      where: { id: values.defaultTemplateId, isActive: true },
+      where: {
+        id: values.defaultTemplateId,
+        isActive: true,
+        kind: { in: ["letter", "filing"] },
+      },
       select: { id: true },
     });
-    if (!t) errors.defaultTemplateId = ["Choose an active template."];
+    if (!t) errors.defaultTemplateId = ["Choose an active letter or filing template."];
   }
   if (!parsed.success || Object.keys(errors).length > 0) {
     return { ok: false, state: { status: "error", errors, values } };

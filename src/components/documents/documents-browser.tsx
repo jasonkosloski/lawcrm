@@ -26,6 +26,7 @@
  * gate on their own permission flags.
  */
 
+import { generatableTemplateWhere } from "@/lib/templates/picker";
 import { Card, CardContent } from "@/components/ui/card";
 import { UploadDocumentForm } from "@/components/matters/documents/upload-document-form";
 import {
@@ -109,11 +110,7 @@ export async function DocumentsBrowser({
     // archived ones (soft-archive semantics on DocumentTemplate).
     prisma.documentTemplate.findMany({
       // Letters and filings that fit this record; email/SMS never generate files.
-      where: {
-        isActive: true,
-        kind: { in: ["letter", "filing"] },
-        appliesTo: { in: scope.kind === "lead" ? ["lead", "both"] : ["matter", "both"] },
-      },
+      where: generatableTemplateWhere(scope.kind),
       orderBy: [{ category: "asc" }, { name: "asc" }],
       select: {
         id: true,
