@@ -139,6 +139,7 @@ import {
   type GmailMessage,
   type GmailThread,
 } from "@/lib/google/gmail-message-parse";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 
 // ── Tuning constants ─────────────────────────────────────────────────────
 
@@ -1157,7 +1158,7 @@ export async function upsertThread(
       // A concurrent pass (backfill, or a stolen stale claim) created
       // this message between our lookup and insert: the nested create
       // rolled back whole, so converge on the winner's row.
-      if ((err as { code?: string } | null)?.code !== "P2002") throw err;
+      if (!isUniqueViolation(err)) throw err;
       const winner = await prisma.emailMessage.findUnique({
         where: {
           threadId_externalId: {

@@ -45,7 +45,6 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertOptionalMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
@@ -62,14 +61,7 @@ import {
   parseCallOccurredAt,
   type CallLogFormState,
 } from "@/lib/call-log-form";
-
-/** Prisma known-request error with this code (P2002 unique violation,
- *  P2025 record not found). */
-function isPrismaError(err: unknown, code: string): boolean {
-  return (
-    err instanceof Prisma.PrismaClientKnownRequestError && err.code === code
-  );
-}
+import { isRecordNotFound, isUniqueViolation } from "@/lib/prisma-errors";
 
 const logCallSchema = z.object({
   contactId: z.string().min(1, "Pick a contact"),
@@ -276,7 +268,7 @@ export async function logCall(
     // Two first-logs to the same new number raced on
     // @@unique([accountId, contactPhone]); the loser's transaction
     // rolled back, so one retry sees the winner's thread.
-    if (!isPrismaError(err, "P2002")) throw err;
+    if (!isUniqueViolation(err)) throw err;
     outcome = await write();
   }
   if (outcome.conflictName) {
@@ -443,7 +435,7 @@ export async function updateCallLog(
     });
   } catch (err) {
     // Another user deleted the call between our read and the write.
-    if (isPrismaError(err, "P2025")) {
+    if (isRecordNotFound(err)) {
       return { status: "error", errors: { form: ["Call log not found"] } };
     }
     throw err;
@@ -580,7 +572,7 @@ export async function deleteCallLog(
     });
   } catch (err) {
     // Deleted concurrently by someone else - the goal state is reached.
-    if (isPrismaError(err, "P2025")) {
+    if (isRecordNotFound(err)) {
       return { ok: false, error: "Call log not found" };
     }
     throw err;
@@ -649,7 +641,7 @@ async function getOrCreateLoggingAccount(): Promise<{
     });
   } catch (err) {
     // Concurrent first log created it (@@unique([provider, phoneNumber])).
-    if (!isPrismaError(err, "P2002")) throw err;
+    if (!isUniqueViolation(err)) throw err;
     return prisma.messengerAccount.findFirstOrThrow({
       where: { provider: "manual", phoneNumber },
       select,

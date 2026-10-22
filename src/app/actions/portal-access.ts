@@ -20,6 +20,7 @@ import { portalLinkUrl } from "@/lib/portal/link-url";
 import { sendEmail } from "@/lib/email/send";
 import { isLenientEmail } from "@/lib/email-shape";
 import { actorSeesAllPortalMatters } from "@/lib/portal/identity-scope";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -126,7 +127,7 @@ export async function invitePortalUser(
   } catch (err) {
     if (
       (err instanceof Error && err.message === "EMAIL_TAKEN") ||
-      (err as { code?: string })?.code === "P2002"
+      isUniqueViolation(err)
     ) {
       return { ok: false, error: EMAIL_TAKEN };
     }

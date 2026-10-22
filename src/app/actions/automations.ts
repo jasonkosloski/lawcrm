@@ -42,18 +42,9 @@ import type {
   AutomationFormState,
 } from "@/lib/automation-form";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
+import { isForeignKeyViolation, isRecordNotFound } from "@/lib/prisma-errors";
 
 const SETTINGS_PATH = "/settings/automations";
-
-/** Prisma "record not found" (P2025) — the row vanished under us. */
-function isNotFound(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "P2025";
-}
-
-/** Prisma foreign-key violation (P2003) — a dependent appeared under us. */
-function isForeignKeyViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "P2003";
-}
 
 /** Serialize manual applies per matter so a double submit (or two
  *  users) can't both pass the duplicate check and both create. */
@@ -180,7 +171,7 @@ export async function updateDeadlineRule(
       data: ruleData(parsed.data),
     });
   } catch (err) {
-    if (isNotFound(err)) return fail("_form", "Rule not found");
+    if (isRecordNotFound(err)) return fail("_form", "Rule not found");
     throw err;
   }
   await logActivity({
@@ -207,7 +198,7 @@ export async function setDeadlineRuleActive(
       select: { title: true },
     });
   } catch (err) {
-    if (isNotFound(err)) return { ok: false, error: "Rule not found." };
+    if (isRecordNotFound(err)) return { ok: false, error: "Rule not found." };
     throw err;
   }
   await logActivity({
@@ -242,7 +233,7 @@ export async function deleteDeadlineRule(
   try {
     await prisma.deadlineRule.delete({ where: { id: ruleId } });
   } catch (err) {
-    if (isNotFound(err)) return { ok: false, error: "Rule not found." };
+    if (isRecordNotFound(err)) return { ok: false, error: "Rule not found." };
     if (isForeignKeyViolation(err)) {
       return {
         ok: false,
@@ -366,7 +357,7 @@ export async function updateTaskList(
     ]);
   } catch (err) {
     // Deleted between the check and the write; the transaction rolled back.
-    if (isNotFound(err)) return fail("_form", "Task list not found");
+    if (isRecordNotFound(err)) return fail("_form", "Task list not found");
     throw err;
   }
   await logActivity({
@@ -392,7 +383,7 @@ export async function setTaskListActive(
       select: { name: true },
     });
   } catch (err) {
-    if (isNotFound(err)) return { ok: false, error: "Task list not found." };
+    if (isRecordNotFound(err)) return { ok: false, error: "Task list not found." };
     throw err;
   }
   await logActivity({
@@ -415,7 +406,7 @@ export async function deleteTaskList(
   try {
     await prisma.taskList.delete({ where: { id: taskListId } });
   } catch (err) {
-    if (isNotFound(err)) return { ok: false, error: "Task list not found." };
+    if (isRecordNotFound(err)) return { ok: false, error: "Task list not found." };
     throw err;
   }
   await logActivity({
@@ -515,7 +506,7 @@ export async function removeAutoApply(
     await prisma.autoApply.delete({ where: { id: autoApplyId } });
   } catch (err) {
     // Another admin (or a double click) removed it first.
-    if (isNotFound(err)) return { ok: false, error: "Default not found." };
+    if (isRecordNotFound(err)) return { ok: false, error: "Default not found." };
     throw err;
   }
   const what = row.deadlineRule

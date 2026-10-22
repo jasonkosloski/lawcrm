@@ -82,6 +82,7 @@ import {
   contentTypeForFilename,
   isMediaType,
 } from "../upload-config";
+import { isForeignKeyViolation } from "@/lib/prisma-errors";
 
 /** Carries an HTTP status so route.ts can answer 401/403/404
  *  instead of a blanket 400 when a callback rejects. */
@@ -342,12 +343,6 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
     };
   };
 
-/** Prisma FK violation (the folder or matter vanished mid-upload). */
-const isForeignKeyError = (err: unknown): boolean =>
-  typeof err === "object" &&
-  err !== null &&
-  (err as { code?: unknown }).code === "P2003";
-
 /** Completion for a matter-draft target: idempotent, and the blob is
  *  removed (nothing written) when the draft vanished, is full, or the
  *  file is empty / over the draft cap. */
@@ -411,7 +406,7 @@ async function completeDraftUpload(
       },
     });
   } catch (err) {
-    if (!isForeignKeyError(err)) throw err;
+    if (!isForeignKeyViolation(err)) throw err;
     await removeBlob("draft vanished during upload");
     return;
   }
@@ -581,7 +576,7 @@ export const onUploadCompleted: NonNullable<
     try {
       created = await createMatterDoc(folderId);
     } catch (err) {
-      if (!isForeignKeyError(err)) throw err;
+      if (!isForeignKeyViolation(err)) throw err;
       // Raced a delete between the checks above and the insert.
       const stillThere = await prisma.matter.findUnique({
         where: { id: matterId },
@@ -626,7 +621,7 @@ export const onUploadCompleted: NonNullable<
     try {
       filed = await fileOnLead(t.folderId);
     } catch (err) {
-      if (!isForeignKeyError(err)) throw err;
+      if (!isForeignKeyViolation(err)) throw err;
       // The folder (or the lead) vanished between the lookup and the
       // insert: retry at the root; a lead that is gone ends as "gone".
       filed = await fileOnLead(null);

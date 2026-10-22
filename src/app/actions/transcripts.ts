@@ -27,6 +27,7 @@ import { wordsToText } from "@/lib/transcription/normalize";
 import { stripUrls } from "@/lib/transcription/sanitize";
 import type { Word } from "@/lib/transcription/types";
 import { reassignSpeakerRange, type WordPoint } from "@/lib/transcription/speaker-range";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 
 export type RequestTranscriptResult =
   | { ok: true; status: "processing" | "completed" }
@@ -219,10 +220,7 @@ export async function requestTranscript(
     try {
       await prisma.transcript.create({ data: { documentId, ...fresh } });
     } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
-      ) {
+      if (isUniqueViolation(err)) {
         return { ok: false, error: ALREADY };
       }
       throw err;

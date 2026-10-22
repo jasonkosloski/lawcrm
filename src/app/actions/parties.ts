@@ -57,6 +57,7 @@ import {
   representationFlag,
   type PartyFormState,
 } from "@/lib/party-constants";
+import { isForeignKeyViolation, isRecordNotFound, isUniqueViolation } from "@/lib/prisma-errors";
 
 /** A refusal raised inside a transaction (rolling it back) that maps
  *  to a field error on the form instead of an error-boundary crash. */
@@ -79,18 +80,16 @@ function partyErrorState(err: unknown): PartyFormState {
   if (err instanceof PartyActionError) {
     return { status: "error", errors: { [err.field]: [err.message] } };
   }
-  if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    if (err.code === "P2025" || err.code === "P2003") {
-      return { status: "error", errors: { _form: [GONE_MESSAGE] } };
-    }
-    if (err.code === "P2002") {
-      return {
-        status: "error",
-        errors: {
-          contactId: ["Already listed in this section — edit that row instead"],
-        },
-      };
-    }
+  if (isRecordNotFound(err) || isForeignKeyViolation(err)) {
+    return { status: "error", errors: { _form: [GONE_MESSAGE] } };
+  }
+  if (isUniqueViolation(err)) {
+    return {
+      status: "error",
+      errors: {
+        contactId: ["Already listed in this section — edit that row instead"],
+      },
+    };
   }
   throw err;
 }

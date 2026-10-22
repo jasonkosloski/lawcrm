@@ -117,6 +117,7 @@ import {
   contentTypeForFilename,
   isMediaType,
 } from "./upload-config";
+import { isForeignKeyViolation } from "@/lib/prisma-errors";
 
 // Never cache, always run per-request — this is a mutation.
 export const dynamic = "force-dynamic";
@@ -431,7 +432,7 @@ async function fileOntoDraft(
   } catch (err) {
     await removeBytes();
     // The draft vanished between the check and the insert (FK).
-    if ((err as { code?: unknown } | null)?.code === "P2003") {
+    if (isForeignKeyViolation(err)) {
       return NextResponse.json({ error: "Draft not found." }, { status: 404 });
     }
     throw err;

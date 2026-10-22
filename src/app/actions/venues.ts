@@ -12,11 +12,11 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { logAuditEntry } from "@/lib/audit-entry";
 import type { VenueOption } from "@/lib/queries/venues";
+import { isForeignKeyViolation, isRecordNotFound, isUniqueViolation } from "@/lib/prisma-errors";
 
 export type VenueInput = { name: string; city?: string; county?: string; state: string };
 
@@ -54,10 +54,6 @@ function parse(
     ok: true,
     data: { name: v.name, city: v.city || null, county: v.county || null, state: v.state },
   };
-}
-
-function isUniqueViolation(e: unknown): boolean {
-  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
 }
 
 function revalidate() {
@@ -129,7 +125,7 @@ export async function updateVenue(
     revalidate();
     return { ok: true, venue };
   } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
+    if (isRecordNotFound(e)) {
       return { ok: false, code: "notfound" };
     }
     if (!isUniqueViolation(e)) throw e;
@@ -178,7 +174,7 @@ export async function deleteVenue(
     await prisma.venue.delete({ where: { id } });
   } catch (e) {
     // FK restrict: a matter picked this venue after the count above.
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+    if (isForeignKeyViolation(e)) {
       return { ok: false, error: inUse };
     }
     throw e;

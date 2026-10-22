@@ -39,6 +39,7 @@ import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import type { TimeEntryFormState } from "@/lib/time-entry-constants";
 import { timeEntryFields } from "@/lib/time-entry-schema";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 
 type TimerResult = {
   ok: boolean;
@@ -128,14 +129,6 @@ export async function startTimer(input?: {
 
   revalidateTimerWidget();
   return { ok: true };
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    (err as { code?: unknown }).code === "P2002"
-  );
 }
 
 // ── Update (mid-run) ────────────────────────────────────────────────────

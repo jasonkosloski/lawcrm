@@ -107,6 +107,7 @@ import {
   type GoogleEventResource,
 } from "@/lib/google/calendar-shared";
 import { DAY_MS } from "@/lib/format-date";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 
 // ── Tuning constants ─────────────────────────────────────────────────────
 
@@ -576,7 +577,7 @@ async function applyGoogleEvent(
     // event unmapped; the loser trips @@unique([accountId,
     // googleEventId]) and the nested create rolled back whole — so
     // the winner's row is the import. Not a failure.
-    if ((err as { code?: string } | null)?.code === "P2002") return;
+    if (isUniqueViolation(err)) return;
     throw err;
   }
 }

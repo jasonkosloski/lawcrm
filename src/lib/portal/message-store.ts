@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 
 export const PORTAL_MESSAGE_MAX = 5000;
 
@@ -82,7 +83,7 @@ async function ensureThread(
       select: { id: true },
     });
   } catch (e) {
-    if ((e as { code?: string }).code !== "P2002") throw e;
+    if (!isUniqueViolation(e)) throw e;
     return prisma.portalThread.findUniqueOrThrow({
       where: { matterId },
       select: { id: true },
