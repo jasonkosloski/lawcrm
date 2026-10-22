@@ -41,33 +41,22 @@ export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
 // homes in `src/lib/constants/` (this file predates that layout and
 // has ~50 importers). Re-exported here so existing imports keep
 // working; new code should import from `@/lib/constants/*` directly.
-export {
-  TASK_PRIORITIES,
-  type TaskPriority,
-} from "@/lib/constants/priority";
-export {
-  TASK_STATUSES,
-  type TaskStatus,
-} from "@/lib/constants/task-status";
+export { TASK_PRIORITIES, type TaskPriority } from "@/lib/constants/priority";
+export { TASK_STATUSES, type TaskStatus } from "@/lib/constants/task-status";
 export {
   DEADLINE_STATUSES,
   DEADLINE_KINDS,
   type DeadlineStatus,
   type DeadlineKind,
 } from "@/lib/constants/deadline-status";
-export {
-  TIME_ENTRY_STATUSES,
-  type TimeEntryStatus,
-} from "@/lib/constants/time-entry-status";
-export {
-  EVENT_TYPES,
-  type CalendarEventType,
-} from "@/lib/constants/calendar-event-type";
+export { TIME_ENTRY_STATUSES, type TimeEntryStatus } from "@/lib/constants/time-entry-status";
+export { EVENT_TYPES, type CalendarEventType } from "@/lib/constants/calendar-event-type";
 
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import { EVENT_TYPES } from "@/lib/constants/calendar-event-type";
 import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
-import { parseWallClock, todayKey, toWallClockInput } from "@/lib/format-date";
+import { todayKey } from "@/lib/format-date";
+import { nextHourInTz } from "@/lib/event-schedule";
 
 export type TaskCapture = {
   kind: "task";
@@ -114,11 +103,7 @@ export type NoteSiblingCapture = {
 };
 
 export type NoteCapture =
-  | TaskCapture
-  | EventCapture
-  | DeadlineCapture
-  | TimeCapture
-  | NoteSiblingCapture;
+  TaskCapture | EventCapture | DeadlineCapture | TimeCapture | NoteSiblingCapture;
 
 export type CaptureKind = NoteCapture["kind"];
 
@@ -136,30 +121,6 @@ function runtimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-/** Today's date in YYYY-MM-DD form for a viewer in `tz` (their profile
- *  zone: `useUserTimeZone()` in client components). Falls back to the
- *  runtime zone, which is what the browser would have said before. */
-export function todayDateString(tz: string = runtimeZone()): string {
-  return todayKey(tz);
-}
-
-/** The next :00 (plus `addHours`) after now, formatted for
- *  datetime-local inputs (YYYY-MM-DDTHH:mm) as wall-clock time in
- *  `tz`. The server parses these with `parseWallClock(value, tz)` in
- *  the same zone, so the value round-trips without drifting. */
-export function nextHourDateTimeString(
-  addHours = 0,
-  tz: string = runtimeZone()
-): string {
-  const now = new Date();
-  // Start of the current wall-clock hour in tz (half-hour zones
-  // included), then step forward in real time.
-  const wall = toWallClockInput(now, tz);
-  const hourStart = parseWallClock(`${wall.slice(0, 13)}:00`, tz) ?? now;
-  const next = new Date(hourStart.getTime() + (1 + addHours) * 3_600_000);
-  return toWallClockInput(next, tz);
-}
-
 /** Factory functions for new capture sub-forms — keep the shape
  *  consistent so the composer doesn't need to branch on kind. */
 export function newCapture(
@@ -167,7 +128,7 @@ export function newCapture(
   tempId: string,
   /** Viewer's profile zone (`useUserTimeZone()`); drives the default
    *  date / time on new captures. */
-  tz: string = runtimeZone()
+  tz: string = runtimeZone(),
 ): NoteCapture {
   switch (kind) {
     case "task":
@@ -183,8 +144,8 @@ export function newCapture(
         kind: "event",
         tempId,
         title: "",
-        startTime: nextHourDateTimeString(0, tz),
-        endTime: nextHourDateTimeString(1, tz),
+        startTime: nextHourInTz(tz),
+        endTime: nextHourInTz(tz, 1),
         type: "meeting",
         location: "",
       };
@@ -201,7 +162,7 @@ export function newCapture(
       return {
         kind: "time",
         tempId,
-        date: todayDateString(tz),
+        date: todayKey(tz),
         hours: "",
         activity: "",
         narrative: "",
@@ -267,7 +228,7 @@ export const NO_NOTE_ACCESS: NoteAccess = {
 /** `kinds` narrowed to the capture kinds the viewer may create. */
 export function allowedCaptureKinds(
   access: NoteAccess,
-  kinds: readonly CaptureKind[]
+  kinds: readonly CaptureKind[],
 ): CaptureKind[] {
   const allowed: Record<CaptureKind, boolean> = {
     task: access.canCreateTask,

@@ -14,23 +14,13 @@
 import { useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { createTimeEntryWithCaptures } from "@/app/actions/captures";
-import {
-  captureInitialState,
-  type CaptureFormState,
-} from "@/lib/capture-schemas";
+import { captureInitialState, type CaptureFormState } from "@/lib/capture-schemas";
 import type { CaptureKind, NoteCapture } from "@/lib/note-constants";
 import { useUserTimeZone } from "@/components/user-time-zone";
-import { todayInput } from "@/lib/capture-defaults";
+import { todayKey } from "@/lib/format-date";
 import { CaptureComposerShell } from "./capture-composer-shell";
-import {
-  DateField,
-  TextField,
-  TextareaField,
-} from "./primary-fields";
-import {
-  DurationFields,
-  UtbmsCodeSelect,
-} from "@/components/time-entries/time-entry-fields";
+import { DateField, TextField, TextareaField } from "./primary-fields";
+import { DurationFields, UtbmsCodeSelect } from "@/components/time-entries/time-entry-fields";
 
 const SIBLING_KINDS: CaptureKind[] = ["task", "event", "deadline", "note_sibling"];
 
@@ -55,13 +45,14 @@ export function TimeComposer({
   // expand, so a failed attempt's field/attachment errors don't
   // reappear when the composer is re-expanded. See
   // src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    CaptureFormState,
-    FormData
-  >(action, captureInitialState, expanded);
+  const [state, formAction, isPending] = useDialogActionState<CaptureFormState, FormData>(
+    action,
+    captureInitialState,
+    expanded,
+  );
 
   const [captures, setCaptures] = useState<NoteCapture[]>([]);
-  const [date, setDate] = useState(() => todayInput(tz));
+  const [date, setDate] = useState(() => todayKey(tz));
   const [hours, setHours] = useState("");
   const [activity, setActivity] = useState("");
   const [narrative, setNarrative] = useState("");
@@ -71,7 +62,7 @@ export function TimeComposer({
   const [privileged, setPrivileged] = useState(false);
 
   const reset = () => {
-    setDate(todayInput(tz));
+    setDate(todayKey(tz));
     setHours("");
     setActivity("");
     setNarrative("");
@@ -111,26 +102,17 @@ export function TimeComposer({
       }}
       formAction={formAction}
       isPending={isPending}
-      hasContent={
-        hours.trim().length > 0 && activity.trim().length > 0
-      }
+      hasContent={hours.trim().length > 0 && activity.trim().length > 0}
       captures={captures}
       onCapturesChange={setCaptures}
       attachmentErrors={state.attachmentErrors}
-      allowedKinds={SIBLING_KINDS.filter(
-        (k) => !siblingKinds || siblingKinds.includes(k)
-      )}
+      allowedKinds={SIBLING_KINDS.filter((k) => !siblingKinds || siblingKinds.includes(k))}
       canPin={canPin}
       formError={errs._form?.[0]}
     >
       <div className="flex flex-col gap-2">
         <div className="grid grid-cols-[auto_auto_1fr] gap-2 items-start">
-          <DateField
-            name="date"
-            value={date}
-            onChange={setDate}
-            error={errs.date?.[0]}
-          />
+          <DateField name="date" value={date} onChange={setDate} error={errs.date?.[0]} />
           <DurationFields
             hours={hours}
             onHoursChange={setHours}

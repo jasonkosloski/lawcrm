@@ -16,37 +16,17 @@
 import { EventPrivateToggle } from "@/components/calendar/event-private-toggle";
 import { useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
-import {
-  createEventWithCaptures,
-  createLeadEvent,
-} from "@/app/actions/captures";
+import { createEventWithCaptures, createLeadEvent } from "@/app/actions/captures";
 import type { RecordScope } from "@/lib/record-scope";
-import {
-  captureInitialState,
-  type CaptureFormState,
-} from "@/lib/capture-schemas";
-import {
-  EVENT_TYPES,
-  type CaptureKind,
-  type NoteCapture,
-} from "@/lib/note-constants";
+import { captureInitialState, type CaptureFormState } from "@/lib/capture-schemas";
+import { EVENT_TYPES, type CaptureKind, type NoteCapture } from "@/lib/note-constants";
 import { EVENT_TYPE_LABEL } from "@/lib/constants/calendar-event-type";
 import { useUserTimeZone } from "@/components/user-time-zone";
-import { nextHourInput } from "@/lib/capture-defaults";
+import { nextHourInTz } from "@/lib/event-schedule";
 import { CaptureComposerShell } from "./capture-composer-shell";
-import {
-  DateTimeField,
-  SelectField,
-  TextField,
-  TextareaField,
-} from "./primary-fields";
+import { DateTimeField, SelectField, TextField, TextareaField } from "./primary-fields";
 
-const SIBLING_KINDS: CaptureKind[] = [
-  "task",
-  "deadline",
-  "time",
-  "note_sibling",
-];
+const SIBLING_KINDS: CaptureKind[] = ["task", "deadline", "time", "note_sibling"];
 
 export function EventComposer({
   scope,
@@ -71,17 +51,17 @@ export function EventComposer({
   // expand, so a failed attempt's field/attachment errors don't
   // reappear when the composer is re-expanded. See
   // src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    CaptureFormState,
-    FormData
-  >(action, captureInitialState, expanded);
+  const [state, formAction, isPending] = useDialogActionState<CaptureFormState, FormData>(
+    action,
+    captureInitialState,
+    expanded,
+  );
 
   const [captures, setCaptures] = useState<NoteCapture[]>([]);
   const [title, setTitle] = useState("");
-  const [type, setType] =
-    useState<(typeof EVENT_TYPES)[number]>("meeting");
-  const [startTime, setStartTime] = useState(() => nextHourInput(tz));
-  const [endTime, setEndTime] = useState(() => nextHourInput(tz, 1));
+  const [type, setType] = useState<(typeof EVENT_TYPES)[number]>("meeting");
+  const [startTime, setStartTime] = useState(() => nextHourInTz(tz));
+  const [endTime, setEndTime] = useState(() => nextHourInTz(tz, 1));
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   // Per-event visibility override — same shape as the calendar's
@@ -93,8 +73,8 @@ export function EventComposer({
   const reset = () => {
     setTitle("");
     setType("meeting");
-    setStartTime(nextHourInput(tz));
-    setEndTime(nextHourInput(tz, 1));
+    setStartTime(nextHourInTz(tz));
+    setEndTime(nextHourInTz(tz, 1));
     setLocation("");
     setDescription("");
     setCaptures([]);
@@ -131,9 +111,7 @@ export function EventComposer({
       captures={captures}
       onCapturesChange={setCaptures}
       attachmentErrors={state.attachmentErrors}
-      allowedKinds={SIBLING_KINDS.filter(
-        (k) => !siblingKinds || siblingKinds.includes(k)
-      )}
+      allowedKinds={SIBLING_KINDS.filter((k) => !siblingKinds || siblingKinds.includes(k))}
       canPin={canPin}
       formError={errs._form?.[0]}
     >

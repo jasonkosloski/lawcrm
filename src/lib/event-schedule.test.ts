@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { parseDateOnly } from "@/lib/format-date";
+import { parseDateOnly, parseWallClock } from "@/lib/format-date";
 import {
   dateOnly,
   nextHourInTz,
@@ -15,9 +15,7 @@ describe("toScheduleInput", () => {
   test("a timed boundary is the wall clock in the given zone", () => {
     const d = new Date("2026-07-06T15:00:00.000Z");
     expect(toScheduleInput(d, false, "America/Denver")).toBe("2026-07-06T09:00");
-    expect(toScheduleInput(d, false, "Pacific/Auckland")).toBe(
-      "2026-07-07T03:00"
-    );
+    expect(toScheduleInput(d, false, "Pacific/Auckland")).toBe("2026-07-07T03:00");
     expect(toScheduleInput(d, false, "UTC")).toBe("2026-07-06T15:00");
   });
 
@@ -30,9 +28,9 @@ describe("toScheduleInput", () => {
 
   test("a legacy all-day row at server-local midnight still reads as its day", () => {
     // Denver-laptop write: 06:00Z is still inside the UTC day.
-    expect(
-      toScheduleInput(new Date("2026-07-06T06:00:00.000Z"), true, "America/Denver")
-    ).toBe("2026-07-06T00:00");
+    expect(toScheduleInput(new Date("2026-07-06T06:00:00.000Z"), true, "America/Denver")).toBe(
+      "2026-07-06T00:00",
+    );
   });
 });
 
@@ -68,6 +66,39 @@ describe("nextHourInTz", () => {
     const late = new Date("2026-07-07T05:40:00.000Z"); // 23:40 Denver Jul 6
     expect(nextHourInTz("America/Denver", 0, late)).toBe("2026-07-07T00:00");
     expect(nextHourInTz("America/Denver", 1, late)).toBe("2026-07-07T01:00");
+  });
+
+  test("on the hour goes to the following hour", () => {
+    const onTheHour = new Date("2026-10-16T21:00:00Z"); // 3:00 PM MDT
+    expect(nextHourInTz("America/Denver", 0, onTheHour)).toBe("2026-10-16T16:00");
+  });
+
+  test("handles a half-hour-offset zone (next :00 wall-clock)", () => {
+    // 20:23Z = 01:53 IST (Apr 16) -> 02:00.
+    const t = new Date("2026-04-15T20:23:00Z");
+    expect(nextHourInTz("Asia/Kolkata", 0, t)).toBe("2026-04-16T02:00");
+  });
+
+  test("never defaults to a time that reads back in the past (fall back)", () => {
+    // Nov 1 2026: Denver falls back at 02:00 MDT (08:00Z), so 01:xx
+    // happens twice and a "01:00" value parses as the MDT one.
+    for (const iso of ["2026-11-01T07:30:00Z", "2026-11-01T08:30:00Z"]) {
+      const t = new Date(iso);
+      const wall = nextHourInTz("America/Denver", 0, t);
+      expect(parseWallClock(wall, "America/Denver")!.getTime()).toBeGreaterThan(t.getTime());
+    }
+  });
+
+  test("skips the missing hour when clocks spring forward", () => {
+    // Mar 8 2026, 01:30 MST (08:30Z): 02:00 doesn't exist, 03:00 MDT is next.
+    const t = new Date("2026-03-08T08:30:00Z");
+    expect(nextHourInTz("America/Denver", 0, t)).toBe("2026-03-08T03:00");
+  });
+
+  test("round-trips through parseWallClock in the same zone", () => {
+    const t = new Date("2026-04-15T20:23:17Z");
+    const wall = nextHourInTz("America/Denver", 0, t);
+    expect(parseWallClock(wall, "America/Denver")?.toISOString()).toBe("2026-04-15T21:00:00.000Z");
   });
 });
 

@@ -3,8 +3,7 @@
  * + behavior tests for the capture-factory helpers.
  */
 
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { parseWallClock } from "./format-date";
+import { describe, expect, test, vi } from "vitest";
 import {
   allowedCaptureKinds,
   CAPTURE_KIND_LABEL,
@@ -14,14 +13,12 @@ import {
   NOTE_TYPES,
   NOTE_TYPE_LABEL,
   newCapture,
-  nextHourDateTimeString,
   NO_NOTE_ACCESS,
   noteInitialState,
   REACTION_EMOJIS,
   TASK_PRIORITIES,
   TASK_STATUSES,
   TIME_ENTRY_STATUSES,
-  todayDateString,
   type CaptureKind,
 } from "./note-constants";
 
@@ -56,13 +53,7 @@ describe("note constant catalogs", () => {
   });
 
   test("CAPTURE_KIND_LABEL covers every capture kind", () => {
-    const kinds: CaptureKind[] = [
-      "task",
-      "event",
-      "deadline",
-      "time",
-      "note_sibling",
-    ];
+    const kinds: CaptureKind[] = ["task", "event", "deadline", "time", "note_sibling"];
     for (const k of kinds) {
       expect(CAPTURE_KIND_LABEL[k]).toBeTruthy();
     }
@@ -73,93 +64,20 @@ describe("note constant catalogs", () => {
   });
 });
 
-describe("todayDateString", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  test("is the viewer's calendar day in the given zone, not UTC's", () => {
-    // 02:00Z on Apr 28 is still Apr 27 (8 PM) in Denver. A UTC-based
-    // implementation - or the old test's round-trip assertion, which
-    // any YYYY-MM-DD string satisfies - would say Apr 28.
-    vi.setSystemTime(new Date("2026-04-28T02:00:00Z"));
-    expect(todayDateString("America/Denver")).toBe("2026-04-27");
-    expect(todayDateString("UTC")).toBe("2026-04-28");
-    expect(todayDateString("Pacific/Auckland")).toBe("2026-04-28");
-  });
-
-  test("without a zone it uses the runtime's own zone", () => {
-    vi.setSystemTime(new Date("2026-04-15T12:00:00Z"));
-    expect(todayDateString()).toBe(
-      todayDateString(Intl.DateTimeFormat().resolvedOptions().timeZone)
-    );
-  });
-});
-
-describe("nextHourDateTimeString", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  test("rounds up to the next :00 in the given zone", () => {
-    // 20:23 UTC = 2:23 PM MDT -> 15:00 wall-clock in Denver.
-    vi.setSystemTime(new Date("2026-04-15T20:23:17Z"));
-    expect(nextHourDateTimeString(0, "America/Denver")).toBe(
-      "2026-04-15T15:00"
-    );
-    expect(nextHourDateTimeString(0, "UTC")).toBe("2026-04-15T21:00");
-  });
-
-  test("addHours offsets from the next hour boundary", () => {
-    vi.setSystemTime(new Date("2026-04-15T20:23:17Z"));
-    expect(nextHourDateTimeString(1, "America/Denver")).toBe(
-      "2026-04-15T16:00"
-    );
-  });
-
-  test("rolls over midnight in the zone, not in UTC", () => {
-    // 05:30Z = 11:30 PM MDT on Apr 14 -> next hour is midnight Apr 15.
-    vi.setSystemTime(new Date("2026-04-15T05:30:00Z"));
-    expect(nextHourDateTimeString(0, "America/Denver")).toBe(
-      "2026-04-15T00:00"
-    );
-  });
-
-  test("handles a half-hour-offset zone (next :00 wall-clock)", () => {
-    // 20:23Z = 01:53 IST (Apr 16) -> 02:00.
-    vi.setSystemTime(new Date("2026-04-15T20:23:00Z"));
-    expect(nextHourDateTimeString(0, "Asia/Kolkata")).toBe("2026-04-16T02:00");
-  });
-
-  test("round-trips through parseWallClock in the same zone", () => {
-    vi.setSystemTime(new Date("2026-04-15T20:23:17Z"));
-    const wall = nextHourDateTimeString(0, "America/Denver");
-    expect(parseWallClock(wall, "America/Denver")?.toISOString()).toBe(
-      "2026-04-15T21:00:00.000Z"
-    );
-  });
-});
-
 describe("allowedCaptureKinds", () => {
   test("narrows to the kinds the viewer may create", () => {
     expect(
-      allowedCaptureKinds(
-        { ...NO_NOTE_ACCESS, canCreateTask: true, canCreateTime: true },
-        ["task", "event", "deadline", "time"]
-      )
+      allowedCaptureKinds({ ...NO_NOTE_ACCESS, canCreateTask: true, canCreateTime: true }, [
+        "task",
+        "event",
+        "deadline",
+        "time",
+      ]),
     ).toEqual(["task", "time"]);
   });
 
   test("fail-closed default offers nothing", () => {
-    expect(
-      allowedCaptureKinds(NO_NOTE_ACCESS, ["task", "event", "deadline", "time"])
-    ).toEqual([]);
+    expect(allowedCaptureKinds(NO_NOTE_ACCESS, ["task", "event", "deadline", "time"])).toEqual([]);
   });
 });
 

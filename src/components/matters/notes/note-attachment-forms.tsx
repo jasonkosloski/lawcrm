@@ -21,12 +21,9 @@ import {
   noteAttachmentInitialState,
   type NoteAttachmentFormState,
 } from "@/lib/note-attachment-form";
-import {
-  DEADLINE_KINDS,
-  TASK_PRIORITIES,
-  todayDateString,
-} from "@/lib/note-constants";
+import { DEADLINE_KINDS, TASK_PRIORITIES } from "@/lib/note-constants";
 import { useUserTimeZone } from "@/components/user-time-zone";
+import { todayKey } from "@/lib/format-date";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { FieldError, inputClass, textareaClass } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -51,11 +48,7 @@ function FormFooter({
       >
         Cancel
       </button>
-      <Button
-        size="xs"
-        type="submit"
-        disabled={isPending || !hasContent}
-      >
+      <Button size="xs" type="submit" disabled={isPending || !hasContent}>
         {isPending ? "Saving…" : saveLabel}
       </Button>
     </div>
@@ -74,10 +67,10 @@ export function AddTaskForm({
   onSaved: () => void;
 }) {
   const action = addTaskToNote.bind(null, noteId);
-  const [state, formAction, isPending] = useActionState<
-    NoteAttachmentFormState,
-    FormData
-  >(action, noteAttachmentInitialState);
+  const [state, formAction, isPending] = useActionState<NoteAttachmentFormState, FormData>(
+    action,
+    noteAttachmentInitialState,
+  );
 
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -164,10 +157,10 @@ export function AddDeadlineForm({
   onSaved: () => void;
 }) {
   const action = addDeadlineToNote.bind(null, noteId);
-  const [state, formAction, isPending] = useActionState<
-    NoteAttachmentFormState,
-    FormData
-  >(action, noteAttachmentInitialState);
+  const [state, formAction, isPending] = useActionState<NoteAttachmentFormState, FormData>(
+    action,
+    noteAttachmentInitialState,
+  );
 
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -212,9 +205,7 @@ export function AddDeadlineForm({
           name="kind"
           aria-label="Deadline type"
           value={kind}
-          onChange={(e) =>
-            setKind(e.target.value as (typeof DEADLINE_KINDS)[number])
-          }
+          onChange={(e) => setKind(e.target.value as (typeof DEADLINE_KINDS)[number])}
         >
           {DEADLINE_KINDS.map((k) => (
             <NativeSelectOption key={k} value={k}>
@@ -256,14 +247,14 @@ export function AddTimeEntryForm({
   onSaved: () => void;
 }) {
   const action = addTimeEntryToNote.bind(null, noteId);
-  const [state, formAction, isPending] = useActionState<
-    NoteAttachmentFormState,
-    FormData
-  >(action, noteAttachmentInitialState);
+  const [state, formAction, isPending] = useActionState<NoteAttachmentFormState, FormData>(
+    action,
+    noteAttachmentInitialState,
+  );
 
   // "Today" in the viewer's profile zone, not the browser's.
   const tz = useUserTimeZone();
-  const [date, setDate] = useState(() => todayDateString(tz));
+  const [date, setDate] = useState(() => todayKey(tz));
   const [hours, setHours] = useState("");
   const [activity, setActivity] = useState("");
   const [narrative, setNarrative] = useState("");
