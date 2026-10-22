@@ -15,6 +15,11 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { RefreshCw, TriangleAlert } from "lucide-react";
 import { previewTemplateDraft } from "@/app/actions/document-templates";
 import { Button } from "@/components/ui/button";
+import {
+  fromSerializedCourt,
+  type CourtContext,
+  type SerializedCourtContext,
+} from "@/lib/templates/court-blocks";
 import { SAMPLE_TEMPLATE_DATA } from "@/lib/templates/catalog";
 import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templates/render";
 import type { AppliesTo, TemplateDoc, TemplateKind } from "@/lib/templates/schema";
@@ -22,6 +27,7 @@ import { resolvedToHtml } from "@/lib/templates/to-html";
 import { resolvedToText } from "@/lib/templates/to-text";
 import { renderPageView, type FirmPageStyle, type PageView } from "@/lib/templates/page-render";
 import { PagePreview } from "@/components/templates/page-preview";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { RecordPicker, type PickedRecord } from "./record-picker";
 
 type Rendered = {
@@ -29,6 +35,8 @@ type Rendered = {
   text: string;
   subjectText: string | null;
   page?: PageView | null;
+  /** Real-record previews: the matter's court format (null = none). */
+  court?: { name: string; archived: boolean } | null;
   report: RenderReport;
 };
 
@@ -42,6 +50,7 @@ export function renderSample(
   blocks: BlockSource[],
   kind: TemplateKind = "letter",
   pageStyle: FirmPageStyle | null = null,
+  court: CourtContext | null = null,
 ): Rendered {
   const data = {
     ...SAMPLE_TEMPLATE_DATA,
@@ -58,6 +67,7 @@ export function renderSample(
       style: pageStyle.values,
       logo: pageStyle.logo,
       logoUrl: pageStyle.logoUrl,
+      court,
     });
     return {
       html: resolvedToHtml(page.body),
@@ -104,6 +114,7 @@ export function PreviewPane({
   appliesTo,
   blocks,
   pageStyle = null,
+  courtFormats = [],
   allowRecord,
 }: {
   doc: TemplateDoc;
@@ -113,12 +124,21 @@ export function PreviewPane({
   blocks: BlockSource[];
   /** Firm document style; letters/filings then preview as a page. */
   pageStyle?: FirmPageStyle | null;
+  /** Active court formats for "Preview as" (filings, sample data). */
+  courtFormats?: SerializedCourtContext[];
   /** Offer the real-record preview (desktop editors only). */
   allowRecord: boolean;
 }) {
+  const [courtId, setCourtId] = useState("");
+  // Switching away from filing goes back to the house style.
+  if (kind !== "filing" && courtId !== "") setCourtId("");
+  const court = useMemo(() => {
+    const f = courtFormats.find((c) => c.id === courtId);
+    return f ? fromSerializedCourt(f) : null;
+  }, [courtFormats, courtId]);
   const sample = useMemo(
-    () => renderSample(doc, subject, appliesTo, blocks, kind, pageStyle),
-    [doc, subject, appliesTo, blocks, kind, pageStyle],
+    () => renderSample(doc, subject, appliesTo, blocks, kind, pageStyle, court),
+    [doc, subject, appliesTo, blocks, kind, pageStyle, court],
   );
   const [picking, setPicking] = useState(false);
   const [record, setRecord] = useState<PickedRecord | null>(null);
@@ -198,6 +218,38 @@ export function PreviewPane({
           </span>
         )}
       </div>
+      {kind === "filing" && pageStyle && (
+        <div className="flex items-center gap-2 text-2xs text-ink-3">
+          {record
+            ? real && (
+                <span>
+                  {real.court == null
+                    ? "No court format \u2014 house style"
+                    : real.court.archived
+                      ? `Court format ${real.court.name} is archived \u2014 house style used.`
+                      : `Court format: ${real.court.name}`}
+                </span>
+              )
+            : courtFormats.length > 0 && (
+                <>
+                  <label htmlFor="preview-as">Preview as</label>
+                  <NativeSelect
+                    id="preview-as"
+                    size="sm"
+                    value={courtId}
+                    onChange={(e) => setCourtId(e.target.value)}
+                  >
+                    <NativeSelectOption value="">House style</NativeSelectOption>
+                    {courtFormats.map((c) => (
+                      <NativeSelectOption key={c.id} value={c.id}>
+                        {c.name}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </>
+              )}
+        </div>
+      )}
       {picking && (
         <RecordPicker appliesTo={appliesTo} onPick={load} onCancel={() => setPicking(false)} />
       )}

@@ -191,6 +191,7 @@ function Editor(props: EditorProps & { narrow: boolean }) {
       appliesTo={appliesTo}
       blocks={blocks}
       pageStyle={props.pageStyle ?? null}
+      courtFormats={props.courtFormats}
       allowRecord={allowRecord}
     />
   );

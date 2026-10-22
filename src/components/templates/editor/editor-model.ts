@@ -13,6 +13,7 @@ import {
   type TemplateData,
 } from "@/lib/templates/catalog";
 import { convertLegacyBody } from "@/lib/templates/legacy";
+import type { SerializedCourtContext } from "@/lib/templates/court-blocks";
 import type { FirmPageStyle } from "@/lib/templates/page-render";
 import type { BlockSource } from "@/lib/templates/render";
 import type { AppliesTo, TemplateDoc, TemplateKind } from "@/lib/templates/schema";
@@ -48,6 +49,8 @@ export type EditorProps = { canSave: boolean } & (
       blocks: BlockSource[];
       /** Firm document style: letters/filings preview as a styled page. */
       pageStyle?: FirmPageStyle;
+      /** Active court formats, for the filing preview's "Preview as". */
+      courtFormats?: SerializedCourtContext[];
       block?: undefined;
       usage?: undefined;
     }
@@ -57,6 +60,7 @@ export type EditorProps = { canSave: boolean } & (
       template?: undefined;
       blocks?: undefined;
       pageStyle?: undefined;
+      courtFormats?: undefined;
     }
 );
 

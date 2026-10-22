@@ -292,6 +292,127 @@ describe("TemplateEditorPage — templates", () => {
     );
   });
 
+  describe("Preview as a court format", () => {
+    const COURT = {
+      id: "cf1",
+      name: "Colorado District",
+      isActive: true,
+      values: {
+        fontKey: null,
+        fontSizeHalfPt: null,
+        lineSpacing: null,
+        spaceAfterPt: null,
+        marginTopIn: null,
+        marginRightIn: null,
+        marginBottomIn: null,
+        marginLeftIn: null,
+        pageNumbers: null,
+        paperSize: "legal" as const,
+      },
+      replacements: [
+        [
+          "lh",
+          {
+            id: "cap",
+            name: "Court caption",
+            isActive: true,
+            content: { type: "doc", content: [para(text("DISTRICT COURT CAPTION"))] } as never,
+          },
+        ],
+      ] as [string, never][],
+    };
+    const filing = () =>
+      tpl({
+        kind: "filing",
+        content: {
+          type: "doc",
+          content: [para(text("Body")), { type: "block", attrs: { blockId: "lh" } }],
+        } as never,
+      });
+    const pane = () => screen.getByRole("combobox", { name: "Preview as" });
+    const minHeight = () =>
+      (screen.getByTestId("page-preview").querySelector("[data-page]") as HTMLElement).style
+        .minHeight;
+
+    it("is offered only for filings", async () => {
+      const user = userEvent.setup();
+      render(
+        <TemplateEditorPage
+          template={tpl()}
+          blocks={[LH_BLOCK]}
+          pageStyle={PAGE_STYLE}
+          courtFormats={[COURT]}
+          canSave
+        />,
+      );
+      expect(screen.queryByLabelText("Preview as")).not.toBeInTheDocument();
+      await user.selectOptions(screen.getByLabelText("Kind"), "filing");
+      expect(pane()).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: "House style" })).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: "Colorado District" })).toBeInTheDocument();
+    });
+
+    it("choosing a format swaps the caption and uses Legal paper; kind change resets it", async () => {
+      const user = userEvent.setup();
+      render(
+        <TemplateEditorPage
+          template={filing()}
+          blocks={[LH_BLOCK]}
+          pageStyle={PAGE_STYLE}
+          courtFormats={[COURT]}
+          canSave
+        />,
+      );
+      const before = minHeight();
+      expect(screen.getByTestId("page-preview").textContent).toContain("FIRM HEAD");
+      await user.selectOptions(pane(), "cf1");
+      expect(screen.getByTestId("page-preview").textContent).toContain("DISTRICT COURT CAPTION");
+      expect(screen.getByTestId("page-preview").textContent).not.toContain("FIRM HEAD");
+      expect(parseFloat(minHeight())).toBeGreaterThan(parseFloat(before));
+
+      await user.selectOptions(screen.getByLabelText("Kind"), "letter");
+      await user.selectOptions(screen.getByLabelText("Kind"), "filing");
+      expect((pane() as HTMLSelectElement).value).toBe("");
+      expect(screen.getByTestId("page-preview").textContent).toContain("FIRM HEAD");
+    });
+
+    it("a real-record preview hides the select and names the matter's court format", async () => {
+      const user = userEvent.setup();
+      searchRecords.mockResolvedValue([
+        { scope: { kind: "matter", matterId: "m1" }, label: "Alvarez v. Aurora" },
+      ]);
+      previewDraft.mockResolvedValue({
+        ok: true,
+        html: "<p>x</p>",
+        text: "x",
+        subjectText: null,
+        court: { name: "Colorado District", archived: false },
+        page: {
+          body: { type: "doc", content: [para(text("x"))] },
+          letterhead: null,
+          continuation: null,
+          style: resolvePageStyle("filing", PAGE_STYLE.values, null),
+          logoUrl: null,
+        },
+        report: { missing: [], invalid: [], archivedBlocks: [] },
+      });
+      render(
+        <TemplateEditorPage
+          template={filing()}
+          blocks={[LH_BLOCK]}
+          pageStyle={PAGE_STYLE}
+          courtFormats={[COURT]}
+          canSave
+        />,
+      );
+      await user.click(screen.getByRole("button", { name: "Preview with a real matter or lead" }));
+      await user.type(screen.getByLabelText("Search for a matter"), "alv");
+      await user.click(await screen.findByRole("button", { name: /Alvarez v. Aurora/ }));
+      expect(await screen.findByText("Court format: Colorado District")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Preview as")).not.toBeInTheDocument();
+    });
+  });
+
   it("narrowing the window keeps the editor and its unsaved edits", async () => {
     const user = userEvent.setup();
     render(<TemplateEditorPage template={tpl()} blocks={[]} canSave />);

@@ -18,6 +18,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/templates/editor-data", () => ({
   loadBlockSources: vi.fn().mockResolvedValue([]),
   loadEditorPageStyle: vi.fn().mockResolvedValue(null),
+  loadEditorCourtFormats: vi.fn().mockResolvedValue([]),
   loadEditorTemplate: vi.fn(),
   loadEditorBlock: vi.fn(),
 }));

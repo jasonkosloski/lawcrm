@@ -4,7 +4,10 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { toSerializedCourt, type SerializedCourtContext } from "./court-blocks";
 import { getDocumentStyle } from "./document-style";
+import type { FontKey } from "./fonts";
+import type { CourtFormatValues } from "./page-style";
 import { logoPreviewUrl, logoRefOf, type FirmPageStyle } from "./page-render";
 import type { BlockSource } from "./render";
 import type { AppliesTo, TemplateDoc, TemplateKind } from "./schema";
@@ -81,4 +84,50 @@ export async function loadEditorPageStyle(): Promise<FirmPageStyle> {
     logo,
     logoUrl: logo ? logoPreviewUrl(s.updatedAt.toISOString()) : null,
   };
+}
+
+const num = (d: { toNumber(): number } | null) => (d === null ? null : d.toNumber());
+
+/** Active court formats (values + replacement blocks) for the editor's
+ *  "Preview as". Firm config, no record data. */
+export async function loadEditorCourtFormats(): Promise<SerializedCourtContext[]> {
+  const rows = await prisma.courtFormat.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    include: {
+      blocks: {
+        include: {
+          replacementBlock: { select: { id: true, name: true, isActive: true, content: true } },
+        },
+      },
+    },
+  });
+  return rows.map((f) => {
+    const values: CourtFormatValues = {
+      fontKey: f.fontKey as FontKey | null,
+      fontSizeHalfPt: f.fontSizeHalfPt,
+      lineSpacing: f.lineSpacing as CourtFormatValues["lineSpacing"],
+      spaceAfterPt: f.spaceAfterPt,
+      marginTopIn: num(f.marginTopIn),
+      marginRightIn: num(f.marginRightIn),
+      marginBottomIn: num(f.marginBottomIn),
+      marginLeftIn: num(f.marginLeftIn),
+      pageNumbers: f.pageNumbers as CourtFormatValues["pageNumbers"],
+      paperSize: f.paperSize as CourtFormatValues["paperSize"],
+    };
+    const replacements = new Map<string, BlockSource>();
+    for (const b of f.blocks) {
+      replacements.set(b.blockId, {
+        ...b.replacementBlock,
+        content: b.replacementBlock.content as unknown as TemplateDoc,
+      });
+    }
+    return toSerializedCourt({
+      id: f.id,
+      name: f.name,
+      isActive: f.isActive,
+      values,
+      replacements,
+    });
+  });
 }

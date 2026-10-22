@@ -11,6 +11,7 @@ import { requireUser } from "@/lib/current-user";
 import { getCurrentUserPermissions, requirePermission } from "@/lib/permission-check";
 import {
   loadBlockSources,
+  loadEditorCourtFormats,
   loadEditorPageStyle,
   loadEditorTemplate,
 } from "@/lib/templates/editor-data";
@@ -41,11 +42,12 @@ export default async function TemplateEditorRoute({
   if (isNew) await requirePermission("documents.template.create");
 
   // Blocks include the style's letterhead/continuation (active and archived).
-  const [{ isAdmin, granted }, template, blocks, pageStyle] = await Promise.all([
+  const [{ isAdmin, granted }, template, blocks, pageStyle, courtFormats] = await Promise.all([
     getCurrentUserPermissions(),
     isNew ? NEW_TEMPLATE : loadEditorTemplate(id),
     loadBlockSources(),
     loadEditorPageStyle(),
+    loadEditorCourtFormats(),
   ]);
   if (!template) notFound();
   const canSave = isNew || isAdmin || granted.has("documents.template.edit");
@@ -56,6 +58,7 @@ export default async function TemplateEditorRoute({
       template={template}
       blocks={blocks}
       pageStyle={pageStyle}
+      courtFormats={courtFormats}
       canSave={canSave}
     />
   );
