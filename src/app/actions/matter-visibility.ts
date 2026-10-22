@@ -10,7 +10,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { loadCurrentFirm, requireAdmin } from "@/lib/firm";
-import { logAuditEntry } from "@/lib/audit-entry";
+import { logSettingsChange } from "@/lib/audit-entry";
 
 export type MatterVisibilityState = {
   status: "idle" | "ok" | "error";
@@ -39,14 +39,11 @@ export async function updateMatterVisibilityAction(
     where: { id: firm.id },
     data: { matterVisibility: value },
   });
-  await logAuditEntry({
-    matterId: null,
+  await logSettingsChange(
     userId,
-    type: "settings",
-    source: "Settings",
-    title: `Matter visibility set to ${LABEL[value]}`,
-    detail: `Changed from ${LABEL[before.matterVisibility]} to ${LABEL[value]}`,
-  });
+    `Matter visibility set to ${LABEL[value]}`,
+    [`Changed from ${LABEL[before.matterVisibility]} to ${LABEL[value]}`]
+  );
   // Visibility changes every matter-scoped surface.
   revalidatePath("/", "layout");
   return { status: "ok" };

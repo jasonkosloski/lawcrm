@@ -14,7 +14,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
-import { logAuditEntry } from "@/lib/audit-entry";
+import { logSettingsChange } from "@/lib/audit-entry";
 import type { VenueOption } from "@/lib/queries/venues";
 import { isForeignKeyViolation, isRecordNotFound, isUniqueViolation } from "@/lib/prisma-errors";
 
@@ -75,15 +75,7 @@ export async function createVenue(
   const nameKey = p.data.name.toLowerCase();
   try {
     const venue = await prisma.venue.create({ data: { ...p.data, nameKey }, select: SELECT });
-    await logAuditEntry({
-      matterId: null,
-      userId,
-      type: "settings",
-      source: "Settings",
-      icon: "zap",
-      title: `Venue "${venue.name}" added`,
-      detail: null,
-    });
+    await logSettingsChange(userId, `Venue "${venue.name}" added`);
     revalidate();
     return { ok: true, venue };
   } catch (e) {
@@ -113,15 +105,7 @@ export async function updateVenue(
       data: { ...p.data, nameKey },
       select: SELECT,
     });
-    await logAuditEntry({
-      matterId: null,
-      userId,
-      type: "settings",
-      source: "Settings",
-      icon: "zap",
-      title: `Venue "${venue.name}" updated`,
-      detail: null,
-    });
+    await logSettingsChange(userId, `Venue "${venue.name}" updated`);
     revalidate();
     return { ok: true, venue };
   } catch (e) {
@@ -147,15 +131,10 @@ export async function setVenueActive(
   if (!row) return { ok: false, error: "Not found" };
   if (row.isActive === active) return { ok: true };
   await prisma.venue.update({ where: { id }, data: { isActive: active } });
-  await logAuditEntry({
-    matterId: null,
+  await logSettingsChange(
     userId,
-    type: "settings",
-    source: "Settings",
-    icon: "zap",
-    title: `Venue "${row.name}" ${active ? "restored" : "archived"}`,
-    detail: null,
-  });
+    `Venue "${row.name}" ${active ? "restored" : "archived"}`
+  );
   revalidate();
   return { ok: true };
 }
@@ -179,15 +158,7 @@ export async function deleteVenue(
     }
     throw e;
   }
-  await logAuditEntry({
-    matterId: null,
-    userId,
-    type: "settings",
-    source: "Settings",
-    icon: "zap",
-    title: `Venue "${row.name}" deleted`,
-    detail: null,
-  });
+  await logSettingsChange(userId, `Venue "${row.name}" deleted`);
   revalidate();
   return { ok: true };
 }

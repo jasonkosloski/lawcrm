@@ -21,7 +21,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { loadCurrentFirm, loadFirmGoals, requireAdmin } from "@/lib/firm";
 import { logActivity } from "@/lib/activity-log";
-import { logAuditEntry } from "@/lib/audit-entry";
+import { logSettingsChange } from "@/lib/audit-entry";
 import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
 import { parseTemplate } from "@/lib/matter-name-template";
 import { requirePermissionResult } from "@/lib/permission-check";
@@ -301,16 +301,15 @@ export async function setRequireOriginatingDoc(
     where: { id: firm.id },
     data: { requireOriginatingDoc: on },
   });
-  await logAuditEntry({
-    matterId: null,
+  await logSettingsChange(
     userId,
-    type: "settings",
-    source: "Settings",
-    title: on
+    on
       ? "Signed originating document required to open a matter"
       : "Signed originating document no longer required to open a matter",
-    detail: `Changed from ${before.requireOriginatingDoc ? "required" : "not required"} to ${on ? "required" : "not required"}`,
-  });
+    [
+      `Changed from ${before.requireOriginatingDoc ? "required" : "not required"} to ${on ? "required" : "not required"}`,
+    ]
+  );
   revalidatePath("/settings/firm");
   revalidatePath("/", "layout");
   return { ok: true };

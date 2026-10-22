@@ -21,7 +21,7 @@ import { prisma } from "@/lib/prisma";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentFirm } from "@/lib/firm";
 import { requirePermission } from "@/lib/permission-check";
-import { logAuditEntry } from "@/lib/audit-entry";
+import { logAuditEntry, logSettingsChange } from "@/lib/audit-entry";
 
 const firmSchema = z.object({
   autoAddTeamToNewEvents: z.literal("on").optional(),
@@ -47,18 +47,17 @@ export async function updateFirmCalendarDefaults(
         parsed.data.autoAddTeamToUpcomingEvents === "on",
     },
   });
-  await logAuditEntry({
-    matterId: null,
+  await logSettingsChange(
     userId,
-    type: "settings",
-    source: "Settings",
-    title: "Firm calendar defaults updated",
-    detail: `Auto-add team to new events: ${
-      parsed.data.autoAddTeamToNewEvents === "on" ? "on" : "off"
-    }; to upcoming events: ${
-      parsed.data.autoAddTeamToUpcomingEvents === "on" ? "on" : "off"
-    }`,
-  });
+    "Firm calendar defaults updated",
+    [
+      `Auto-add team to new events: ${
+        parsed.data.autoAddTeamToNewEvents === "on" ? "on" : "off"
+      }; to upcoming events: ${
+        parsed.data.autoAddTeamToUpcomingEvents === "on" ? "on" : "off"
+      }`,
+    ]
+  );
   // Calendar defaults touch the matter edit pages + every event-
   // create + team-add. Layout revalidation is the cheapest sweep.
   revalidatePath("/", "layout");

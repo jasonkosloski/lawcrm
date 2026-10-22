@@ -39,7 +39,7 @@ import {
   toSolPeriod,
   type SolPeriod,
 } from "@/lib/sol";
-import { logAuditEntry } from "@/lib/audit-entry";
+import { logSettingsChange } from "@/lib/audit-entry";
 import { parseTemplate } from "@/lib/matter-name-template";
 import { isRequiredMatterField } from "@/lib/matter-required-fields";
 import {
@@ -69,28 +69,6 @@ const DEFAULT_DOC_LABEL = "Fee agreement (default)";
 
 function formatPeriodOrNone(period: SolPeriod | null): string {
   return period ? formatStatutePeriod(period) : "none";
-}
-
-/** Firm-level audit row for practice-area / stage settings changes.
- *  `changes` entries that are null (nothing changed) are dropped; when
- *  nothing changed at all, no row is written. */
-async function logSettingsChange(
-  userId: string,
-  title: string,
-  changes: Array<string | null>,
-  skipIfNoChanges = false
-): Promise<void> {
-  const list = changes.filter((c): c is string => c !== null);
-  if (list.length === 0 && skipIfNoChanges) return;
-  await logAuditEntry({
-    matterId: null,
-    userId,
-    type: "settings",
-    source: "Settings",
-    icon: "zap",
-    title,
-    detail: list.length > 0 ? list.join("; ") : null,
-  });
 }
 
 // ── Practice area ───────────────────────────────────────────────────────

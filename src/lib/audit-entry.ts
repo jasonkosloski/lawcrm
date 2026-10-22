@@ -40,3 +40,24 @@ export async function logAuditEntry(input: {
     console.warn("[audit] failed to write activity entry", err);
   }
 }
+
+/** Firm-level audit row for a Settings change. `changes` entries that
+ *  are null (nothing changed) are dropped and the rest joined into the
+ *  detail; with `skipIfNoChanges`, nothing changed means no row. */
+export async function logSettingsChange(
+  userId: string,
+  title: string,
+  changes: Array<string | null> = [],
+  skipIfNoChanges = false
+): Promise<void> {
+  const list = changes.filter((c): c is string => c !== null);
+  if (list.length === 0 && skipIfNoChanges) return;
+  await logAuditEntry({
+    matterId: null,
+    userId,
+    type: "settings",
+    source: "Settings",
+    title,
+    detail: list.length > 0 ? list.join("; ") : null,
+  });
+}

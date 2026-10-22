@@ -31,7 +31,7 @@ import {
   EMAIL_SIGNATURE_MAX_LENGTH,
   normalizeEmailSignature,
 } from "@/lib/email-signature";
-import { logAuditEntry } from "@/lib/audit-entry";
+import { logSettingsChange } from "@/lib/audit-entry";
 
 const profileSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
@@ -146,13 +146,10 @@ export async function updateEmailSignatureAction(
     where: { id: userId },
     data: { emailSignature: signature },
   });
-  await logAuditEntry({
-    matterId: null,
+  await logSettingsChange(
     userId,
-    type: "settings",
-    source: "Settings",
-    title: signature ? "Email signature updated" : "Email signature removed",
-  });
+    signature ? "Email signature updated" : "Email signature removed"
+  );
 
   revalidatePath("/settings/profile");
   // Composers on the inbox, matter and lead pages read the signature.
