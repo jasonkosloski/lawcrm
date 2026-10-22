@@ -159,6 +159,7 @@ export async function DocumentViewerBody({
       transcript,
       canTranscribe,
       canDeleteTranscript,
+      canEditTranscript,
     ] = await Promise.all([
         getDocumentFlaggedMoments(doc.id),
         getCurrentUserId(),
@@ -168,6 +169,7 @@ export async function DocumentViewerBody({
         isMedia ? getDocumentTranscript(doc.id) : Promise.resolve(null),
         isMedia ? currentUserHasPermission("documents.transcribe") : Promise.resolve(false),
         isMedia ? currentUserHasPermission("documents.transcript.delete") : Promise.resolve(false),
+        isMedia ? currentUserHasPermission("documents.transcript.edit") : Promise.resolve(false),
       ]);
     // Resolve ?flag= against the rail list (server-side) — its
     // anchor becomes the adapter's initial navigation. A stale id
@@ -181,6 +183,7 @@ export async function DocumentViewerBody({
       transcript,
       canTranscribe,
       canDeleteTranscript,
+      canEditTranscript,
       initialSeconds: linked?.timeSeconds ?? tSeconds,
       initialPage: linked?.pageNumber ?? null,
       initialEndPage: linked?.endPageNumber ?? null,
@@ -386,6 +389,7 @@ type ReviewData = {
   transcript: TranscriptView | null;
   canTranscribe: boolean;
   canDeleteTranscript: boolean;
+  canEditTranscript: boolean;
 };
 
 /** Pick + build the body for a document that has stored bytes.
@@ -450,6 +454,7 @@ async function renderBody(
           transcript={review.transcript}
           canTranscribe={review.canTranscribe}
           canDeleteTranscript={review.canDeleteTranscript}
+          canEditTranscript={review.canEditTranscript}
           {...shared}
         />
       );

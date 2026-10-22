@@ -38,6 +38,7 @@ export function MediaReview({
   transcript,
   canTranscribe,
   canDeleteTranscript,
+  canEditTranscript,
 }: {
   kind: "video" | "audio";
   src: string;
@@ -54,6 +55,7 @@ export function MediaReview({
   transcript: TranscriptView | null;
   canTranscribe: boolean;
   canDeleteTranscript: boolean;
+  canEditTranscript: boolean;
 }) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const [composerAnchor, setComposerAnchor] = useState<ComposerAnchor | null>(
@@ -137,6 +139,16 @@ export function MediaReview({
         flags={moments}
         canTranscribe={canTranscribe}
         canDelete={canDeleteTranscript}
+        canEdit={canEditTranscript}
+        canFlag={canCreate}
+        onFlagSelection={(span) =>
+          setComposerAnchor({
+            kind: "time",
+            timeSeconds: span.startSeconds,
+            endSeconds: span.endSeconds,
+            quote: span.quote,
+          })
+        }
         initialSeconds={initialSeconds}
       />
     </ReviewPanel>

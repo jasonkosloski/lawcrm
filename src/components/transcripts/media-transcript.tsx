@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { TranscriptPane, type PaneFlag } from "./transcript-pane";
+import type { SelectionSpan } from "./selection-toolbar";
 import type { TranscriptView } from "@/lib/queries/transcript";
 
 export function MediaTranscript({
@@ -19,6 +20,9 @@ export function MediaTranscript({
   flags,
   canTranscribe,
   canDelete,
+  canEdit,
+  canFlag,
+  onFlagSelection,
   initialSeconds,
 }: {
   mediaRef: React.RefObject<HTMLVideoElement | HTMLAudioElement | null>;
@@ -28,6 +32,9 @@ export function MediaTranscript({
   flags: PaneFlag[];
   canTranscribe: boolean;
   canDelete: boolean;
+  canEdit: boolean;
+  canFlag: boolean;
+  onFlagSelection: (span: SelectionSpan) => void;
   initialSeconds: number | null;
 }) {
   const [currentTime, setCurrentTime] = useState(0);
@@ -97,6 +104,9 @@ export function MediaTranscript({
       flags={flags}
       canTranscribe={canTranscribe}
       canDelete={canDelete}
+      canEdit={canEdit}
+      canFlag={canFlag}
+      onFlagSelection={onFlagSelection}
       durationSeconds={duration}
       initialSeconds={initialSeconds}
     />

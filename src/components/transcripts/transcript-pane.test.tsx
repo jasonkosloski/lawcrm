@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -198,8 +199,9 @@ describe("TranscriptPane", () => {
     vi.mocked(confirmAction).mockResolvedValue(true);
     vi.mocked(deleteTranscript).mockResolvedValue({ ok: true });
     pane();
-    fireEvent.click(screen.getByLabelText("Transcript options"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete transcript" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText("Transcript options"));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete transcript" }));
     await waitFor(() => expect(deleteTranscript).toHaveBeenCalledWith("doc1"));
     expect(confirmAction).toHaveBeenCalled();
   });
@@ -207,8 +209,9 @@ describe("TranscriptPane", () => {
   test("declining the confirm keeps the transcript", async () => {
     vi.mocked(confirmAction).mockResolvedValue(false);
     pane();
-    fireEvent.click(screen.getByLabelText("Transcript options"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete transcript" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText("Transcript options"));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete transcript" }));
     await waitFor(() => expect(confirmAction).toHaveBeenCalled());
     expect(deleteTranscript).not.toHaveBeenCalled();
   });

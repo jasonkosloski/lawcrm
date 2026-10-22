@@ -8,12 +8,16 @@
 
 "use client";
 
-import { memo } from "react";
-import { Flag } from "lucide-react";
+import { memo, useState, useTransition } from "react";
+import { Flag, Pencil } from "lucide-react";
+import { revertTranscriptSegment } from "@/app/actions/transcripts";
+import { notifyError } from "@/lib/feedback";
 import { cn } from "@/lib/utils";
 import { flagCategoryTintClass } from "@/lib/constants/flag-category";
 import { formatTimecode } from "@/lib/transcription/timecode";
 import type { TranscriptSegmentView as Segment } from "@/lib/queries/transcript";
+import { SegmentEditor } from "./segment-editor";
+import { SpeakerChip } from "./speaker-chip";
 
 /** Flag decoration for one segment, keyed by word index. */
 export type SegmentDecor = {
@@ -39,7 +43,13 @@ export type TranscriptSegmentProps = {
   find?: SegmentFind;
   onSeek: (seconds: number) => void;
   onMarkerClick?: (flagId: string) => void;
-  // Task 8 adds an `editing` mode here (textarea + speaker chip).
+  transcriptId: string;
+  /** Speaker label → display name (stable object from the transcript). */
+  speakers: Record<string, string>;
+  /** The user may correct the transcript. */
+  canEdit: boolean;
+  /** Edit mode is on: pencils and speaker chips show. */
+  editMode: boolean;
 };
 
 export const TranscriptSegmentView = memo(function TranscriptSegmentView({
@@ -50,8 +60,34 @@ export const TranscriptSegmentView = memo(function TranscriptSegmentView({
   find,
   onSeek,
   onMarkerClick,
+  transcriptId,
+  speakers,
+  canEdit,
+  editMode,
 }: TranscriptSegmentProps) {
   const words = segment.words;
+  const [editing, setEditing] = useState(false);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [reverting, startRevert] = useTransition();
+  const edited = segment.originalText !== null;
+
+  const revert = () =>
+    startRevert(async () => {
+      try {
+        const res = await revertTranscriptSegment(segment.id, segment.revision);
+        if (!res.ok) {
+          notifyError(
+            res.conflict
+              ? "Someone else changed this paragraph. Reload to see their version."
+              : res.error,
+          );
+        } else {
+          setShowOriginal(false);
+        }
+      } catch {
+        notifyError("Couldn't revert the paragraph. Try again.");
+      }
+    });
 
   const onClick = (e: React.MouseEvent<HTMLParagraphElement>) => {
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-s]");
@@ -66,7 +102,17 @@ export const TranscriptSegmentView = memo(function TranscriptSegmentView({
   return (
     <div data-seg={segment.id} className="py-2">
       <div className="mb-0.5 flex items-center gap-2 text-2xs">
-        <span className="font-semibold text-ink-2">{speakerName}</span>
+        {editMode && canEdit ? (
+          <SpeakerChip
+            transcriptId={transcriptId}
+            segmentId={segment.id}
+            revision={segment.revision}
+            speaker={segment.speaker}
+            speakers={speakers}
+          />
+        ) : (
+          <span className="font-semibold text-ink-2">{speakerName}</span>
+        )}
         <button
           type="button"
           onClick={() => onSeek(segment.startSeconds)}
@@ -74,7 +120,34 @@ export const TranscriptSegmentView = memo(function TranscriptSegmentView({
         >
           {`[${formatTimecode(segment.startSeconds)}]`}
         </button>
+        {editMode && canEdit && !editing && (
+          <button
+            type="button"
+            aria-label={`Edit paragraph at ${formatTimecode(segment.startSeconds)}`}
+            onClick={() => setEditing(true)}
+            className="text-ink-3 hover:text-brand-700"
+          >
+            <Pencil className="h-3 w-3" aria-hidden />
+          </button>
+        )}
+        {edited && (
+          <button
+            type="button"
+            onClick={() => setShowOriginal((v) => !v)}
+            className="text-ink-3 hover:text-brand-700"
+          >
+            {showOriginal ? "Hide original" : "Show original"}
+          </button>
+        )}
       </div>
+      {editing ? (
+        <SegmentEditor
+          segmentId={segment.id}
+          initialText={segment.text}
+          revision={segment.revision}
+          onClose={() => setEditing(false)}
+        />
+      ) : (
       <p className="text-sm leading-relaxed text-ink" onClick={onClick}>
         {words.map((w, i) => {
           const tint = decor?.tints[i] ?? null;
@@ -117,6 +190,22 @@ export const TranscriptSegmentView = memo(function TranscriptSegmentView({
           );
         })}
       </p>
+      )}
+      {edited && showOriginal && (
+        <div className="mt-1 flex items-start gap-2 text-xs text-ink-3">
+          <p className="italic">{segment.originalText}</p>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={revert}
+              disabled={reverting}
+              className="shrink-0 font-medium text-brand-700 hover:underline disabled:opacity-50"
+            >
+              Revert
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 });

@@ -13,12 +13,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Pencil } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { deleteTranscript } from "@/app/actions/transcripts";
 import { confirmAction, notifyError } from "@/lib/feedback";
 import type { TranscriptView } from "@/lib/queries/transcript";
 import { activeWordIndex } from "@/lib/transcription/timecode";
 import { FindBar } from "./find-bar";
+import { SelectionToolbar, type SelectionSpan } from "./selection-toolbar";
 import {
   TranscriptSegmentView,
   type SegmentDecor,
@@ -49,6 +56,9 @@ export function TranscriptPane({
   flags,
   canTranscribe,
   canDelete,
+  canEdit = false,
+  canFlag = false,
+  onFlagSelection,
   durationSeconds,
   initialSeconds = null,
   onFlagFocus,
@@ -66,12 +76,17 @@ export function TranscriptPane({
   /** From ?t=: scroll the pane here once. */
   initialSeconds?: number | null;
   onFlagFocus?: (flagId: string) => void;
-  /** Task 8 adds `canEdit` here (edit mode, speaker chips). */
+  /** May correct text and speakers (documents.transcript.edit). */
+  canEdit?: boolean;
+  /** May create flags: shows "Flag selection". */
+  canFlag?: boolean;
+  /** Open the flag composer on a selected span. */
+  onFlagSelection?: (span: SelectionSpan) => void;
 }) {
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [following, setFollowing] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [matchIdx, setMatchIdx] = useState(0);
@@ -242,7 +257,6 @@ export function TranscriptPane({
   };
 
   const remove = async () => {
-    setMenuOpen(false);
     const ok = await confirmAction({
       title: "Delete this transcript?",
       description:
@@ -290,7 +304,7 @@ export function TranscriptPane({
                 Corrected{transcript.correctedByName ? ` by ${transcript.correctedByName}` : ""}
               </span>
             )}
-            <div className="relative ml-auto flex items-center gap-1">
+            <div className="ml-auto flex items-center gap-1">
               {hasText && (
                 <button
                   type="button"
@@ -300,51 +314,49 @@ export function TranscriptPane({
                   Find
                 </button>
               )}
+              {canEdit && hasText && (
+                <button
+                  type="button"
+                  aria-label="Edit transcript"
+                  aria-pressed={editMode}
+                  onClick={() => setEditMode((v) => !v)}
+                  className={`inline-flex h-6 items-center gap-1 rounded-md px-2 text-2xs font-medium ${
+                    editMode ? "bg-brand-50 text-brand-700" : "text-ink-3 hover:text-ink"
+                  }`}
+                >
+                  <Pencil className="h-3 w-3" aria-hidden />
+                  {editMode ? "Done editing" : "Edit"}
+                </button>
+              )}
               {showMenu && (
-                <>
-                  <button
-                    type="button"
-                    aria-label="Transcript options"
-                    aria-haspopup="menu"
-                    aria-expanded={menuOpen}
-                    onClick={() => setMenuOpen((v) => !v)}
-                    onKeyDown={(e) => e.key === "Escape" && setMenuOpen(false)}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-3 hover:text-ink"
-                  >
-                    <MoreHorizontal className="h-4 w-4" aria-hidden />
-                  </button>
-                  {menuOpen && (
-                    <div
-                      role="menu"
-                      className="absolute right-0 top-7 z-20 flex w-44 flex-col rounded-md border border-line bg-white p-1 text-xs shadow-md"
-                    >
-                      {canTranscribe && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          disabled={retranscribing}
-                          onClick={() => {
-                            setMenuOpen(false);
-                            void retranscribe();
-                          }}
-                          className="rounded px-2 py-1.5 text-left hover:bg-paper-2"
-                        >
-                          Re-transcribe
-                        </button>
-                      )}
-                      {canDelete && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={remove}
-                          className="rounded px-2 py-1.5 text-left text-warn hover:bg-paper-2"
-                        >
-                          Delete transcript
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label="Transcript options"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-3 hover:text-ink"
+                      >
+                        <MoreHorizontal className="h-4 w-4" aria-hidden />
+                      </button>
+                    }
+                  />
+                  <DropdownMenuContent align="end" className="min-w-44">
+                    {canTranscribe && (
+                      <DropdownMenuItem
+                        disabled={retranscribing}
+                        onClick={() => void retranscribe()}
+                      >
+                        Re-transcribe
+                      </DropdownMenuItem>
+                    )}
+                    {canDelete && (
+                      <DropdownMenuItem variant="destructive" onClick={remove}>
+                        Delete transcript
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
           </div>
@@ -393,9 +405,19 @@ export function TranscriptPane({
                 find={finds.get(seg.id)}
                 onSeek={onSeek}
                 onMarkerClick={handleMarker}
+                transcriptId={transcript.id}
+                speakers={transcript.speakers}
+                canEdit={canEdit}
+                editMode={editMode}
               />
             ))}
           </div>
+          <SelectionToolbar
+            rootRef={scrollRef}
+            documentName={documentName}
+            canFlag={canFlag && !!onFlagSelection}
+            onFlag={(span) => onFlagSelection?.(span)}
+          />
           {!following && !findOpen && (
             <button
               type="button"

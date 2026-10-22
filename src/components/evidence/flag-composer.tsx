@@ -72,7 +72,14 @@ export type ComposerFlag = {
 
 /** What the renderer adapter captured for a NEW flag. */
 export type ComposerAnchor =
-  | { kind: "time"; timeSeconds: number }
+  | {
+      kind: "time";
+      timeSeconds: number;
+      /** Span end, e.g. from a transcript selection. */
+      endSeconds?: number;
+      /** Transcript text the span covers; rides with the flag. */
+      quote?: string;
+    }
   | {
       kind: "page";
       pageNumber: number | null;
@@ -111,7 +118,11 @@ function seedAnchorText(
               : 0,
         );
   const endText =
-    editing?.endSeconds != null ? formatMediaTime(editing.endSeconds) : "";
+    editing?.endSeconds != null
+      ? formatMediaTime(editing.endSeconds)
+      : !editing && createAnchor?.kind === "time" && createAnchor.endSeconds != null
+        ? formatMediaTime(createAnchor.endSeconds)
+        : "";
   let pageText = "";
   if (editing?.pageNumber != null) pageText = String(editing.pageNumber);
   else if (!editing && createAnchor?.kind === "page" && createAnchor.pageNumber)
@@ -122,7 +133,9 @@ function seedAnchorText(
     endPageText = String(createAnchor.endPageNumber);
   const quoteText =
     editing?.quote ??
-    (createAnchor?.kind === "quote" || createAnchor?.kind === "page"
+    (createAnchor?.kind === "quote" ||
+    createAnchor?.kind === "page" ||
+    createAnchor?.kind === "time"
       ? (createAnchor.quote ?? "")
       : "");
   return { timeText, endText, pageText, endPageText, quoteText };
@@ -283,6 +296,8 @@ export function FlagComposer({
   // page-only.
   const showQuote =
     kind === "quote" ||
+    (kind === "time" &&
+      (editing ? editing.quote != null : createAnchor?.kind === "time" && !!createAnchor.quote)) ||
     (kind === "page" &&
       (editing ? editing.quote != null : createAnchor?.kind === "page" && !!createAnchor.quote));
 
