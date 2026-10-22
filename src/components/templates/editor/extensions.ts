@@ -6,13 +6,13 @@
  * so paste/setContent of anything else is dropped by ProseMirror.
  */
 
-import { Extension, type Extensions } from "@tiptap/core";
+import { Extension, type Editor, type Extensions } from "@tiptap/core";
 import Document from "@tiptap/extension-document";
 import { ListItem, OrderedList } from "@tiptap/extension-list";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
 import StarterKit from "@tiptap/starter-kit";
-import type { TemplateKind } from "@/lib/templates/schema";
+import type { TemplateDoc, TemplateKind } from "@/lib/templates/schema";
 import type { BlockSource } from "@/lib/templates/render";
 import { BlockNode } from "./block-node";
 import { FieldNode, ListFieldNode } from "./field-node";
@@ -35,6 +35,14 @@ const withoutAlign = {
     return { colspan: parent.colspan, rowspan: parent.rowspan, colwidth: parent.colwidth };
   },
 };
+
+/**
+ * The editor's doc as plain JSON. ProseMirror shares one null-prototype
+ * `attrs` object across nodes with default attrs, which server actions
+ * refuse to serialize, so anything sent to the server goes through this.
+ */
+export const templateJSON = (editor: Editor): TemplateDoc =>
+  JSON.parse(JSON.stringify(editor.getJSON())) as TemplateDoc;
 
 /** Generic node-attribute updater used by the property dialogs. */
 const UpdateNodeAttrs = Extension.create({

@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
 import { fieldByPath, listByPath } from "@/lib/templates/catalog";
 import { validateTemplateContent, type TemplateKind } from "@/lib/templates/schema";
-import { createTemplateExtensions } from "./extensions";
+import { createTemplateExtensions, templateJSON } from "./extensions";
 import { fieldChipText, listFieldChipText } from "./field-node";
 import { ruleHeaderText } from "./section-nodes";
 
@@ -246,5 +246,21 @@ describe("labels", () => {
     expect(ruleHeaderText({ path: "x.y", op: "in", values: ["a", "b"] })).toBe(
       "Show if: x.y is one of a, b",
     );
+  });
+});
+
+describe("templateJSON", () => {
+  it("returns plain objects a server action can carry (inserted tables share null-prototype attrs)", () => {
+    const editor = make("letter", { type: "doc", content: [p()] });
+    editor.commands.insertTable({ rows: 2, cols: 2, withHeaderRow: true });
+    const protos: unknown[] = [];
+    const walk = (n: { attrs?: object; content?: unknown[] }) => {
+      if (n.attrs) protos.push(Object.getPrototypeOf(n.attrs));
+      n.content?.forEach((c) => walk(c as typeof n));
+    };
+    walk(templateJSON(editor));
+    expect(protos.length).toBeGreaterThan(0);
+    expect(protos.every((pr) => pr === Object.prototype)).toBe(true);
+    expect(validateTemplateContent("letter", templateJSON(editor)).ok).toBe(true);
   });
 });

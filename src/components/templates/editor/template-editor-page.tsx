@@ -34,6 +34,7 @@ import {
   titleOf,
   type EditorProps,
 } from "./editor-model";
+import { templateJSON } from "./extensions";
 import { FieldFormatPopover } from "./field-format-popover";
 import { setFitInvalid } from "./fit-highlight";
 import { BODY_CLASS, useBodyEditor } from "./use-body-editor";
@@ -150,7 +151,7 @@ function Editor(props: EditorProps & { narrow: boolean }) {
   const save = () => {
     if (!editor) return;
     setError(null);
-    const content = editor.getJSON();
+    const content = templateJSON(editor);
     const expectedUpdatedAt = savedId ? (version ?? undefined) : undefined;
     startSave(async () => {
       const res = bMeta
@@ -164,7 +165,12 @@ function Editor(props: EditorProps & { narrow: boolean }) {
             id: savedId ?? undefined,
             ...tMeta!,
             content,
-            subject: kind === "email" ? (subjectEditor?.getJSON() ?? subject) : undefined,
+            subject:
+              kind === "email"
+                ? subjectEditor
+                  ? templateJSON(subjectEditor)
+                  : subject
+                : undefined,
             expectedUpdatedAt,
           });
       if (!res.ok) {

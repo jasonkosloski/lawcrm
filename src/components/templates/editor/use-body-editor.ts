@@ -11,7 +11,7 @@ import { useEditor } from "@tiptap/react";
 import type { BlockSource } from "@/lib/templates/render";
 import type { TemplateDoc, TemplateKind } from "@/lib/templates/schema";
 import { cn } from "@/lib/utils";
-import { createTemplateExtensions } from "./extensions";
+import { createTemplateExtensions, templateJSON } from "./extensions";
 import { FitHighlight } from "./fit-highlight";
 
 export const BODY_CLASS = cn(
@@ -61,9 +61,9 @@ export function useBodyEditor(opts: {
       editable: opts.editable,
       immediatelyRender: false,
       editorProps: EDITOR_PROPS,
-      onCreate: ({ editor }) => opts.onDoc(editor.getJSON() as TemplateDoc),
+      onCreate: ({ editor }) => opts.onDoc(templateJSON(editor)),
       onUpdate: ({ editor }) => {
-        opts.onDoc(editor.getJSON() as TemplateDoc);
+        opts.onDoc(templateJSON(editor));
         opts.onEdit();
       },
       onFocus: opts.onFocus,

@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import { Fragment, Slice, type Node as PMNode, type Schema } from "@tiptap/pm/model";
 import type { TemplateDoc } from "@/lib/templates/schema";
-import { createTemplateExtensions } from "./extensions";
+import { createTemplateExtensions, templateJSON } from "./extensions";
 import { FitHighlight } from "./fit-highlight";
 
 /** A pasted multi-paragraph slice as one line: paragraphs and line
@@ -86,7 +86,7 @@ export function SubjectEditor({
       editable,
       immediatelyRender: false,
       editorProps,
-      onUpdate: ({ editor: e }) => onChange(e.getJSON() as TemplateDoc),
+      onUpdate: ({ editor: e }) => onChange(templateJSON(e)),
       onFocus,
     },
     [],
