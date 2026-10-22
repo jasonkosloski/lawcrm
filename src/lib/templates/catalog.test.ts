@@ -9,12 +9,48 @@ import {
   listByPath,
 } from "./catalog";
 import { formatFieldValue } from "./format";
-import { MERGE_FIELDS } from "@/lib/template-merge";
+
+/** Keys the removed `template-merge.ts` engine supported; stored legacy
+ *  `{{token}}` bodies still use them. */
+const LEGACY_KEYS = [
+  "matter.name",
+  "matter.caseNumber",
+  "matter.practiceArea",
+  "matter.stage",
+  "matter.court",
+  "matter.opposingParty",
+  "matter.incidentDate",
+  "matter.solDate",
+  "client.name",
+  "client.email",
+  "client.phone",
+  "client.address",
+  "firm.name",
+  "firm.addressLine1",
+  "firm.addressLine2",
+  "firm.cityStateZip",
+  "firm.phone",
+  "firm.email",
+  "request.subject",
+  "request.description",
+  "request.type",
+  "request.dateRangeStart",
+  "request.dateRangeEnd",
+  "request.responseDueDate",
+  "request.sentDate",
+  "custodian.name",
+  "custodian.organization",
+  "custodian.address",
+  "custodian.email",
+  "custodian.phone",
+  "user.name",
+  "today",
+];
 
 describe("catalog", () => {
   it("every legacy key resolves", () => {
-    for (const f of MERGE_FIELDS) {
-      expect(fieldByPath(f.key), f.key).toBeDefined();
+    for (const key of LEGACY_KEYS) {
+      expect(fieldByPath(key), key).toBeDefined();
     }
   });
 

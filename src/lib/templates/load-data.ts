@@ -12,7 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { assertScopeAccess } from "@/lib/scope-access";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { getCurrentFirm } from "@/lib/firm";
-import { composeCityStateZip } from "@/lib/template-merge";
+import { composeCityStateZip } from "./format";
 import type {
   ContactData,
   CounselData,
