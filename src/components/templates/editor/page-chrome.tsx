@@ -1,6 +1,6 @@
 /**
  * Editor page header: back link, title, actions slot and, for a saved
- * block, which templates use it.
+ * block, which templates and court formats use it.
  */
 
 import Link from "next/link";
@@ -12,7 +12,7 @@ import { plural } from "@/lib/utils";
 /** Both save actions' stale-version refusal starts with this. */
 const STALE_PREFIX = "Someone else saved this";
 
-export type Usage = { id: string; name: string };
+export type Usage = { id: string; name: string; kind?: "template" | "court_format" };
 
 export function EditorHeader({
   isBlock,
@@ -46,16 +46,31 @@ export function EditorHeader({
 
 function UsageLine({ usage }: { usage: Usage[] }) {
   if (usage.length === 0) {
-    return <p className="text-xs text-ink-4">Not used by any template yet.</p>;
+    return <p className="text-xs text-ink-4">Not used by any template or court format yet.</p>;
   }
+  const formats = usage.filter((u) => u.kind === "court_format").length;
+  const templates = usage.length - formats;
+  const label = [
+    templates > 0 ? plural(templates, "template") : null,
+    formats > 0 ? plural(formats, "court format") : null,
+  ]
+    .filter(Boolean)
+    .join(" and ");
   return (
     <p className="text-xs text-ink-3">
-      <span>{`Used by ${plural(usage.length, "template")}`}</span>
+      <span>{`Used by ${label}`}</span>
       {": "}
       {usage.map((u, i) => (
         <span key={u.id}>
           {i > 0 && ", "}
-          <Link href={`/settings/templates/${u.id}`} className="text-brand-700 hover:underline">
+          <Link
+            href={
+              u.kind === "court_format"
+                ? `/settings/court-formats/${u.id}`
+                : `/settings/templates/${u.id}`
+            }
+            className="text-brand-700 hover:underline"
+          >
             {u.name}
           </Link>
         </span>

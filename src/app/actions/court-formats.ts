@@ -14,7 +14,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { logSettingsChange } from "@/lib/audit-entry";
-import { isUniqueViolation } from "@/lib/prisma-errors";
+import { isForeignKeyViolation, isUniqueViolation } from "@/lib/prisma-errors";
 import { MAX_TEMPLATE_NAME } from "@/lib/template-constants";
 import {
   COURT_SYSTEMS,
@@ -33,6 +33,7 @@ import {
 const STALE = "Someone else saved this court format — reload to see their changes.";
 const NAME_TAKEN = "A court format with that name already exists.";
 const SELF = "A block can't replace itself.";
+const BLOCK_GONE = "That block no longer exists — reload.";
 const DUPLICATE = "Each block can be replaced only once per court format.";
 
 const margin = z
@@ -104,7 +105,7 @@ export async function saveCourtFormat(input: CourtFormatInput): Promise<SaveResu
   if (blockIds.length > 0) {
     const found = await prisma.templateBlock.count({ where: { id: { in: blockIds } } });
     if (found !== blockIds.length) {
-      return { ok: false, error: "That block no longer exists — reload." };
+      return { ok: false, error: BLOCK_GONE };
     }
   }
 
@@ -119,6 +120,7 @@ export async function saveCourtFormat(input: CourtFormatInput): Promise<SaveResu
       return { ok: true, id: created.id, updatedAt: created.updatedAt.toISOString() };
     } catch (e) {
       if (isUniqueViolation(e)) return { ok: false, error: NAME_TAKEN };
+      if (isForeignKeyViolation(e)) return { ok: false, error: BLOCK_GONE };
       throw e;
     }
   }
@@ -141,6 +143,7 @@ export async function saveCourtFormat(input: CourtFormatInput): Promise<SaveResu
   } catch (e) {
     if (e instanceof StaleError) return { ok: false, error: STALE };
     if (isUniqueViolation(e)) return { ok: false, error: NAME_TAKEN };
+    if (isForeignKeyViolation(e)) return { ok: false, error: BLOCK_GONE };
     throw e;
   }
   await logSettingsChange(userId, `Court format "${values.name}" updated`);

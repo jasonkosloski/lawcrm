@@ -49,9 +49,28 @@ async function usageOf(blockId: string): Promise<{ id: string; name: string }[]>
     .map((t) => ({ id: t.id, name: t.name }));
 }
 
-export async function listBlockUsage(blockId: string): Promise<{ id: string; name: string }[]> {
+/** Court formats (either side of a replacement) that use the block. */
+async function courtFormatsUsing(blockId: string): Promise<{ id: string; name: string }[]> {
+  return prisma.courtFormat.findMany({
+    where: { blocks: { some: { OR: [{ blockId }, { replacementBlockId: blockId }] } } },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+const courtFormatsInUse = (formats: { name: string }[]) =>
+  `This block is used by court format(s): ${formats.map((f) => f.name).join(", ")}. Remove it there first.`;
+
+export type BlockUsage = { id: string; name: string; kind: "template" | "court_format" };
+
+/** Everything that references the block: templates, then court formats. */
+export async function listBlockUsage(blockId: string): Promise<BlockUsage[]> {
   await requireUser();
-  return usageOf(blockId);
+  const [templates, formats] = await Promise.all([usageOf(blockId), courtFormatsUsing(blockId)]);
+  return [
+    ...templates.map((t) => ({ ...t, kind: "template" as const })),
+    ...formats.map((f) => ({ ...f, kind: "court_format" as const })),
+  ];
 }
 
 export async function saveTemplateBlock(input: {
@@ -129,7 +148,9 @@ export async function saveTemplateBlock(input: {
   return { ok: true, id: input.id, updatedAt: updatedAt.toISOString() };
 }
 
-/** Archive (false) or restore (true). Allowed while referenced. */
+/** Archive (false) or restore (true). Archiving is refused while a court
+ *  format uses the block (filings would print the archived marker);
+ *  templates may still reference an archived block. */
 export async function setTemplateBlockActive(
   id: string,
   active: boolean,
@@ -140,6 +161,10 @@ export async function setTemplateBlockActive(
     select: { name: true, isActive: true },
   });
   if (!existing) return { ok: false, error: "Block not found." };
+  if (!active) {
+    const formats = await courtFormatsUsing(id);
+    if (formats.length > 0) return { ok: false, error: courtFormatsInUse(formats) };
+  }
   await prisma.templateBlock.update({ where: { id }, data: { isActive: active } });
   if (existing.isActive !== active) {
     await logTemplateChange(
@@ -166,17 +191,8 @@ export async function deleteTemplateBlock(
     select: { name: true, key: true },
   });
   if (!existing) return { ok: false, error: "Block not found." };
-  const formats = await prisma.courtFormat.findMany({
-    where: { blocks: { some: { OR: [{ blockId: id }, { replacementBlockId: id }] } } },
-    select: { name: true },
-    orderBy: { name: "asc" },
-  });
-  if (formats.length > 0) {
-    return {
-      ok: false,
-      error: `This block is used by court format(s): ${formats.map((f) => f.name).join(", ")}. Remove it there first.`,
-    };
-  }
+  const formats = await courtFormatsUsing(id);
+  if (formats.length > 0) return { ok: false, error: courtFormatsInUse(formats) };
   const styleUse = await prisma.documentStyle.count({
     where: { OR: [{ letterheadBlockId: id }, { continuationBlockId: id }] },
   });

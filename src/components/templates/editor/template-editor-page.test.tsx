@@ -547,6 +547,31 @@ describe("TemplateEditorPage — blocks", () => {
     );
   });
 
+  it("lists court formats that use the block", () => {
+    render(
+      <TemplateEditorPage
+        block={{
+          id: "b1",
+          key: "signature",
+          name: "Signature",
+          description: null,
+          content: { type: "doc", content: [para(text("Sincerely"))] } as never,
+          updatedAt: UPDATED,
+        }}
+        usage={[
+          { id: "t1", name: "Demand letter", kind: "template" },
+          { id: "f1", name: "CO District", kind: "court_format" },
+        ]}
+        canSave
+      />,
+    );
+    expect(screen.getByText("Used by 1 template and 1 court format")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "CO District" })).toHaveAttribute(
+      "href",
+      "/settings/court-formats/f1",
+    );
+  });
+
   it("saves the block with its version", async () => {
     const user = userEvent.setup();
     saveBlock.mockResolvedValue({ ok: true, id: "b1", updatedAt: "2026-10-02T00:00:00.000Z" });

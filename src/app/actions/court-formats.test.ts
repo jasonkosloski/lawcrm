@@ -273,3 +273,23 @@ describe("deleteCourtFormat", () => {
     expect(await prisma.courtFormatBlock.count()).toBe(0);
   });
 });
+
+describe("foreign-key races", () => {
+  const fk = () => Object.assign(new Error("fk"), { code: "P2003" });
+  const gone = { ok: false, error: "That block no longer exists — reload." };
+
+  test("create returns friendly copy when a block vanishes before the write", async () => {
+    const spy = vi.spyOn(prisma.courtFormat, "create").mockRejectedValueOnce(fk());
+    expect(await saveCourtFormat(base)).toEqual(gone);
+    spy.mockRestore();
+  });
+
+  test("update returns friendly copy when a block vanishes before the write", async () => {
+    const c = await create();
+    const spy = vi.spyOn(prisma, "$transaction").mockRejectedValueOnce(fk());
+    expect(await saveCourtFormat({ ...base, id: c.id, expectedUpdatedAt: c.updatedAt })).toEqual(
+      gone,
+    );
+    spy.mockRestore();
+  });
+});

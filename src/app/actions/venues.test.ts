@@ -199,3 +199,26 @@ describe("venue court format and caption name", () => {
     });
   });
 });
+
+describe("foreign-key races on courtFormatId", () => {
+  const fk = () => Object.assign(new Error("fk"), { code: "P2003" });
+  const gone = {
+    ok: false,
+    code: "invalid",
+    errors: { courtFormatId: ["That court format no longer exists — reload."] },
+  };
+
+  test("create and update return the friendly invalid shape", async () => {
+    const f = await prisma.courtFormat.create({ data: { name: "F" } });
+    const create = vi.spyOn(prisma.venue, "create").mockRejectedValueOnce(fk());
+    expect(await createVenue({ ...aurora, courtFormatId: f.id })).toEqual(gone);
+    create.mockRestore();
+
+    const v = await prisma.venue.create({
+      data: { name: "Aurora", nameKey: "aurora", state: "CO" },
+    });
+    const update = vi.spyOn(prisma.venue, "update").mockRejectedValueOnce(fk());
+    expect(await updateVenue(v.id, { ...aurora, courtFormatId: f.id })).toEqual(gone);
+    update.mockRestore();
+  });
+});

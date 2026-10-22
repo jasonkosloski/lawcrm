@@ -105,6 +105,12 @@ async function checkCourtFormat(
   return error ? { ok: false, code: "invalid", errors: { courtFormatId: [error] } } : null;
 }
 
+const FORMAT_GONE: Invalid = {
+  ok: false,
+  code: "invalid",
+  errors: { courtFormatId: ["That court format no longer exists — reload."] },
+};
+
 function revalidate() {
   revalidatePath("/settings/venues");
   revalidatePath("/matters/new");
@@ -130,6 +136,7 @@ export async function createVenue(
     revalidate();
     return { ok: true, venue };
   } catch (e) {
+    if (isForeignKeyViolation(e)) return FORMAT_GONE;
     if (!isUniqueViolation(e)) throw e;
     const existing = await prisma.venue.findUnique({ where: { nameKey }, select: SELECT });
     if (!existing) throw e;
@@ -170,6 +177,7 @@ export async function updateVenue(
     if (isRecordNotFound(e)) {
       return { ok: false, code: "notfound" };
     }
+    if (isForeignKeyViolation(e)) return FORMAT_GONE;
     if (!isUniqueViolation(e)) throw e;
     const existing = await prisma.venue.findUnique({ where: { nameKey }, select: SELECT });
     if (!existing) throw e;

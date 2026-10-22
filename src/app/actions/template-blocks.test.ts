@@ -241,3 +241,41 @@ describe("deleteTemplateBlock court format protection", () => {
     expect((await deleteTemplateBlock(b.id)).ok).toBe(true);
   });
 });
+
+describe("court format usage of a block", () => {
+  const mkFormat = (blockId: string, replacementBlockId: string, name = "CO District") =>
+    prisma.courtFormat.create({
+      data: { name, blocks: { create: [{ blockId, replacementBlockId }] } },
+    });
+
+  test("listBlockUsage lists court formats on either side with a kind", async () => {
+    const a = await saveTemplateBlock(blockInput());
+    const b = await saveTemplateBlock(blockInput({ key: "other", name: "Other" }));
+    if (!a.ok || !b.ok) throw new Error("seed");
+    const t = await seedTemplateUsing(a.id, "Tpl");
+    const f = await mkFormat(a.id, b.id);
+    expect(await listBlockUsage(a.id)).toEqual([
+      { id: t.id, name: "Tpl", kind: "template" },
+      { id: f.id, name: "CO District", kind: "court_format" },
+    ]);
+    expect(await listBlockUsage(b.id)).toEqual([
+      { id: f.id, name: "CO District", kind: "court_format" },
+    ]);
+  });
+
+  test("archiving is refused while a court format uses the block; restore is fine", async () => {
+    const a = await saveTemplateBlock(blockInput());
+    const b = await saveTemplateBlock(blockInput({ key: "other", name: "Other" }));
+    if (!a.ok || !b.ok) throw new Error("seed");
+    await mkFormat(a.id, b.id);
+    for (const id of [a.id, b.id]) {
+      expect(await setTemplateBlockActive(id, false)).toEqual({
+        ok: false,
+        error: "This block is used by court format(s): CO District. Remove it there first.",
+      });
+      expect((await prisma.templateBlock.findUniqueOrThrow({ where: { id } })).isActive).toBe(true);
+    }
+    await prisma.templateBlock.update({ where: { id: a.id }, data: { isActive: false } });
+    expect(await setTemplateBlockActive(a.id, true)).toEqual({ ok: true });
+  });
+});

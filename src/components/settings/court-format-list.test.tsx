@@ -7,6 +7,9 @@ const actions = vi.hoisted(() => ({
 }));
 vi.mock("@/app/actions/court-formats", () => actions);
 
+const feedback = vi.hoisted(() => ({ confirmAction: vi.fn() }));
+vi.mock("@/lib/feedback", () => feedback);
+
 import { CourtFormatList } from "./court-format-list";
 
 const FORMATS = [
@@ -16,7 +19,10 @@ const FORMATS = [
 ];
 const all = { canAdd: true, canEdit: true, canDelete: true };
 
-beforeEach(() => Object.values(actions).forEach((f) => f.mockReset()));
+beforeEach(() => {
+  Object.values(actions).forEach((f) => f.mockReset());
+  feedback.confirmAction.mockReset().mockResolvedValue(true);
+});
 afterEach(cleanup);
 
 describe("CourtFormatList", () => {
@@ -48,6 +54,15 @@ describe("CourtFormatList", () => {
     render(<CourtFormatList formats={FORMATS} {...all} />);
     fireEvent.click(screen.getByRole("button", { name: "Delete CO District" }));
     await screen.findByText(msg);
+  });
+
+  test("cancelling the delete confirmation calls no action", async () => {
+    feedback.confirmAction.mockResolvedValue(false);
+    render(<CourtFormatList formats={FORMATS} {...all} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete CO District" }));
+    await waitFor(() => expect(feedback.confirmAction).toHaveBeenCalled());
+    expect(feedback.confirmAction.mock.calls[0]![0].title).toBe("Delete CO District?");
+    expect(actions.deleteCourtFormat).not.toHaveBeenCalled();
   });
 
   test("controls follow permissions", () => {

@@ -11,6 +11,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Archive, ArchiveRestore, Plus, Trash2 } from "lucide-react";
 import { deleteCourtFormat, setCourtFormatActive } from "@/app/actions/court-formats";
+import { confirmAction } from "@/lib/feedback";
 import { Card, CardContent } from "@/components/ui/card";
 import type { CourtSystem } from "@/lib/templates/page-style";
 
@@ -51,6 +52,16 @@ export function CourtFormatList({
       const res = await fn();
       if (!res.ok && res.error) setError(res.error);
     });
+  };
+
+  const onDelete = async (f: CourtFormatListRow) => {
+    const ok = await confirmAction({
+      title: `Delete ${f.name}?`,
+      description: "Its block replacements are deleted too. This can't be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (ok) run(() => deleteCourtFormat(f.id));
   };
 
   return (
@@ -116,7 +127,7 @@ export function CourtFormatList({
                           aria-label={`Delete ${f.name}`}
                           title="Delete"
                           disabled={pending}
-                          onClick={() => run(() => deleteCourtFormat(f.id))}
+                          onClick={() => onDelete(f)}
                           className={iconBtn}
                         >
                           <Trash2 size={13} />
