@@ -60,6 +60,7 @@
 import { revalidatePath } from "next/cache";
 import { optionalScopeOf, scopePaths } from "@/lib/record-scope";
 import { z } from "zod";
+import { isLenientEmail } from "@/lib/email-shape";
 import { prisma, type Tx } from "@/lib/prisma";
 import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserId } from "@/lib/current-user";
@@ -170,8 +171,7 @@ const attendeeEntrySchema = z
           message: "Email is required when adding a new contact",
         });
       } else {
-        const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim());
-        if (!ok) {
+        if (!isLenientEmail(data.email)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ["email"],

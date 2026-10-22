@@ -13,6 +13,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { isLenientEmail } from "@/lib/email-shape";
 import { prisma, type Tx } from "@/lib/prisma";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
@@ -165,7 +166,7 @@ const createMatterSchema = z
           message: "Add an email or phone so the client is reachable",
         });
       }
-      if (data.newClientEmail && !data.newClientEmail.includes("@")) {
+      if (data.newClientEmail && !isLenientEmail(data.newClientEmail)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["newClientEmail"],

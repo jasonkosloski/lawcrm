@@ -26,6 +26,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { isLenientEmail } from "@/lib/email-shape";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type Tx } from "@/lib/prisma";
 import { assertChildMatterAccess, assertMatterAccess } from "@/lib/matter-access";
@@ -52,7 +53,6 @@ import {
   PARTY_CATEGORIES,
   PARTY_CATEGORY_LABEL,
   PICK_EXISTING,
-  isLenientEmail,
   isOpposingCounselRole,
   representationFlag,
   type PartyFormState,

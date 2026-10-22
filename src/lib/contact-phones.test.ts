@@ -5,7 +5,6 @@ import {
   MAX_PHONES_PER_CONTACT,
 } from "./contact-phones";
 import {
-  isLenientEmail,
   isOpposingCounselRole,
   representationFlag,
 } from "./party-constants";
@@ -108,12 +107,6 @@ describe("party constants helpers", () => {
     for (const r of ["defendant", "counsel", "opposing", "", null, undefined]) {
       expect(isOpposingCounselRole(r)).toBe(false);
     }
-  });
-
-  test("isLenientEmail", () => {
-    expect(isLenientEmail("a@b")).toBe(true);
-    expect(isLenientEmail("a b@c.com")).toBe(false);
-    expect(isLenientEmail("nope")).toBe(false);
   });
 
   test("representationFlag never persists for clients", () => {

@@ -18,13 +18,13 @@ import { deleteSessionsFor } from "@/lib/portal/sessions";
 import { inviteEmail } from "@/lib/portal/emails";
 import { portalLinkUrl } from "@/lib/portal/link-url";
 import { sendEmail } from "@/lib/email/send";
+import { isLenientEmail } from "@/lib/email-shape";
 import { actorSeesAllPortalMatters } from "@/lib/portal/identity-scope";
 
 type Result = { ok: true } | { ok: false; error: string };
 
 const PORTAL_OFF = "The client portal is not available right now.";
 const SEND_FAILED = "Couldn't send the invite email; try again.";
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function invitePortalUser(
   matterId: string,
@@ -37,7 +37,7 @@ export async function invitePortalUser(
   await assertMatterAccess(matterId);
 
   const normalized = (email ?? "").trim().toLowerCase();
-  if (!normalized || normalized.length > 254 || !EMAIL_SHAPE.test(normalized)) {
+  if (!normalized || normalized.length > 254 || !isLenientEmail(normalized)) {
     return { ok: false, error: "Enter a valid email address." };
   }
 

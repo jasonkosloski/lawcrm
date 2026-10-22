@@ -23,6 +23,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isLenientEmail } from "@/lib/email-shape";
 import { searchAttendeesAction } from "@/app/actions/attendee-search";
 import { EmailLink } from "@/components/ui/email-link";
 import type { AttendeeSearchResult } from "@/lib/queries/attendee-search";
@@ -274,9 +275,9 @@ function AttendeeAutocomplete({
 
   const trimmedEmail = email.trim();
   // Light client-side email check. The server re-validates with
-  // the same regex, so this is purely UX (don't enable the
+  // the same helper, so this is purely UX (don't enable the
   // commit button until the address looks valid).
-  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
+  const emailLooksValid = isLenientEmail(trimmedEmail);
   // Show "Add new" option whenever the typed text doesn't have
   // an exact case-insensitive name match in the results.
   const exactMatchExists = results.some(

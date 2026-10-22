@@ -82,12 +82,6 @@ export function representationFlag(
   return choice === "yes" ? true : choice === "no" ? false : null;
 }
 
-/** Lenient email check: something@something, no whitespace. Existing
- *  records are never re-validated with it - only values being written. */
-export function isLenientEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+$/.test(value);
-}
-
 /** True when a free-text subrole names opposing counsel ("Opposing
  *  counsel", "opposing-counsel", "opposing_counsel", ...). */
 export function isOpposingCounselRole(role: string | null | undefined): boolean {

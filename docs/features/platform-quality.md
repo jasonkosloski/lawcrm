@@ -1,14 +1,14 @@
 # Platform Quality and Hardening
 
-Cross-cutting tech debt, consistency sweeps and hardening that are not tied to one feature area. Mostly done; the open items are the button-size convention and server-side email validation.
+Cross-cutting tech debt, consistency sweeps and hardening that are not tied to one feature area. Mostly done; the open item is the button-size convention.
 Related: [ADR-011](../decisions/011-oauth-tokens-encrypt-at-rest-via-a.md), [ADR-012](../decisions/012-date-only-values-are-utc-midnight-calendar.md), [ADR-016](../decisions/016-postgres-migration-baseline-prisma-migrate-replaces-db.md), [ADR-022](../decisions/022-security-header-baseline-no-csp-yet-and.md), [ADR-035](../decisions/035-statute-periods-are-calendar-amount-unit-computed.md), [ADR-036](../decisions/036-money-is-decimal-14-2-one-settlement.md), [UI_PATTERNS.md](../UI_PATTERNS.md)
 
 ## Open work
 - [ ] **Inconsistent button sizes** (P2) — across cards / tables / forms. Define a per-context size convention and sweep once.
-- [ ] **Server-side email validation** (P2) — contact / party / calendar-attendee schemas do not validate email server-side (finding F987, open follow-up from the sanitization audit).
 - [ ] **Opportunistic sweeps still ongoing** (P2) — hand-rolled empty states (calendar day/week, time views, reports cards, settings) -> `<EmptyState>`; remaining ternary plurals -> `plural()`; remaining component-level status literals -> central label maps. Migrate as files are touched.
 
 ## Shipped
+- [x] **Server-side email validation** (F987) — every typed-in email (contacts, parties, new attendees, the new-matter inline client, portal invites) is checked on the server by the one lenient helper `isLenientEmail` (`src/lib/email-shape.ts`); edits never re-reject an unchanged stored value.
 - [x] **Date format sweep** (2026-07-07, P2) — every display callsite funnels through `formatDate` / `formatRelative` variants; dashboard queries take the viewer's TZ; date-only inputs parse via `parseDateOnly` (UTC-midnight calendar date) and `parseWallClock` (a wall-clock instant in the user's zone), ADR-012. The old `parseLocalDate` / `parseLocalDateOrDateTime` helpers no longer exist.
 - [x] **Timezone awareness in date inputs** (2026-07-07) — same sweep: date-only strings parse to UTC-midnight and render without TZ override, so "March 15" stays March 15 regardless of viewer/server zones (ADR-012).
 - [x] **Status / priority / role values as shared constants** (2026-07-07) — `src/lib/constants/` is the canonical client-safe home: per-domain files (task-status, priority, deadline-status incl. kinds, time-entry-status incl. WIP subset, lead-stage incl. open/closed partitions, invoice-status incl. kinds, calendar-event-type, settlement-status) export `as const` arrays + union types + label maps, smoke-tested for drift (`constants.test.ts`). Older homes re-export from there (`note-constants.ts`, `queries/leads.ts`, `billing-form.ts` with typed transition maps). Server actions and queries migrated (billing WIP predicate, reports pipeline stages derived from `LEAD_OPEN_STAGES`, sidebar/palette/leads closed-stage filters). Matter itself has no status column (stage is a DB-backed FK), so no matter-status constant.

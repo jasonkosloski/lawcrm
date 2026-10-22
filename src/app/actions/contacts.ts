@@ -32,6 +32,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { isLenientEmail } from "@/lib/email-shape";
 import { prisma } from "@/lib/prisma";
 import { actorSeesAllPortalMatters } from "@/lib/portal/identity-scope";
 import {
@@ -76,11 +77,6 @@ const contactSchema = z.object({
   notes: z.string().trim().max(4000).optional().or(z.literal("")),
 });
 
-/** Lenient shape check: something@something.tld, no whitespace. Not a
- *  deliverability test - it only catches typos like "dana@" or
- *  "dana example.com". */
-const LENIENT_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 /** A field error for a malformed email, or null. On edit, an email
  *  that is unchanged from the stored value is never rejected, so old
  *  records that predate this check stay editable. */
@@ -89,7 +85,7 @@ function emailFieldError(
   unchangedFrom?: string | null
 ): string[] | null {
   const v = (email ?? "").trim();
-  if (!v || LENIENT_EMAIL.test(v)) return null;
+  if (!v || isLenientEmail(v)) return null;
   if (unchangedFrom != null && v === unchangedFrom.trim()) return null;
   return ["Enter a valid email address"];
 }

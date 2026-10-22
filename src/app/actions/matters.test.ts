@@ -1057,6 +1057,23 @@ describe("createMatter inline client", () => {
     });
     expect(contact).toEqual({ firmId, type: "client" });
   });
+
+  test.each(["dana@", "dana@example", "dana @example.com"])(
+    "a malformed email (%j) is a field error and nothing is written",
+    async (email) => {
+      const state = await createMatter(
+        createMatterInitialState,
+        createForm({
+          clientId: NEW_CLIENT_SENTINEL,
+          newClientName: "Jane Doe",
+          newClientEmail: email,
+        })
+      );
+      expect(state.errors?.newClientEmail?.[0]).toMatch(/doesn't look like an email/);
+      expect(await prisma.contact.count({ where: { name: "Jane Doe" } })).toBe(0);
+      expect(await prisma.matter.count({ where: { name: "Doe v. Acme" } })).toBe(0);
+    }
+  );
 });
 
 // ── Conflict gate on create (ADR-054) ──────────────────────────────────
