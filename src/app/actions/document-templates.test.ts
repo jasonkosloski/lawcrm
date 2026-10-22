@@ -1272,8 +1272,28 @@ describe("court formats on filings", () => {
     expect(xml).toMatch(/w:pgMar[^>]*w:top="1800"/);
     expect(xml).toContain("DENVER CAPTION");
     expect(xml).not.toContain("HOUSE CAPTION");
-    const pdfText = Buffer.from(await pdf!.arrayBuffer()).toString("latin1");
-    expect(pdfText).toMatch(/MediaBox\s*\[\s*0\s+0\s+612(\.0+)?\s+1008/);
+    const pdfBuf = Buffer.from(await pdf!.arrayBuffer());
+    expect(pdfBuf.toString("latin1")).toMatch(/MediaBox\s*\[\s*0\s+0\s+612(\.0+)?\s+1008/);
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pd = await pdfjs.getDocument({ data: new Uint8Array(pdfBuf), verbosity: 0 }).promise;
+    const tc = await (await pd.getPage(1)).getTextContent();
+    const items = tc.items.filter((it): it is typeof it & { str: string } => "str" in it);
+    const pageText = items
+      .map((it) => it.str)
+      .join("")
+      .replace(/\s+/g, " ");
+    expect(pageText).toContain("DENVER CAPTION");
+    expect(pageText).not.toContain("HOUSE CAPTION");
+    const { PDFDocument, PDFDict, PDFName } = await import("pdf-lib");
+    const lib = await PDFDocument.load(pdfBuf);
+    const fonts: string[] = [];
+    for (const [, obj] of lib.context.enumerateIndirectObjects()) {
+      if (obj instanceof PDFDict && obj.get(PDFName.of("Type")) === PDFName.of("Font")) {
+        const base = obj.get(PDFName.of("BaseFont"));
+        if (base) fonts.push(String(base));
+      }
+    }
+    expect(fonts.some((f) => f.includes("LiberationMono"))).toBe(true);
   });
 
   test("an inactive court format is ignored and flagged archived", async () => {
