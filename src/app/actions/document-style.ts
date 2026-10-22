@@ -13,7 +13,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { logTemplateChange } from "@/lib/template-activity";
-import { getDocumentStyle } from "@/lib/templates/document-style";
+import { DOCUMENT_STYLE_STALE, getDocumentStyle } from "@/lib/templates/document-style";
 import {
   FONT_KEYS,
   FONT_SIZE_HALF_PT_MAX,
@@ -28,7 +28,7 @@ import {
   type DocumentStyleValues,
 } from "@/lib/templates/page-style";
 
-const STALE = "Someone else saved the document style — reload to see their changes.";
+const STALE = DOCUMENT_STYLE_STALE;
 
 const margin = z
   .number()

@@ -128,7 +128,12 @@ describe("DocumentStyleForm", () => {
   test("logo upload adopts updatedAt and logoPosition, bumps the preview URL", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, updatedAt: "2026-10-22T12:00:00.000Z", logoPosition: "left" }),
+      json: async () => ({
+        ok: true,
+        updatedAt: "2026-10-22T12:00:00.000Z",
+        logoPosition: "left",
+        logoPositionChanged: true,
+      }),
     });
     vi.stubGlobal("fetch", fetchMock);
     saveDocumentStyle.mockResolvedValue({ ok: true, updatedAt: "2026-10-22T13:00:00.000Z" });
@@ -140,6 +145,8 @@ describe("DocumentStyleForm", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(fetchMock.mock.calls[0][0]).toBe("/api/document-style/logo");
     expect(fetchMock.mock.calls[0][1].method).toBe("POST");
+    const body = fetchMock.mock.calls[0][1].body as FormData;
+    expect(body.get("expectedUpdatedAt")).toBe("2026-10-22T10:00:00.000Z");
     await waitFor(() =>
       expect(document.querySelector("img")?.getAttribute("src")).toBe(
         "/api/document-style/logo?v=2026-10-22T12%3A00%3A00.000Z",
@@ -159,14 +166,48 @@ describe("DocumentStyleForm", () => {
       vi.fn().mockResolvedValue({
         ok: false,
         status: 409,
-        json: async () => ({ ok: false, error: "The logo changed — try again." }),
+        json: async () => ({
+          ok: false,
+          error: "Someone else saved the document style — reload to see their changes.",
+        }),
       }),
     );
     render(<DocumentStyleForm {...baseProps} />);
     const file = new File([new Uint8Array([1])], "logo.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("Upload logo"), { target: { files: [file] } });
-    await screen.findByText("The logo changed — try again.");
+    await screen.findByText(/Someone else saved the document style/);
     expect(screen.getByRole("button", { name: "Reload" })).toBeTruthy();
+    // Not adopted: the preview URL keeps the loaded version.
+    expect(document.querySelector("img")).toBeNull();
+  });
+
+  test("upload keeps an unsaved position edit when the server didn't change it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        updatedAt: "2026-10-22T12:00:00.000Z",
+        logoPosition: "left",
+        logoPositionChanged: false,
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <DocumentStyleForm
+        {...baseProps}
+        hasLogo
+        initial={{ ...baseProps.initial, logoPosition: "left" }}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Logo position"), { target: { value: "right" } });
+    const file = new File([new Uint8Array([1])], "logo.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Upload logo"), { target: { files: [file] } });
+    await waitFor(() =>
+      expect(document.querySelector("img")?.getAttribute("src")).toBe(
+        "/api/document-style/logo?v=2026-10-22T12%3A00%3A00.000Z",
+      ),
+    );
+    expect((screen.getByLabelText("Logo position") as HTMLSelectElement).value).toBe("right");
   });
 
   test("remove logo calls DELETE and adopts the response", async () => {
@@ -185,6 +226,9 @@ describe("DocumentStyleForm", () => {
     expect(document.querySelector("img")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Remove logo" }));
     await waitFor(() => expect(fetchMock.mock.calls[0][1].method).toBe("DELETE"));
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/document-style/logo?expectedUpdatedAt=2026-10-22T10%3A00%3A00.000Z",
+    );
     await waitFor(() => expect(document.querySelector("img")).toBeNull());
   });
 });

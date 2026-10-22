@@ -27,6 +27,8 @@ export type LoadedDocumentStyle = DocumentStyleValues & {
 const LETTERHEAD_BLOCK_ID = "tplblock_letterhead";
 const CONTINUATION_BLOCK_ID = "tplblock_continuation";
 export const LOGO_WARNING = "Logo couldn't be loaded.";
+export const DOCUMENT_STYLE_STALE =
+  "Someone else saved the document style — reload to see their changes.";
 
 async function readRow(firmId: string) {
   return prisma.documentStyle.findUnique({ where: { firmId } });

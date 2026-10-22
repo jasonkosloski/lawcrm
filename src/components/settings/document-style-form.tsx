@@ -4,9 +4,10 @@
  *
  * The form is controlled so the preview follows every keystroke. Save
  * sends `expectedUpdatedAt` and adopts the returned timestamp; logo
- * upload/remove go through the logo route (ADR-034) and adopt the
- * timestamp and logo position it returns, so the next Save is not
- * stale. Users without `firm.edit_document_style` get the same page
+ * upload/remove go through the logo route (ADR-034) with the same
+ * `expectedUpdatedAt`, and on success adopt the returned timestamp (so the
+ * next Save is not stale) and, only when the upload moved it off "none",
+ * the logo position (an unsaved local position edit is kept otherwise). Users without `firm.edit_document_style` get the same page
  * with every control disabled.
  */
 
@@ -144,26 +145,41 @@ export function DocumentStyleForm({
     });
   };
 
-  const adopt = (r: { updatedAt: string; logoPosition: LogoPosition }) => {
+  const adopt = (r: {
+    updatedAt: string;
+    logoPosition: LogoPosition;
+    positionChanged: boolean;
+  }) => {
     setUpdatedAt(r.updatedAt);
     setLogoVersion(r.updatedAt);
-    setValues((v) => ({ ...v, logoPosition: r.logoPosition }));
+    if (r.positionChanged) {
+      // The server moved none -> left; keep a position the user already picked.
+      setValues((v) => (v.logoPosition === "none" ? { ...v, logoPosition: r.logoPosition } : v));
+    }
   };
 
-  const callLogo = async (init: RequestInit, onOk: () => void) => {
+  const callLogo = async (
+    { url = LOGO_URL, ...init }: RequestInit & { url?: string },
+    onOk: () => void,
+  ) => {
     setLogoError(null);
     setStale(false);
     setLogoBusy(true);
     try {
-      const res = await fetch(LOGO_URL, init);
+      const res = await fetch(url, init);
       const json = (await res.json().catch(() => null)) as {
         ok?: boolean;
         error?: string;
         updatedAt?: string;
         logoPosition?: LogoPosition;
+        logoPositionChanged?: boolean;
       } | null;
       if (res.ok && json?.ok && json.updatedAt && json.logoPosition) {
-        adopt({ updatedAt: json.updatedAt, logoPosition: json.logoPosition });
+        adopt({
+          updatedAt: json.updatedAt,
+          logoPosition: json.logoPosition,
+          positionChanged: json.logoPositionChanged === true,
+        });
         onOk();
         setSaved(false);
       } else {
@@ -181,9 +197,17 @@ export function DocumentStyleForm({
     if (!file) return;
     const fd = new FormData();
     fd.append("file", file);
+    fd.append("expectedUpdatedAt", updatedAt);
     void callLogo({ method: "POST", body: fd }, () => setHasLogo(true));
   };
-  const removeLogo = () => void callLogo({ method: "DELETE" }, () => setHasLogo(false));
+  const removeLogo = () =>
+    void callLogo(
+      {
+        method: "DELETE",
+        url: `${LOGO_URL}?expectedUpdatedAt=${encodeURIComponent(updatedAt)}`,
+      },
+      () => setHasLogo(false),
+    );
 
   const dis = !canEdit;
   const ctl = (extra = "") => `${inputClass(false, "md")} ${extra}`;
