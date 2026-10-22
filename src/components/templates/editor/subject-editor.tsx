@@ -9,9 +9,44 @@
 
 import { useEffect, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
+import { Fragment, Slice, type Node as PMNode, type Schema } from "@tiptap/pm/model";
 import type { TemplateDoc } from "@/lib/templates/schema";
 import { createTemplateExtensions } from "./extensions";
 import { FitHighlight } from "./fit-highlight";
+
+/** A pasted multi-paragraph slice as one line: paragraphs and line
+ *  breaks become spaces, so the subject stays a single paragraph. */
+export function flattenPasted(slice: Slice, schema: Schema): Slice {
+  if (slice.content.childCount <= 1 && !hasBreak(slice.content)) return slice;
+  const inline: PMNode[] = [];
+  const space = () => {
+    if (inline.length > 0) inline.push(schema.text(" "));
+  };
+  slice.content.forEach((block) => {
+    if (!block.isTextblock) {
+      if (block.isText || block.isInline) {
+        inline.push(block.type.name === "hardBreak" ? schema.text(" ") : block);
+      } else if (block.textContent) {
+        space();
+        inline.push(schema.text(block.textContent));
+      }
+      return;
+    }
+    space();
+    block.forEach((n) => inline.push(n.type.name === "hardBreak" ? schema.text(" ") : n));
+  });
+  const para = schema.nodes.paragraph.create(null, inline);
+  return new Slice(Fragment.from(para), 1, 1);
+}
+
+function hasBreak(f: Fragment): boolean {
+  let found = false;
+  f.descendants((n) => {
+    if (n.type.name === "hardBreak") found = true;
+    return !found;
+  });
+  return found;
+}
 
 const EMPTY: TemplateDoc = { type: "doc", content: [{ type: "paragraph" }] };
 
@@ -41,6 +76,8 @@ export function SubjectEditor({
       class: "min-h-8 px-2.5 py-1.5 text-xs text-ink focus:outline-none [&_p]:m-0",
     },
     handleKeyDown: (_view: unknown, event: KeyboardEvent) => event.key === "Enter",
+    transformPasted: (slice: Slice, view: { state: { schema: Schema } }) =>
+      flattenPasted(slice, view.state.schema),
   }));
   const editor = useEditor(
     {

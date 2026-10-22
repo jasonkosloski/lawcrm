@@ -32,6 +32,8 @@ export function useBodyEditor(opts: {
   content: TemplateDoc | string;
   rebuildKey: number;
   onDoc: (doc: TemplateDoc) => void;
+  /** A user edit (not the initial load). */
+  onEdit: () => void;
   onFocus: () => void;
   /** Must be stable: baked into the extensions. */
   onEditField: (pos: number) => void;
@@ -60,7 +62,10 @@ export function useBodyEditor(opts: {
       immediatelyRender: false,
       editorProps: EDITOR_PROPS,
       onCreate: ({ editor }) => opts.onDoc(editor.getJSON() as TemplateDoc),
-      onUpdate: ({ editor }) => opts.onDoc(editor.getJSON() as TemplateDoc),
+      onUpdate: ({ editor }) => {
+        opts.onDoc(editor.getJSON() as TemplateDoc);
+        opts.onEdit();
+      },
       onFocus: opts.onFocus,
     },
     [kind, opts.rebuildKey],

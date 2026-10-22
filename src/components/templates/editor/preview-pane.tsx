@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { RefreshCw, TriangleAlert } from "lucide-react";
 import { previewTemplateDraft } from "@/app/actions/document-templates";
 import { Button } from "@/components/ui/button";
@@ -88,19 +88,28 @@ export function PreviewPane({
   const [real, setReal] = useState<Rendered | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Last-started request wins: an older, slower response is dropped.
+  const latest = useRef(0);
 
   const load = (r: PickedRecord) => {
     setPicking(false);
     setRecord(r);
     setError(null);
+    const id = ++latest.current;
     startTransition(async () => {
-      const res = await previewTemplateDraft({
-        content: doc,
-        subject: kind === "email" ? subject : undefined,
-        kind,
-        appliesTo,
-        target: { scope: r.scope },
-      });
+      let res: Awaited<ReturnType<typeof previewTemplateDraft>>;
+      try {
+        res = await previewTemplateDraft({
+          content: doc,
+          subject: kind === "email" ? subject : undefined,
+          kind,
+          appliesTo,
+          target: { scope: r.scope },
+        });
+      } catch {
+        res = { ok: false, error: "Couldn't render the preview — try again." };
+      }
+      if (id !== latest.current) return;
       if (res.ok) setReal(res);
       else {
         setReal(null);
@@ -129,7 +138,14 @@ export function PreviewPane({
                 >
                   <RefreshCw size={12} />
                 </Button>
-                <Button variant="ghost" size="xs" onClick={() => setRecord(null)}>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => {
+                    latest.current++;
+                    setRecord(null);
+                  }}
+                >
                   Sample data
                 </Button>
               </>

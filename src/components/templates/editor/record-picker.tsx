@@ -29,16 +29,25 @@ export function RecordPicker({
   onCancel: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<{ query: string; hits: PickedRecord[] } | null>(null);
+  const [results, setResults] = useState<{
+    query: string;
+    hits: PickedRecord[] | null;
+    error?: string;
+  } | null>(null);
   const q = query.trim();
 
   useEffect(() => {
     if (q.length < 2) return;
     let live = true;
     const t = setTimeout(() => {
-      void searchTemplatePreviewRecords(q, appliesTo).then((hits) => {
-        if (live) setResults({ query: q, hits });
-      });
+      searchTemplatePreviewRecords(q, appliesTo).then(
+        (hits) => {
+          if (live) setResults({ query: q, hits });
+        },
+        () => {
+          if (live) setResults({ query: q, hits: null, error: "Search failed — try again." });
+        },
+      );
     }, 250);
     return () => {
       live = false;
@@ -46,7 +55,8 @@ export function RecordPicker({
     };
   }, [q, appliesTo]);
 
-  const hits = q.length >= 2 && results?.query === q ? results.hits : null;
+  const current = q.length >= 2 && results?.query === q ? results : null;
+  const hits = current?.hits ?? null;
   const what = appliesTo === "lead" ? "lead" : appliesTo === "matter" ? "matter" : "matter or lead";
 
   return (
@@ -66,6 +76,7 @@ export function RecordPicker({
           className={cn(inputClass(), "w-full pl-7")}
         />
       </div>
+      {current?.error && <p className="px-1 text-xs text-warn">{current.error}</p>}
       {hits && hits.length === 0 && <p className="px-1 text-xs text-ink-4">No matches.</p>}
       {hits && hits.length > 0 && (
         <ul className="max-h-64 overflow-y-auto">

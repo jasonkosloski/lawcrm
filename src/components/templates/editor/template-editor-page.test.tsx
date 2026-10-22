@@ -4,7 +4,7 @@
  * the mobile read-only view and block usage. Actions are mocked.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const saveTemplate = vi.fn();
@@ -28,20 +28,33 @@ vi.mock("next/navigation", () => ({
 
 import { TemplateEditorPage, type EditorTemplate } from "./template-editor-page";
 
+let viewport = { desktop: true, listeners: new Set<() => void>() };
+
+/** Stub matchMedia; `resize(false)` narrows the window and notifies. */
 function mockViewport(desktop: boolean) {
+  viewport = { desktop, listeners: new Set() };
   vi.spyOn(window, "matchMedia").mockImplementation(
     (query) =>
       ({
-        matches: desktop,
+        get matches() {
+          return viewport.desktop;
+        },
         media: query,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
+        addEventListener: (_: string, cb: () => void) => viewport.listeners.add(cb),
+        removeEventListener: (_: string, cb: () => void) => viewport.listeners.delete(cb),
         addListener: vi.fn(),
         removeListener: vi.fn(),
         dispatchEvent: vi.fn(),
         onchange: null,
       }) as unknown as MediaQueryList,
   );
+}
+
+function resize(desktop: boolean) {
+  act(() => {
+    viewport.desktop = desktop;
+    for (const cb of viewport.listeners) cb();
+  });
 }
 
 const para = (...content: unknown[]) => ({ type: "paragraph", content });
@@ -213,6 +226,103 @@ describe("TemplateEditorPage — templates", () => {
       target: { scope: { kind: "matter", matterId: "m1" } },
     });
     expect(screen.getByText("Not on file: Court")).toBeInTheDocument();
+  });
+
+  it("narrowing the window keeps the editor and its unsaved edits", async () => {
+    const user = userEvent.setup();
+    render(<TemplateEditorPage template={tpl()} blocks={[]} canSave />);
+    await waitFor(() => expect(document.querySelector("[data-field-chip]")).not.toBeNull());
+    const body = screen.getByLabelText("Template body");
+    await user.clear(screen.getByLabelText(/^Name/));
+    await user.type(screen.getByLabelText(/^Name/), "Renamed");
+
+    resize(false);
+    expect(screen.getByText("Edit on a larger screen.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+
+    resize(true);
+    expect(screen.getByLabelText(/^Name/)).toHaveValue("Renamed");
+    // Same TipTap instance: the body element was never unmounted.
+    expect(screen.getByLabelText("Template body")).toBe(body);
+    expect(document.querySelector("[data-field-chip]")).not.toBeNull();
+  });
+
+  it("warns before unload only while there are unsaved changes", async () => {
+    const user = userEvent.setup();
+    saveTemplate.mockResolvedValue({ ok: true, id: "t1", updatedAt: "2026-10-02T00:00:00.000Z" });
+    render(<TemplateEditorPage template={tpl()} blocks={[]} canSave />);
+    const unload = () => {
+      const e = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    expect(unload()).toBe(false);
+    await user.type(screen.getByLabelText(/^Name/), "!");
+    expect(unload()).toBe(true);
+    await user.click(saveButton());
+    await waitFor(() => expect(unload()).toBe(false));
+  });
+
+  it("Reload adopts props that already advanced before it was clicked", async () => {
+    const user = userEvent.setup();
+    saveTemplate.mockResolvedValue({
+      ok: false,
+      error: "Someone else saved this template — reload to see their changes.",
+    });
+    const { rerender } = render(<TemplateEditorPage template={tpl()} blocks={[]} canSave />);
+    rerender(
+      <TemplateEditorPage
+        template={tpl({ name: "Their name", updatedAt: "2026-10-05T00:00:00.000Z" })}
+        blocks={[]}
+        canSave
+      />,
+    );
+    expect(screen.getByLabelText(/^Name/)).toHaveValue("Demand letter");
+    await user.click(saveButton());
+    await user.click(await screen.findByRole("button", { name: "Reload" }));
+    await waitFor(() => expect(screen.getByLabelText(/^Name/)).toHaveValue("Their name"));
+    expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
+  });
+
+  it("a failed record search shows an inline error", async () => {
+    const user = userEvent.setup();
+    searchRecords.mockRejectedValue(new Error("boom"));
+    render(<TemplateEditorPage template={tpl()} blocks={[]} canSave />);
+    await user.click(screen.getByRole("button", { name: "Preview with a real matter or lead" }));
+    await user.type(screen.getByLabelText("Search for a matter"), "alv");
+    expect(await screen.findByText("Search failed — try again.")).toBeInTheDocument();
+  });
+
+  it("a slower, older record preview never overwrites a newer one", async () => {
+    const user = userEvent.setup();
+    searchRecords.mockResolvedValue([
+      { scope: { kind: "matter", matterId: "m1" }, label: "First matter" },
+      { scope: { kind: "matter", matterId: "m2" }, label: "Second matter" },
+    ]);
+    let resolveFirst: (v: unknown) => void = () => {};
+    const ok = (t: string) => ({
+      ok: true,
+      html: `<p>${t}</p>`,
+      text: t,
+      subjectText: null,
+      report: { missing: [], invalid: [], archivedBlocks: [] },
+    });
+    previewDraft
+      .mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)))
+      .mockResolvedValueOnce(ok("SECOND"));
+    render(<TemplateEditorPage template={tpl()} blocks={[]} canSave />);
+    const pick = async (label: RegExp) => {
+      await user.click(screen.getByRole("button", { name: "Preview with a real matter or lead" }));
+      await user.type(screen.getByLabelText("Search for a matter"), "mat");
+      await user.click(await screen.findByRole("button", { name: label }));
+    };
+    await pick(/First matter/);
+    await pick(/Second matter/);
+    await waitFor(() =>
+      expect(screen.getByTestId("template-preview").textContent).toContain("SECOND"),
+    );
+    await act(async () => resolveFirst(ok("FIRST")));
+    expect(screen.getByTestId("template-preview").textContent).toContain("SECOND");
   });
 
   it("without the key the page is read-only", () => {
