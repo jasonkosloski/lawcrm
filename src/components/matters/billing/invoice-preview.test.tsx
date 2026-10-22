@@ -196,6 +196,14 @@ describe("InvoicePreview — voided invoices", () => {
     expect(balanceLabel.nextElementSibling).toHaveTextContent("—");
   });
 
+  test("a void invoice carries the VOID watermark; an open one doesn't", () => {
+    const { unmount } = render_({}, invoice({ status: "void", balance: 450, paidAmount: 0 }));
+    expect(screen.getByTestId("void-watermark")).toHaveTextContent("VOID");
+    unmount();
+    render_({}, invoice({ status: "sent", balance: 450, paidAmount: 0 }));
+    expect(screen.queryByTestId("void-watermark")).toBeNull();
+  });
+
   test("an open invoice still shows its balance", () => {
     render_({}, invoice({ status: "sent", balance: 350, paidAmount: 100 }));
     expect(screen.getByText("Balance").nextElementSibling).toHaveTextContent(

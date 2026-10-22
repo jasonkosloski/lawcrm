@@ -40,4 +40,5 @@ Related: [ADR-013](../decisions/013-timer-sessions-are-pre-entries-ungated-to.md
 - After the void commits, every PDF of the invoice filed in the matter's Invoices folder (linked by `Document.invoiceId`) has its bytes replaced in place with a VOID-stamped copy (pdf-lib overlay: red diagonal VOID plus "Voided <date>"); the old file is deleted unless another document shares it.
 - If nothing was filed, a stamped copy is rendered before the void and filed as "Invoice <n> (void YYYY-MM-DD).pdf". The client is emailed the stamped PDF.
 - Stamping covers every document linked to the invoice wherever it was moved; a "Copy to…" copy isn't linked, so it keeps the original unstamped bytes.
+- The live invoice view (billing pane and `/print/invoices/<id>`) shows the same diagonal VOID watermark for any void invoice, including ones voided before stamping existed.
 - Failures after the void never undo it; they surface as a warning.

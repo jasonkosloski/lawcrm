@@ -107,7 +107,20 @@ export function InvoicePreview({
           printMode ? "bg-white" : "flex-1 overflow-y-auto bg-white"
         }
       >
-        <div>
+        <div className={isVoid ? "relative" : undefined}>
+          {/* Matches the VOID stamp on filed PDFs (void-stamp.ts), so
+              the print view of a voided invoice can't pass as a bill. */}
+          {isVoid && (
+            <div
+              data-testid="void-watermark"
+              aria-hidden
+              className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden [print-color-adjust:exact]"
+            >
+              <span className="-rotate-[35deg] select-none text-[9rem] font-bold leading-none tracking-widest text-danger opacity-35">
+                VOID
+              </span>
+            </div>
+          )}
           {/* Letterhead */}
           <div className="px-6 py-4 border-b border-line">
             <div className="flex items-start justify-between gap-6">
