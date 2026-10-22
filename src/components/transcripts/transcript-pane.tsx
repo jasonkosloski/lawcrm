@@ -435,7 +435,7 @@ export function TranscriptPane({
       )}
 
       {hasText && (
-        <div className="relative min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1 flex-col">
           <div
             ref={scrollRef}
             tabIndex={-1}
@@ -451,7 +451,7 @@ export function TranscriptPane({
             onScroll={() => {
               if (performance.now() > ownScrollUntil.current) setFollowing(false);
             }}
-            className="relative max-h-[60vh] min-h-64 overflow-y-auto rounded-md border border-line bg-white px-3 py-1 outline-none"
+            className="relative max-h-[60vh] min-h-64 flex-1 overflow-y-auto rounded-md border border-line bg-white px-3 py-1 outline-none lg:max-h-none"
           >
             {segments!.map((seg) => (
               <TranscriptSegmentView

@@ -17,6 +17,12 @@
  *   (b) how to NAVIGATE to one — `onNavigate` (seek / #page reload /
  *       scroll-to-highlight); omit it and rows render non-clickable.
  *
+ * With an `aside` (media with a transcript), the layout flips to
+ * transcript-first: `children` (the transcript) takes the main column
+ * at full height; the aside (player), capture button and flags stack in
+ * a narrower right column. Small screens stack player, transcript,
+ * flags.
+ *
  * Flags arrive server-fetched from the page — this shell never
  * fetches; the mutation actions revalidatePath the viewer, and the
  * action response re-feeds the list (no client router.refresh()).
@@ -47,6 +53,7 @@ export function ReviewPanel({
   getCurrentTime,
   emptyHint,
   children,
+  aside,
 }: {
   documentId: string;
   moments: RailMoment[];
@@ -70,55 +77,88 @@ export function ReviewPanel({
   emptyHint: string;
   /** The viewer body (player / iframe / rendered sheet). */
   children: React.ReactNode;
+  /** Transcript-first layout: shown above the flags in the side
+   *  column, while `children` fills the main column. */
+  aside?: React.ReactNode;
 }) {
+  const capture = (
+    <>
+      {canCreate && composerAnchor === null && (
+        <div>
+          <button
+            type="button"
+            onClick={() => onComposerAnchorChange(captureAnchor())}
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-xs font-medium text-ink-2 transition-colors hover:border-brand-300 hover:text-brand-700"
+          >
+            <Flag className="h-3.5 w-3.5" aria-hidden />
+            {captureLabel}
+          </button>
+        </div>
+      )}
+      {canCreate && composerAnchor !== null && (
+        <FlagComposer
+          documentId={documentId}
+          editing={null}
+          createAnchor={composerAnchor}
+          getCurrentTime={getCurrentTime}
+          onClose={() => onComposerAnchorChange(null)}
+        />
+      )}
+    </>
+  );
+
+  const rail = (
+    <>
+      <div className="flex items-center gap-1.5 text-2xs font-medium text-ink-3">
+        <Flag className="h-3 w-3" aria-hidden />
+        Flags
+        <span className="font-mono normal-case">
+          {plural(moments.length, "flag")}
+        </span>
+      </div>
+      <MomentsRail
+        documentId={documentId}
+        moments={moments}
+        currentUserId={currentUserId}
+        canEditAny={canEditAny}
+        canDeleteAny={canDeleteAny}
+        onNavigate={onNavigate}
+        getCurrentTime={getCurrentTime}
+        emptyHint={emptyHint}
+      />
+    </>
+  );
+
+  if (aside) {
+    // DOM order is the small-screen stack (player, transcript, flags);
+    // lg grid placement moves the transcript into the main column.
+    return (
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_26rem] lg:grid-rows-[auto_minmax(0,1fr)]">
+        <div className="flex min-w-0 flex-col gap-3 lg:col-start-2 lg:row-start-1">
+          {aside}
+          {capture}
+        </div>
+        <div className="flex min-h-0 min-w-0 flex-col lg:col-start-1 lg:row-span-2 lg:row-start-1">
+          {children}
+        </div>
+        <div className="flex min-h-0 flex-col gap-2 lg:col-start-2 lg:row-start-2 lg:overflow-y-auto">
+          {rail}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
       {/* ── Viewer body + composer ─────────────────────────────── */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
         {children}
-
-        {canCreate && composerAnchor === null && (
-          <div>
-            <button
-              type="button"
-              onClick={() => onComposerAnchorChange(captureAnchor())}
-              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-xs font-medium text-ink-2 transition-colors hover:border-brand-300 hover:text-brand-700"
-            >
-              <Flag className="h-3.5 w-3.5" aria-hidden />
-              {captureLabel}
-            </button>
-          </div>
-        )}
-        {canCreate && composerAnchor !== null && (
-          <FlagComposer
-            documentId={documentId}
-            editing={null}
-            createAnchor={composerAnchor}
-            getCurrentTime={getCurrentTime}
-            onClose={() => onComposerAnchorChange(null)}
-          />
-        )}
+        {capture}
       </div>
 
       {/* ── Moments rail ───────────────────────────────────────── */}
       <div className="flex flex-col gap-2 lg:w-80 lg:shrink-0 lg:overflow-y-auto">
-        <div className="flex items-center gap-1.5 text-2xs font-medium text-ink-3">
-          <Flag className="h-3 w-3" aria-hidden />
-          Flags
-          <span className="font-mono normal-case">
-            {plural(moments.length, "flag")}
-          </span>
-        </div>
-        <MomentsRail
-          documentId={documentId}
-          moments={moments}
-          currentUserId={currentUserId}
-          canEditAny={canEditAny}
-          canDeleteAny={canDeleteAny}
-          onNavigate={onNavigate}
-          getCurrentTime={getCurrentTime}
-          emptyHint={emptyHint}
-        />
+        {rail}
       </div>
     </div>
   );

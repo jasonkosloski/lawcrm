@@ -94,6 +94,54 @@ export function MediaReview({
     el.currentTime = m.timeSeconds;
   };
 
+  const player = (
+    // On small screens the video stays pinned while the transcript
+    // scrolls beneath it; in the desktop side column it sits on top.
+    <div
+      className={
+        kind === "video"
+          ? "sticky top-0 z-10 flex shrink-0 flex-col bg-paper [&>div]:max-h-[45vh] lg:static"
+          : "flex shrink-0 flex-col"
+      }
+    >
+      {kind === "video" ? (
+        <VideoPlayer
+          src={src}
+          mediaRef={mediaRef as React.Ref<HTMLVideoElement>}
+        />
+      ) : (
+        <AudioPlayer
+          src={src}
+          name={name}
+          mediaRef={mediaRef as React.Ref<HTMLAudioElement>}
+        />
+      )}
+    </div>
+  );
+
+  const transcriptPane = (
+    <MediaTranscript
+      mediaRef={mediaRef}
+      transcript={transcript}
+      documentId={documentId}
+      documentName={name}
+      flags={moments}
+      canTranscribe={canTranscribe}
+      transcriptionConfigured={transcriptionConfigured}
+      canDelete={canDeleteTranscript}
+      canEdit={canEditTranscript}
+      canFlag={canCreate}
+      onFlagSelection={(span) =>
+        setComposerAnchor(spanToComposerAnchor(span))
+      }
+      initialSeconds={initialSeconds}
+    />
+  );
+
+  // Once a recording has a transcript (any status), the transcript is
+  // the main surface and the player + flags move to the side column.
+  const transcriptFirst = transcript !== null;
+
   return (
     <ReviewPanel
       documentId={documentId}
@@ -112,44 +160,16 @@ export function MediaReview({
       onNavigate={navigate}
       getCurrentTime={getCurrentTime}
       emptyHint="Scrub to a key moment and hit “Flag this moment.”"
+      aside={transcriptFirst ? player : undefined}
     >
-      {/* Video stays pinned while the transcript scrolls beneath it. */}
-      <div
-        className={
-          kind === "video"
-            ? "sticky top-0 z-10 flex shrink-0 flex-col bg-paper [&>div]:max-h-[45vh]"
-            : "flex shrink-0 flex-col"
-        }
-      >
-        {kind === "video" ? (
-          <VideoPlayer
-            src={src}
-            mediaRef={mediaRef as React.Ref<HTMLVideoElement>}
-          />
-        ) : (
-          <AudioPlayer
-            src={src}
-            name={name}
-            mediaRef={mediaRef as React.Ref<HTMLAudioElement>}
-          />
-        )}
-      </div>
-      <MediaTranscript
-        mediaRef={mediaRef}
-        transcript={transcript}
-        documentId={documentId}
-        documentName={name}
-        flags={moments}
-        canTranscribe={canTranscribe}
-        transcriptionConfigured={transcriptionConfigured}
-        canDelete={canDeleteTranscript}
-        canEdit={canEditTranscript}
-        canFlag={canCreate}
-        onFlagSelection={(span) =>
-          setComposerAnchor(spanToComposerAnchor(span))
-        }
-        initialSeconds={initialSeconds}
-      />
+      {transcriptFirst ? (
+        transcriptPane
+      ) : (
+        <>
+          {player}
+          {transcriptPane}
+        </>
+      )}
     </ReviewPanel>
   );
 }
