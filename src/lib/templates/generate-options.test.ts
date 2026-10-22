@@ -88,7 +88,9 @@ describe("loadGenerateOptions", () => {
     const c = await seedContact({ name: "Lee Lead" });
     const { leadId } = await seedLead({ contactId: c.contactId, teamUserIds: [other] });
     const res = await loadGenerateOptions({ kind: "lead", leadId });
-    expect(res.contacts).toEqual([{ id: c.contactId, name: "Lee Lead", role: "client" }]);
+    expect(res.contacts).toEqual([
+      expect.objectContaining({ id: c.contactId, name: "Lee Lead", role: "client" }),
+    ]);
     expect(res.team.map((t) => t.id).sort()).toEqual([me, other].sort());
   });
 

@@ -47,6 +47,8 @@ import type { FilingLeadOption, FilingMatterOption } from "@/lib/queries/communi
 import { blockEnterSubmit, LabeledField } from "./labeled-field";
 import { RecordPicker } from "./record-picker";
 import { SendAttachmentsField } from "./send-attachments-field";
+import { TemplateInsertPanel, templatePanelKey } from "./template-insert-panel";
+import { hasTemplatePlaceholders, PLACEHOLDER_SEND_WARNING } from "@/lib/templates/placeholders";
 import type { AttachableDocument } from "@/app/actions/email-send-attachments";
 import type { StorageDriver } from "@/lib/storage/storage-key";
 
@@ -101,6 +103,9 @@ export function ComposeEmailButton({
   const [attachments, setAttachments] = useState<AttachableDocument[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped to re-mount the (uncontrolled) editor with a template's text.
+  const [editorKey, setEditorKey] = useState(0);
+  const [placeholderWarning, setPlaceholderWarning] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   // The From account can disappear from `accounts` while this stays
@@ -133,6 +138,8 @@ export function ComposeEmailButton({
     setChangingRecord(false);
     setAttachments([]);
     setError(null);
+    setPlaceholderWarning(false);
+    setEditorKey((k) => k + 1);
   };
 
   // The editor emits tag scaffolding ("<p></p>") for an empty
@@ -140,7 +147,7 @@ export function ComposeEmailButton({
   // wire's text/plain part.
   const bodyText = htmlToText(body);
 
-  const handleSend = (): void => {
+  const handleSend = (sendAnyway = false): void => {
     const toParsed = parseAddressList(to);
     if (toParsed.invalid.length > 0) {
       setError(`Invalid address: ${toParsed.invalid.join(", ")}`);
@@ -159,6 +166,11 @@ export function ComposeEmailButton({
       setError("Choose a matter or lead.");
       return;
     }
+    if (!sendAnyway && hasTemplatePlaceholders(`${subject}\n${bodyText}`)) {
+      setPlaceholderWarning(true);
+      return;
+    }
+    setPlaceholderWarning(false);
     setError(null);
 
     startTransition(async () => {
@@ -341,7 +353,25 @@ export function ComposeEmailButton({
                 ariaLabel="Subject"
               />
             </LabeledField>
-            <RichTextEditor initialHTML={body} onChange={setBody} placeholder="Write your email…" />
+            <TemplateInsertPanel
+              key={templatePanelKey(scope)}
+              scope={scope}
+              disabled={isPending || uploading}
+              draftHasContent={subject.trim() !== "" || !isBodyEmpty(body, signature)}
+              onInsert={(t) => {
+                if (t.subject) setSubject(t.subject);
+                setBody(t.html + (signature ?? ""));
+                setEditorKey((k) => k + 1);
+                if (!to.trim() && t.recipientEmail) setTo(t.recipientEmail);
+                setPlaceholderWarning(false);
+              }}
+            />
+            <RichTextEditor
+              key={editorKey}
+              initialHTML={body}
+              onChange={setBody}
+              placeholder="Write your email…"
+            />
             <SendAttachmentsField
               scope={scope}
               value={attachments}
@@ -353,6 +383,20 @@ export function ComposeEmailButton({
             />
 
             {error && <div className="text-2xs text-warn">{error}</div>}
+            {placeholderWarning && (
+              <div role="alert" className="flex items-center gap-2 text-2xs text-warn">
+                <span className="flex-1">{PLACEHOLDER_SEND_WARNING}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isPending}
+                  onClick={() => handleSend(true)}
+                >
+                  Send anyway
+                </Button>
+              </div>
+            )}
 
             <DialogFooter>
               <Button

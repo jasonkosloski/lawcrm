@@ -17,7 +17,13 @@ import { assertScopeAccess } from "@/lib/scope-access";
 import type { RecordScope } from "@/lib/record-scope";
 
 export type SignerOption = { id: string; name: string };
-export type RecipientOption = { id: string; name: string; role: string | null };
+export type RecipientOption = {
+  id: string;
+  name: string;
+  role: string | null;
+  email: string | null;
+  phone: string | null;
+};
 export type GenerateOptions = {
   team: SignerOption[];
   contacts: RecipientOption[];
@@ -26,13 +32,18 @@ export type GenerateOptions = {
 
 const words = (s: string) => s.replace(/_/g, " ");
 
+const CONTACT_SELECT = { id: true, name: true, email: true, phone: true } as const;
+type ContactRow = { id: string; name: string; email: string | null; phone: string | null };
+
 export async function loadGenerateOptions(scope: RecordScope): Promise<GenerateOptions> {
   await assertScopeAccess(scope);
   const currentUserId = await getCurrentUserId();
 
   const contacts = new Map<string, RecipientOption>();
-  const add = (id: string, name: string, role: string | null) => {
-    if (!contacts.has(id)) contacts.set(id, { id, name, role });
+  const add = (c: ContactRow, role: string | null) => {
+    if (!contacts.has(c.id)) {
+      contacts.set(c.id, { id: c.id, name: c.name, role, email: c.email, phone: c.phone });
+    }
   };
   let teamUsers: SignerOption[];
 
@@ -40,14 +51,14 @@ export async function loadGenerateOptions(scope: RecordScope): Promise<GenerateO
     const matter = await prisma.matter.findUnique({
       where: { id: scope.matterId },
       select: {
-        client: { where: { isActive: true }, select: { id: true, name: true } },
+        client: { where: { isActive: true }, select: CONTACT_SELECT },
         contacts: {
           orderBy: { createdAt: "asc" },
           select: {
             category: true,
             role: true,
-            contact: { select: { id: true, name: true, isActive: true } },
-            representationContact: { select: { id: true, name: true, isActive: true } },
+            contact: { select: { ...CONTACT_SELECT, isActive: true } },
+            representationContact: { select: { ...CONTACT_SELECT, isActive: true } },
           },
         },
         teamMembers: {
@@ -56,15 +67,15 @@ export async function loadGenerateOptions(scope: RecordScope): Promise<GenerateO
         },
       },
     });
-    if (matter?.client) add(matter.client.id, matter.client.name, "client");
+    if (matter?.client) add(matter.client, "client");
     for (const mc of matter?.contacts ?? []) {
       if (mc.contact.isActive) {
-        add(mc.contact.id, mc.contact.name, words(mc.role?.trim() || mc.category));
+        add(mc.contact, words(mc.role?.trim() || mc.category));
       }
     }
     for (const mc of matter?.contacts ?? []) {
       if (mc.category === "opposing" && mc.representationContact?.isActive) {
-        add(mc.representationContact.id, mc.representationContact.name, "opposing counsel");
+        add(mc.representationContact, "opposing counsel");
       }
     }
     teamUsers = (matter?.teamMembers ?? []).map((t) => t.user);
@@ -72,14 +83,14 @@ export async function loadGenerateOptions(scope: RecordScope): Promise<GenerateO
     const lead = await prisma.lead.findUnique({
       where: { id: scope.leadId },
       select: {
-        contact: { select: { id: true, name: true, isActive: true } },
+        contact: { select: { ...CONTACT_SELECT, isActive: true } },
         teamMembers: {
           where: { user: { isActive: true } },
           select: { user: { select: { id: true, name: true } } },
         },
       },
     });
-    if (lead?.contact?.isActive) add(lead.contact.id, lead.contact.name, "client");
+    if (lead?.contact?.isActive) add(lead.contact, "client");
     teamUsers = (lead?.teamMembers ?? []).map((t) => t.user);
   }
 

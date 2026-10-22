@@ -48,7 +48,7 @@ import { resolveRecordsRoleFolder } from "@/lib/records-requests/folder";
 import { loadRecordsRequest, loadTemplateData } from "@/lib/templates/load-data";
 import { SAMPLE_TEMPLATE_DATA, type TemplateData } from "@/lib/templates/catalog";
 import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templates/render";
-import { convertLegacyBody } from "@/lib/templates/legacy";
+import { contentOf, loadBlockMap } from "@/lib/templates/template-source";
 import { resolvedToHtml } from "@/lib/templates/to-html";
 import { resolvedToText } from "@/lib/templates/to-text";
 import {
@@ -287,25 +287,6 @@ export type GenerateFormat = (typeof FORMATS)[number];
 /** Kinds that produce a saved document (email and SMS are message drafts). */
 const isDocumentKind = (kind: string): kind is PageKind => kind === "letter" || kind === "filing";
 
-/** The blocks a doc references (plus `extraIds`, e.g. the firm style's
- *  letterhead/continuation), active AND archived (archived ones render a
- *  visible placeholder rather than vanishing). Unknown ids are absent
- *  from the map, which the renderer reports as deleted. */
-async function loadBlockMap(
-  doc: TemplateDoc,
-  extraIds: string[] = [],
-): Promise<Map<string, BlockSource>> {
-  const ids = [...new Set([...collectBlockIds(doc), ...extraIds])];
-  const map = new Map<string, BlockSource>();
-  if (ids.length === 0) return map;
-  const rows = await prisma.templateBlock.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, name: true, isActive: true, content: true },
-  });
-  for (const r of rows) map.set(r.id, { ...r, content: r.content as unknown as TemplateDoc });
-  return map;
-}
-
 /** The body plus the style's block refs, so signer/recipient detection
  *  sees fields used in the letterhead or continuation header too. */
 const withStyleBlocks = (doc: TemplateDoc, ids: string[]): TemplateDoc => ({
@@ -334,10 +315,6 @@ function previewPage(
     logoUrl: logoPreviewUrl(style.updatedAt.toISOString()),
   });
 }
-
-/** Structured content, or the legacy `{{token}}` body converted on the fly. */
-const contentOf = (t: { content: Prisma.JsonValue | null; body: string | null }): TemplateDoc =>
-  t.content ? (t.content as unknown as TemplateDoc) : convertLegacyBody(t.body ?? "");
 
 type GenerateOpts = {
   recordsRequestId?: string;

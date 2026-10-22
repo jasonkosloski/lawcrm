@@ -780,9 +780,9 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       },
       {
         key: "communication.log_call",
-        label: "Log calls",
+        label: "Log calls and texts",
         description:
-          "Manually record a phone call with a contact — direction, outcome, duration, summary, and optional matter filing. The call appears in the Messages inbox and, when filed, on the matter timeline.",
+          "Manually record a phone call with a contact — direction, outcome, duration, summary, and optional matter filing — and use text templates (copy, or copy and log an outbound text). Logged items appear in the Messages inbox and, when filed, on the matter timeline.",
       },
       {
         key: "communication.send_email",

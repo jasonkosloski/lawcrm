@@ -48,6 +48,9 @@ vi.mock("@/components/communication/embedded-inbox", () => ({
     />
   ),
 }));
+vi.mock("@/components/communication/text-from-template-button", () => ({
+  TextFromTemplateButton: () => <div data-testid="text-from-template" />,
+}));
 vi.mock("@/components/communication/log-call-button", () => ({
   LogCallButton: () => <div data-testid="log-call-button" />,
 }));

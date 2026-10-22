@@ -46,6 +46,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import { assertOptionalMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -62,6 +63,76 @@ import {
   type CallLogFormState,
 } from "@/lib/call-log-form";
 import { isRecordNotFound, isUniqueViolation } from "@/lib/prisma-errors";
+
+/** Shared by `logCall` and `logText`: find or create the number's thread
+ *  for this contact and add one manual item to it. Returns the other
+ *  contact's name when the number's thread already belongs to someone
+ *  else (a shared switchboard / main line) — filing there would show the
+ *  wrong person everywhere the thread's contact is read, so refuse. */
+async function fileManualItem(input: {
+  accountId: string;
+  contactId: string;
+  contactPhone: string;
+  occurredAt: Date;
+  item: Omit<
+    Prisma.MessengerItemUncheckedCreateInput,
+    "threadId" | "providerEventId" | "occurredAt"
+  >;
+}): Promise<{ conflictName: string | null }> {
+  const { accountId, contactId, contactPhone, occurredAt, item } = input;
+  const write = () =>
+    prisma.$transaction(async (tx) => {
+      const thread = await tx.messengerThread.findUnique({
+        where: { accountId_contactPhone: { accountId, contactPhone } },
+        select: {
+          id: true,
+          contactId: true,
+          lastItemAt: true,
+          contact: { select: { name: true } },
+        },
+      });
+      if (thread?.contactId && thread.contactId !== contactId) {
+        return { conflictName: thread.contact?.name ?? "another contact" };
+      }
+
+      let threadId: string;
+      if (!thread) {
+        // No defaultMatterId: the filing lives on the item (see header).
+        const created = await tx.messengerThread.create({
+          data: { accountId, contactPhone, contactId, lastItemAt: occurredAt },
+          select: { id: true },
+        });
+        threadId = created.id;
+      } else {
+        threadId = thread.id;
+        await tx.messengerThread.update({
+          where: { id: thread.id },
+          data: {
+            // Backfill contact resolution on threads created from raw
+            // webhook traffic (contactId is null here, or already ours).
+            contactId,
+            ...(occurredAt > thread.lastItemAt ? { lastItemAt: occurredAt } : {}),
+          },
+        });
+      }
+
+      await tx.messengerItem.create({
+        data: { ...item, threadId, providerEventId: `manual-${randomUUID()}`, occurredAt },
+        select: { id: true },
+      });
+      return { conflictName: null };
+    });
+
+  try {
+    return await write();
+  } catch (err) {
+    // Two first-logs to the same new number raced on
+    // @@unique([accountId, contactPhone]); the loser's transaction
+    // rolled back, so one retry sees the winner's thread.
+    if (!isUniqueViolation(err)) throw err;
+    return await write();
+  }
+}
 
 const logCallSchema = z.object({
   contactId: z.string().min(1, "Pick a contact"),
@@ -185,84 +256,24 @@ export async function logCall(
 
   const account = await getOrCreateLoggingAccount();
 
-  const write = () =>
-    prisma.$transaction(async (tx) => {
-      const thread = await tx.messengerThread.findUnique({
-        where: {
-          accountId_contactPhone: { accountId: account.id, contactPhone },
-        },
-        select: {
-          id: true,
-          contactId: true,
-          lastItemAt: true,
-          contact: { select: { name: true } },
-        },
-      });
-      // The number's thread already belongs to someone else (a shared
-      // switchboard / main line). Filing this call into it would show
-      // the wrong person everywhere the thread's contact is read, so
-      // refuse rather than silently ignore the contact the user picked.
-      if (thread?.contactId && thread.contactId !== contact.id) {
-        return { conflictName: thread.contact?.name ?? "another contact" };
-      }
-
-      let threadId: string;
-      if (!thread) {
-        // No defaultMatterId: the filing lives on the item (see header).
-        const created = await tx.messengerThread.create({
-          data: {
-            accountId: account.id,
-            contactPhone,
-            contactId: contact.id,
-            lastItemAt: occurredAt,
-          },
-          select: { id: true },
-        });
-        threadId = created.id;
-      } else {
-        threadId = thread.id;
-        await tx.messengerThread.update({
-          where: { id: thread.id },
-          data: {
-            // Backfill contact resolution on threads created from raw
-            // webhook traffic (contactId is null here, or already ours).
-            contactId: contact.id,
-            ...(occurredAt > thread.lastItemAt ? { lastItemAt: occurredAt } : {}),
-          },
-        });
-      }
-
-      await tx.messengerItem.create({
-        data: {
-          threadId,
-          providerEventId: `manual-${randomUUID()}`,
-          kind: "call",
-          direction: input.direction,
-          fromNumber: input.direction === "inbound" ? contactPhone : account.phoneNumber,
-          toNumber: input.direction === "inbound" ? account.phoneNumber : contactPhone,
-          body: input.summary?.trim() || null,
-          callDurationSec: durationSec,
-          callStatus: input.outcome,
-          matterId,
-          // You logged it yourself - never surfaces as unread.
-          isRead: true,
-          occurredAt,
-        },
-        select: { id: true },
-      });
-      return { conflictName: null };
-    });
-
-  let outcome: { conflictName: string | null };
-  try {
-    outcome = await write();
-  } catch (err) {
-    // Two first-logs to the same new number raced on
-    // @@unique([accountId, contactPhone]); the loser's transaction
-    // rolled back, so one retry sees the winner's thread.
-    if (!isUniqueViolation(err)) throw err;
-    outcome = await write();
-  }
+  const outcome = await fileManualItem({
+    accountId: account.id,
+    contactId: contact.id,
+    contactPhone,
+    occurredAt,
+    item: {
+      kind: "call",
+      direction: input.direction,
+      fromNumber: input.direction === "inbound" ? contactPhone : account.phoneNumber,
+      toNumber: input.direction === "inbound" ? account.phoneNumber : contactPhone,
+      body: input.summary?.trim() || null,
+      callDurationSec: durationSec,
+      callStatus: input.outcome,
+      matterId,
+      // You logged it yourself - never surfaces as unread.
+      isRead: true,
+    },
+  });
   if (outcome.conflictName) {
     return {
       status: "error",
@@ -297,6 +308,98 @@ export async function logCall(
   }
 
   return { status: "ok" };
+}
+
+// ── Log a text ──────────────────────────────────────────────────────────
+
+const logTextSchema = z.object({
+  contactId: z.string().min(1, "Pick a contact"),
+  matterId: z.string().nullable(),
+  body: z
+    .string()
+    .trim()
+    .min(1, "The text is empty.")
+    .max(4000, "Keep texts under 4000 characters"),
+});
+
+export type LogTextResult = { ok: true } | { ok: false; error: string };
+
+/** Record an outbound text the user sent from their own phone (there's no
+ *  SMS provider yet), on the contact's thread, filed to the matter when
+ *  given. Same thread rules as `logCall`; the number is the one on file. */
+export async function logText(input: {
+  contactId: string;
+  matterId: string | null;
+  body: string;
+}): Promise<LogTextResult> {
+  await requirePermission("communication.log_call");
+  const userId = await getCurrentUserId();
+  const parsed = logTextSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid text." };
+  }
+  const { contactId, matterId, body } = parsed.data;
+
+  await assertOptionalMatterAccess(matterId);
+  if (matterId) {
+    const matter = await prisma.matter.findUnique({
+      where: { id: matterId },
+      select: { id: true },
+    });
+    if (!matter) return { ok: false, error: "Matter not found." };
+  }
+  const contact = await prisma.contact.findUnique({
+    where: { id: contactId },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      phones: { where: { isPrimary: true }, select: { number: true }, take: 1 },
+    },
+  });
+  if (!contact) return { ok: false, error: "Contact not found." };
+  const contactPhone = normalizePhone(contact.phone) ?? normalizePhone(contact.phones[0]?.number);
+  if (!contactPhone) {
+    return { ok: false, error: `${contact.name} has no valid phone number on file.` };
+  }
+
+  const account = await getOrCreateLoggingAccount();
+  const outcome = await fileManualItem({
+    accountId: account.id,
+    contactId: contact.id,
+    contactPhone,
+    occurredAt: new Date(),
+    item: {
+      kind: "sms",
+      direction: "outbound",
+      fromNumber: account.phoneNumber,
+      toNumber: contactPhone,
+      body,
+      matterId,
+      isRead: true,
+    },
+  });
+  if (outcome.conflictName) {
+    return {
+      ok: false,
+      error: `This number is already linked to ${outcome.conflictName}, so the text wasn't logged.`,
+    };
+  }
+
+  await logActivity({
+    matterId,
+    userId,
+    type: "call",
+    title: `Logged a text to ${contact.name}`,
+    detail: body.length > 140 ? `${body.slice(0, 140)}…` : body,
+  });
+  revalidatePath("/communication");
+  if (matterId) {
+    revalidatePath(`/matters/${matterId}`);
+    revalidatePath(`/matters/${matterId}/timeline`);
+    revalidatePath(`/matters/${matterId}/communication`);
+  }
+  return { ok: true };
 }
 
 // ── Edit ────────────────────────────────────────────────────────────────

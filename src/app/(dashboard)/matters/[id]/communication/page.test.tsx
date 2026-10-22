@@ -86,6 +86,9 @@ vi.mock("@/components/communication/matter-phone-log", () => ({
     <div data-testid="phone-log" data-tz={props.tz ?? ""} />
   ),
 }));
+vi.mock("@/components/communication/text-from-template-button", () => ({
+  TextFromTemplateButton: () => <div data-testid="text-from-template" />,
+}));
 vi.mock("@/components/communication/log-call-button", () => ({
   LogCallButton: () => <div data-testid="log-call-button" />,
 }));
@@ -211,6 +214,7 @@ describe("log-call gate", () => {
 
     expect(mockedContacts).not.toHaveBeenCalled();
     expect(screen.queryByTestId("log-call-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("text-from-template")).not.toBeInTheDocument();
   });
 
   test("with the key: contacts fetched matter-first, button rendered", async () => {
@@ -218,6 +222,7 @@ describe("log-call gate", () => {
 
     expect(mockedContacts).toHaveBeenCalledWith({ priorityMatterId: "matter_1" });
     expect(screen.getByTestId("log-call-button")).toBeInTheDocument();
+    expect(screen.getByTestId("text-from-template")).toBeInTheDocument();
   });
 });
 

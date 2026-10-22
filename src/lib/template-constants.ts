@@ -80,3 +80,7 @@ export const APPLIES_TO_LABEL: Record<AppliesTo, string> = {
 
 /** Refusal copy when a template changed after the user previewed it. */
 export const STALE_TEMPLATE = "This template changed — review the preview again.";
+
+/** Email bodies go through the compose editor, which keeps headings,
+ *  bold/italic, lists and quotes but not tables, alignment or underline. */
+export const EMAIL_FORMATTING_NOTE = "Tables and alignment aren't kept in email.";

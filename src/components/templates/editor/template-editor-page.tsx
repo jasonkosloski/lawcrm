@@ -44,6 +44,7 @@ import { RulePopover } from "./rule-popover";
 import { SmsCounter } from "./sms-counter";
 import { SubjectEditor } from "./subject-editor";
 import { Toolbar } from "./toolbar";
+import { EMAIL_FORMATTING_NOTE } from "@/lib/template-constants";
 import { useUnsavedChangesGuard } from "./use-unsaved-guard";
 
 const NO_BLOCKS: BlockSource[] = [];
@@ -264,6 +265,9 @@ function Editor(props: EditorProps & { narrow: boolean }) {
                 onEditField={editSubjectField}
                 onEditor={setSubjectEditor}
               />
+            )}
+            {kind === "email" && !isBlock && (
+              <p className="text-2xs text-ink-3">{EMAIL_FORMATTING_NOTE}</p>
             )}
             <div className="rounded-md border border-line bg-white overflow-hidden">
               {editor && canSave && (

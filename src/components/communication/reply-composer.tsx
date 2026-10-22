@@ -47,6 +47,8 @@ import type { FilingLeadOption, FilingMatterOption } from "@/lib/queries/communi
 import { blockEnterSubmit, LabeledField } from "./labeled-field";
 import { RecordPicker } from "./record-picker";
 import { SendAttachmentsField } from "./send-attachments-field";
+import { TemplateInsertPanel, templatePanelKey } from "./template-insert-panel";
+import { hasTemplatePlaceholders, PLACEHOLDER_SEND_WARNING } from "@/lib/templates/placeholders";
 import type { AttachableDocument } from "@/app/actions/email-send-attachments";
 import type { StorageDriver } from "@/lib/storage/storage-key";
 
@@ -112,6 +114,9 @@ export function ReplyComposer({
   const [uploading, setUploading] = useState(false);
   const attachScope = needsRecord ? scope : recordScope;
   const [error, setError] = useState<string | null>(null);
+  // Bumped to re-mount the (uncontrolled) editor with a template's text.
+  const [editorKey, setEditorKey] = useState(0);
+  const [placeholderWarning, setPlaceholderWarning] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const defaults = mode === "replyAll" ? replyAll : reply;
@@ -136,7 +141,7 @@ export function ReplyComposer({
   // text/plain part in one.
   const bodyText = htmlToText(body);
 
-  const handleSend = (): void => {
+  const handleSend = (sendAnyway = false): void => {
     // ALWAYS post the exact recipients the user is looking at: the
     // typed list when editing, else the displayed defaults. The server
     // refuses an unedited send if the thread now derives something
@@ -184,6 +189,11 @@ export function ReplyComposer({
       setError("Choose a matter or lead.");
       return;
     }
+    if (!sendAnyway && hasTemplatePlaceholders(bodyText)) {
+      setPlaceholderWarning(true);
+      return;
+    }
+    setPlaceholderWarning(false);
     setError(null);
 
     startTransition(async () => {
@@ -201,6 +211,7 @@ export function ReplyComposer({
         if (result.ok) {
           if (result.notice) notifySuccess(result.notice);
           setBody(signature ?? "");
+          setEditorKey((k) => k + 1);
           setAttachments([]);
           setMode(null);
           setEditing(false);
@@ -349,7 +360,28 @@ export function ReplyComposer({
               {REPLY_NEEDS_FILER_ERROR}
             </div>
           )}
-          <RichTextEditor initialHTML={body} onChange={setBody} placeholder="Write your reply…" />
+          {!(needsRecord && !canFile) && (
+            // Replies keep the thread's subject and recipients; only the
+            // body comes from the template.
+            <TemplateInsertPanel
+              key={templatePanelKey(attachScope)}
+              scope={attachScope}
+              withSubject={false}
+              disabled={isPending || uploading}
+              draftHasContent={!isBodyEmpty(body, signature)}
+              onInsert={(t) => {
+                setBody(t.html + (signature ?? ""));
+                setEditorKey((k) => k + 1);
+                setPlaceholderWarning(false);
+              }}
+            />
+          )}
+          <RichTextEditor
+            key={editorKey}
+            initialHTML={body}
+            onChange={setBody}
+            placeholder="Write your reply…"
+          />
           {!(needsRecord && !canFile) && (
             <SendAttachmentsField
               scope={attachScope}
@@ -362,6 +394,20 @@ export function ReplyComposer({
             />
           )}
           {error && <div className="text-2xs text-warn">{error}</div>}
+          {placeholderWarning && (
+            <div role="alert" className="flex items-center gap-2 text-2xs text-warn">
+              <span className="flex-1">{PLACEHOLDER_SEND_WARNING}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isPending}
+                onClick={() => handleSend(true)}
+              >
+                Send anyway
+              </Button>
+            </div>
+          )}
           <div className="flex items-center justify-end gap-2">
             <Button
               type="button"

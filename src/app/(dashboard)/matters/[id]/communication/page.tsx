@@ -21,6 +21,7 @@ import { prisma } from "@/lib/prisma";
 import { EmbeddedInbox } from "@/components/communication/embedded-inbox";
 import { MatterPhoneLog } from "@/components/communication/matter-phone-log";
 import { LogCallButton } from "@/components/communication/log-call-button";
+import { TextFromTemplateButton } from "@/components/communication/text-from-template-button";
 import { PortalConversation } from "@/components/communication/portal-conversation";
 import { getPortalConversation } from "@/lib/queries/portal-messages";
 import { ComposeEmailLauncher } from "@/components/communication/compose-email-launcher";
@@ -120,6 +121,11 @@ export default async function MatterCommunicationPage({
     <LogCallButton contacts={contacts} fixedMatter={{ id: matter.id, name: matter.name }} />
   ) : null;
 
+  // Same gate as Log call (`communication.log_call`).
+  const textButton = logCallButton ? (
+    <TextFromTemplateButton scope={{ kind: "matter", matterId: matter.id }} />
+  ) : null;
+
   if (channel === "portal") {
     return (
       <div className="p-5 flex flex-col flex-1 min-h-0 gap-3">
@@ -146,6 +152,7 @@ export default async function MatterCommunicationPage({
             showPortal={canViewPortal}
           />
           {logCallButton}
+          {textButton}
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto">
           <MatterPhoneLog
@@ -183,6 +190,7 @@ export default async function MatterCommunicationPage({
         <div className="flex items-center gap-2">
           <ComposeEmailLauncher initialScope={{ kind: "matter", matterId: id }} />
           {logCallButton}
+          {textButton}
         </div>
       </div>
       <EmbeddedInbox

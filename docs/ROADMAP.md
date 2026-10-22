@@ -32,7 +32,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [x] **Email: per-user signatures**: set on Settings → Profile; compose and reply start with it (text and links; images later). → [email](features/communication-email.md)
 - [x] **Templates foundation**: structured templates, block library, full-page editor, .docx generation from matters and leads. → [documents](features/documents.md)
 - [x] **Letters out**: firm house style (font, spacing, letterhead placement) and PDF output. → [documents](features/documents.md)
-- [ ] **Emails and texts from templates**: email templates in compose/reply; text templates once an SMS provider exists. → [documents](features/documents.md)
+- [x] **Emails and texts from templates**: "Use template" in compose and reply; "Text from template" copies (or copies and logs) until an SMS provider exists. → [email](features/communication-email.md)
 - [ ] **Court-aware filings**: venue court systems, per-court formatting rules and template variants. → [documents](features/documents.md)
 - [~] **Search follow-ups**: within-list keyword filters; Postgres FTS when ILIKE stops scaling. → [search](features/search.md)
 

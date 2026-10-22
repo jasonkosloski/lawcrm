@@ -44,6 +44,7 @@ import { listContactPickerOptions } from "@/lib/queries/contacts";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { ComposeEmailLauncher } from "@/components/communication/compose-email-launcher";
 import { LogCallButton } from "@/components/communication/log-call-button";
+import { TextFromTemplateButton } from "@/components/communication/text-from-template-button";
 import { requireUser } from "@/lib/current-user";
 import { assertLeadAccess } from "@/lib/lead-access";
 import { parsePageParam } from "@/lib/pagination";
@@ -106,6 +107,11 @@ export default async function LeadCommunicationPage({
       />
     ) : null;
 
+  // Same gate as Log call (`communication.log_call`).
+  const textButton = logCallButton ? (
+    <TextFromTemplateButton scope={{ kind: "lead", leadId: id }} />
+  ) : null;
+
   // Compose prefilled with this lead; a converted lead's mail lives
   // on its matter now, so it can't be a filing target.
   const composeButton =
@@ -129,6 +135,7 @@ export default async function LeadCommunicationPage({
         <div className="flex items-center justify-end gap-2 shrink-0">
           {composeButton}
           {logCallButton}
+          {textButton}
         </div>
       )}
       <div className="flex flex-col flex-1 min-h-0 gap-3">

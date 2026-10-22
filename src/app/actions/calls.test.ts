@@ -906,3 +906,64 @@ describe("thread reuse", () => {
     expect(await prisma.messengerAccount.count()).toBe(1);
   });
 });
+
+describe("logText", () => {
+  test("files an outbound text on the contact's thread, to the matter", async () => {
+    const { logText } = await import("@/app/actions/calls");
+    const res = await logText({ contactId, matterId, body: "Your hearing is on Friday." });
+    expect(res).toEqual({ ok: true });
+    const item = await prisma.messengerItem.findFirstOrThrow({
+      where: { kind: "sms" },
+      select: { direction: true, body: true, matterId: true, toNumber: true, isRead: true },
+    });
+    expect(item).toEqual({
+      direction: "outbound",
+      body: "Your hearing is on Friday.",
+      matterId,
+      toNumber: "+13035550182",
+      isRead: true,
+    });
+    expect(requirePermission).toHaveBeenCalledWith("communication.log_call");
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/communication`);
+    const log = await prisma.activityLog.findFirst({ where: { matterId } });
+    expect(log?.title).toBe("Logged a text to Maria Alvarez");
+  });
+
+  test("files unfiled (no matter) for a lead's text", async () => {
+    const { logText } = await import("@/app/actions/calls");
+    const res = await logText({ contactId, matterId: null, body: "Hi" });
+    expect(res).toEqual({ ok: true });
+    const item = await prisma.messengerItem.findFirstOrThrow({ where: { kind: "sms" } });
+    expect(item.matterId).toBeNull();
+  });
+
+  test("refuses a contact with no phone, and an empty text", async () => {
+    const { logText } = await import("@/app/actions/calls");
+    const bare = await prisma.contact.create({
+      data: { name: "No Phone", type: "client" },
+      select: { id: true },
+    });
+    expect(await logText({ contactId: bare.id, matterId, body: "Hi" })).toEqual({
+      ok: false,
+      error: "No Phone has no valid phone number on file.",
+    });
+    expect(await logText({ contactId, matterId, body: "   " })).toEqual({
+      ok: false,
+      error: "The text is empty.",
+    });
+    expect(await prisma.messengerItem.count()).toBe(0);
+  });
+
+  test("refuses a number whose thread belongs to another contact", async () => {
+    const { logText } = await import("@/app/actions/calls");
+    const other = await prisma.contact.create({
+      data: { name: "Front Desk", type: "other", phone: "(303) 555-0182" },
+      select: { id: true },
+    });
+    expect((await logText({ contactId: other.id, matterId, body: "First" })).ok).toBe(true);
+    expect(await logText({ contactId, matterId, body: "Second" })).toEqual({
+      ok: false,
+      error: "This number is already linked to Front Desk, so the text wasn't logged.",
+    });
+  });
+});
