@@ -95,6 +95,39 @@ describe("finishTranscriptJob", () => {
     expect(await prisma.notification.count()).toBe(1);
   });
 
+  test("completion transaction gets an explicit long timeout (long depositions)", async () => {
+    vi.mocked(fetchJob).mockResolvedValue({ status: "completed", raw: fixture as never });
+    const spy = vi.spyOn(prisma, "$transaction");
+    await finishTranscriptJob(transcriptId);
+    const opts = spy.mock.calls.map((c) => c[1]).find(Boolean) as
+      | { timeout?: number; maxWait?: number }
+      | undefined;
+    expect(opts?.timeout).toBeGreaterThanOrEqual(30_000);
+    expect(opts?.maxWait).toBeGreaterThanOrEqual(10_000);
+    spy.mockRestore();
+  });
+
+  test("completion write keeps failing: throws until 6 hours, then fails Couldn't save", async () => {
+    vi.mocked(fetchJob).mockResolvedValue({ status: "completed", raw: fixture as never });
+    const spy = vi
+      .spyOn(prisma, "$transaction")
+      .mockRejectedValue(new Error("P2028 transaction timeout"));
+    await expect(finishTranscriptJob(transcriptId)).rejects.toThrow("P2028");
+    expect(
+      (await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } })).status
+    ).toBe("processing");
+
+    await prisma.transcript.update({
+      where: { id: transcriptId },
+      data: { requestedAt: new Date(Date.now() - 7 * 3600_000) },
+    });
+    expect(await finishTranscriptJob(transcriptId)).toBe("failed");
+    spy.mockRestore();
+    const t = await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } });
+    expect(t.status).toBe("failed");
+    expect(t.error).toBe("Couldn't save the transcript");
+  });
+
   test("zero words: completed with zero segments", async () => {
     vi.mocked(fetchJob).mockResolvedValue({
       status: "completed",

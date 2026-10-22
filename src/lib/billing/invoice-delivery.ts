@@ -1,6 +1,5 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { loadFirmProfileForUser } from "@/lib/firm";
@@ -136,7 +135,7 @@ async function deliver(input: {
   const result = await sendEmail({
     to,
     ...content,
-    idempotencyKey: `invoice-${invoiceId}-${kind}-${randomUUID()}`,
+    idempotencyKey: `invoice-${invoiceId}-${kind}-${to}-${Math.floor(Date.now() / 60_000)}`,
     fromName: firmName,
     ...(sender?.email ? { replyTo: sender.email } : {}),
     attachments: [

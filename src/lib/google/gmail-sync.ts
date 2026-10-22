@@ -155,6 +155,18 @@ export const BACKFILL_MAX_THREADS = 200;
  *  catch-up must close the whole gap, since "Load older emails" only
  *  walks BELOW the oldest local thread and can never reach it. */
 export const CATCHUP_MAX_THREADS = 1000;
+/** Incremental pass cap (history-affected threads). Syncing is
+ *  sequential with no mid-pass cursor save, so a pass that is killed by
+ *  the 300 s function ceiling would redo the same work forever. Above
+ *  this the incremental pass bails to the bounded, resumable catch-up
+ *  (same path as an expired cursor). Sized to finish well inside the
+ *  ceiling: ~200 threads at a few hundred ms each. Trade-off: catch-up
+ *  lists since lastSyncAt-1d, so a label-only change to an old thread
+ *  not touched since then is not re-synced on this fallback. */
+export const INCREMENTAL_MAX_THREADS = 200;
+/** Stop starting new mailboxes in the cron sweep after this long, so
+ *  the calendar pull that follows (same 300 s function) is not starved. */
+export const SYNC_SWEEP_BUDGET_MS = 200_000;
 /** A "syncing" claim older than this is treated as a crashed run and
  *  may be re-claimed. Above the 300 s function ceiling so a live run
  *  is never stolen from. */
@@ -282,6 +294,8 @@ export async function syncEmailAccount(
     catchUpMaxThreads?: number;
     /** Test seam: override FULL_SYNC_MAX_THREADS (initial-import cap). */
     fullSyncMaxThreads?: number;
+    /** Test seam: override INCREMENTAL_MAX_THREADS. */
+    incrementalMaxThreads?: number;
   }
 ): Promise<AccountSyncResult> {
   const account = await prisma.emailAccount.findUnique({
@@ -368,7 +382,8 @@ export async function syncEmailAccount(
       const incremental = await runIncrementalSync(
         accountId,
         account.historyId,
-        labelMap
+        labelMap,
+        opts?.incrementalMaxThreads
       );
       if (incremental === "history-expired") {
         // Cursor aged out at Google — transparent full resync. With a
@@ -485,7 +500,8 @@ function collectThreadIds(record: GmailHistoryRecord, into: Set<string>): void {
 async function runIncrementalSync(
   accountId: string,
   startHistoryId: string,
-  labelMap: Map<string, string>
+  labelMap: Map<string, string>,
+  maxThreads: number = INCREMENTAL_MAX_THREADS
 ): Promise<SyncOutcome | "history-expired"> {
   const affected = new Set<string>();
   let newHistoryId: string | null = null;
@@ -509,6 +525,13 @@ async function runIncrementalSync(
     }
     pageToken = data.nextPageToken;
   } while (pageToken);
+
+  if (affected.size > maxThreads) {
+    console.warn(
+      `[gmail-sync] incremental pass for account ${accountId} touches ${affected.size} threads (> ${maxThreads}); falling back to the bounded catch-up`
+    );
+    return "history-expired";
+  }
 
   const frontier = await prisma.emailThread.aggregate({
     where: { accountId },
@@ -1161,10 +1184,21 @@ type AccountRow = {
 };
 
 async function syncAccounts(
-  accounts: AccountRow[]
+  accounts: AccountRow[],
+  budgetMs?: number
 ): Promise<AccountSyncResult[]> {
   const results: AccountSyncResult[] = [];
+  const startedAt = Date.now();
   for (const account of accounts) {
+    // Out of budget: leave the rest for the next tick (the list is
+    // least-recently-synced first, so they go first next time).
+    if (
+      budgetMs !== undefined &&
+      results.length > 0 &&
+      Date.now() - startedAt >= budgetMs
+    ) {
+      break;
+    }
     if (account.syncStatus === "error") {
       // Reconnect required — hitting Google again just fails.
       results.push({
@@ -1220,7 +1254,9 @@ export async function syncEmailAccountsForUser(
 
 /** Sync every connected account of every user — the headless cron
  *  path. No session involved; each account syncs for its own user. */
-export async function syncAllEmailAccounts(): Promise<AccountSyncResult[]> {
+export async function syncAllEmailAccounts(
+  opts?: { budgetMs?: number }
+): Promise<AccountSyncResult[]> {
   const accounts = await prisma.emailAccount.findMany({
     // Deactivated members' mailboxes are NOT synced — deactivation
     // is the admin lever (see actions/email-accounts.ts).
@@ -1232,7 +1268,7 @@ export async function syncAllEmailAccounts(): Promise<AccountSyncResult[]> {
     // starve the others every tick.
     orderBy: [{ lastSyncAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
   });
-  return syncAccounts(accounts);
+  return syncAccounts(accounts, opts?.budgetMs ?? SYNC_SWEEP_BUDGET_MS);
 }
 
 // ── Page-load kick (throttled, fire-and-forget) ──────────────────────────

@@ -66,7 +66,7 @@ describe("sendEmail", () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const res = await sendEmail(msg);
-    expect(res).toEqual({ ok: false, error: "Email is not configured." });
+    expect(res).toEqual({ ok: false, error: "Email is not configured.", code: "not_configured" });
     expect(info).not.toHaveBeenCalled();
     expect(log).not.toHaveBeenCalled();
   });
@@ -77,7 +77,7 @@ describe("sendEmail", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const res = await sendEmail(msg);
-    expect(res).toEqual({ ok: false, error: "EMAIL_FROM is not set." });
+    expect(res).toEqual({ ok: false, error: "EMAIL_FROM is not set.", code: "not_configured" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

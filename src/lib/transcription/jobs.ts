@@ -9,6 +9,13 @@ import { deleteJob, fetchJob } from "./assemblyai";
 import { normalizeAssemblyAI } from "./normalize";
 import { stripUrls } from "./sanitize";
 
+/** Segments per INSERT in the completion transaction. */
+const SEGMENT_INSERT_CHUNK = 500;
+/** Prisma's default 5 s interactive-transaction timeout is too short for
+ *  delete + insert of a long deposition's word-level segments (P2028
+ *  left the job "processing" forever). */
+const COMPLETE_TX_OPTIONS = { timeout: 60_000, maxWait: 15_000 };
+
 /** A job still unfinished this long after the request is abandoned. */
 const JOB_TIMEOUT_MS = 6 * 3600_000;
 /** A claimed row with no provider job id this long after the request
@@ -158,6 +165,9 @@ export async function finishTranscriptJob(
     result.speakers.map((label) => [label, `Speaker ${label}`]),
   );
 
+  // A write that keeps failing (e.g. a transcript too big for the
+  // transaction) would otherwise leave the job `processing` and refetch
+  // it every sweep forever: rethrow until the job's age limit, then fail.
   const won = await prisma.$transaction(async (tx) => {
     const res = await tx.transcript.updateMany({
       where: inFlight,
@@ -175,9 +185,11 @@ export async function finishTranscriptJob(
     });
     if (res.count === 0) return false;
     await tx.transcriptSegment.deleteMany({ where: { transcriptId: t.id } });
-    if (result.segments.length > 0) {
+    // Chunked: long depositions carry thousands of segments with
+    // word-level JSON; one giant INSERT risks the statement size limit.
+    for (let i = 0; i < result.segments.length; i += SEGMENT_INSERT_CHUNK) {
       await tx.transcriptSegment.createMany({
-        data: result.segments.map((s) => ({
+        data: result.segments.slice(i, i + SEGMENT_INSERT_CHUNK).map((s) => ({
           transcriptId: t.id,
           index: s.index,
           speaker: s.speaker,
@@ -189,7 +201,14 @@ export async function finishTranscriptJob(
       });
     }
     return true;
+  }, COMPLETE_TX_OPTIONS).catch((err: unknown) => {
+    if (timedOut) return "save-failed" as const;
+    throw err;
   });
+  if (won === "save-failed") {
+    console.warn("[transcription] completion write failed past the job age limit", t.id);
+    return fail("Couldn't save the transcript");
+  }
   if (!won) return "pending";
 
   await deleteProviderCopy(t.providerJobId);

@@ -10,7 +10,6 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertChildMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
-import { randomUUID } from "node:crypto";
 import { requirePermission, currentUserHasPermission } from "@/lib/permission-check";
 import { loadFirmProfileForUser } from "@/lib/firm";
 import { sendEmail } from "@/lib/email/send";
@@ -153,7 +152,7 @@ async function setInvoiceStatusUnchecked(
       return {
         ok: false,
         error:
-          "Can't void an invoice with payments recorded — refund the payments first.",
+          "Can't void an invoice with payments recorded. Payments can't be reversed in the app yet — ask an admin to correct it.",
       };
     }
   }
@@ -274,7 +273,7 @@ export async function voidInvoice(
     ) {
       return {
         status: "error",
-        error: "Can't void an invoice with payments recorded — refund the payments first.",
+        error: "Can't void an invoice with payments recorded. Payments can't be reversed in the app yet — ask an admin to correct it.",
       };
     }
     const preSent = invoice.kind === "client" && invoice.status === "sent";
@@ -401,7 +400,7 @@ export async function voidInvoice(
           const result = await sendEmail({
             to: recipient,
             ...invoiceVoidEmail({ invoiceNumber: n, firmName, matterName }),
-            idempotencyKey: `invoice-void-${invoiceId}-${randomUUID()}`,
+            idempotencyKey: `invoice-void-${invoiceId}-${recipient}-${Math.floor(Date.now() / 60_000)}`,
             fromName: firmName,
             ...(sender?.email ? { replyTo: sender.email } : {}),
             attachments: [

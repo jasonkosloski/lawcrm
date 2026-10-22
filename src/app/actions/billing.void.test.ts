@@ -159,7 +159,7 @@ describe("voidInvoice (sent)", () => {
     expect(msg.subject).toBe(`Invoice ${N} from Kosloski Law has been voided`);
     expect(msg.fromName).toBe("Kosloski Law");
     expect(msg.replyTo).toBe("atty@firm.com");
-    expect(msg.idempotencyKey).toMatch(new RegExp(`^invoice-void-${id}-[0-9a-f-]{36}$`));
+    expect(msg.idempotencyKey).toMatch(new RegExp(`^invoice-void-${id}-client@example\\.com-\\d+$`));
     expect(msg.attachments![0].filename).toBe(`Invoice ${N} (VOID).pdf`);
     expect(await extractText(msg.attachments![0].content)).toContain("VOID");
     const t = await titles();
@@ -273,7 +273,7 @@ describe("voidInvoice (sent)", () => {
     const res = await run(id);
     expect(res).toEqual({
       status: "error",
-      error: "Can't void an invoice with payments recorded — refund the payments first.",
+      error: "Can't void an invoice with payments recorded. Payments can't be reversed in the app yet — ask an admin to correct it.",
     });
     expect(spy).not.toHaveBeenCalled();
     expect(await statusOf(id)).toBe("sent");

@@ -20,7 +20,13 @@ export type OutgoingEmail = {
 
 export type EmailResult =
   | { ok: true; id?: string }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      /** "not_configured": a deployment/config problem, not a per-message
+       *  failure. Callers must not count it as a delivery attempt. */
+      code?: "not_configured";
+    };
 export type EmailDriver = (msg: OutgoingEmail) => Promise<EmailResult>;
 
 /** Dev/default driver: logs the message (including any links) to the console. */
@@ -40,13 +46,14 @@ export const consoleDriver: EmailDriver = async (msg) => {
 export const notConfiguredDriver: EmailDriver = async () => ({
   ok: false,
   error: "Email is not configured.",
+  code: "not_configured",
 });
 
 /** Resend driver: plain fetch, no SDK. Never throws. */
 export function resendDriver(apiKey: string): EmailDriver {
   return async (msg) => {
     const from = process.env.EMAIL_FROM?.trim();
-    if (!from) return { ok: false, error: "EMAIL_FROM is not set." };
+    if (!from) return { ok: false, error: "EMAIL_FROM is not set.", code: "not_configured" };
     const address = /<([^>]+)>/.exec(from)?.[1]?.trim() ?? from;
     const displayName = msg.fromName?.replace(/[\r\n]+/g, " ").trim();
     const fromHeader = displayName

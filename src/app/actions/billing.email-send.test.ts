@@ -128,11 +128,14 @@ describe("sendInvoice by email", () => {
     expect(titles.some((t) => t.includes("not emailed"))).toBe(false);
   });
 
-  test("each send carries a fresh per-call idempotency key", async () => {
+  test("the idempotency key is stable within a minute (double-submit dedupes)", async () => {
     const id = await makeInvoice();
     await sendInvoice(id, billingInitialState, sendForm());
     const key = cap.sent[0].idempotencyKey;
-    expect(key).toMatch(new RegExp(`^invoice-${id}-initial-[0-9a-f-]{36}$`));
+    expect(key).toMatch(new RegExp(`^invoice-${id}-initial-client@example\\.com-\\d+$`));
+    // Deterministic: same inputs in the same minute rebuild the same key.
+    const bucket = Math.floor(Date.now() / 60_000);
+    expect([bucket, bucket - 1].map((b) => `invoice-${id}-initial-client@example.com-${b}`)).toContain(key);
   });
 
   test("rejects a multi-recipient string", async () => {

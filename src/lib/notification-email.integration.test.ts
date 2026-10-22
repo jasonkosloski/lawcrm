@@ -5,7 +5,7 @@
  * retries, and the once-a-day digest at 07:00 local.
  */
 
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { __setDriverForTests } from "@/lib/email/send";
 import { captureEmails } from "@/test/email-capture";
@@ -170,6 +170,32 @@ describe("instant delivery", () => {
     expect(await stateOf(id)).toBe("skipped");
   });
 
+  test("sends a stable per-row idempotency key", async () => {
+    const { id } = await notify();
+    await run(AT_0730_DENVER);
+    expect(mail.sent[0].idempotencyKey).toBe(`notification-${id}`);
+  });
+
+  test("a not-configured driver burns no attempts and releases every claim", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    __setDriverForTests(async () => ({
+      ok: false,
+      error: "Email is not configured.",
+      code: "not_configured",
+    }));
+    const a = await notify();
+    const b = await notify();
+    for (let i = 0; i < 4; i++) await run(AT_0730_DENVER);
+    for (const { id } of [a, b]) {
+      const row = await prisma.notification.findUniqueOrThrow({ where: { id } });
+      expect(row.emailAttempts).toBe(0);
+      expect(row.emailState).toBe("pending");
+      expect(row.emailClaimedAt).toBeNull();
+    }
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   test("retries then fails", async () => {
     __setDriverForTests(async () => ({ ok: false, error: "down" }));
     const { id } = await notify();
@@ -265,6 +291,39 @@ describe("daily digest", () => {
     const row = await prisma.notification.findUniqueOrThrow({ where: { id } });
     expect(row.emailAttempts).toBe(3);
     expect(row.emailState).toBe("failed");
+  });
+
+  test("digest send carries a deterministic idempotency key", async () => {
+    await notify();
+    await notify();
+    await run(AT_0730_DENVER);
+    const first = mail.sent[0].idempotencyKey;
+    expect(first).toMatch(/^notification-digest-/);
+    // Same user + day + rows (a reclaimed digest) -> same key.
+    await prisma.notification.updateMany({ data: { emailState: "held" } });
+    await prisma.user.update({
+      where: { id: userId },
+      data: { notificationDigestSentOn: null },
+    });
+    await run(AT_0730_DENVER);
+    expect(mail.sent[1].idempotencyKey).toBe(first);
+  });
+
+  test("digest with email not configured stays held, attempts untouched, day un-claimed", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { id } = await notify();
+    __setDriverForTests(async () => ({
+      ok: false,
+      error: "Email is not configured.",
+      code: "not_configured",
+    }));
+    for (let i = 0; i < 4; i++) await run(AT_0730_DENVER);
+    const row = await prisma.notification.findUniqueOrThrow({ where: { id } });
+    expect(row.emailAttempts).toBe(0);
+    expect(row.emailState).toBe("held");
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    expect(user.notificationDigestSentOn).toBeNull();
+    warn.mockRestore();
   });
 
   test("digest covers only rows from before 07:00", async () => {

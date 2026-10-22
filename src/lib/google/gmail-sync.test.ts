@@ -1800,3 +1800,52 @@ describe("cron sweep ordering (F692)", () => {
     expect(results.map((r) => r.accountId)).toEqual([never, old, recent]);
   });
 });
+
+describe("bounded incremental pass", () => {
+  it("an incremental pass touching more threads than the cap falls back to the resumable catch-up", async () => {
+    const lastSyncAt = new Date("2026-03-01T12:00:00Z");
+    const accountId = await seedAccount({ historyId: "h100", lastSyncAt });
+    const threads: GmailThread[] = Array.from({ length: 5 }, (_, i) => ({
+      id: `t${i}`,
+      messages: [
+        gmailMsg({
+          id: `m${i}`,
+          threadId: `t${i}`,
+          text: `body ${i}`,
+          internalDate: 1_767_000_000_000 - i * 1000,
+        }),
+      ],
+    }));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    installFakeGmail({
+      profileHistoryId: "h-new",
+      labels: [],
+      threads,
+      history: {
+        historyId: "h200",
+        records: threads.map((t) => ({
+          messagesAdded: [{ message: { id: `m-${t.id}`, threadId: t.id } }],
+        })),
+      },
+    });
+
+    const result = await syncEmailAccount(accountId, { incrementalMaxThreads: 2 });
+    expect(result).toMatchObject({ ok: true, mode: "full", threadsSynced: 5 });
+    const listCall = requestedPaths().find((p) => p.startsWith("/users/me/threads?"))!;
+    expect(new URLSearchParams(listCall.split("?")[1]).get("q")).toBe(
+      `after:${Math.floor(lastSyncAt.getTime() / 1000) - 86400}`
+    );
+    warnSpy.mockRestore();
+  }, 30_000);
+
+  it("the cron sweep stops starting mailboxes once its budget is spent", async () => {
+    const a = await seedAccount({ email: "a@gmail.com" });
+    const { firmId } = await seedFirm();
+    const { userId: other } = await seedUser({ firmId });
+    await seedAccount({ ownerId: other, email: "b@gmail.com" });
+    installFakeGmail({ labels: [], threads: [basicThread()] });
+    const results = await syncAllEmailAccounts({ budgetMs: 0 });
+    expect(results).toHaveLength(1);
+    expect(results[0].accountId).toBe(a);
+  }, 30_000);
+});

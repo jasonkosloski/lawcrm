@@ -44,6 +44,7 @@
 
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { createHash } from "node:crypto";
 import { sendEmail } from "@/lib/email/send";
 import { canAccessMatter } from "@/lib/matter-access";
 import { staffAppUrl } from "@/lib/staff-authorized-parties";
@@ -122,6 +123,8 @@ type DigestJob = {
   to: string;
   rows: Row[];
   previousSentOn: Date | null;
+  /** Recipient-local digest day (YYYY-MM-DD). */
+  day: string;
 };
 
 const ROW_SELECT = {
@@ -303,7 +306,7 @@ async function claimDigests(
         where: { id: userId },
         data: { notificationDigestSentOn: parseDateOnly(today) },
       });
-      jobs.push({ userId, to: user.email, rows, previousSentOn: previous });
+      jobs.push({ userId, to: user.email, rows, previousSentOn: previous, day: today });
     }
     return jobs;
   }, LOCKED_TX);
@@ -327,6 +330,28 @@ async function recordFailure(rows: Row[], retryState: "pending" | "held"): Promi
     if (giveUp) failed++;
   }
   return failed;
+}
+
+/** Hands unsent digest claims back: rows to "held", day un-claimed. */
+async function releaseDigests(jobs: DigestJob[]): Promise<void> {
+  for (const rest of jobs) {
+    await prisma.notification.updateMany({
+      where: { id: { in: rest.rows.map((r) => r.id) }, emailState: "sending" },
+      data: { emailState: "held", emailClaimedAt: null },
+    });
+    await prisma.user.update({
+      where: { id: rest.userId },
+      data: { notificationDigestSentOn: rest.previousSentOn },
+    });
+  }
+}
+
+/** Stable across retries/reclaims of the same digest: user + local day
+ *  + the exact row set. */
+function digestIdempotencyKey(job: DigestJob): string {
+  const ids = job.rows.map((r) => r.id).sort().join(",");
+  const hash = createHash("sha256").update(ids).digest("hex").slice(0, 24);
+  return `notification-digest-${job.userId}-${job.day}-${hash}`;
 }
 
 /**
@@ -378,7 +403,21 @@ export async function runNotificationEmailDelivery(
       return result;
     }
     const { row, to } = instant[i];
-    const res = await sendEmail({ to, ...instantNotificationEmail(row, baseUrl) });
+    const res = await sendEmail({
+      to,
+      ...instantNotificationEmail(row, baseUrl),
+      idempotencyKey: `notification-${row.id}`,
+    });
+    if (!res.ok && res.code === "not_configured") {
+      // Deployment problem, not a delivery failure: no attempt is
+      // burned. Hand every unsent claim back and stop the run.
+      console.warn("[notification-email] email is not configured; releasing claims", res.error);
+      await prisma.notification.updateMany({
+        where: { id: { in: instant.slice(i).map((j) => j.row.id) }, emailState: "sending" },
+        data: { emailState: "pending", emailClaimedAt: null },
+      });
+      return result;
+    }
     if (res.ok) {
       await prisma.notification.updateMany({
         where: { id: row.id, emailState: "sending" },
@@ -399,22 +438,20 @@ export async function runNotificationEmailDelivery(
     const job = digests[i];
     if (!(await mayStartSend())) {
       // Over budget: release every unsent digest and its day claim.
-      for (const rest of digests.slice(i)) {
-        await prisma.notification.updateMany({
-          where: { id: { in: rest.rows.map((r) => r.id) }, emailState: "sending" },
-          data: { emailState: "held", emailClaimedAt: null },
-        });
-        await prisma.user.update({
-          where: { id: rest.userId },
-          data: { notificationDigestSentOn: rest.previousSentOn },
-        });
-      }
+      await releaseDigests(digests.slice(i));
       return result;
     }
     const res = await sendEmail({
       to: job.to,
       ...digestNotificationEmail(job.rows, baseUrl),
+      idempotencyKey: digestIdempotencyKey(job),
     });
+    if (!res.ok && res.code === "not_configured") {
+      // Deployment problem, not a delivery failure: no attempt burned.
+      console.warn("[notification-email] email is not configured; releasing digests", res.error);
+      await releaseDigests(digests.slice(i));
+      return result;
+    }
     if (res.ok) {
       await prisma.notification.updateMany({
         where: { id: { in: job.rows.map((r) => r.id) }, emailState: "sending" },
