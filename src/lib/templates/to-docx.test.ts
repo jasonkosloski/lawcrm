@@ -2,7 +2,14 @@ import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { resolvedToDocx } from "./to-docx";
 import { renderFixture } from "./converters-fixture";
-import { DEFAULT_DOCUMENT_STYLE, resolvePageStyle, type PageStyle } from "./page-style";
+import {
+  CELL_PAD_TWIPS,
+  DEFAULT_DOCUMENT_STYLE,
+  HEADER_DISTANCE_PT,
+  HEADER_DISTANCE_TWIPS,
+  resolvePageStyle,
+  type PageStyle,
+} from "./page-style";
 import type { ResolvedDoc } from "./render";
 
 const text = (t: string, marks?: { type: "missing" }[]): ResolvedDoc => ({
@@ -222,5 +229,48 @@ describe("resolvedToDocx", () => {
       letterhead: text("[X block — archived]", [{ type: "missing" }]),
     });
     expect(headers.find((h) => h.includes("archived"))).toContain('<w:highlight w:val="yellow"/>');
+  });
+
+  it("writes the shared header distance explicitly into the section", async () => {
+    for (const style of [letterStyle(), resolvePageStyle("filing", DEFAULT_DOCUMENT_STYLE, null)]) {
+      const { doc } = await build({ style });
+      const pgMar = doc.match(/<w:pgMar [^>]*\/>/)![0];
+      expect(pgMar).toContain(`w:header="${HEADER_DISTANCE_TWIPS}"`);
+      expect(pgMar).toContain(`w:footer="${HEADER_DISTANCE_TWIPS}"`);
+    }
+    expect(HEADER_DISTANCE_TWIPS / 20).toBe(HEADER_DISTANCE_PT);
+  });
+
+  it("table cells: no space after, equal left/right padding", async () => {
+    const { doc } = await build({
+      body: {
+        type: "doc",
+        content: [
+          {
+            type: "table",
+            content: [
+              {
+                type: "tableRow",
+                content: [
+                  {
+                    type: "tableCell",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "Cell" }] }],
+                  },
+                ],
+              },
+            ],
+          },
+          { type: "paragraph", content: [{ type: "text", text: "After" }] },
+        ],
+      } as ResolvedDoc,
+      style: letterStyle(),
+    });
+    const tc = doc.match(/<w:tc>[\s\S]*?<\/w:tc>/)![0];
+    expect(tc).toContain('<w:spacing w:after="0"/>');
+    expect(tc).toMatch(new RegExp(`<w:(left|start) w:type="dxa" w:w="${CELL_PAD_TWIPS}"/>`));
+    expect(tc).toMatch(new RegExp(`<w:(right|end) w:type="dxa" w:w="${CELL_PAD_TWIPS}"/>`));
+    // Body paragraphs outside the table keep the document spacing.
+    const after = doc.slice(doc.indexOf("</w:tbl>"));
+    expect(after).not.toContain('w:after="0"');
   });
 });

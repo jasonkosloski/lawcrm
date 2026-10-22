@@ -6,8 +6,12 @@
  * `render` returns the letterhead on page 1 and the continuation header
  * (plus "Page N") on later pages. react-pdf recomputes a dynamic node's
  * height per page, so body text starts below whatever that page's header
- * is and never overlaps it. The filing page number is an absolutely
- * positioned fixed footer inside the bottom margin.
+ * is and never overlaps it. Word's rule: the header starts at the header
+ * distance from the page top and the body at max(top margin, header
+ * distance + header height). So letters pad the page top by the header
+ * distance and give the header View a min height of (top margin - header
+ * distance). The filing page number is an absolutely positioned fixed
+ * footer inside the bottom margin.
  */
 import "server-only";
 import { Document, Font, Image, Page, Text, View, renderToBuffer } from "@react-pdf/renderer";
@@ -16,11 +20,19 @@ import type { ReactElement, ReactNode } from "react";
 import { FONTS, type FontKey } from "./fonts";
 import { fontFilePath } from "./fonts-server";
 import { imageSize } from "./image-size";
-import { headingSizePt, type LoadedLogo, type PageStyle } from "./page-style";
+import {
+  CELL_PAD_PT,
+  HEADER_DISTANCE_PT,
+  headingSizePt,
+  type LoadedLogo,
+  type PageStyle,
+} from "./page-style";
 import type { ResolvedBlock, ResolvedDoc, ResolvedInline, ResolvedTableCell } from "./render";
 
 const FALLBACK_FAMILY = "Liberation Sans";
 const PT_PER_IN = 72;
+/** imageSize reports pixels; Word places them at 96 dpi. */
+const PT_PER_PX = 72 / 96;
 const LOGO_MAX_W_PT = 3 * PT_PER_IN;
 const LOGO_MAX_H_PT = 1 * PT_PER_IN;
 const LIST_INDENT = 18; // marker column and per-level indent, in points
@@ -42,7 +54,14 @@ function registerFamily(family: string, files: (typeof FONTS)[FontKey]["files"])
   registered.add(family);
 }
 
+let hyphenationOff = false;
+
 function ensureFonts(key: FontKey) {
+  // react-pdf hyphenates long words by default; Word does not.
+  if (!hyphenationOff) {
+    Font.registerHyphenationCallback((word) => [word]);
+    hyphenationOff = true;
+  }
   registerFamily(FONTS[key].pdfFamily, FONTS[key].files);
   registerFamily(FALLBACK_FAMILY, FONTS.arial.files);
 }
@@ -205,7 +224,8 @@ function cell(c: ResolvedTableCell, key: number, ctx: Ctx) {
       key={key}
       style={{
         flex: 1,
-        padding: 4,
+        paddingLeft: CELL_PAD_PT,
+        paddingRight: CELL_PAD_PT,
         borderRightWidth: 0.5,
         borderBottomWidth: 0.5,
         borderColor: BORDER.borderColor,
@@ -221,9 +241,11 @@ const JUSTIFY = { left: "flex-start", center: "center", right: "flex-end" } as c
 function logo(l: LoadedLogo, ctx: Ctx) {
   const size = imageSize(l.bytes, l.contentType);
   if (!size) return null; // undecodable: skipped, the caller warns
-  const scale = Math.min(1, LOGO_MAX_W_PT / size.width, LOGO_MAX_H_PT / size.height);
-  const w = size.width * scale;
-  const h = size.height * scale;
+  const natW = size.width * PT_PER_PX;
+  const natH = size.height * PT_PER_PX;
+  const scale = Math.min(1, LOGO_MAX_W_PT / natW, LOGO_MAX_H_PT / natH);
+  const w = natW * scale;
+  const h = natH * scale;
   return (
     <View
       key="logo"
@@ -289,6 +311,7 @@ export async function resolvedToPdf(input: {
           style={{
             textAlign: "right",
             fontSize: style.sizePt,
+            lineHeight: lineHeightFor(style),
             marginBottom: style.spaceAfterPt,
           }}
         >
@@ -307,7 +330,7 @@ export async function resolvedToPdf(input: {
         style={{
           fontFamily: family,
           fontSize: style.sizePt,
-          paddingTop: pt(m.top),
+          paddingTop: isLetter ? HEADER_DISTANCE_PT : pt(m.top),
           paddingBottom: pt(m.bottom),
           paddingLeft: pt(m.left),
           paddingRight: pt(m.right),
@@ -316,6 +339,7 @@ export async function resolvedToPdf(input: {
         {isLetter && (
           <View
             fixed
+            style={{ minHeight: Math.max(0, pt(m.top) - HEADER_DISTANCE_PT) }}
             render={({ pageNumber }) => {
               const parts = pageNumber === 1 ? firstHeader() : laterHeader(pageNumber);
               return parts.length ? <View>{parts}</View> : null;

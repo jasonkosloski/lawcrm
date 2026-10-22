@@ -21,7 +21,13 @@ import {
 } from "docx";
 import { FONTS } from "./fonts";
 import { imageSize } from "./image-size";
-import { headingSizePt, type LoadedLogo, type PageStyle } from "./page-style";
+import {
+  CELL_PAD_TWIPS,
+  HEADER_DISTANCE_TWIPS,
+  headingSizePt,
+  type LoadedLogo,
+  type PageStyle,
+} from "./page-style";
 import type { ResolvedBlock, ResolvedDoc, ResolvedInline, ResolvedTableCell } from "./render";
 
 const ALIGN = {
@@ -51,7 +57,10 @@ function runs(nodes: ResolvedInline[] | undefined): ParagraphChild[] {
   });
 }
 
-type Ctx = { instance: { n: number } };
+/** `inCell`: paragraphs inside a table cell have no space after (as in the PDF). */
+type Ctx = { instance: { n: number }; inCell?: boolean };
+
+const cellSpacing = (ctx: Ctx) => (ctx.inCell ? { spacing: { after: 0 } } : {});
 
 function blocks(list: ResolvedBlock[], ctx: Ctx, level: number): (Paragraph | Table)[] {
   return list.flatMap((b): (Paragraph | Table)[] => {
@@ -61,6 +70,7 @@ function blocks(list: ResolvedBlock[], ctx: Ctx, level: number): (Paragraph | Ta
           new Paragraph({
             children: runs(b.content),
             alignment: b.attrs?.textAlign ? ALIGN[b.attrs.textAlign] : undefined,
+            ...cellSpacing(ctx),
           }),
         ];
       case "heading":
@@ -69,6 +79,7 @@ function blocks(list: ResolvedBlock[], ctx: Ctx, level: number): (Paragraph | Ta
             children: runs(b.content),
             heading: HEADINGS[b.attrs.level - 1],
             alignment: b.attrs.textAlign ? ALIGN[b.attrs.textAlign] : undefined,
+            ...cellSpacing(ctx),
           }),
         ];
       case "bulletList":
@@ -83,6 +94,7 @@ function blocks(list: ResolvedBlock[], ctx: Ctx, level: number): (Paragraph | Ta
                 new Paragraph({
                   children: runs(c.content),
                   alignment: c.attrs?.textAlign ? ALIGN[c.attrs.textAlign] : undefined,
+                  ...cellSpacing(ctx),
                   // Only the first paragraph of an item carries the marker.
                   ...(i === 0
                     ? {
@@ -116,9 +128,12 @@ function blocks(list: ResolvedBlock[], ctx: Ctx, level: number): (Paragraph | Ta
 }
 
 function tableCell(c: ResolvedTableCell, ctx: Ctx): TableCell {
-  const children = blocks(c.content, ctx, 0);
-  // Word requires at least one paragraph per cell.
-  return new TableCell({ children: children.length ? children : [new Paragraph("")] });
+  const children = blocks(c.content, { ...ctx, inCell: true }, 0);
+  return new TableCell({
+    // Word requires at least one paragraph per cell.
+    children: children.length ? children : [new Paragraph({ spacing: { after: 0 } })],
+    margins: { left: CELL_PAD_TWIPS, right: CELL_PAD_TWIPS, top: 0, bottom: 0 },
+  });
 }
 
 const levels = (format: (typeof LevelFormat)[keyof typeof LevelFormat], bullet: boolean) =>
@@ -255,6 +270,8 @@ export async function resolvedToDocx(input: {
               right: Math.round(style.marginsIn.right * 1440),
               bottom: Math.round(style.marginsIn.bottom * 1440),
               left: Math.round(style.marginsIn.left * 1440),
+              header: HEADER_DISTANCE_TWIPS,
+              footer: HEADER_DISTANCE_TWIPS,
             },
           },
         },

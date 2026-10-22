@@ -28,6 +28,13 @@ describe("PagePreview", () => {
     expect(container.querySelector("[data-page2]")?.textContent).toContain("Page 2");
     expect(container.querySelector("style")?.textContent).toContain("@font-face");
   });
+  it("letters: the header area reaches the top margin (Word's rule)", () => {
+    const { container } = render(<PagePreview {...props("letter", "/logo.png")} />);
+    const header = container.querySelector<HTMLElement>("[data-page-header]")!;
+    expect(parseFloat(header.style.minHeight)).toBeCloseTo(96 - 47.2, 3);
+    expect(header.querySelector("img")).not.toBeNull();
+    expect(header.querySelector("[data-page-letterhead]")).not.toBeNull();
+  });
   it("omits the logo without a url, and letterhead/strip content for a filing", () => {
     const { container } = render(<PagePreview {...props("filing", null)} />);
     expect(container.querySelector("img")).toBeNull();

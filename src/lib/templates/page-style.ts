@@ -26,6 +26,18 @@ export const MARGIN_IN_MIN = 0.5;
 export const MARGIN_IN_MAX = 2;
 export const LOGO_MAX_BYTES = 1024 * 1024;
 
+/** Word's header distance: headers start this far from the page top
+ *  (708 twips, Word's default, written explicitly into the .docx). The
+ *  body starts at max(top margin, header distance + header height); the
+ *  PDF and the preview follow the same rule. Footers mirror it. */
+export const HEADER_DISTANCE_TWIPS = 708;
+export const HEADER_DISTANCE_PT = HEADER_DISTANCE_TWIPS / 20;
+
+/** Table cell padding, left and right, in both outputs (~0.08 in; Word's
+ *  default cell margins are close to this). Top and bottom are 0. */
+export const CELL_PAD_TWIPS = 115;
+export const CELL_PAD_PT = CELL_PAD_TWIPS / 20;
+
 /** The editable DocumentStyle columns, margins as plain numbers. */
 export type DocumentStyleValues = {
   fontKey: FontKey;

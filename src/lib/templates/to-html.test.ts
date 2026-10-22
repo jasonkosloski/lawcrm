@@ -62,6 +62,16 @@ describe("resolvedToPageParts", () => {
     expect(p.style["--page-line-height"]).toBe(String(1.5 * 1.15));
     expect(p.fontFamily).toContain("Tpl Liberation Serif");
   });
+
+  it("letters follow Word's header rule; filings pad by the top margin", () => {
+    const letter = mk("letter", { marginTopIn: 1.5 });
+    // Header distance 35.4 pt = 47.2 px; header area fills to the 1.5 in margin.
+    expect(parseFloat(letter.style.paddingTop)).toBeCloseTo(47.2, 5);
+    expect(letter.headerMinHeightPx).toBeCloseTo(144 - 47.2, 5);
+    const filing = mk("filing", { marginTopIn: 1.5 });
+    expect(filing.style.paddingTop).toBe("144px");
+    expect(filing.headerMinHeightPx).toBeNull();
+  });
   it("letter: letterhead, logo, top strip with right Page 2", () => {
     const p = mk("letter", {}, logo);
     expect(p.letterheadHtml).toContain("<table>");

@@ -14,7 +14,7 @@
 
 import { sanitizeDocumentHtml } from "@/lib/sanitize-html";
 import { FONTS, fontPublicUrl, type FontKey } from "./fonts";
-import type { PreviewPageStyle } from "./page-style";
+import { CELL_PAD_PT, HEADER_DISTANCE_PT, type PreviewPageStyle } from "./page-style";
 import type {
   ResolvedBlock,
   ResolvedDoc,
@@ -95,6 +95,8 @@ export const PAGE_WIDTH_PX = 8.5 * PX_PER_IN;
 export const PAGE_MIN_HEIGHT_PX = 11 * PX_PER_IN;
 export const LOGO_MAX_W_PX = 3 * PX_PER_IN;
 export const LOGO_MAX_H_PX = 1 * PX_PER_IN;
+/** Table cell left/right padding, same as the .docx and PDF. */
+export const CELL_PAD_PX = CELL_PAD_PT * PX_PER_PT;
 /** Previewed family names are prefixed so they never clash with system fonts. */
 export const previewFontFamily = (font: FontKey) => `Tpl ${FONTS[font].pdfFamily}`;
 
@@ -118,6 +120,10 @@ export function pageFontFaceCss(font: FontKey): string {
 export type PageParts = {
   /** Style props for the page element (CSS custom properties + padding). */
   style: Record<string, string>;
+  /** Letters: min height of the header area (top margin - header distance),
+   *  so the body starts at the top margin unless the header is taller
+   *  (Word's rule). Null for filings, which pad the page by the margin. */
+  headerMinHeightPx: number | null;
   fontFamily: string;
   /** Sanitized; null when no letterhead block. */
   letterheadHtml: string | null;
@@ -174,11 +180,14 @@ export function resolvedToPageParts(input: {
       // Word's "single" (the font's natural leading).
       "--page-line-height": String(style.lineSpacing * 1.15),
       "--page-space-after": `${style.spaceAfterPt * PX_PER_PT}px`,
-      paddingTop: `${m.top * PX_PER_IN}px`,
+      paddingTop: `${isLetter ? HEADER_DISTANCE_PT * PX_PER_PT : m.top * PX_PER_IN}px`,
       paddingRight: `${m.right * PX_PER_IN}px`,
       paddingBottom: `${m.bottom * PX_PER_IN}px`,
       paddingLeft: `${m.left * PX_PER_IN}px`,
     },
+    headerMinHeightPx: isLetter
+      ? Math.max(0, m.top * PX_PER_IN - HEADER_DISTANCE_PT * PX_PER_PT)
+      : null,
     letterheadHtml:
       isLetter && style.letterhead && input.letterhead ? resolvedToHtml(input.letterhead) : null,
     logo:

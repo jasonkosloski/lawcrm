@@ -12,6 +12,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { ResolvedDoc } from "@/lib/templates/render";
 import type { PreviewPageStyle } from "@/lib/templates/page-style";
 import {
+  CELL_PAD_PX,
   LOGO_MAX_H_PX,
   LOGO_MAX_W_PX,
   PAGE_MIN_HEIGHT_PX,
@@ -28,7 +29,7 @@ const PAGE_CSS = `
 [data-page] ul{list-style:disc;}
 [data-page] ol{list-style:decimal;}
 [data-page] li>p{margin:0;}
-[data-page] td,[data-page] th{border:1px solid #999;padding:2px 6px;vertical-align:top;}
+[data-page] td,[data-page] th{border:1px solid #999;padding:0 ${CELL_PAD_PX}px;vertical-align:top;}
 [data-page] table{border-collapse:collapse;}
 [data-page] hr[data-page-break]{border:0;border-top:1px dashed #bbb;margin:0 0 var(--page-space-after);}
 [data-page] mark[data-missing]{background:#fde68a;color:inherit;}
@@ -76,17 +77,30 @@ export function PagePreview(input: {
   } as CSSProperties;
   const JUSTIFY = { left: "flex-start", center: "center", right: "flex-end" } as const;
   const strip = parts.strip;
+  const headerMin = parts.headerMinHeightPx;
   const stripEl = strip && (
     <div data-page2 data-placement={strip.placement}>
-      {strip.continuationHtml && (
-        // Sanitized by resolvedToHtml.
-        <div dangerouslySetInnerHTML={{ __html: strip.continuationHtml }} />
+      {/* Page 2's top: the same header distance and min height as page 1. */}
+      {strip.placement === "top" && headerMin !== null && (
+        <div style={{ height: parts.style.paddingTop }} aria-hidden />
       )}
-      {strip.pageLabel && (
-        <div style={{ textAlign: strip.pageLabel.align, marginBottom: "var(--page-space-after)" }}>
-          {strip.pageLabel.text}
-        </div>
-      )}
+      <div
+        style={
+          strip.placement === "top" && headerMin !== null ? { minHeight: headerMin } : undefined
+        }
+      >
+        {strip.continuationHtml && (
+          // Sanitized by resolvedToHtml.
+          <div dangerouslySetInnerHTML={{ __html: strip.continuationHtml }} />
+        )}
+        {strip.pageLabel && (
+          <div
+            style={{ textAlign: strip.pageLabel.align, marginBottom: "var(--page-space-after)" }}
+          >
+            {strip.pageLabel.text}
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -99,25 +113,34 @@ export function PagePreview(input: {
     >
       <style>{`${pageFontFaceCss(input.style.font)}\n${PAGE_CSS}`}</style>
       <div ref={page} data-page style={pageStyle}>
-        {parts.logo && (
-          <div style={{ display: "flex", justifyContent: JUSTIFY[parts.logo.position] }}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- firm logo from an API route */}
-            <img
-              src={parts.logo.url}
-              alt=""
-              style={{
-                maxWidth: LOGO_MAX_W_PX,
-                maxHeight: LOGO_MAX_H_PX,
-                width: "auto",
-                height: "auto",
-                marginBottom: "var(--page-space-after)",
-              }}
-            />
+        {headerMin !== null && (
+          // Word's header area: the body starts at the top margin unless
+          // the letterhead is taller.
+          <div data-page-header style={{ minHeight: headerMin }}>
+            {parts.logo && (
+              <div style={{ display: "flex", justifyContent: JUSTIFY[parts.logo.position] }}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- firm logo from an API route */}
+                <img
+                  src={parts.logo.url}
+                  alt=""
+                  style={{
+                    maxWidth: LOGO_MAX_W_PX,
+                    maxHeight: LOGO_MAX_H_PX,
+                    width: "auto",
+                    height: "auto",
+                    marginBottom: "var(--page-space-after)",
+                  }}
+                />
+              </div>
+            )}
+            {parts.letterheadHtml && (
+              // Sanitized by resolvedToHtml.
+              <div
+                data-page-letterhead
+                dangerouslySetInnerHTML={{ __html: parts.letterheadHtml }}
+              />
+            )}
           </div>
-        )}
-        {parts.letterheadHtml && (
-          // Sanitized by resolvedToHtml.
-          <div data-page-letterhead dangerouslySetInnerHTML={{ __html: parts.letterheadHtml }} />
         )}
         <div data-page-body dangerouslySetInnerHTML={{ __html: parts.bodyHtml }} />
         {stripEl}

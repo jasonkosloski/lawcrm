@@ -2,7 +2,12 @@ import { PDFDocument, PDFName, PDFDict, PDFRawStream } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import { FONTS } from "./fonts";
 import { renderFixture } from "./converters-fixture";
-import { DEFAULT_DOCUMENT_STYLE, resolvePageStyle, type PageStyle } from "./page-style";
+import {
+  DEFAULT_DOCUMENT_STYLE,
+  HEADER_DISTANCE_PT,
+  resolvePageStyle,
+  type PageStyle,
+} from "./page-style";
 import type { ResolvedDoc } from "./render";
 import { resolvedToPdf } from "./to-pdf";
 
@@ -294,5 +299,145 @@ describe("glyph fallback", () => {
       style: style("letter", { font: "garamond" }),
     });
     expect(r.warnings).toEqual([]);
+  });
+});
+
+describe("header placement follows Word", () => {
+  const firstBodyY = (p: Item[]) =>
+    Math.max(...p.filter((i) => i.str.startsWith("Body line")).map((i) => i.y));
+
+  it("body starts at the top margin on every page when the header is shorter", async () => {
+    const filing = await resolvedToPdf({
+      body: longBody(),
+      letterhead: null,
+      continuation: null,
+      style: style("filing", { pageNumbers: "none" }),
+    });
+    const ref = await pages(filing.buffer);
+    const y0 = firstBodyY(ref[0]);
+    expect(firstBodyY(ref[1])).toBeCloseTo(y0, 1);
+
+    const letter = await resolvedToPdf({
+      body: longBody(),
+      letterhead: doc("LH NAME"),
+      continuation: doc("CONT HDR"),
+      style: style("letter", {
+        letterhead: { blockId: "b", logo: null },
+        pageNumbers: "none",
+      }),
+    });
+    const ps = await pages(letter.buffer);
+    expect(ps.length).toBeGreaterThanOrEqual(2);
+    expect(firstBodyY(ps[0])).toBeCloseTo(y0, 1);
+    expect(firstBodyY(ps[1])).toBeCloseTo(y0, 1);
+    // Headers start at the header distance (35.4 pt), 36.6 pt above the body.
+    const lh = ps[0].find((i) => i.str.includes("LH NAME"))!;
+    const ch = ps[1].find((i) => i.str.includes("CONT HDR"))!;
+    expect(lh.y - y0).toBeCloseTo(72 - HEADER_DISTANCE_PT, 1);
+    expect(ch.y - y0).toBeCloseTo(72 - HEADER_DISTANCE_PT, 1);
+  });
+
+  it("a header taller than the gap pushes the body down", async () => {
+    const ref = await pages(
+      (
+        await resolvedToPdf({
+          body: longBody(),
+          letterhead: null,
+          continuation: null,
+          style: style("filing", { pageNumbers: "none" }),
+        })
+      ).buffer,
+    );
+    const ps = await pages(
+      (
+        await resolvedToPdf({
+          body: longBody(),
+          letterhead: null,
+          continuation: doc("CONT HDR"),
+          style: style("letter"), // continuation + "Page N": two lines with space after
+        })
+      ).buffer,
+    );
+    expect(firstBodyY(ps[1])).toBeLessThan(firstBodyY(ref[0]) - 1);
+  });
+});
+
+describe("hyphenation", () => {
+  it("never splits a long word with a hyphen (Word doesn't)", async () => {
+    const word = "Supercalifragilisticexpialidocious";
+    const { buffer } = await resolvedToPdf({
+      body: {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: `${word} `.repeat(40).trim() }] },
+        ],
+      },
+      letterhead: null,
+      continuation: null,
+      style: style("letter", { pageNumbers: "none" }),
+    });
+    const all = (await pages(buffer)).map(text).join(" ");
+    expect(all).not.toContain("-");
+    expect(
+      all
+        .split(/\s+/)
+        .filter(Boolean)
+        .every((w) => w === word),
+    ).toBe(true);
+  });
+});
+
+describe("logo size", () => {
+  it("treats image pixels as 96 dpi: a 200x60 PNG is 150 pt wide", async () => {
+    const sharp = (await import("sharp")).default;
+    const png = new Uint8Array(
+      await sharp({ create: { width: 200, height: 60, channels: 3, background: "#336699" } })
+        .png()
+        .toBuffer(),
+    );
+    const { buffer } = await resolvedToPdf({
+      body: doc("Body"),
+      letterhead: null,
+      continuation: null,
+      style: style("letter", {
+        letterhead: {
+          blockId: null,
+          logo: { bytes: png, contentType: "image/png", position: "left" },
+        },
+      }),
+    });
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(buffer), verbosity: 0 }).promise;
+    const ops = await (await pdf.getPage(1)).getOperatorList();
+    let last: number[] | null = null;
+    let size: number[] | null = null;
+    ops.fnArray.forEach((fn, i) => {
+      if (fn === pdfjs.OPS.transform) last = ops.argsArray[i] as number[];
+      if (fn === pdfjs.OPS.paintImageXObject && last) size = [last[0], Math.abs(last[3])];
+    });
+    expect(size).not.toBeNull();
+    expect(size![0]).toBeCloseTo(150, 1);
+    expect(size![1]).toBeCloseTo(45, 1);
+  });
+});
+
+describe("Page N line", () => {
+  it("uses the body line height", async () => {
+    // Double spacing, no space after: continuation + page line (two lines)
+    // are taller than the header gap, so the body follows them directly and
+    // every line pitch should be the body's.
+    const { buffer } = await resolvedToPdf({
+      body: longBody(),
+      letterhead: null,
+      continuation: doc("CONT HDR"),
+      style: style("letter", { spaceAfterPt: 0, lineSpacing: 2 }),
+    });
+    const p2 = (await pages(buffer))[1];
+    const ch = p2.find((i) => i.str.includes("CONT HDR"))!;
+    const num = p2.find((i) => i.str.includes("Page 2"))!;
+    const body = p2.filter((i) => i.str.startsWith("Body line")).map((i) => i.y);
+    const pitch = body[0] - body[1];
+    expect(ch.y - num.y).toBeCloseTo(pitch, 1);
+    expect(num.y - body[0]).toBeCloseTo(pitch, 1);
   });
 });
