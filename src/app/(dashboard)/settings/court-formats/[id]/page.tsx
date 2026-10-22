@@ -20,6 +20,7 @@ import type {
   PageNumberPosition,
   PaperSize,
 } from "@/lib/templates/page-style";
+import { readStyleOverrides } from "@/lib/templates/paragraph-styles";
 import type { TemplateDoc } from "@/lib/templates/schema";
 
 const num = (d: { toString(): string } | null) => (d === null ? null : Number(d.toString()));
@@ -93,7 +94,7 @@ export default async function CourtFormatEditorRoute({
           marginLeftIn: num(row.marginLeftIn),
           pageNumbers: row.pageNumbers as PageNumberPosition | null,
           paperSize: row.paperSize as PaperSize,
-          styleOverrides: {},
+          styleOverrides: readStyleOverrides(row.styleOverrides, row),
         },
         replacements: row.blocks.map((b) => ({
           blockId: b.blockId,

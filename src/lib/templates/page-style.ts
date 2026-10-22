@@ -6,6 +6,7 @@
 
 import { FONT_KEYS, type FontKey } from "./fonts";
 import { defaultParagraphStyles, type ParagraphStyle, type StyleValues } from "./paragraph-styles";
+import { effectiveStyles, lineFactor } from "./resolve-styles";
 import { headingSizePt, LINE_SPACINGS, type LineSpacing } from "./style-basics";
 
 export { FONT_KEYS };
@@ -126,6 +127,8 @@ export type PageStyleOf<L extends LogoRef> = {
   sizePt: number;
   lineSpacing: 1 | 1.15 | 1.5 | 2;
   spaceAfterPt: number;
+  /** The effective paragraph styles (court overrides applied for filings). */
+  styles: ParagraphStyle[];
   marginsIn: { top: number; right: number; bottom: number; left: number };
   letterhead: { blockId: string | null; logo: L | null } | null;
   continuationBlockId: string | null;
@@ -144,12 +147,7 @@ export function toPreviewPageStyle(style: PageStyleOf<LogoRef>): PreviewPageStyl
   return { ...style, letterhead: { blockId: style.letterhead.blockId, logo } };
 }
 
-const LINE_FACTOR: Record<LineSpacing, PageStyle["lineSpacing"]> = {
-  single: 1,
-  "1.15": 1.15,
-  "1.5": 1.5,
-  double: 2,
-};
+const LEGACY_FACTOR = { single: 1, "1.15": 1.15, "1.5": 1.5, double: 2 } as const;
 
 /** Letters get everything; filings keep font, size, spacing, margins and
  *  page numbers but no letterhead or continuation header. A court format
@@ -174,13 +172,21 @@ export function resolvePageStyle<L extends LogoRef>(
 ): PageStyleOf<L> {
   const isLetter = kind === "letter";
   const c = !isLetter && court ? court : null;
+  const styles = effectiveStyles(style.paragraphStyles, c?.styleOverrides ?? null);
+  const body = styles.find((x) => x.key === "body")?.values;
+  const sizePt = body?.sizePt ?? style.fontSizeHalfPt / 2;
+  // Exact line spacing has no factor; approximate it for the converters that
+  // still read a factor (they move to per-paragraph values later).
+  const factor = body ? lineFactor(body.lineSpacing) : LEGACY_FACTOR[style.lineSpacing];
+  const lineSpacing = factor ?? (body!.lineSpacing as { exactPt: number }).exactPt / sizePt;
   const hasLetterhead = isLetter && (style.letterheadBlockId !== null || logo !== null);
   return {
     kind,
     font: c?.fontKey ?? style.fontKey,
-    sizePt: (c?.fontSizeHalfPt ?? style.fontSizeHalfPt) / 2,
-    lineSpacing: LINE_FACTOR[c?.lineSpacing ?? style.lineSpacing],
-    spaceAfterPt: c?.spaceAfterPt ?? style.spaceAfterPt,
+    sizePt,
+    lineSpacing: lineSpacing as PageStyle["lineSpacing"],
+    spaceAfterPt: body?.spaceAfterPt ?? style.spaceAfterPt,
+    styles,
     marginsIn: {
       top: c?.marginTopIn ?? style.marginTopIn,
       right: c?.marginRightIn ?? style.marginRightIn,

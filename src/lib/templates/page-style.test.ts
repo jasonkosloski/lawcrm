@@ -8,8 +8,15 @@ import {
   type DocumentStyleValues,
   type LoadedLogo,
 } from "./page-style";
+import { defaultParagraphStyles } from "./paragraph-styles";
 
-const STYLE: DocumentStyleValues = {
+/** Body follows the legacy columns, as the real loader keeps them in step. */
+const withHouse = (s: DocumentStyleValues): DocumentStyleValues => ({
+  ...s,
+  paragraphStyles: defaultParagraphStyles(s),
+});
+
+const STYLE: DocumentStyleValues = withHouse({
   ...DEFAULT_DOCUMENT_STYLE,
   fontKey: "palatino",
   fontSizeHalfPt: 25,
@@ -23,7 +30,7 @@ const STYLE: DocumentStyleValues = {
   continuationBlockId: "cont",
   pageNumbers: "bottom_right",
   logoPosition: "center",
-};
+});
 const LOGO: LoadedLogo = {
   bytes: new Uint8Array([1, 2]),
   contentType: "image/png",
@@ -74,9 +81,9 @@ describe("resolvePageStyle", () => {
     ["1.5", 1.5],
     ["double", 2],
   ] as const)("lineSpacing %s maps to %s", (ls, factor) => {
-    expect(resolvePageStyle("letter", { ...STYLE, lineSpacing: ls }, null).lineSpacing).toBe(
-      factor,
-    );
+    expect(
+      resolvePageStyle("letter", withHouse({ ...STYLE, lineSpacing: ls }), null).lineSpacing,
+    ).toBe(factor);
   });
 });
 
@@ -109,6 +116,7 @@ describe("court format layer", () => {
       fontKey: "arial",
       fontSizeHalfPt: 28,
       lineSpacing: "1.5",
+      styleOverrides: { body: { sizePt: 14, lineSpacing: "1.5" } },
       marginLeftIn: 1.5,
       pageNumbers: "none",
       paperSize: "legal",

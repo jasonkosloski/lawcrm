@@ -9,6 +9,7 @@ import { getDocumentStyle } from "./document-style";
 import type { FontKey } from "./fonts";
 import type { CourtFormatValues } from "./page-style";
 import { logoPreviewUrl, logoRefOf, type FirmPageStyle } from "./page-render";
+import { readStyleOverrides } from "./paragraph-styles";
 import type { BlockSource } from "./render";
 import type { AppliesTo, TemplateDoc, TemplateKind } from "./schema";
 
@@ -115,7 +116,7 @@ export async function loadEditorCourtFormats(): Promise<SerializedCourtContext[]
       marginLeftIn: num(f.marginLeftIn),
       pageNumbers: f.pageNumbers as CourtFormatValues["pageNumbers"],
       paperSize: f.paperSize as CourtFormatValues["paperSize"],
-      styleOverrides: {},
+      styleOverrides: readStyleOverrides(f.styleOverrides, f),
     };
     const replacements = new Map<string, BlockSource>();
     for (const b of f.blocks) {

@@ -29,6 +29,7 @@ describe("resolvedToHtml", () => {
   });
 });
 
+import { defaultParagraphStyles } from "./paragraph-styles";
 import { resolvePageStyle, DEFAULT_DOCUMENT_STYLE } from "./page-style";
 import { resolvedToPageParts, pageFontFaceCss } from "./to-html";
 
@@ -45,7 +46,11 @@ describe("resolvedToPageParts", () => {
       body: doc,
       letterhead: doc,
       continuation: doc,
-      style: resolvePageStyle(kind, { ...base, ...over }, lg),
+      style: resolvePageStyle(
+        kind,
+        { ...base, ...over, paragraphStyles: defaultParagraphStyles({ ...base, ...over }) },
+        lg,
+      ),
       logoUrl: "/api/document-style/logo",
     });
 

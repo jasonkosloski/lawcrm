@@ -38,4 +38,10 @@ describe("loadEditorCourtFormats", () => {
     const ctx = fromSerializedCourt(out[0]!);
     expect(ctx.replacements.get(a.id)?.name).toBe("Court caption");
   });
+
+  test("Preview-as carries a legacy court lineSpacing into the body override", async () => {
+    await prisma.courtFormat.create({ data: { name: "Spaced", lineSpacing: "double" } });
+    const out = await loadEditorCourtFormats();
+    expect(out[0]!.values.styleOverrides.body?.lineSpacing).toBe("double");
+  });
 });

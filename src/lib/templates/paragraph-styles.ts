@@ -224,3 +224,31 @@ export function newStyleKey(name: string, taken: Set<string>): string {
     if (isFree(candidate)) return candidate;
   }
 }
+
+/** Stored overrides with invalid entries dropped. The legacy body columns
+ *  are overlaid as the body override (stored values win): this bridges them
+ *  until the styles UI replaces those fields. */
+export function readStyleOverrides(
+  stored: unknown,
+  legacy: {
+    fontSizeHalfPt: number | null;
+    lineSpacing: string | null;
+    spaceAfterPt: number | null;
+  },
+): Record<string, Partial<StyleValues>> {
+  const out: Record<string, Partial<StyleValues>> = {};
+  if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+    for (const [key, value] of Object.entries(stored)) {
+      const parsed = styleOverrideSchema.safeParse(value);
+      if (parsed.success) out[key] = parsed.data as Partial<StyleValues>;
+    }
+  }
+  const body: Partial<StyleValues> = {};
+  if (legacy.fontSizeHalfPt !== null) body.sizePt = legacy.fontSizeHalfPt / 2;
+  if (legacy.lineSpacing !== null)
+    body.lineSpacing = legacy.lineSpacing as StyleValues["lineSpacing"];
+  if (legacy.spaceAfterPt !== null) body.spaceAfterPt = legacy.spaceAfterPt;
+  const merged = { ...body, ...out.body };
+  if (Object.keys(merged).length > 0) out.body = merged;
+  return out;
+}
