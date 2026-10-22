@@ -159,8 +159,30 @@ describe("loadTemplateData — matter scope", () => {
       category: "opposing",
     });
     expect((await loadTemplateData({ scope, recipientContactId: stranger })).ok).toBe(false);
+    // Opposing counsel via an opposing party's representation is allowed.
     const ok = await loadTemplateData({ scope, recipientContactId: counsel });
-    expect(ok.ok).toBe(false); // counsel is only a representation link, not a MatterContact
+    expect(ok.ok && ok.data.recipient?.name).toBe("Pat Counsel");
+    // ...but not when the representing row isn't an opposing party.
+    await prisma.matterContact.updateMany({ where: { matterId }, data: { category: "other" } });
+    expect((await loadTemplateData({ scope, recipientContactId: counsel })).ok).toBe(false);
+  });
+
+  test("inactive signer / merged contact and foreign request are refused", async () => {
+    const { matterId, clientId } = await matterWithParties();
+    const scope = { kind: "matter", matterId } as const;
+    const { userId: gone } = await seedUser({ firmId, name: "Gone", isActive: false });
+    await prisma.matterTeamMember.create({ data: { matterId, userId: gone, role: "paralegal" } });
+    expect(await loadTemplateData({ scope, signerId: gone })).toEqual({
+      ok: false,
+      error: "That signer isn't on this record's team.",
+    });
+    await prisma.contact.update({ where: { id: clientId }, data: { isActive: false } });
+    expect((await loadTemplateData({ scope, recipientContactId: clientId })).ok).toBe(false);
+    const foreign = { matterId: "other", leadId: null } as never;
+    expect(await loadTemplateData({ scope, request: foreign })).toEqual({
+      ok: false,
+      error: "Records request not found.",
+    });
   });
 
   test("a MatterContact or the client is an allowed recipient", async () => {

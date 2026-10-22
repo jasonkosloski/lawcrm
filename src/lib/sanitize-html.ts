@@ -147,8 +147,10 @@ export function sanitizeUserHtml(html: string): string {
 // faithfully converts whatever markup tricks live inside), so we
 // sanitize the converter's output before it ever reaches
 // `dangerouslySetInnerHTML`. Script contexts stay impossible:
-// no <script>/<iframe>/<style>, no event handlers or style attrs
-// (sanitize-html strips unlisted attributes), and image sources are
+// no <script>/<iframe>/<style>, no event handlers, and style attrs only
+// as a validated text-align on p/h1-h3/td/th (the template converters and
+// the docx preview also keep <mark data-missing> and <hr data-page-break>;
+// sanitize-html strips every other unlisted attribute), and image sources are
 // restricted to `data:` URIs — mammoth inlines embedded images as
 // data URIs, and a data-URI <img> is a non-scripting context even
 // for SVG payloads. http(s) image sources are deliberately absent:

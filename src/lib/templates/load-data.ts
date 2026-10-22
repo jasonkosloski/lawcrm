@@ -249,9 +249,11 @@ const userSelect = {
   phone: true,
   jobTitle: true,
   barNumber: true,
+  isActive: true,
 } as const;
 
 type UserRow = {
+  isActive?: boolean;
   name: string;
   email: string;
   phone: string | null;
@@ -272,6 +274,15 @@ export async function loadTemplateData(
 ): Promise<LoadTemplateDataResult> {
   const { scope, request = null } = input;
   const userId = await assertScopeAccess(scope);
+  // Defense in depth: never trust a request that belongs to another record.
+  if (
+    request &&
+    (scope.kind === "matter"
+      ? request.matterId !== scope.matterId
+      : request.leadId !== scope.leadId)
+  ) {
+    return { ok: false, error: "Records request not found." };
+  }
 
   const [firm, me] = await Promise.all([
     getCurrentFirm(),
@@ -332,6 +343,13 @@ export async function loadTemplateData(
     teamUsers = matter.teamMembers;
     const linked = new Set(matter.contacts.map((c) => c.contactId));
     if (matter.clientId) linked.add(matter.clientId);
+    // Opposing counsel (representation contact of an opposing party) is a
+    // valid recipient: letters to opposing counsel are a main use case.
+    for (const c of matter.contacts) {
+      if (c.category === "opposing" && c.representationContactId) {
+        linked.add(c.representationContactId);
+      }
+    }
     recipientAllowed = (id) => linked.has(id);
     base = {
       scope: "matter",
@@ -407,7 +425,7 @@ export async function loadTemplateData(
   let signerUser: UserRow = me;
   if (input.signerId && input.signerId !== userId) {
     const member = teamUsers.find((t) => t.user.id === input.signerId);
-    if (!member) return { ok: false, error: SIGNER_ERROR };
+    if (!member || !member.user.isActive) return { ok: false, error: SIGNER_ERROR };
     signerUser = member.user;
   }
 
@@ -419,9 +437,9 @@ export async function loadTemplateData(
     }
     const contact = await prisma.contact.findUnique({
       where: { id: input.recipientContactId },
-      select: contactSelect,
+      select: { ...contactSelect, isActive: true },
     });
-    if (!contact) return { ok: false, error: RECIPIENT_ERROR };
+    if (!contact || !contact.isActive) return { ok: false, error: RECIPIENT_ERROR };
     recipient = toContactData(contact);
   }
 
