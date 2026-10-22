@@ -186,6 +186,10 @@ describe("decodeHtmlEntities", () => {
       "Tom & Jerry's <brief> —ok"
     );
   });
+
+  it("leaves out-of-range numeric entities alone instead of throwing", () => {
+    expect(decodeHtmlEntities("a &#99999999; b")).toBe("a &#99999999; b");
+  });
 });
 
 // ── MIME fixtures ────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import { decodeHtmlEntities } from "@/lib/html-to-text";
 import { paragraphsToHtml } from "@/lib/text-to-html";
 /**
  * Pure Gmail-payload parsing helpers for the sync engine.
@@ -120,23 +121,10 @@ export function decodeMimeWords(raw: string): string {
     );
 }
 
-/** Decode the handful of HTML entities Gmail uses in `snippet`
- *  values (snippets arrive HTML-escaped; we store display text). */
-export function decodeHtmlEntities(raw: string): string {
-  return raw
-    .replace(/&#(\d+);/g, (_m, code: string) =>
-      String.fromCodePoint(parseInt(code, 10))
-    )
-    .replace(/&#x([0-9a-fA-F]+);/g, (_m, code: string) =>
-      String.fromCodePoint(parseInt(code, 16))
-    )
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&");
-}
+/** Snippets arrive HTML-escaped; decode with the shared decoder,
+ *  which guards out-of-range numeric entities. Re-exported so sync
+ *  code keeps importing it from here. */
+export { decodeHtmlEntities };
 
 // ── Header access ────────────────────────────────────────────────────────
 
