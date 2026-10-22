@@ -130,18 +130,22 @@ const levels = (format: (typeof LevelFormat)[keyof typeof LevelFormat], bullet: 
     style: { paragraph: { indent: { left: 720 * (level + 1), hanging: 360 } } },
   }));
 
-const EMU_PER_IN = 96; // docx ImageRun transformation is in pixels at 96 dpi
+const PX_PER_IN = 96; // docx ImageRun transformation is in pixels at 96 dpi
 const LOGO_MAX_W_IN = 3;
 const LOGO_MAX_H_IN = 1;
 
 function logoParagraph(logo: LoadedLogo): Paragraph {
   const size = imageSize(logo.bytes, logo.contentType);
-  let wIn = 1;
-  let hIn = 1;
+  let wPx = PX_PER_IN;
+  let hPx = PX_PER_IN;
   if (size) {
-    const scale = Math.min(LOGO_MAX_W_IN / size.width, LOGO_MAX_H_IN / size.height);
-    wIn = size.width * scale;
-    hIn = size.height * scale;
+    const scale = Math.min(
+      1,
+      (LOGO_MAX_W_IN * PX_PER_IN) / size.width,
+      (LOGO_MAX_H_IN * PX_PER_IN) / size.height,
+    );
+    wPx = size.width * scale;
+    hPx = size.height * scale;
   }
   return new Paragraph({
     alignment: ALIGN[logo.position],
@@ -150,8 +154,8 @@ function logoParagraph(logo: LoadedLogo): Paragraph {
         type: logo.contentType === "image/png" ? "png" : "jpg",
         data: logo.bytes,
         transformation: {
-          width: Math.round(wIn * EMU_PER_IN),
-          height: Math.round(hIn * EMU_PER_IN),
+          width: Math.round(wPx),
+          height: Math.round(hPx),
         },
       }),
     ],
@@ -176,7 +180,11 @@ export async function resolvedToDocx(input: {
   const { style } = input;
   const ctx: Ctx = { instance: { n: 0 } };
   const children = blocks(input.body.content ?? [], ctx, 0);
-  const isLetter = style.letterhead !== null || style.continuationBlockId !== null;
+  const isLetter = style.kind === "letter";
+  // Page numbers show on pages 2+ only. Letters carry "Page N" in the
+  // continuation header (never the footer); filings use the footer per
+  // pageNumbers. Either way the first page needs its own (empty) header/footer.
+  const footerNumber = !isLetter && style.pageNumbers !== "none";
   const font = FONTS[style.font].wordName;
   const headingRun = (level: 1 | 2 | 3) => ({
     font,
@@ -199,20 +207,19 @@ export async function resolvedToDocx(input: {
     if (parts.length) headers.first = new Header({ children: parts });
   }
   if (isLetter) {
-    headers.default = new Header({
-      children: [...content(input.continuation, ctx), pageLine(AlignmentType.RIGHT)],
-    });
+    const cont = content(input.continuation, ctx);
+    if (style.pageNumbers !== "none") cont.push(pageLine(AlignmentType.RIGHT));
+    headers.default = new Header({ children: cont.length ? cont : [new Paragraph("")] });
   }
 
   const footers: { default?: Footer; first?: Footer } = {};
-  if (style.pageNumbers !== "none") {
+  if (footerNumber) {
     footers.default = new Footer({
       children: [
         pageLine(style.pageNumbers === "bottom_right" ? AlignmentType.RIGHT : AlignmentType.CENTER),
       ],
     });
-    // First page of letters carries no page number.
-    if (isLetter) footers.first = new Footer({ children: [new Paragraph("")] });
+    footers.first = new Footer({ children: [new Paragraph("")] });
   }
 
   const file = new Document({
@@ -242,7 +249,7 @@ export async function resolvedToDocx(input: {
     sections: [
       {
         properties: {
-          titlePage: isLetter || undefined,
+          titlePage: isLetter || footerNumber || undefined,
           page: {
             size: { width: 12240, height: 15840 },
             margin: {

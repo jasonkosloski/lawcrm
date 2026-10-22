@@ -109,7 +109,7 @@ describe("resolvedToDocx", () => {
     expect(styles).toContain('<w:sz w:val="36"/>');
   });
 
-  it("letters: titlePg, letterhead on first page with logo, continuation + PAGE field", async () => {
+  it("letters: titlePg, letterhead on first page with logo, continuation header holds PAGE, footer none", async () => {
     const style = letterStyle({
       letterhead: {
         blockId: "b1",
@@ -133,9 +133,7 @@ describe("resolvedToDocx", () => {
     const cont = headers.find((h) => h.includes("Re: Smith matter"))!;
     expect(cont).toContain("PAGE");
     expect(cont).toContain('<w:jc w:val="right"/>');
-    const withPage = footers.filter((f) => f.includes("PAGE"));
-    expect(withPage).toHaveLength(1);
-    expect(withPage[0]).toContain('<w:jc w:val="right"/>');
+    expect(footers.some((f) => f.includes("PAGE"))).toBe(false);
   });
 
   it("logo alone when the letterhead block is null", async () => {
@@ -149,17 +147,59 @@ describe("resolvedToDocx", () => {
     expect(headers.some((h) => h.includes("<w:drawing>"))).toBe(true);
   });
 
-  it("filings: no titlePg and no headers", async () => {
-    const style = resolvePageStyle("filing", DEFAULT_DOCUMENT_STYLE, null);
-    const { doc, headers } = await build({ style });
-    expect(doc).not.toContain("w:titlePg");
+  it("filing + bottom_right: PAGE only in default footer, first footer empty, no headers", async () => {
+    const style = resolvePageStyle(
+      "filing",
+      { ...DEFAULT_DOCUMENT_STYLE, pageNumbers: "bottom_right" },
+      null,
+    );
+    const { doc, headers, footers } = await build({ style });
     expect(headers).toHaveLength(0);
-    expect(doc).toContain("w:footerReference");
+    expect(doc).toContain("<w:titlePg/>");
+    expect(footers.filter((f) => f.includes("PAGE"))).toHaveLength(1);
+    expect(footers.filter((f) => !f.includes("PAGE"))).toHaveLength(1);
   });
 
-  it("pageNumbers none adds no PAGE field", async () => {
-    const { footers } = await build({ style: letterStyle({ pageNumbers: "none" }) });
+  it("filing + none: no titlePg, no headers, no PAGE", async () => {
+    const style = resolvePageStyle(
+      "filing",
+      { ...DEFAULT_DOCUMENT_STYLE, pageNumbers: "none" },
+      null,
+    );
+    const { doc, headers, footers } = await build({ style });
+    expect(doc).not.toContain("w:titlePg");
+    expect(headers).toHaveLength(0);
     expect(footers.some((f) => f.includes("PAGE"))).toBe(false);
+  });
+
+  it("letter + none: no PAGE field anywhere", async () => {
+    const { headers, footers } = await build({ style: letterStyle({ pageNumbers: "none" }) });
+    expect([...headers, ...footers].some((x) => x.includes("PAGE"))).toBe(false);
+  });
+
+  it("letter with no letterhead or continuation: titlePg, PAGE only in default header", async () => {
+    const { doc, headers, footers } = await build({
+      style: letterStyle({ pageNumbers: "bottom_center" }),
+    });
+    expect(doc).toContain("<w:titlePg/>");
+    expect(headers.filter((h) => h.includes("PAGE"))).toHaveLength(1);
+    expect(footers.some((f) => f.includes("PAGE"))).toBe(false);
+  });
+
+  it("keeps a small logo at its own size (shrink-only)", async () => {
+    const small = new Uint8Array(png);
+    new DataView(small.buffer).setUint32(16, 96);
+    new DataView(small.buffer).setUint32(20, 48);
+    const style = letterStyle({
+      letterhead: {
+        blockId: null,
+        logo: { bytes: small, contentType: "image/png", position: "left" },
+      },
+    });
+    const { headers } = await build({ style });
+    expect(headers.find((h) => h.includes("<w:drawing>"))).toContain(
+      `<wp:extent cx="${96 * 9525}" cy="${48 * 9525}"/>`,
+    );
   });
 
   it("highlights an archived-block marker in the letterhead", async () => {

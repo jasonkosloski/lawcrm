@@ -65,6 +65,7 @@ export type LoadedLogo = {
 };
 
 export type PageStyle = {
+  kind: "letter" | "filing";
   font: FontKey;
   sizePt: number;
   lineSpacing: 1 | 1.15 | 1.5 | 2;
@@ -92,6 +93,7 @@ export function resolvePageStyle(
   const isLetter = kind === "letter";
   const hasLetterhead = isLetter && (style.letterheadBlockId !== null || logo !== null);
   return {
+    kind,
     font: style.fontKey,
     sizePt: style.fontSizeHalfPt / 2,
     lineSpacing: LINE_FACTOR[style.lineSpacing],

@@ -31,6 +31,7 @@ const LOGO: LoadedLogo = {
 describe("resolvePageStyle", () => {
   test("letter keeps letterhead (with logo) and continuation", () => {
     const p = resolvePageStyle("letter", STYLE, LOGO);
+    expect(p.kind).toBe("letter");
     expect(p.letterhead).toEqual({ blockId: "lh", logo: LOGO });
     expect(p.continuationBlockId).toBe("cont");
     expect(p.font).toBe("palatino");
