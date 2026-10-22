@@ -36,7 +36,7 @@ New `DocumentStyle` (`document_styles`), one row per firm, created lazily with d
 | `pageNumbers`                  | String          | `none` \| `bottom_center` (default) \| `bottom_right`; pages 2+ only                  |
 | `updatedAt`, `createdAt`       |                 |                                                                                       |
 
-The migration (expand-only) creates the table and seeds a `TemplateBlock` `tplblock_continuation` (key `continuation`, name "Continuation header"): one paragraph `field recipient.name`, text " · ", `field today` (format `long`). Idempotent `ON CONFLICT DO NOTHING`. The style row itself is created by the app on first read (the firm id isn't known to the migration).
+The migration (expand-only) creates the table and seeds a `TemplateBlock` `tplblock_continuation` (key `continuation`, name "Continuation header"): one paragraph `field client.name`, text " · ", `field today` (format `long`). Idempotent `ON CONFLICT DO NOTHING`. The style row itself is created by the app on first read (the firm id isn't known to the migration).
 
 Paper is US Letter only. Heading sizes derive from the body size (H1 +6 pt, H2 +4 pt, H3 +2 pt, all bold); not configurable.
 

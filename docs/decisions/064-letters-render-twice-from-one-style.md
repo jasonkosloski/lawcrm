@@ -9,7 +9,8 @@
 
 - One firm-wide `DocumentStyle` resolves to one `PageStyle` (`resolvePageStyle`, kind letter or filing). Two converters read the same `ResolvedDoc` and `PageStyle`: `.docx` via `docx` and PDF via `@react-pdf` (`to-pdf.tsx`). The HTML preview reads the same style.
 - Fonts are bundled, metric-compatible free faces (`src/lib/templates/fonts.ts`), so Word's named font and the embedded PDF font wrap alike. The PDF line height is the factor times the font's natural line height, matching Word's single spacing.
-- The letterhead is a real Word first-page header (title page), with a separate continuation header for later pages, not body content. Page 1 is never numbered.
+- The letterhead is a real Word first-page header (title page), with a separate continuation header for later pages, not body content.
+- Word's layout rules are the reference: the PDF and the preview copy its header placement (header distance, body at max(top margin, header bottom)), its lack of hyphenation and its 96-dpi image sizing, so page breaks land in the same places.
 - Logo uploads are re-encoded to PNG (longest side 1200 px) with `sharp`, so react-pdf never meets progressive, CMYK or odd JPEGs.
 - Generate offers Word, PDF or Both, all-or-nothing.
 

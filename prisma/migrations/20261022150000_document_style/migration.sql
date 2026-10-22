@@ -35,11 +35,14 @@ ALTER TABLE "document_styles" ADD CONSTRAINT "document_styles_letterheadBlockId_
 ALTER TABLE "document_styles" ADD CONSTRAINT "document_styles_continuationBlockId_fkey" FOREIGN KEY ("continuationBlockId") REFERENCES "template_blocks"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 
--- Seed the continuation header block (idempotent). The style row itself is
+-- Seed the continuation header block: client name and date, which every
+-- matter letter has (recipient would print a placeholder on letters
+-- without one). Idempotent; a bare ON CONFLICT also skips the seed when a
+-- user already made a block keyed 'continuation'. The style row itself is
 -- created by the app on first read.
 INSERT INTO "template_blocks" ("id", "key", "name", "description", "content", "updatedAt")
-VALUES ('tplblock_continuation', 'continuation', 'Continuation header', 'Header on pages 2 and later: recipient and date.', '{"type":"doc","content":[{"type":"paragraph","attrs":{"textAlign":null},"content":[{"type":"field","attrs":{"path":"recipient.name","format":null}},{"type":"text","text":" · "},{"type":"field","attrs":{"path":"today","format":"long"}}]}]}'::jsonb, CURRENT_TIMESTAMP)
-ON CONFLICT ("id") DO NOTHING;
+VALUES ('tplblock_continuation', 'continuation', 'Continuation header', 'Header on pages 2 and later: client name and date.', '{"type":"doc","content":[{"type":"paragraph","attrs":{"textAlign":null},"content":[{"type":"field","attrs":{"path":"client.name","format":null}},{"type":"text","text":" · "},{"type":"field","attrs":{"path":"today","format":"long"}}]}]}'::jsonb, CURRENT_TIMESTAMP)
+ON CONFLICT DO NOTHING;
 
 -- Data only: the new firm.edit_document_style permission, granted to every
 -- role that can already edit the firm profile. Admins bypass the matrix.

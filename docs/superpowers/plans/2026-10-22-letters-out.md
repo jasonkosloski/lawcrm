@@ -59,7 +59,7 @@
 
 - [ ] **Step 1: Write failing test** — integration: create `DocumentStyle` with only `firmId`; assert every default from Global Constraints; second row for the same firm → `P2002`; deleting a referenced `TemplateBlock` nulls `letterheadBlockId`.
 - [ ] **Step 2: Run** `npx vitest run src/lib/templates/document-style-schema.test.ts` — FAIL.
-- [ ] **Step 3: Schema + SQL via `migrate diff`**; append continuation-block seed (`ON CONFLICT ("id") DO NOTHING`; content: one paragraph `field recipient.name`, text `·`, `field today` format `long`) and the permission grant from `firm.edit_info`. Add the permission entry.
+- [ ] **Step 3: Schema + SQL via `migrate diff`**; append continuation-block seed (bare `ON CONFLICT DO NOTHING`; content: one paragraph `field client.name`, text `·`, `field today` format `long`) and the permission grant from `firm.edit_info`. Add the permission entry.
 - [ ] **Step 4: Run** the test, `npm run check:migrations`, and apply all migrations to a fresh scratch DB to confirm the seed row and grant (record output; drop the DB) — PASS.
 - [ ] **Step 5: Commit** `feat(documents): document style schema and permission`.
 
