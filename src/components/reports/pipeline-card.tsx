@@ -14,6 +14,7 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PipelineReport } from "@/lib/queries/reports";
+import { Badge } from "@/components/ui/badge";
 
 export function PipelineCard({ report }: { report: PipelineReport }) {
   // Scale bars against the busiest stage, floored at 1 so an empty
@@ -29,9 +30,9 @@ export function PipelineCard({ report }: { report: PipelineReport }) {
             {report.totalActiveLeads} leads · {report.totalOpenMatters} open
             matters
           </span>
-          <span className="ml-auto text-2xs font-mono font-medium px-2 py-0.5 rounded-full bg-ok-soft text-ok border border-line">
+          <Badge variant="ok" className="ml-auto font-mono">
             {report.convertedThisQuarter} converted this quarter
-          </span>
+          </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-4 flex flex-col gap-4">

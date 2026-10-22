@@ -63,6 +63,7 @@ import type { TypeOption, UserOption } from "./new-request-composer";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { inputClass, labelClass } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export type RequestDetailPermissions = {
   /** records.edit */
@@ -407,9 +408,9 @@ export function RequestDetail({
               {detail.custodianName} · {detail.typeName}
             </p>
           </div>
-          <span className="inline-block text-2xs font-medium px-2 py-0.5 rounded-full bg-paper-2 text-ink-3 border-line shrink-0">
+          <Badge variant="neutral">
             {RECORDS_STATUS_LABEL[detail.status]}
-          </span>
+          </Badge>
           {badge && (
             <span
               className={cn(

@@ -31,6 +31,7 @@ import { eventTimeEntryDate } from "@/components/calendar/event-dates";
 import { EventNotesSection } from "@/components/calendar/event-notes-section";
 import { EventTimeEntriesSection } from "@/components/calendar/event-time-entries-section";
 import type { MatterEventRow } from "@/lib/queries/matter-detail";
+import { Badge } from "@/components/ui/badge";
 
 const TYPE_LABEL: Record<string, string> = {
   meeting: "Meeting",
@@ -141,22 +142,23 @@ export function EventRowExpandable({
                   {event.title}
                 </div>
                 {notesCount > 0 && (
-                  <span
-                    className="inline-flex items-center gap-0.5 text-2xs font-medium text-brand-700 bg-brand-soft border border-brand-200 px-1.5 py-0.5 rounded-full shrink-0"
+                  <Badge
+                    className="gap-0.5"
                     title={`${notesCount} note${notesCount === 1 ? "" : "s"} attached`}
                   >
                     <MessageSquare size={10} />
                     {notesCount}
-                  </span>
+                  </Badge>
                 )}
                 {timeCount > 0 && (
-                  <span
-                    className="inline-flex items-center gap-0.5 text-2xs font-medium text-ok bg-ok-soft border border-line px-1.5 py-0.5 rounded-full shrink-0 font-mono"
+                  <Badge
+                    variant="ok"
+                    className="gap-0.5 font-mono"
                     title={`${formatHours(totalHours)} hours logged across ${timeCount} entr${timeCount === 1 ? "y" : "ies"}`}
                   >
                     <Clock size={10} />
                     {formatHours(totalHours)}h
-                  </span>
+                  </Badge>
                 )}
               </div>
               {event.location && (
@@ -170,9 +172,9 @@ export function EventRowExpandable({
                 </div>
               )}
             </div>
-            <span className="inline-block text-2xs font-medium px-2 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line shrink-0">
+            <Badge variant="neutral">
               {TYPE_LABEL[event.type] ?? event.type}
-            </span>
+            </Badge>
             {event.attendeeCount > 0 && (
               <span className="text-2xs font-mono text-ink-4 shrink-0">
                 {event.attendeeCount}{" "}

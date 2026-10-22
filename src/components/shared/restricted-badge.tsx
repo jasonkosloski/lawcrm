@@ -5,15 +5,16 @@
  */
 
 import { Lock } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 export function RestrictedBadge({ title }: { title?: string }) {
   return (
-    <span
-      className="inline-flex items-center gap-1 text-2xs font-medium px-2 py-0.5 rounded-full border border-warn-border bg-warn-soft text-warn"
+    <Badge
+      variant="warn"
       title={title ?? "Restricted: only its team can see this"}
     >
       <Lock size={10} aria-hidden />
       Restricted
-    </span>
+    </Badge>
   );
 }

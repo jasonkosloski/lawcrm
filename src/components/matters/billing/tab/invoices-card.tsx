@@ -23,6 +23,7 @@ import { invoiceStatusLabel, type InvoiceKind } from "@/lib/billing-form";
 import { formatDate } from "@/lib/format-date";
 import { formatMoney } from "@/lib/format-money";
 import { INVOICE_STATUS_CLASS } from "@/lib/constants/invoice-status";
+import { Badge } from "@/components/ui/badge";
 
 export function InvoicesCard({
   billing,
@@ -109,12 +110,13 @@ export function InvoicesCard({
                         <>
                           {inv.invoiceNumber}
                           {inv.kind === "internal_record" && (
-                            <span
-                              className="ml-2 text-2xs text-ink-3 px-1.5 py-px rounded-full border border-line bg-paper-2 font-sans"
+                            <Badge
+                              variant="neutral"
+                              className="ml-2 font-sans"
                               title="Internal record — closes WIP without billing the client. Excluded from Outstanding AR."
                             >
                               internal
-                            </span>
+                            </Badge>
                           )}
                           {inv.lineItemCount > 0 && (
                             <span className="ml-2 text-2xs text-ink-4 font-sans">
@@ -151,12 +153,12 @@ export function InvoicesCard({
                             inv.status === "sent" &&
                             inv.paidAmount > 0 &&
                             inv.paidAmount < inv.totalAmount && (
-                              <span
-                                className="text-2xs font-medium px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line"
+                              <Badge
+                                variant="neutral"
                                 title="Some payment recorded but a balance remains."
                               >
                                 partial
-                              </span>
+                              </Badge>
                             )}
                         </span>
                       )}

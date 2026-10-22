@@ -10,6 +10,11 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default: "bg-brand-soft text-brand-700 [a]:hover:bg-brand-50",
+        // Status tones (UI_PATTERNS "Status chip"); default is the brand tone.
+        ok: "bg-ok-soft text-ok",
+        warn: "bg-warn-soft text-warn",
+        danger: "bg-danger-soft text-danger",
+        neutral: "bg-paper-2 text-ink-3",
         secondary:
           "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
         destructive:

@@ -67,6 +67,7 @@ import {
 import { ConvertNoteToTaskDialog } from "@/components/conversions/convert-dialogs";
 import { EditNoteDialog } from "./edit-note-dialog";
 import type { NoteScope } from "@/lib/note-scope";
+import { Badge } from "@/components/ui/badge";
 
 export type NoteCardNote = {
   id: string;
@@ -184,9 +185,9 @@ export function NoteCard({
               {formatDate(note.createdAt, "datetime_medium", tz)}
             </div>
           </div>
-          <span className="inline-block text-2xs font-medium px-2 py-0.5 rounded-full border bg-brand-soft text-brand-700 border-brand-200">
+          <Badge>
             {typeLabel}
-          </span>
+          </Badge>
           {access.canPin ? (
             <button
               type="button"

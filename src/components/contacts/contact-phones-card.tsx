@@ -28,6 +28,7 @@ import { formatPhone } from "@/lib/format-phone";
 import { updateContactPhones } from "@/app/actions/contacts";
 import type { ContactPhoneEntry } from "@/lib/contact-form";
 import { inputClass } from "@/components/ui/field";
+import { Badge } from "@/components/ui/badge";
 
 export type ContactPhoneRow = {
   id: string;
@@ -85,9 +86,9 @@ export function ContactPhonesCard({
                 </span>
                 {p.label && <span className="text-ink-3">{p.label}</span>}
                 {p.isPrimary && (
-                  <span className="ml-auto text-2xs font-medium px-1.5 py-0.5 rounded-full bg-brand-soft text-brand-700 border border-brand-200">
+                  <Badge className="ml-auto">
                     Primary
-                  </span>
+                  </Badge>
                 )}
               </li>
             ))}

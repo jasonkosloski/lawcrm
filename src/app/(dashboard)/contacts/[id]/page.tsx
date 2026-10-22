@@ -26,6 +26,7 @@ import { getContactById } from "@/lib/queries/contacts";
 import { getFilingMatterOptions } from "@/lib/queries/communication";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { requireUser } from "@/lib/current-user";
+import { Badge } from "@/components/ui/badge";
 
 const PARTY_CATEGORY_LABEL: Record<string, string> = {
   client: "Client",
@@ -83,18 +84,18 @@ export default async function ContactDetailPage({
         subtitle={
           <>
             {!c.isActive && (
-              <span className="text-2xs font-medium px-2 py-0.5 rounded-full bg-paper-2 text-ink-3 border border-line">
+              <Badge variant="neutral">
                 Inactive
-              </span>
+              </Badge>
             )}
             {c.conflictStatus === "flagged" ? (
-              <span className="text-2xs font-medium px-2 py-0.5 rounded-full bg-warn-soft text-warn border border-warn-border">
+              <Badge variant="warn">
                 Conflict
-              </span>
+              </Badge>
             ) : c.conflictStatus === "override" ? (
-              <span className="text-2xs font-medium px-2 py-0.5 rounded-full bg-brand-soft text-brand-700 border border-brand-200">
+              <Badge>
                 Override
-              </span>
+              </Badge>
             ) : null}
           </>
         }

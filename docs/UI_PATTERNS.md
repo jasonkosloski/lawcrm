@@ -64,6 +64,8 @@ src/components/shared/due-label.tsx — "Oct 25 · 5d", "Today", "Tomorrow", "Oc
 
 ### Status chip
 ```
+<Badge variant="ok|warn|danger|neutral"> (brand is the default) from
+src/components/ui/badge.tsx; don't hand-roll rounded-full spans.
 Pale tint + dark text of the same hue, 12px, h-5, rounded-full, never squeezed (shrink-0).
 - ok:     bg-ok-soft text-ok         (filed, paid, done, converted)
 - warn:   bg-warn-soft text-warn     (due soon, unfiled, needs review)

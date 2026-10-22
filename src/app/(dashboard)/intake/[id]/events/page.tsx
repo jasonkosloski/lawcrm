@@ -41,6 +41,7 @@ import {
   formatDate,
   formatDateOnly,
 } from "@/lib/format-date";
+import { Badge } from "@/components/ui/badge";
 
 export default async function LeadEventsPage({
   params,
@@ -214,9 +215,9 @@ function LeadEventRow({
         )}
       </div>
       {event.viewerCanSeeDetails && (
-        <span className="inline-block text-2xs font-medium px-2 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line shrink-0">
+        <Badge variant="neutral">
           {typeLabel}
-        </span>
+        </Badge>
       )}
     </div>
   );

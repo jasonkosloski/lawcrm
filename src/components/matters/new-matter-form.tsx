@@ -76,6 +76,7 @@ import { agreementGateErrors } from "@/lib/originating-doc";
 import type { StorageDriver } from "@/lib/storage/storage-key";
 import { Field, inputClass } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 type ClientOption = {
   id: string;
@@ -567,13 +568,13 @@ export function NewMatterForm({
               Matter name
               <span className="text-warn">*</span>
               {!isNameDirty && displayedName && (
-                <span
-                  className="inline-flex items-center gap-1 text-2xs font-mono text-brand-700 bg-brand-soft px-1.5 py-0.5 rounded-full border border-brand-200"
+                <Badge
+                  className="font-mono"
                   title="Auto-generated from the matter name template"
                 >
                   <Sparkles size={10} />
                   auto
-                </span>
+                </Badge>
               )}
             </label>
             {isNameDirty && (

@@ -47,6 +47,7 @@ import { ClientStatusCard } from "@/components/matters/client-status-card";
 import { getClientStatusCardData } from "@/lib/queries/portal-status";
 import { NoteComposer } from "@/components/matters/notes/note-composer";
 import { NotesTabBody } from "@/components/matters/notes/notes-tab-body";
+import { Badge } from "@/components/ui/badge";
 
 const ROLE_LABEL: Record<string, string> = {
   lead: "Lead attorney",
@@ -444,12 +445,11 @@ export default async function MatterOverviewPage({
                           {row.contact.name}
                         </span>
                         {row.contact.id === matter.clientId && (
-                          <span
-                            className="text-2xs font-medium px-1.5 py-0.5 rounded-full bg-brand-soft text-brand-700 border border-brand-200"
+                          <Badge
                             title="Matter's primary client"
                           >
                             Primary
-                          </span>
+                          </Badge>
                         )}
                       </div>
                       {row.contact.organization && (

@@ -86,6 +86,7 @@ import {
   formatFileSize,
 } from "@/lib/document-display";
 import { scopeBasePath, type RecordScope } from "@/lib/record-scope";
+import { Badge } from "@/components/ui/badge";
 
 const firstParam =(v: string | string[] | undefined): string | undefined =>
   Array.isArray(v) ? v[0] : v;
@@ -256,9 +257,9 @@ export async function DocumentViewerBody({
               <h1 className="min-w-0 truncate text-sm font-semibold text-ink">
                 {doc.name}
               </h1>
-              <span className="inline-block rounded-full bg-paper-2 px-2 py-0.5 text-2xs font-medium text-ink-3">
+              <Badge variant="neutral">
                 {documentCategoryLabel(doc.category)}
-              </span>
+              </Badge>
               <span
                 className={`inline-block rounded-full px-2 py-0.5 text-2xs font-medium ${status.className}`}
               >

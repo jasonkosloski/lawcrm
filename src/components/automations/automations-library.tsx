@@ -51,6 +51,7 @@ import type {
 import { DeadlineRuleDialog } from "./deadline-rule-dialog";
 import { TaskListDialog } from "./task-list-dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export type AutomationPermissions = {
   ruleCreate: boolean;
@@ -368,7 +369,7 @@ function Row({
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-ink truncate">{title}</span>
           {badge && (
-            <span className="text-2xs px-1.5 py-0.5 rounded-full border border-line bg-paper-2 text-ink-3 shrink-0">{badge}</span>
+            <Badge variant="neutral">{badge}</Badge>
           )}
           {inactive && <span className="text-2xs text-ink-4 shrink-0">Archived</span>}
         </div>

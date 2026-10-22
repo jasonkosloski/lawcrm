@@ -36,6 +36,7 @@ import type {
   FilingLeadOption,
   FilingMatterOption,
 } from "@/lib/queries/communication";
+import { Badge } from "@/components/ui/badge";
 
 const formatRecipients = (
   list: Array<{ name?: string; email: string }>
@@ -192,13 +193,13 @@ export async function ThreadReader({
                     &lt;{m.fromEmail}&gt;
                   </span>
                   {m.isPrivileged && (
-                    <span
-                      className="inline-flex items-center gap-1 text-2xs font-medium px-1.5 py-0.5 rounded-full border bg-warn-soft text-warn border-warn-border"
+                    <Badge
+                      variant="warn"
                       title="Flagged as attorney-client privileged"
                     >
                       <ShieldCheck size={10} />
                       Privileged
-                    </span>
+                    </Badge>
                   )}
                 </div>
                 {/* Recipients block. Each line breaks on sm+ so the

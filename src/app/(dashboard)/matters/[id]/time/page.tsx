@@ -58,6 +58,7 @@ import {
 import { requireUser } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { formatMoney } from "@/lib/format-money";
+import { Badge } from "@/components/ui/badge";
 
 export default async function MatterTimePage({
   params,
@@ -460,19 +461,19 @@ function ExpenseTableRow({
                 Billed · {expense.invoiceNumber}
               </Link>
             ) : (
-              <span className="inline-flex w-fit items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full border bg-brand-soft text-brand-700 border-brand-200">
+              <Badge>
                 Billable
-              </span>
+              </Badge>
             )
           ) : (
-            <span className="inline-flex w-fit items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line">
+            <Badge variant="neutral">
               Non-billable
-            </span>
+            </Badge>
           )}
           {expense.clientAdvanced && (
-            <span className="inline-flex w-fit items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line">
+            <Badge variant="neutral">
               Client-advanced
-            </span>
+            </Badge>
           )}
           {expense.receiptDocumentId && (
             // The chip links to the file when a blob exists, else
@@ -493,14 +494,14 @@ function ExpenseTableRow({
                 <Paperclip size={11} /> Receipt
               </a>
             ) : (
-              <span
-                className="inline-flex w-fit items-center gap-1 text-2xs px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line"
+              <Badge
+                variant="neutral"
                 title={
                   expense.receiptDocumentName ?? "Receipt attached (no file)"
                 }
               >
                 <Paperclip size={11} /> Receipt (no file)
-              </span>
+              </Badge>
             )
           )}
         </div>

@@ -27,6 +27,7 @@ import { formatDate } from "@/lib/format-date";
 import { formatHours, timeEntryStatusBadge } from "@/lib/time-entry-constants";
 import type { DayTimeEntry, MyDayTime, RunningTimer } from "@/lib/queries/time";
 import { timeSourceLabel } from "./time-view-utils";
+import { Badge } from "@/components/ui/badge";
 
 export function TimeDayView({
   day,
@@ -217,9 +218,9 @@ function EntryCard({
           {status.label}
         </span>
         {showSource && (
-          <span className="inline-block text-2xs font-medium px-1.5 py-px rounded-full border bg-paper-2 text-ink-3 border-line">
+          <Badge variant="neutral">
             via {timeSourceLabel(entry.source)}
-          </span>
+          </Badge>
         )}
         {!entry.billable && (
           <span className="text-2xs text-ink-4">Non-billable</span>

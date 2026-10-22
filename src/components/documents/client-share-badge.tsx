@@ -4,6 +4,7 @@
  */
 
 import type { shareReason } from "@/lib/portal/document-visibility";
+import { Badge } from "@/components/ui/badge";
 
 export type ShareReason = ReturnType<typeof shareReason>;
 
@@ -14,11 +15,12 @@ export function ClientShareBadge({ reason }: { reason: ShareReason }) {
       ? "Shared with client"
       : `Shared via folder ${reason.folderName}`;
   return (
-    <span
+    <Badge
       title={title}
-      className="ml-2 inline-block text-2xs font-medium px-1.5 py-0.5 rounded-full bg-paper-2 text-ink-3 align-middle"
+      variant="neutral"
+      className="ml-2 align-middle"
     >
       Shared
-    </span>
+    </Badge>
   );
 }

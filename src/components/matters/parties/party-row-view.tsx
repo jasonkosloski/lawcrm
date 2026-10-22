@@ -23,6 +23,7 @@ import type { PartyCategory } from "@/lib/party-constants";
 import { PartyEditForm } from "./party-edit-form";
 import { PartyRowActions } from "./party-row-actions";
 import type { ContactOption } from "./party-composer";
+import { Badge } from "@/components/ui/badge";
 
 export function PartyRowView({
   party,
@@ -82,17 +83,16 @@ export function PartyRowView({
             {party.name}
           </Link>
           {party.isPrimaryClient && (
-            <span
-              className="text-2xs font-medium px-1.5 py-0.5 rounded-full bg-brand-soft text-brand-700 border border-brand-200"
+            <Badge
               title="This matter's primary client — set via Matter → Edit"
             >
               Primary
-            </span>
+            </Badge>
           )}
           {party.conflictStatus === "flagged" && (
-            <span className="text-2xs font-medium px-1.5 py-0.5 rounded-full bg-warn-soft text-warn border border-warn-border">
+            <Badge variant="warn">
               conflict flagged
-            </span>
+            </Badge>
           )}
         </div>
       </TableCell>
@@ -176,9 +176,9 @@ export function PartyRowView({
 function RepresentationCell({ party }: { party: PartyRow }) {
   if (party.isRepresented === false) {
     return (
-      <span className="inline-block text-2xs font-medium px-1.5 py-0.5 rounded-full border bg-paper-2 text-ink-3 border-line">
+      <Badge variant="neutral">
         Pro se
-      </span>
+      </Badge>
     );
   }
   if (party.isRepresented === true && party.representationName) {

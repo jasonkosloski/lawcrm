@@ -39,6 +39,7 @@ import type { TeamFormState } from "@/lib/team-form";
 import { ADMIN_ROLE_NAME } from "@/lib/role-constants";
 import { MemberEditForm } from "./member-edit-form";
 import type { FirmUserRow, RoleChip } from "@/lib/queries/team";
+import { Badge } from "@/components/ui/badge";
 
 export function MemberRow({
   member,
@@ -156,9 +157,9 @@ export function MemberRow({
                 {member.name}
               </span>
               {member.isSelf && (
-                <span className="text-2xs font-medium px-1.5 py-px rounded-full bg-brand-soft text-brand-700 border border-brand-200">
+                <Badge>
                   you
-                </span>
+                </Badge>
               )}
             </div>
             <span className="text-2xs text-ink-4 truncate">{member.email}</span>
