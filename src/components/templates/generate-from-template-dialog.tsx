@@ -36,6 +36,7 @@ import {
   previewDocumentFromTemplate,
   type TemplatePreviewResult,
 } from "@/app/actions/document-templates";
+import { FormErrorBanner } from "@/components/ui/field";
 
 export type TemplateOption = {
   id: string;
@@ -226,12 +227,7 @@ export function GenerateFromTemplateDialog({
                 </div>
               )}
 
-              {!previewPending && preview && !preview.ok && (
-                <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-                  <TriangleAlert size={12} className="shrink-0 mt-px" />
-                  <span>{preview.error}</span>
-                </div>
-              )}
+              {!previewPending && preview && !preview.ok && <FormErrorBanner message={preview.error} />}
 
               {!previewPending && preview?.ok && (
                 <>
@@ -289,12 +285,7 @@ export function GenerateFromTemplateDialog({
                 </div>
               )}
 
-              {saveError && (
-                <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-                  <TriangleAlert size={12} className="shrink-0 mt-px" />
-                  <span>{saveError}</span>
-                </div>
-              )}
+              <FormErrorBanner message={saveError} />
             </div>
           )}
 

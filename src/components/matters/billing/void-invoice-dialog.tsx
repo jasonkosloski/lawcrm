@@ -14,7 +14,6 @@
 "use client";
 
 import { useEffect, useId, useState, useTransition } from "react";
-import { TriangleAlert } from "lucide-react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import {
   Dialog,
@@ -32,7 +31,7 @@ import {
   type BillingFormState,
 } from "@/lib/billing-form";
 import { notifySuccess, notifyWarning } from "@/lib/feedback";
-import { inputClass } from "@/components/ui/field";
+import { inputClass, FormErrorBanner } from "@/components/ui/field";
 
 export function VoidInvoiceDialog({
   open,
@@ -153,12 +152,7 @@ function VoidInvoiceForm({
         </>
       )}
 
-      {state.status === "error" && state.error && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-          <TriangleAlert size={12} className="shrink-0 mt-px" />
-          <span>{state.error}</span>
-        </div>
-      )}
+      {state.status === "error" && state.error && <FormErrorBanner message={state.error} />}
 
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onCancel}>

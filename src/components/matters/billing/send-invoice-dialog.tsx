@@ -41,7 +41,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Globe, Mail, Stamp, TriangleAlert } from "lucide-react";
+import { Globe, Mail, Stamp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sendInvoice } from "@/app/actions/billing";
 import {
@@ -51,7 +51,7 @@ import {
 import { notifyWarning } from "@/lib/feedback";
 import { parseMoneyInput } from "@/lib/parse-money-input";
 import { formatMoney } from "@/lib/format-money";
-import { inputClass } from "@/components/ui/field";
+import { inputClass, FormErrorBanner } from "@/components/ui/field";
 
 export type PortalSend = { available: boolean; reason: string | null };
 const NO_PORTAL_SEND: PortalSend = { available: false, reason: null };
@@ -398,12 +398,7 @@ function SendInvoiceForm({
         </div>
       )}
 
-      {state.status === "error" && state.error && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-          <TriangleAlert size={12} className="shrink-0 mt-px" />
-          <span>{state.error}</span>
-        </div>
-      )}
+      {state.status === "error" && state.error && <FormErrorBanner message={state.error} />}
 
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onCancel}>

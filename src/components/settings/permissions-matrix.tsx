@@ -30,11 +30,12 @@
 "use client";
 
 import { Fragment, useState, useTransition } from "react";
-import { Lock, TriangleAlert } from "lucide-react";
+import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { setRolePermissionAction } from "@/app/actions/roles";
 import { ADMIN_ROLE_NAME } from "@/lib/role-constants";
 import { ADMIN_ONLY_PERMISSIONS, PERMISSION_CATEGORIES } from "@/lib/permissions";
+import { FormErrorBanner } from "@/components/ui/field";
 
 type RoleColumn = {
   id: string;
@@ -131,12 +132,7 @@ export function PermissionsMatrix({
         </div>
       </div>
 
-      {error && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-          <TriangleAlert size={12} className="shrink-0 mt-px" />
-          <span>{error}</span>
-        </div>
-      )}
+      <FormErrorBanner message={error} />
 
       <div className="border border-line rounded-md overflow-x-auto bg-paper">
         {/* The grid uses one wide column for the permission label

@@ -31,7 +31,7 @@
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, TriangleAlert, Upload } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { upload } from "@vercel/blob/client";
 import { cn } from "@/lib/utils";
 import { contentTypeForFilename } from "@/app/api/documents/upload/upload-config";
@@ -45,7 +45,7 @@ import {
 import { makeStorageKey, type StorageDriver } from "@/lib/storage/storage-key";
 import { blobUploadErrorMessage } from "./upload-errors";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { inputClass } from "@/components/ui/field";
+import { inputClass, FormErrorBanner } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 
 const MAX_MB = Math.round(MAX_DOCUMENT_BYTES / (1024 * 1024));
@@ -278,15 +278,7 @@ export function UploadDocumentForm({
         </div>
       </div>
 
-      {error && (
-        <div
-          role="alert"
-          className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn"
-        >
-          <TriangleAlert size={12} className="shrink-0 mt-px" />
-          <span>{error}</span>
-        </div>
-      )}
+      <FormErrorBanner message={error} />
 
       <div className="flex items-center justify-end gap-2">
         <button

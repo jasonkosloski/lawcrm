@@ -10,7 +10,7 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
-import { Lock, LockOpen, Plus, TriangleAlert, X } from "lucide-react";
+import { Lock, LockOpen, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
@@ -25,6 +25,7 @@ import {
   type MatterTeamRole,
 } from "@/lib/matter-team-constants";
 import { confirmAction } from "@/lib/feedback";
+import { FormErrorBanner } from "@/components/ui/field";
 
 export type LeadTeamRow = {
   userId: string;
@@ -227,15 +228,7 @@ export function LeadAccessCard({
         </Button>
       )}
 
-      {error && (
-        <div
-          role="alert"
-          className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn"
-        >
-          <TriangleAlert size={12} className="shrink-0 mt-px" />
-          <span>{error}</span>
-        </div>
-      )}
+      <FormErrorBanner message={error} />
     </div>
   );
 }

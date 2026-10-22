@@ -23,7 +23,6 @@ import {
   Check,
   CheckCircle2,
   Circle,
-  TriangleAlert,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -34,7 +33,7 @@ import { formatDate } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { Button } from "@/components/ui/button";
 import { setApprovalStepStatus } from "@/app/actions/settlements";
-import { inputClass } from "@/components/ui/field";
+import { inputClass, FormErrorBanner } from "@/components/ui/field";
 
 type ApprovalRow = {
   id: string;
@@ -101,12 +100,7 @@ export function SettlementApprovals({
         </div>
       </div>
 
-      {error && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-          <TriangleAlert size={12} className="shrink-0 mt-px" />
-          <span>{error}</span>
-        </div>
-      )}
+      <FormErrorBanner message={error} />
 
       <ul className="border border-line rounded-md overflow-hidden divide-y divide-line">
         {approvals.map((a) => {

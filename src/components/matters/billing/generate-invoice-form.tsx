@@ -17,7 +17,7 @@
 
 import { useCallback, useId, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
-import { FilePlus2, TriangleAlert } from "lucide-react";
+import { FilePlus2 } from "lucide-react";
 import { generateInvoiceFromWip } from "@/app/actions/billing";
 import {
   billingInitialState,
@@ -25,7 +25,7 @@ import {
 } from "@/lib/billing-form";
 import { bundleCountLabel, bundleTotal } from "./bundle-summary";
 import { formatMoney } from "@/lib/format-money";
-import { inputClass } from "@/components/ui/field";
+import { inputClass, FormErrorBanner } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 
 export function GenerateInvoiceForm({
@@ -153,12 +153,7 @@ export function GenerateInvoiceForm({
         </div>
       </div>
 
-      {state.status === "error" && state.error && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-          <TriangleAlert size={12} className="shrink-0 mt-px" />
-          <span>{state.error}</span>
-        </div>
-      )}
+      {state.status === "error" && state.error && <FormErrorBanner message={state.error} />}
 
       <div className="flex items-center justify-end gap-2">
         <button

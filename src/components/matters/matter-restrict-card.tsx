@@ -8,10 +8,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Lock, LockOpen, TriangleAlert } from "lucide-react";
+import { Lock, LockOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { setMatterRestricted } from "@/app/actions/matters";
 import { confirmAction } from "@/lib/feedback";
+import { FormErrorBanner } from "@/components/ui/field";
 
 export function MatterRestrictCard({
   matterId,
@@ -75,15 +76,7 @@ export function MatterRestrictCard({
         {restricted ? <LockOpen size={12} /> : <Lock size={12} />}
         {restricted ? "Open to firm" : "Restrict to case team"}
       </Button>
-      {error && (
-        <div
-          role="alert"
-          className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn"
-        >
-          <TriangleAlert size={12} className="shrink-0 mt-px" />
-          <span>{error}</span>
-        </div>
-      )}
+      <FormErrorBanner message={error} />
     </div>
   );
 }

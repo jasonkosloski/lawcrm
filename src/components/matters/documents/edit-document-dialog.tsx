@@ -12,7 +12,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, TriangleAlert } from "lucide-react";
+import { Pencil } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +30,7 @@ import {
 } from "@/lib/document-form";
 import { documentCategoryLabel } from "@/lib/document-display";
 import { MAX_DOCUMENT_NAME_LENGTH } from "@/app/api/documents/upload/upload-config";
-import { inputClass } from "@/components/ui/field";
+import { inputClass, FormErrorBanner } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 
 export function EditDocumentDialog({
@@ -129,15 +129,7 @@ export function EditDocumentDialog({
               ))}
             </NativeSelect>
           </div>
-          {error && (
-            <div
-              role="alert"
-              className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn"
-            >
-              <TriangleAlert size={12} className="shrink-0 mt-px" />
-              <span>{error}</span>
-            </div>
-          )}
+          <FormErrorBanner message={error} />
           <DialogFooter>
             <Button
               variant="outline"

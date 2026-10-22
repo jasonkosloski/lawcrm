@@ -25,8 +25,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   ShieldX,
-  TriangleAlert,
-} from "lucide-react";
+  } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,7 +33,7 @@ import {
   runLeadConflictCheck,
 } from "@/app/actions/conflict-check";
 import type { ConflictMatch } from "@/lib/conflict-check";
-import { textareaClass } from "@/components/ui/field";
+import { textareaClass, FormErrorBanner } from "@/components/ui/field";
 
 type Status = "pending" | "clear" | "warn" | "conflict" | "override";
 
@@ -199,12 +198,7 @@ export function ConflictCheckCard({
         </div>
       )}
 
-      {error && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-          <TriangleAlert size={12} className="shrink-0 mt-px" />
-          <span>{error}</span>
-        </div>
-      )}
+      <FormErrorBanner message={error} />
 
       {/* Override composer */}
       {overrideOpen && showOverrideButton && (

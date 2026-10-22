@@ -10,7 +10,7 @@
 
 import type { RecordScope } from "@/lib/record-scope";
 import { useState, useTransition } from "react";
-import { FolderPlus, TriangleAlert } from "lucide-react";
+import { FolderPlus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { createFolder } from "@/app/actions/document-folders";
-import { inputClass } from "@/components/ui/field";
+import { inputClass, FormErrorBanner } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 
 export function NewFolderButton({
@@ -125,12 +125,7 @@ export function NewFolderDialog({
               autoFocus
               className={inputClass()}
             />
-            {error && (
-              <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-                <TriangleAlert size={12} className="shrink-0 mt-px" />
-                <span>{error}</span>
-              </div>
-            )}
+            <FormErrorBanner message={error} />
             <DialogFooter>
               <Button
                 variant="outline"

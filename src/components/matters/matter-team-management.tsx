@@ -19,7 +19,7 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
-import { Plus, TriangleAlert, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,7 @@ import {
   type MatterTeamRole,
 } from "@/lib/matter-team-constants";
 import { confirmAction } from "@/lib/feedback";
+import { FormErrorBanner } from "@/components/ui/field";
 
 export type TeamMemberRow = {
   membershipId: string;
@@ -261,12 +262,7 @@ export function MatterTeamManagement({
         </div>
       )}
 
-      {error && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-          <TriangleAlert size={12} className="shrink-0 mt-px" />
-          <span>{error}</span>
-        </div>
-      )}
+      <FormErrorBanner message={error} />
 
       {/* Former members — read-only, dimmed. Always rendered when
           there are any so the audit trail stays visible during

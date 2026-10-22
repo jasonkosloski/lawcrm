@@ -35,8 +35,7 @@ import {
   Paperclip,
   Pin,
   Search,
-  TriangleAlert,
-} from "lucide-react";
+  } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -56,6 +55,7 @@ import {
 import type { FilingMatterOption } from "@/lib/queries/communication";
 import type { FlatFolder } from "@/lib/folder-tree";
 import { Button } from "@/components/ui/button";
+import { FormErrorBanner } from "@/components/ui/field";
 
 export type AttachmentChipItem = {
   id: string;
@@ -415,12 +415,7 @@ function FileAttachmentDialog({
           </label>
         )}
 
-        {error && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-            <TriangleAlert size={12} className="shrink-0 mt-px" />
-            <span>{error}</span>
-          </div>
-        )}
+        <FormErrorBanner message={error} />
         {notice && (
           <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-paper-2 border border-line text-2xs text-ink-3">
             <Info size={12} className="shrink-0 mt-px" />

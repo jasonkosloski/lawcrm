@@ -28,6 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { FlatFolder } from "@/lib/folder-tree";
 import { Button } from "@/components/ui/button";
+import { FormErrorBanner } from "@/components/ui/field";
 
 export function MoveToFolderDialog({
   open,
@@ -174,12 +175,7 @@ export function MoveToFolderDialog({
           </div>
         )}
 
-        {error && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-            <TriangleAlert size={12} className="shrink-0 mt-px" />
-            <span>{error}</span>
-          </div>
-        )}
+        <FormErrorBanner message={error} />
 
         <DialogFooter>
           <Button

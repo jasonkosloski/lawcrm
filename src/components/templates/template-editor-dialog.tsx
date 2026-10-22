@@ -56,7 +56,7 @@ import {
   updateDocumentTemplate,
 } from "@/app/actions/document-templates";
 import type { TemplateListItem } from "@/components/templates/template-library";
-import { inputClass, labelClass, textareaClass } from "@/components/ui/field";
+import { inputClass, labelClass, textareaClass, FormErrorBanner } from "@/components/ui/field";
 
 export function TemplateEditorDialog({
   open,
@@ -289,12 +289,7 @@ export function TemplateEditorDialog({
             )}
           </div>
 
-          {state.status === "error" && state.error && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
-              <TriangleAlert size={12} className="shrink-0 mt-px" />
-              <span>{state.error}</span>
-            </div>
-          )}
+          {state.status === "error" && state.error && <FormErrorBanner message={state.error} />}
 
           <DialogFooter>
             <Button
