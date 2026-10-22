@@ -22,6 +22,9 @@ import {
   uploadBytes,
 } from "@/lib/transcription/assemblyai";
 import { capExceeded, monthStart } from "@/lib/transcription/cap";
+import { alignWords } from "@/lib/transcription/align";
+import { wordsToText } from "@/lib/transcription/normalize";
+import type { Word } from "@/lib/transcription/types";
 
 export type RequestTranscriptResult =
   | { ok: true; status: "processing" | "completed" }
@@ -277,6 +280,235 @@ export async function deleteTranscript(
     userId,
     type: "document",
     title: "Transcript deleted",
+    detail: doc.name,
+  });
+  revalidatePath(`${scopeBasePath(scopeOf(doc))}/documents/${doc.id}`);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Corrections
+// ---------------------------------------------------------------------------
+
+export type SegmentEditResult =
+  | { ok: true; revision: number }
+  | { ok: false; error: string; conflict?: true };
+
+const CONFLICT: SegmentEditResult = {
+  ok: false,
+  conflict: true,
+  error: "Someone else changed this paragraph. Reload to see their version.",
+};
+const MAX_PARAGRAPH_CHARS = 5000;
+
+type SegmentContext = {
+  userId: string;
+  seg: {
+    id: string;
+    transcriptId: string;
+    speaker: string;
+    text: string;
+    words: unknown;
+    originalText: string | null;
+  };
+  transcript: { id: string; status: string; speakers: unknown };
+  doc: { id: string; name: string; matterId: string | null; leadId: string | null };
+  viewerPath: string;
+};
+
+function speakerMap(raw: unknown): Record<string, string> {
+  return raw && typeof raw === "object" && !Array.isArray(raw)
+    ? { ...(raw as Record<string, string>) }
+    : {};
+}
+
+/** Permission + scope check for an edit on a segment. Returns an error result or the context. */
+async function loadSegmentForEdit(
+  segmentId: string,
+): Promise<SegmentContext | { error: SegmentEditResult }> {
+  const userId = await requirePermission("documents.transcript.edit");
+  const seg = await prisma.transcriptSegment.findUnique({
+    where: { id: segmentId },
+    select: {
+      id: true,
+      transcriptId: true,
+      speaker: true,
+      text: true,
+      words: true,
+      originalText: true,
+      transcript: {
+        select: {
+          id: true,
+          status: true,
+          speakers: true,
+          document: {
+            select: { id: true, name: true, matterId: true, leadId: true },
+          },
+        },
+      },
+    },
+  });
+  if (!seg) return { error: { ok: false, error: "Paragraph not found." } };
+  const { document: doc, ...transcript } = seg.transcript;
+  await assertChildMatterAccess("document", doc.id);
+  if (transcript.status !== "completed") {
+    return { error: { ok: false, error: "The transcript isn't ready to edit." } };
+  }
+  return {
+    userId,
+    seg,
+    transcript,
+    doc,
+    viewerPath: `${scopeBasePath(scopeOf(doc))}/documents/${doc.id}`,
+  };
+}
+
+/** Revision-checked segment write plus transcript corrected stamp, in one transaction. */
+async function writeSegment(
+  ctx: SegmentContext,
+  revision: number,
+  data: Prisma.TranscriptSegmentUpdateManyMutationInput,
+  transcriptData?: Prisma.TranscriptUpdateInput,
+): Promise<SegmentEditResult> {
+  const ok = await prisma.$transaction(async (tx) => {
+    const res = await tx.transcriptSegment.updateMany({
+      where: { id: ctx.seg.id, revision },
+      data: { ...data, revision: { increment: 1 } },
+    });
+    if (res.count === 0) return false;
+    await tx.transcript.update({
+      where: { id: ctx.transcript.id },
+      data: {
+        ...transcriptData,
+        correctedAt: new Date(),
+        correctedBy: { connect: { id: ctx.userId } },
+      },
+    });
+    return true;
+  });
+  if (!ok) return CONFLICT;
+  revalidatePath(ctx.viewerPath);
+  return { ok: true, revision: revision + 1 };
+}
+
+function logCorrection(ctx: SegmentContext, title: string) {
+  return logActivity({
+    matterId: ctx.doc.matterId,
+    leadId: ctx.doc.leadId,
+    userId: ctx.userId,
+    type: "document",
+    title,
+    detail: ctx.doc.name,
+  });
+}
+
+export async function updateTranscriptSegment(
+  segmentId: string,
+  input: { text: string; revision: number },
+): Promise<SegmentEditResult> {
+  const ctx = await loadSegmentForEdit(segmentId);
+  if ("error" in ctx) return ctx.error;
+  const text = input.text.trim();
+  if (!text) return { ok: false, error: "A paragraph can't be empty." };
+  if (text.length > MAX_PARAGRAPH_CHARS) {
+    return { ok: false, error: "A paragraph can be at most 5,000 characters." };
+  }
+  const words = alignWords((ctx.seg.words as Word[]) ?? [], text);
+  if (words.length === 0) return { ok: false, error: "A paragraph can't be empty." };
+  const res = await writeSegment(ctx, input.revision, {
+    text: wordsToText(words),
+    words,
+    // Only the first edit records the provider's text.
+    ...(ctx.seg.originalText === null ? { originalText: ctx.seg.text } : {}),
+  });
+  if (res.ok) await logCorrection(ctx, "Transcript corrected");
+  return res;
+}
+
+export async function revertTranscriptSegment(
+  segmentId: string,
+  revision: number,
+): Promise<SegmentEditResult> {
+  const ctx = await loadSegmentForEdit(segmentId);
+  if ("error" in ctx) return ctx.error;
+  if (ctx.seg.originalText === null) return { ok: true, revision };
+  const words = alignWords((ctx.seg.words as Word[]) ?? [], ctx.seg.originalText);
+  const res = await writeSegment(ctx, revision, {
+    text: ctx.seg.originalText,
+    words,
+    originalText: null,
+  });
+  if (res.ok) await logCorrection(ctx, "Transcript paragraph reverted");
+  return res;
+}
+
+export async function setSegmentSpeaker(
+  segmentId: string,
+  speaker: string,
+  revision: number,
+): Promise<SegmentEditResult> {
+  const ctx = await loadSegmentForEdit(segmentId);
+  if ("error" in ctx) return ctx.error;
+  const speakers = speakerMap(ctx.transcript.speakers);
+  let transcriptData: Prisma.TranscriptUpdateInput | undefined;
+  if (!Object.hasOwn(speakers, speaker)) {
+    if (!/^[A-Z]$/.test(speaker)) return { ok: false, error: "Unknown speaker." };
+    transcriptData = { speakers: { ...speakers, [speaker]: `Speaker ${speaker}` } };
+  }
+  const res = await writeSegment(ctx, revision, { speaker }, transcriptData);
+  if (res.ok) await logCorrection(ctx, "Transcript speaker changed");
+  return res;
+}
+
+export async function renameTranscriptSpeaker(
+  transcriptId: string,
+  speaker: string,
+  name: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requirePermission("documents.transcript.edit");
+  const t = await prisma.transcript.findUnique({
+    where: { id: transcriptId },
+    select: {
+      id: true,
+      status: true,
+      document: { select: { id: true, name: true, matterId: true, leadId: true } },
+    },
+  });
+  if (!t) return { ok: false, error: "Transcript not found." };
+  const doc = t.document;
+  await assertChildMatterAccess("document", doc.id);
+  if (t.status !== "completed") {
+    return { ok: false, error: "The transcript isn't ready to edit." };
+  }
+  const trimmed = name.trim();
+  if (trimmed.length < 1 || trimmed.length > 60) {
+    return { ok: false, error: "Names must be 1 to 60 characters." };
+  }
+  const found = await prisma.$transaction(async (tx) => {
+    const fresh = await tx.transcript.findUniqueOrThrow({
+      where: { id: t.id },
+      select: { speakers: true },
+    });
+    const speakers = speakerMap(fresh.speakers);
+    if (!Object.hasOwn(speakers, speaker)) return false;
+    speakers[speaker] = trimmed;
+    await tx.transcript.update({
+      where: { id: t.id },
+      data: {
+        speakers,
+        correctedAt: new Date(),
+        correctedBy: { connect: { id: userId } },
+      },
+    });
+    return true;
+  });
+  if (!found) return { ok: false, error: "Unknown speaker." };
+  await logActivity({
+    matterId: doc.matterId,
+    leadId: doc.leadId,
+    userId,
+    type: "document",
+    title: "Transcript speaker renamed",
     detail: doc.name,
   });
   revalidatePath(`${scopeBasePath(scopeOf(doc))}/documents/${doc.id}`);
