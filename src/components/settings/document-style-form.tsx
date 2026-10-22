@@ -13,6 +13,7 @@
 
 "use client";
 
+import { overlayLegacyBody } from "@/lib/templates/paragraph-styles";
 import { useState, useTransition } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { saveDocumentStyle } from "@/app/actions/document-style";
@@ -124,7 +125,8 @@ export function DocumentStyleForm({
   const showLogo = hasLogo && values.logoPosition !== "none";
   const style = resolvePageStyle(
     "letter",
-    values,
+    // The form edits the legacy columns; keep Body in step as the loader does.
+    { ...values, paragraphStyles: overlayLegacyBody(values.paragraphStyles, values) },
     showLogo ? placeholderLogo(values.logoPosition as "left" | "center" | "right") : null,
   );
   const docFor = (id: string | null) => (id ? (blockDocs[id] ?? null) : null);

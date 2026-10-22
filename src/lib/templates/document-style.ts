@@ -16,7 +16,7 @@ import {
   type LogoPosition,
   type PageNumberPosition,
 } from "./page-style";
-import { parseParagraphStyles, type ParagraphStyle } from "./paragraph-styles";
+import { overlayLegacyBody, parseParagraphStyles } from "./paragraph-styles";
 
 export type LoadedDocumentStyle = DocumentStyleValues & {
   id: string;
@@ -36,24 +36,6 @@ async function readRow(firmId: string) {
 }
 
 type Row = NonNullable<Awaited<ReturnType<typeof readRow>>>;
-
-/** Bridges the legacy size/spacing columns (what the current Settings form
- *  edits) onto the Body style until the styles UI replaces those fields. */
-function overlayLegacyBody(styles: ParagraphStyle[], row: Row): ParagraphStyle[] {
-  return styles.map((s) =>
-    s.key === "body"
-      ? {
-          ...s,
-          values: {
-            ...s.values,
-            sizePt: row.fontSizeHalfPt / 2,
-            lineSpacing: row.lineSpacing as LineSpacing,
-            spaceAfterPt: row.spaceAfterPt,
-          },
-        }
-      : s,
-  );
-}
 
 function toValues(row: Row): LoadedDocumentStyle {
   const house = {
@@ -78,7 +60,10 @@ function toValues(row: Row): LoadedDocumentStyle {
     logoContentType: row.logoContentType,
     continuationBlockId: row.continuationBlockId,
     pageNumbers: row.pageNumbers as PageNumberPosition,
-    paragraphStyles: overlayLegacyBody(parseParagraphStyles(row.paragraphStyles, house), row),
+    paragraphStyles: overlayLegacyBody(parseParagraphStyles(row.paragraphStyles, house), {
+      ...house,
+      lineSpacing: row.lineSpacing as LineSpacing,
+    }),
   };
 }
 

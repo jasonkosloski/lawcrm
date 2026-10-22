@@ -231,4 +231,13 @@ describe("DocumentStyleForm", () => {
     );
     await waitFor(() => expect(document.querySelector("img")).toBeNull());
   });
+
+  test("changing line spacing updates the live preview", () => {
+    render(<DocumentStyleForm {...baseProps} />);
+    const before = pageStyleAttr();
+    fireEvent.change(screen.getByLabelText("Line spacing"), { target: { value: "double" } });
+    const after = pageStyleAttr();
+    expect(after).not.toBe(before);
+    expect(after).toContain(String(2 * 1.15));
+  });
 });

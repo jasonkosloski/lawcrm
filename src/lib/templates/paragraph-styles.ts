@@ -252,3 +252,25 @@ export function readStyleOverrides(
   if (Object.keys(merged).length > 0) out.body = merged;
   return out;
 }
+
+/** Bridges the legacy size/spacing columns (what the Settings form edits)
+ *  onto the Body style until the styles UI replaces those fields. Used by the
+ *  loader and by the form's live preview so there is one definition. */
+export function overlayLegacyBody(
+  styles: ParagraphStyle[],
+  legacy: { fontSizeHalfPt: number; lineSpacing: LineSpacing; spaceAfterPt: number },
+): ParagraphStyle[] {
+  return styles.map((s) =>
+    s.key === "body"
+      ? {
+          ...s,
+          values: {
+            ...s.values,
+            sizePt: legacy.fontSizeHalfPt / 2,
+            lineSpacing: legacy.lineSpacing,
+            spaceAfterPt: legacy.spaceAfterPt,
+          },
+        }
+      : s,
+  );
+}

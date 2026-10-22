@@ -172,6 +172,7 @@ export function resolvePageStyle<L extends LogoRef>(
 ): PageStyleOf<L> {
   const isLetter = kind === "letter";
   const c = !isLetter && court ? court : null;
+  // Size/spacing come from Body (letters too); loaders keep Body in step with the legacy columns.
   const styles = effectiveStyles(style.paragraphStyles, c?.styleOverrides ?? null);
   const body = styles.find((x) => x.key === "body")?.values;
   const sizePt = body?.sizePt ?? style.fontSizeHalfPt / 2;
