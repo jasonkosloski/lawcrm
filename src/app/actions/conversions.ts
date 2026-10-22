@@ -21,6 +21,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateDeadlineSurfaces } from "@/lib/revalidate-deadlines";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { assertChildMatterAccess } from "@/lib/matter-access";
@@ -158,9 +159,8 @@ export async function convertTaskToDeadline(
     },
   });
 
-  revalidatePath(`/matters/${task.matterId}/deadlines`);
+  revalidateDeadlineSurfaces(task.matterId);
   revalidatePath(`/matters/${task.matterId}/tasks`);
-  revalidatePath(`/matters/${task.matterId}`);
   await logActivity({
     matterId: task.matterId,
     userId,
