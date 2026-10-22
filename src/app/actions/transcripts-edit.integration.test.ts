@@ -109,15 +109,17 @@ describe("updateTranscriptSegment", () => {
     expect(await prisma.activityLog.count({ where: { title: "Transcript corrected" } })).toBe(2);
   });
 
-  test("stale revision conflicts and writes nothing", async () => {
+  test("stale revision conflicts, returns their version, and writes nothing", async () => {
     await updateTranscriptSegment(segId, { text: "the dog sat", revision: 0 });
     const r = await updateTranscriptSegment(segId, { text: "a bird sat", revision: 0 });
     expect(r).toEqual({
       ok: false,
       conflict: true,
       error: "Someone else changed this paragraph. Reload to see their version.",
+      current: { text: "the dog sat", revision: 1 },
     });
     expect((await seg()).text).toBe("the dog sat");
+    expect((await seg()).originalText).toBe("the cat sat");
   });
 
   test("blank text is refused", async () => {

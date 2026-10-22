@@ -166,6 +166,19 @@ describe("finishTranscriptJob", () => {
     expect(purges.map((p) => p.providerJobId)).toEqual(["job-1"]);
   });
 
+  test("provider error text has links stripped in the row and the notification", async () => {
+    vi.mocked(fetchJob).mockResolvedValue({
+      status: "error",
+      error: "Download error for https://blob.example/a.mp3?sig=zz, try again",
+    });
+    await finishTranscriptJob(transcriptId);
+    const t = await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } });
+    expect(t.error).toBe("Download error for [link removed] try again");
+    const n = await prisma.notification.findMany({ where: { userId } });
+    expect(n[0].body).not.toContain("https://");
+    expect(n[0].body).toContain("[link removed]");
+  });
+
   test("still processing: pending, nothing written", async () => {
     vi.mocked(fetchJob).mockResolvedValue({ status: "processing" });
     expect(await finishTranscriptJob(transcriptId)).toBe("pending");

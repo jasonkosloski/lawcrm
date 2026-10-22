@@ -55,6 +55,7 @@ beforeEach(async () => {
   await resetDb();
   vi.clearAllMocks();
   delete process.env.TRANSCRIPTION_MONTHLY_HOURS;
+  delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
   process.env.AUTH_URL = "https://app.example.com";
   const { firmId } = await seedFirm();
   ({ userId } = await seedUser({ firmId }));
@@ -127,10 +128,59 @@ describe("requestTranscript", () => {
     );
   });
 
-  test("no AUTH_URL means no webhook URL", async () => {
+  test("no public origin known means no webhook URL", async () => {
     delete process.env.AUTH_URL;
     await requestTranscript(docId);
     expect(vi.mocked(submitJob).mock.calls[0][0].webhookUrl).toBeNull();
+  });
+
+  test("AUTH_URL unset falls back to the Vercel production URL", async () => {
+    delete process.env.AUTH_URL;
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "litgox.com";
+    await requestTranscript(docId);
+    expect(vi.mocked(submitJob).mock.calls[0][0].webhookUrl).toBe(
+      "https://litgox.com/api/webhooks/assemblyai",
+    );
+  });
+
+  test("AUTH_URL wins over the Vercel production URL", async () => {
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "litgox.com";
+    await requestTranscript(docId);
+    expect(vi.mocked(submitJob).mock.calls[0][0].webhookUrl).toBe(
+      "https://app.example.com/api/webhooks/assemblyai",
+    );
+  });
+
+  test("provider error text has links stripped before it is stored", async () => {
+    vi.mocked(submitJob).mockRejectedValue(
+      new Error("AssemblyAI submit failed: cannot fetch https://x.blob.core/a.mp3?sig=abc123 today"),
+    );
+    await requestTranscript(docId);
+    const t = await prisma.transcript.findUniqueOrThrow({ where: { documentId: docId } });
+    expect(t.error).toBe("AssemblyAI submit failed: cannot fetch [link removed] today");
+  });
+
+  test("transcript deleted between claim and submit: provider job is deleted", async () => {
+    vi.mocked(submitJob).mockImplementation(async () => {
+      await prisma.transcript.deleteMany({ where: { documentId: docId } });
+      return { jobId: "orphan-1" };
+    });
+    vi.mocked(deleteJob).mockResolvedValue(true);
+    await requestTranscript(docId);
+    expect(deleteJob).toHaveBeenCalledWith("orphan-1");
+    expect(await prisma.transcriptPurge.count()).toBe(0);
+    expect(await prisma.transcript.count()).toBe(0);
+  });
+
+  test("orphaned job whose delete is refused is queued for purge", async () => {
+    vi.mocked(submitJob).mockImplementation(async () => {
+      await prisma.transcript.deleteMany({ where: { documentId: docId } });
+      return { jobId: "orphan-2" };
+    });
+    vi.mocked(deleteJob).mockResolvedValue(false);
+    await requestTranscript(docId);
+    const purges = await prisma.transcriptPurge.findMany();
+    expect(purges.map((p) => p.providerJobId)).toEqual(["orphan-2"]);
   });
 
   test("second request while in flight: Already transcribing.", async () => {
@@ -224,6 +274,31 @@ describe("requestTranscript", () => {
     expect(t.durationSeconds).toBe(60);
     expect(t.segments.map((s) => s.text)).toEqual(["Hello."]);
     expect(await prisma.activityLog.count({ where: { title: "Transcript copied" } })).toBe(1);
+  });
+
+  async function completedSibling() {
+    const other = await audioDoc("blob/a.mp3", "copy.mp3");
+    await prisma.transcript.create({
+      data: { documentId: other, status: "completed", providerJobId: "src", requestedById: userId, durationSeconds: 60, completedAt: new Date() },
+    });
+  }
+
+  test("re-running over an existing completed transcript re-runs, never copies a sibling", async () => {
+    await completedSibling();
+    await prisma.transcript.create({
+      data: { documentId: docId, status: "completed", providerJobId: "mine", requestedById: userId, completedAt: new Date() },
+    });
+    expect(await requestTranscript(docId)).toEqual({ ok: true, status: "processing" });
+    expect(submitJob).toHaveBeenCalledTimes(1);
+  });
+
+  test("a failed transcript that never completed may still reuse a sibling", async () => {
+    await completedSibling();
+    await prisma.transcript.create({
+      data: { documentId: docId, status: "failed", requestedById: userId },
+    });
+    expect(await requestTranscript(docId)).toEqual({ ok: true, status: "completed" });
+    expect(submitJob).not.toHaveBeenCalled();
   });
 
   test("monthly cap refuses and excludes copies", async () => {

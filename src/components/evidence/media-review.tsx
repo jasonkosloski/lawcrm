@@ -38,6 +38,7 @@ export function MediaReview({
   canDeleteAny,
   transcript,
   canTranscribe,
+  transcriptionConfigured,
   canDeleteTranscript,
   canEditTranscript,
 }: {
@@ -55,6 +56,7 @@ export function MediaReview({
   /** Null until someone requests one. */
   transcript: TranscriptView | null;
   canTranscribe: boolean;
+  transcriptionConfigured: boolean;
   canDeleteTranscript: boolean;
   canEditTranscript: boolean;
 }) {
@@ -139,6 +141,7 @@ export function MediaReview({
         documentName={name}
         flags={moments}
         canTranscribe={canTranscribe}
+        transcriptionConfigured={transcriptionConfigured}
         canDelete={canDeleteTranscript}
         canEdit={canEditTranscript}
         canFlag={canCreate}

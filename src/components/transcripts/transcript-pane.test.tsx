@@ -159,6 +159,15 @@ describe("TranscriptPane", () => {
     expect(screen.getByText("No speech detected")).toBeTruthy();
   });
 
+  test("not configured: a disabled control explains instead of a dead button", () => {
+    pane({ transcript: null, transcriptionConfigured: false });
+    expect(screen.getByText("Transcription isn't set up yet.")).toBeTruthy();
+    const btn = screen.getByRole("button", { name: /Transcribe/ }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    fireEvent.click(btn);
+    expect(requestTranscript).not.toHaveBeenCalled();
+  });
+
   test("no transcript: Transcribe button shows the duration and requests", async () => {
     vi.mocked(requestTranscript).mockResolvedValue({ ok: true, status: "processing" });
     pane({ transcript: null });

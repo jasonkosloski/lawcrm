@@ -24,6 +24,7 @@ import {
 import { capExceeded, monthStart } from "@/lib/transcription/cap";
 import { alignWords } from "@/lib/transcription/align";
 import { wordsToText } from "@/lib/transcription/normalize";
+import { stripUrls } from "@/lib/transcription/sanitize";
 import type { Word } from "@/lib/transcription/types";
 
 export type RequestTranscriptResult =
@@ -39,7 +40,20 @@ function monthlyCapHours(): number {
 }
 
 function errMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "Transcription failed";
+  return stripUrls(err instanceof Error ? err.message : "Transcription failed");
+}
+
+/**
+ * Where the provider can reach our webhook, or null when no public origin is
+ * known (the sweep then finishes the job). Only used when the recording is
+ * fetched by URL; local-storage dev uploads bytes and has no public origin.
+ */
+function webhookOrigin(): string | null {
+  if (activeStorageDriver() === "local") return null;
+  const configured = process.env.AUTH_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  return vercel ? `https://${vercel.replace(/^https?:\/\//, "").replace(/\/+$/, "")}` : null;
 }
 
 export async function requestTranscript(
@@ -75,7 +89,7 @@ export async function requestTranscript(
 
   const existing = await prisma.transcript.findUnique({
     where: { documentId },
-    select: { status: true, correctedAt: true },
+    select: { status: true, correctedAt: true, completedAt: true },
   });
   if (existing && IN_FLIGHT.includes(existing.status)) {
     return { ok: false, error: ALREADY };
@@ -88,8 +102,13 @@ export async function requestTranscript(
     };
   }
 
-  // Reuse: the same stored file already transcribed in this scope.
-  const source = await prisma.transcript.findFirst({
+  // Reuse: the same stored file already transcribed in this scope. Only when
+  // there is nothing of this document's own to replace: re-running over an
+  // existing transcript means "transcribe again", and a sibling's (possibly
+  // corrected) copy would silently undo that. A failed row that never
+  // completed has nothing of its own either.
+  const mayReuse = !existing || (existing.status === "failed" && !existing.completedAt);
+  const source = !mayReuse ? null : await prisma.transcript.findFirst({
     where: {
       status: "completed",
       documentId: { not: documentId },
@@ -228,20 +247,29 @@ export async function requestTranscript(
     } else {
       audioUrl = await signedBlobUrl(doc.fileUrl, { media: true });
     }
-    const origin = process.env.AUTH_URL?.replace(/\/+$/, "");
-    const webhookUrl =
-      activeStorageDriver() !== "local" && origin
-        ? `${origin}/api/webhooks/assemblyai`
-        : null;
+    const origin = webhookOrigin();
+    const webhookUrl = origin ? `${origin}/api/webhooks/assemblyai` : null;
     ({ jobId } = await submitJob({ audioUrl, webhookUrl, webhookSecret }));
   } catch (err) {
     return failJob(errMessage(err));
   }
 
-  await prisma.transcript.updateMany({
+  const claimed = await prisma.transcript.updateMany({
     where: { documentId, webhookSecret },
     data: { status: "processing", providerJobId: jobId },
   });
+  if (claimed.count === 0) {
+    // The transcript was deleted (or replaced) between the claim and the
+    // submit: the provider job is an orphan nobody will finish or delete.
+    if (!(await deleteJob(jobId))) {
+      await prisma.transcriptPurge.upsert({
+        where: { providerJobId: jobId },
+        create: { providerJobId: jobId },
+        update: {},
+      });
+    }
+    return { ok: false, error: "The transcript was removed while it was starting." };
+  }
   await logActivity({
     ...activity,
     type: "document",
@@ -294,13 +322,25 @@ export async function deleteTranscript(
 
 export type SegmentEditResult =
   | { ok: true; revision: number }
-  | { ok: false; error: string; conflict?: true };
+  | {
+      ok: false;
+      error: string;
+      conflict?: true;
+      /** On a conflict: the paragraph as it is now, so the UI can show it. */
+      current?: { text: string; revision: number };
+    };
 
-const CONFLICT: SegmentEditResult = {
-  ok: false,
-  conflict: true,
-  error: "Someone else changed this paragraph. Reload to see their version.",
-};
+function conflictResult(current?: {
+  text: string;
+  revision: number;
+}): SegmentEditResult {
+  return {
+    ok: false,
+    conflict: true,
+    error: "Someone else changed this paragraph. Reload to see their version.",
+    ...(current ? { current } : {}),
+  };
+}
 const MAX_PARAGRAPH_CHARS = 5000;
 
 type SegmentContext = {
@@ -312,6 +352,7 @@ type SegmentContext = {
     text: string;
     words: unknown;
     originalText: string | null;
+    revision: number;
   };
   transcript: { id: string; status: string; speakers: unknown };
   doc: { id: string; name: string; matterId: string | null; leadId: string | null };
@@ -327,6 +368,7 @@ function speakerMap(raw: unknown): Record<string, string> {
 /** Permission + scope check for an edit on a segment. Returns an error result or the context. */
 async function loadSegmentForEdit(
   segmentId: string,
+  revision: number,
 ): Promise<SegmentContext | { error: SegmentEditResult }> {
   const userId = await requirePermission("documents.transcript.edit");
   const seg = await prisma.transcriptSegment.findUnique({
@@ -338,6 +380,7 @@ async function loadSegmentForEdit(
       text: true,
       words: true,
       originalText: true,
+      revision: true,
       transcript: {
         select: {
           id: true,
@@ -355,6 +398,13 @@ async function loadSegmentForEdit(
   await assertChildMatterAccess("document", doc.id);
   if (transcript.status !== "completed") {
     return { error: { ok: false, error: "The transcript isn't ready to edit." } };
+  }
+  // The alignment base (words/text) and the revision must agree: a stale
+  // client is a conflict before anything is computed from newer text.
+  if (seg.revision !== revision) {
+    return {
+      error: conflictResult({ text: seg.text, revision: seg.revision }),
+    };
   }
   return {
     userId,
@@ -403,7 +453,13 @@ async function writeSegment(
         where: { id: ctx.seg.id, revision },
         data: { ...data, revision: { increment: 1 } },
       });
-      if (res.count === 0) return CONFLICT;
+      if (res.count === 0) {
+        const now = await tx.transcriptSegment.findUnique({
+          where: { id: ctx.seg.id },
+          select: { text: true, revision: true },
+        });
+        return conflictResult(now ?? undefined);
+      }
       await tx.transcript.update({
         where: { id: ctx.transcript.id },
         data: {
@@ -434,7 +490,7 @@ export async function updateTranscriptSegment(
   segmentId: string,
   input: { text: string; revision: number },
 ): Promise<SegmentEditResult> {
-  const ctx = await loadSegmentForEdit(segmentId);
+  const ctx = await loadSegmentForEdit(segmentId, input.revision);
   if ("error" in ctx) return ctx.error;
   const text = input.text.trim();
   if (!text) return { ok: false, error: "A paragraph can't be empty." };
@@ -457,7 +513,7 @@ export async function revertTranscriptSegment(
   segmentId: string,
   revision: number,
 ): Promise<SegmentEditResult> {
-  const ctx = await loadSegmentForEdit(segmentId);
+  const ctx = await loadSegmentForEdit(segmentId, revision);
   if ("error" in ctx) return ctx.error;
   if (ctx.seg.originalText === null) return { ok: true, revision };
   const words = alignWords((ctx.seg.words as Word[]) ?? [], ctx.seg.originalText);
@@ -475,7 +531,7 @@ export async function setSegmentSpeaker(
   speaker: string,
   revision: number,
 ): Promise<SegmentEditResult> {
-  const ctx = await loadSegmentForEdit(segmentId);
+  const ctx = await loadSegmentForEdit(segmentId, revision);
   if ("error" in ctx) return ctx.error;
   const res = await writeSegment(ctx, revision, { speaker }, speaker);
   if (res.ok) await logCorrection(ctx, "Transcript speaker changed");

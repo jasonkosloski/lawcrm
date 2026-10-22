@@ -35,6 +35,7 @@ import {
   FailedBanner,
   InFlightNotice,
   TranscribeButton,
+  TranscribeUnavailable,
   useRequestTranscript,
 } from "./transcript-status";
 
@@ -55,6 +56,7 @@ export function TranscriptPane({
   onSeek,
   flags,
   canTranscribe,
+  transcriptionConfigured = true,
   canDelete,
   canEdit = false,
   canFlag = false,
@@ -70,6 +72,8 @@ export function TranscriptPane({
   onSeek: (seconds: number) => void;
   flags: PaneFlag[];
   canTranscribe: boolean;
+  /** False when no provider key is set: Transcribe is shown disabled. */
+  transcriptionConfigured?: boolean;
   canDelete: boolean;
   /** The media's length, for the Transcribe button. */
   durationSeconds: number | null;
@@ -303,14 +307,21 @@ export function TranscriptPane({
 
   // ── Render ──
   if (!transcript) {
-    return canTranscribe ? (
+    if (!canTranscribe) return null;
+    return transcriptionConfigured ? (
       <TranscribeButton documentId={documentId} durationSeconds={durationSeconds} />
-    ) : null;
+    ) : (
+      <TranscribeUnavailable />
+    );
   }
 
   const hasText = !!segments && segments.length > 0;
   // Delete stays reachable for a failed or in-flight transcript with no text.
-  const showMenu = canDelete || (canTranscribe && !inFlight);
+  // Re-running needs a provider key too.
+  const canRun = canTranscribe && transcriptionConfigured;
+  const showMenu = canDelete || (canRun && !inFlight);
+  // Corrections only make sense on a finished transcript.
+  const editing = editMode && status === "completed";
 
   return (
     <section
@@ -320,7 +331,7 @@ export function TranscriptPane({
     >
       {inFlight && <InFlightNotice />}
       {status === "failed" && (
-        <FailedBanner documentId={documentId} error={transcript.error} canTranscribe={canTranscribe} />
+        <FailedBanner documentId={documentId} error={transcript.error} canTranscribe={canRun} />
       )}
 
       {(hasText || status === "completed" || showMenu) && (
@@ -353,7 +364,7 @@ export function TranscriptPane({
                   Export PDF
                 </a>
               )}
-              {canEdit && hasText && (
+              {canEdit && hasText && status === "completed" && (
                 <button
                   type="button"
                   aria-label="Edit transcript"
@@ -381,7 +392,7 @@ export function TranscriptPane({
                     }
                   />
                   <DropdownMenuContent align="end" className="min-w-44">
-                    {canTranscribe && !inFlight && (
+                    {canRun && !inFlight && (
                       <DropdownMenuItem
                         disabled={retranscribing}
                         onClick={() => void retranscribe()}
@@ -458,7 +469,7 @@ export function TranscriptPane({
                 speakers={transcript.speakers}
                 usedSpeakers={usedSpeakers}
                 canEdit={canEdit}
-                editMode={editMode}
+                editMode={editing}
               />
             ))}
           </div>

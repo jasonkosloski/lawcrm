@@ -79,6 +79,15 @@ describe("print transcript page", () => {
     expect(html).toContain("Uncorrected machine transcript");
   });
 
+  test("footer lives in @page margin boxes, not a fixed element", async () => {
+    const html = renderToStaticMarkup(await PrintTranscriptPage({ params, searchParams }));
+    expect(html).toContain("@bottom-left");
+    expect(html).toContain('content: "Uncorrected machine transcript"');
+    expect(html).toContain("@bottom-right");
+    expect(html).toContain('content: "Page " counter(page)');
+    expect(html).not.toMatch(/\bfixed\b/);
+  });
+
   test("corrected transcript says who corrected it and uses the corrected footer", async () => {
     vi.mocked(getDocumentTranscript).mockResolvedValueOnce(
       view({ correctedAt: new Date("2026-10-02T18:00:00Z"), correctedByName: "Jo Park" }),

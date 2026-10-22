@@ -19,6 +19,7 @@ export function MediaTranscript({
   documentName,
   flags,
   canTranscribe,
+  transcriptionConfigured,
   canDelete,
   canEdit,
   canFlag,
@@ -31,6 +32,7 @@ export function MediaTranscript({
   documentName: string;
   flags: PaneFlag[];
   canTranscribe: boolean;
+  transcriptionConfigured: boolean;
   canDelete: boolean;
   canEdit: boolean;
   canFlag: boolean;
@@ -103,6 +105,7 @@ export function MediaTranscript({
       onSeek={onSeek}
       flags={flags}
       canTranscribe={canTranscribe}
+      transcriptionConfigured={transcriptionConfigured}
       canDelete={canDelete}
       canEdit={canEdit}
       canFlag={canFlag}

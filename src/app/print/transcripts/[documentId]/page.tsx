@@ -43,6 +43,21 @@ export async function generateMetadata({
   };
 }
 
+/**
+ * The notice and "Page N" live in @page margin boxes, which repeat on every
+ * printed page and reserve their own space (a position:fixed footer would
+ * sit over the text, and counter(page) only resolves in a margin box). The
+ * notice is fixed export copy, never user input.
+ */
+function printCss(notice: string): string {
+  const box = "font: 9pt sans-serif; color: #666;";
+  return `@page {
+  margin: 18mm 16mm 22mm;
+  @bottom-left { content: ${JSON.stringify(notice)}; ${box} }
+  @bottom-right { content: "Page " counter(page); ${box} }
+}`;
+}
+
 export default async function PrintTranscriptPage({
   params,
   searchParams,
@@ -67,7 +82,7 @@ export default async function PrintTranscriptPage({
   return (
     <div className="min-h-screen bg-white">
       <PrintToolbar autoprint={sp.autoprint === "1"} />
-      <main className="max-w-3xl mx-auto print:max-w-none print:mx-0 p-6 print:p-0 pb-12">
+      <main className="max-w-3xl mx-auto print:max-w-none print:mx-0 p-6 print:p-0 pb-8">
         <header className="mb-6 border-b border-line pb-4">
           {exp.caption && (
             <p className="text-sm font-semibold text-ink">{exp.caption}</p>
@@ -99,18 +114,12 @@ export default async function PrintTranscriptPage({
           ))}
         </div>
       </main>
-      {/* Printed on every page (position: fixed repeats in print). */}
-      <footer className="hidden print:flex fixed bottom-0 left-0 right-0 justify-between text-2xs text-ink-3 border-t border-line pt-1 bg-white">
-        <span>{notice}</span>
-        <span className="transcript-page-number" />
-      </footer>
-      <style>{`
-        @media print {
-          .transcript-page-number::after {
-            content: "Page " counter(page);
-          }
-        }
-      `}</style>
+      {/* On screen the notice sits under the transcript; in print it moves
+          into the page margin (below), so nothing is ever overlaid. */}
+      <p className="print:hidden max-w-3xl mx-auto px-6 pb-8 text-2xs text-ink-3">
+        {notice}
+      </p>
+      <style dangerouslySetInnerHTML={{ __html: printCss(notice) }} />
     </div>
   );
 }

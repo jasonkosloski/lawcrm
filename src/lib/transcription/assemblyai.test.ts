@@ -55,6 +55,7 @@ describe("submitJob", () => {
     expect(JSON.parse(init.body)).toEqual({
       audio_url: "https://x/a.mp3",
       speaker_labels: true,
+      language_detection: true,
       punctuate: true,
       format_text: true,
       webhook_url: "https://app/hook",
@@ -70,6 +71,7 @@ describe("submitJob", () => {
     expect(body).toEqual({
       audio_url: "u",
       speaker_labels: true,
+      language_detection: true,
       punctuate: true,
       format_text: true,
     });

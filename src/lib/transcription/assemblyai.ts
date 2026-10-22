@@ -47,6 +47,7 @@ export async function submitJob(input: {
   const body: Record<string, unknown> = {
     audio_url: input.audioUrl,
     speaker_labels: true,
+    language_detection: true,
     punctuate: true,
     format_text: true,
   };

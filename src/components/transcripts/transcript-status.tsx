@@ -68,6 +68,22 @@ export function TranscribeButton({
   );
 }
 
+/** Shown in place of Transcribe when no provider key is configured. */
+export function TranscribeUnavailable() {
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <button
+        type="button"
+        disabled
+        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-3 text-xs font-medium text-ink-2 opacity-60"
+      >
+        Transcribe
+      </button>
+      <p className="text-2xs text-ink-3">Transcription isn&apos;t set up yet.</p>
+    </div>
+  );
+}
+
 export function InFlightNotice() {
   return (
     <div

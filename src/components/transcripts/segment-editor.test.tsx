@@ -93,6 +93,11 @@ describe("edit mode gating", () => {
     expect(screen.queryByRole("button", { name: /Edit paragraph/ })).toBeNull();
   });
 
+  test("no Edit toggle while the transcript is not completed", () => {
+    pane({ transcript: { ...T, status: "processing" } });
+    expect(screen.queryByRole("button", { name: "Edit transcript" })).toBeNull();
+  });
+
   test("pencils appear only after toggling Edit", () => {
     pane();
     expect(screen.queryByRole("button", { name: /Edit paragraph/ })).toBeNull();
@@ -124,20 +129,59 @@ describe("paragraph editor", () => {
     await waitFor(() => expect(screen.queryByRole("textbox", { name: "Paragraph text" })).toBeNull());
   });
 
-  test("a conflict shows the message and Reload refreshes", async () => {
-    vi.mocked(updateTranscriptSegment).mockResolvedValue({
+  async function conflictOnce() {
+    vi.mocked(updateTranscriptSegment).mockResolvedValueOnce({
       ok: false,
       conflict: true,
       error: "Someone else changed this paragraph. Reload to see their version.",
+      current: { text: "the officer arrived late", revision: 7 },
     });
     const box = await openEditor();
     fireEvent.change(box, { target: { value: "changed" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByText("Someone else changed this paragraph.");
-    // typed text is kept
-    expect((screen.getByRole("textbox", { name: "Paragraph text" }) as HTMLTextAreaElement).value).toBe("changed");
-    fireEvent.click(screen.getByRole("button", { name: "Reload" }));
+  }
+
+  test("a conflict refreshes and shows their version, keeping the typed text", async () => {
+    await conflictOnce();
     expect(refresh).toHaveBeenCalled();
+    expect(screen.getByText("Their version")).toBeTruthy();
+    expect(screen.getByText("the officer arrived late")).toBeTruthy();
+    expect((screen.getByRole("textbox", { name: "Paragraph text" }) as HTMLTextAreaElement).value).toBe("changed");
+    // Plain Save is not available until a choice is made.
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(updateTranscriptSegment).toHaveBeenCalledTimes(1);
+  });
+
+  test("Use theirs re-seeds the textarea and saves against the new revision", async () => {
+    await conflictOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Use theirs" }));
+    expect(screen.queryByText("Their version")).toBeNull();
+    const box = screen.getByRole("textbox", { name: "Paragraph text" }) as HTMLTextAreaElement;
+    expect(box.value).toBe("the officer arrived late");
+    expect(updateTranscriptSegment).toHaveBeenCalledTimes(1);
+    vi.mocked(updateTranscriptSegment).mockResolvedValueOnce({ ok: true, revision: 8 });
+    fireEvent.change(box, { target: { value: "the officer arrived late today" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(updateTranscriptSegment).toHaveBeenLastCalledWith("seg0", {
+        text: "the officer arrived late today",
+        revision: 7,
+      }),
+    );
+  });
+
+  test("Keep mine and save is the explicit overwrite against the new revision", async () => {
+    await conflictOnce();
+    vi.mocked(updateTranscriptSegment).mockResolvedValueOnce({ ok: true, revision: 8 });
+    fireEvent.click(screen.getByRole("button", { name: "Keep mine and save" }));
+    await waitFor(() =>
+      expect(updateTranscriptSegment).toHaveBeenLastCalledWith("seg0", {
+        text: "changed",
+        revision: 7,
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Paragraph text" })).toBeNull());
   });
 
   test("another error shows inline and keeps the editor open", async () => {

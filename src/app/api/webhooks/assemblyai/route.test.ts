@@ -90,6 +90,16 @@ describe("assemblyai webhook", () => {
     expect((await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } })).status).toBe("processing");
   });
 
+  test("webhook after the document was deleted: 200, nothing written", async () => {
+    const t = await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } });
+    await prisma.document.delete({ where: { id: t.documentId } });
+    const res = await POST(req({ transcript_id: "job-new" }, "sec") as never);
+    expect(res.status).toBe(200);
+    expect(fetchJob).not.toHaveBeenCalled();
+    expect(await prisma.transcript.count()).toBe(0);
+    expect(await prisma.transcriptSegment.count()).toBe(0);
+  });
+
   test("malformed body: 200 no-op", async () => {
     const res = await POST(
       new Request("http://x", { method: "POST", body: "not json" }) as never,

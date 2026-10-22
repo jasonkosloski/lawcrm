@@ -62,6 +62,7 @@ import { resolveDocumentRenderer } from "@/components/documents-viewer/resolve-r
 import { ViewerFallbackCard } from "@/components/documents-viewer/fallback-card";
 import { ImageViewer } from "@/components/documents-viewer/image-viewer";
 import { getDocumentTranscript } from "@/lib/queries/transcript";
+import { transcriptionConfigured } from "@/lib/transcription/assemblyai";
 import { MediaReview } from "@/components/evidence/media-review";
 import { PdfReview } from "@/components/evidence/pdf-review";
 import { SpreadsheetPreview } from "@/components/documents-viewer/spreadsheet-preview";
@@ -182,6 +183,7 @@ export async function DocumentViewerBody({
       canDeleteAny,
       transcript,
       canTranscribe,
+      transcriptionConfigured: transcriptionConfigured(),
       canDeleteTranscript,
       canEditTranscript,
       initialSeconds: linked?.timeSeconds ?? tSeconds,
@@ -388,6 +390,7 @@ type ReviewData = {
   /** Audio/video only. */
   transcript: TranscriptView | null;
   canTranscribe: boolean;
+  transcriptionConfigured: boolean;
   canDeleteTranscript: boolean;
   canEditTranscript: boolean;
 };
@@ -453,6 +456,7 @@ async function renderBody(
           initialSeconds={review.initialSeconds}
           transcript={review.transcript}
           canTranscribe={review.canTranscribe}
+          transcriptionConfigured={review.transcriptionConfigured}
           canDeleteTranscript={review.canDeleteTranscript}
           canEditTranscript={review.canEditTranscript}
           {...shared}

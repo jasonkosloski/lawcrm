@@ -85,6 +85,36 @@ describe("transcription sweep", () => {
     expect(vi.mocked(fetchJob)).toHaveBeenCalledTimes(25);
   });
 
+  test("drains purges before processing jobs", async () => {
+    await prisma.transcriptPurge.create({ data: { providerJobId: "purge-me" } });
+    await transcript({ status: "processing", ageMs: 30 * MIN, jobId: "job-a" });
+    await call();
+    const purgeAt = vi.mocked(deleteJob).mock.invocationCallOrder[0];
+    const jobAt = vi.mocked(fetchJob).mock.invocationCallOrder[0];
+    expect(purgeAt).toBeLessThan(jobAt);
+  });
+
+  test("stops picking up new jobs once ~40 s have elapsed", async () => {
+    for (let i = 0; i < 6; i++) {
+      await transcript({ status: "processing", ageMs: (30 + i) * MIN, jobId: `slow${i}` });
+    }
+    const real = Date.now();
+    let offset = 0;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => real + offset);
+    // Each provider call "takes" 15 s.
+    vi.mocked(fetchJob).mockImplementation(async () => {
+      offset += 15_000;
+      return { status: "processing" };
+    });
+    try {
+      const body = await (await call()).json();
+      expect(vi.mocked(fetchJob)).toHaveBeenCalledTimes(3);
+      expect(body.skipped).toBe(3);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   test("recovers a queued row stuck over 10 minutes", async () => {
     const t = await transcript({ status: "queued", ageMs: 11 * MIN, jobId: null });
     const body = await (await call()).json();

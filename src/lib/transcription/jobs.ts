@@ -7,6 +7,7 @@ import { createNotification } from "@/lib/notifications";
 import { scopeBasePath, scopeOf } from "@/lib/record-scope";
 import { deleteJob, fetchJob } from "./assemblyai";
 import { normalizeAssemblyAI } from "./normalize";
+import { stripUrls } from "./sanitize";
 
 /** A job still unfinished this long after the request is abandoned. */
 const JOB_TIMEOUT_MS = 6 * 3600_000;
@@ -99,7 +100,8 @@ export async function finishTranscriptJob(
     }
   };
 
-  const fail = async (message: string): Promise<FinishOutcome> => {
+  const fail = async (rawMessage: string): Promise<FinishOutcome> => {
+    const message = stripUrls(rawMessage);
     const res = await prisma.transcript.updateMany({
       where: inFlight,
       data: { status: "failed", error: message, webhookSecret: null },
