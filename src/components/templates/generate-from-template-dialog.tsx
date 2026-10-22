@@ -400,6 +400,15 @@ export function GenerateFromTemplateDialog({
                       </div>
                     </div>
                   )}
+                  {preview.page.style.kind === "filing" && (
+                    <p className="text-2xs text-ink-4">
+                      {preview.court === null
+                        ? "No court format \u2014 house style"
+                        : preview.court.archived
+                          ? `Court format ${preview.court.name} is archived \u2014 house style used.`
+                          : `Court format: ${preview.court.name}`}
+                    </p>
+                  )}
                   <div className="max-h-96 overflow-y-auto rounded-md">
                     <PagePreview {...preview.page} />
                   </div>

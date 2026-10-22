@@ -59,6 +59,7 @@ import {
 import {
   logoPreviewUrl,
   logoRefOf,
+  effectiveBlocks,
   mergeReport,
   renderPage,
   renderPageView,
@@ -69,6 +70,8 @@ import {
 } from "@/lib/templates/page-render";
 import { resolvedToDocx } from "@/lib/templates/to-docx";
 import { resolvedToPdf } from "@/lib/templates/to-pdf";
+import { loadCourtContext } from "@/lib/templates/court-context";
+import type { CourtContext } from "@/lib/templates/court-blocks";
 import { Prisma } from "@/generated/prisma/client";
 import {
   checkTemplateFit,
@@ -304,6 +307,7 @@ function previewPage(
   data: TemplateData,
   blocks: Map<string, BlockSource>,
   style: LoadedDocumentStyle,
+  court: CourtContext | null,
 ): { page: PageView; report: RenderReport } {
   return renderPageView({
     doc,
@@ -311,10 +315,20 @@ function previewPage(
     data,
     blocks,
     style,
+    court,
     logo: logoRefOf(style),
     logoUrl: logoPreviewUrl(style.updatedAt.toISOString()),
   });
 }
+
+/** What the dialog says about the court format: null = none applies. */
+export type CourtNote = { name: string; archived: boolean } | null;
+const courtNote = (court: CourtContext | null): CourtNote =>
+  court ? { name: court.name, archived: !court.isActive } : null;
+
+/** Court formats apply to filings only; letters skip the query. */
+const courtFor = (kind: PageKind, scope: RecordScope) =>
+  kind === "filing" ? loadCourtContext(scope) : Promise.resolve(null);
 
 type GenerateOpts = {
   recordsRequestId?: string;
@@ -334,6 +348,8 @@ export type TemplatePreviewResult =
       templateUpdatedAt: string;
       needsSigner: boolean;
       needsRecipient: boolean;
+      /** The matter's court format for filings; null = house style, no format. */
+      court: CourtNote;
     }
   | { ok: false; error: string };
 
@@ -390,9 +406,11 @@ export async function previewDocumentFromTemplate(
     request,
   });
   if (!loaded.ok) return { ok: false, error: loaded.error };
+  const court = await courtFor(kind, scope);
 
-  const { page, report } = previewPage(doc, kind, loaded.data, blocks, style);
+  const { page, report } = previewPage(doc, kind, loaded.data, blocks, style, court);
   const whole = withStyleBlocks(doc, styleIds);
+  const seen = effectiveBlocks(kind, blocks, court);
   return {
     ok: true,
     templateName: template.name,
@@ -401,8 +419,9 @@ export async function previewDocumentFromTemplate(
     page,
     report,
     templateUpdatedAt: template.updatedAt.toISOString(),
-    needsSigner: usesSigner(whole, blocks),
-    needsRecipient: usesRecipient(whole, blocks),
+    needsSigner: usesSigner(whole, seen),
+    needsRecipient: usesRecipient(whole, seen),
+    court: courtNote(court),
   };
 }
 
@@ -492,11 +511,12 @@ export async function generateDocumentFromTemplate(
     request,
   });
   if (!loaded.ok) return { ok: false, error: loaded.error };
+  const court = await courtFor(kind, scope);
 
   // Filings never show a letterhead, so their logo is never read.
   const { logo, warning } =
     kind === "letter" ? await loadLogo(style) : { logo: null, warning: null };
-  const page = renderPage({ doc, kind, data: loaded.data, blocks, style, logo });
+  const page = renderPage({ doc, kind, data: loaded.data, blocks, style, logo, court });
   const report: GenerationReport = { ...page.report, warnings: warning ? [warning] : [] };
   const parts = {
     body: page.body,
@@ -685,6 +705,8 @@ export async function previewTemplateDraft(input: {
       /** Letters and filings only. */
       page: PageView | null;
       report: RenderReport;
+      /** Real-record filing previews only; the sample target has no court. */
+      court: CourtNote;
     }
   | { ok: false; error: string }
 > {
@@ -709,6 +731,7 @@ export async function previewTemplateDraft(input: {
   );
 
   let data: TemplateData;
+  let court: CourtContext | null = null;
   if ("sample" in input.target) {
     data = {
       ...SAMPLE_TEMPLATE_DATA,
@@ -718,13 +741,14 @@ export async function previewTemplateDraft(input: {
     const loaded = await loadTemplateData({ scope: input.target.scope });
     if (!loaded.ok) return { ok: false, error: loaded.error };
     data = loaded.data;
+    if (isDocumentKind(kind)) court = await courtFor(kind, input.target.scope);
   }
 
   let page: PageView | null = null;
   let resolved;
   let report: RenderReport;
   if (style && isDocumentKind(kind)) {
-    ({ page, report } = previewPage(content.doc, kind, data, blocks, style));
+    ({ page, report } = previewPage(content.doc, kind, data, blocks, style, court));
     resolved = page.body;
   } else {
     ({ doc: resolved, report } = renderTemplate(content.doc, { data, blocks }));
@@ -742,5 +766,6 @@ export async function previewTemplateDraft(input: {
     subjectText,
     page,
     report,
+    court: courtNote(court),
   };
 }

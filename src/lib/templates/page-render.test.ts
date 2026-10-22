@@ -49,3 +49,31 @@ describe("renderPageView", () => {
     expect(report.archivedBlocks).toEqual([]);
   });
 });
+
+describe("court replacements by kind", () => {
+  const court = {
+    id: "c1",
+    name: "Court",
+    isActive: true,
+    values: {} as never,
+    replacements: new Map<string, BlockSource>([
+      ["ct", { id: "ct2", name: "Court continuation", isActive: true, content: doc("COURT CONT") }],
+    ]),
+  };
+  const ref: TemplateDoc = { type: "doc", content: [{ type: "block", attrs: { blockId: "ct" } }] };
+  const run = (kind: "letter" | "filing") =>
+    renderPageView({ doc: ref, kind, data, blocks, style, logo: null, logoUrl: null, court });
+
+  it("a filing body referencing the default block renders the replacement", () => {
+    expect(resolvedToText(run("filing").page.body)).toBe("COURT CONT");
+  });
+
+  // Letterhead and continuation never render for filings (styleBlockIds is
+  // empty), and a court is ignored on letters, so the continuation is
+  // never swapped; the replacement reaches filings through the body only.
+  it("letters ignore the court, including style blocks", () => {
+    const { page } = run("letter");
+    expect(resolvedToText(page.body)).toBe("CONT");
+    expect(resolvedToText(page.continuation!)).toBe("CONT");
+  });
+});

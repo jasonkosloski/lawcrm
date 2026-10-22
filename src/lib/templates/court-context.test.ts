@@ -76,6 +76,21 @@ describe("loadCourtContext", () => {
 
   test("a refused access check propagates", async () => {
     vi.mocked(assertScopeAccess).mockRejectedValue(new Error("NOT_FOUND"));
+    const spy = vi.spyOn(prisma.matter, "findUnique");
     await expect(loadCourtContext({ kind: "matter", matterId })).rejects.toThrow("NOT_FOUND");
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  test("an archived format is returned with isActive false", async () => {
+    const f = await prisma.courtFormat.create({ data: { name: "Old", isActive: false } });
+    const v = await prisma.venue.create({
+      data: { name: "V", nameKey: "v", state: "CO", courtFormatId: f.id },
+    });
+    await prisma.matter.update({ where: { id: matterId }, data: { venueId: v.id } });
+    expect(await loadCourtContext({ kind: "matter", matterId })).toMatchObject({
+      id: f.id,
+      isActive: false,
+    });
   });
 });

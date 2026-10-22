@@ -1181,3 +1181,147 @@ describe("searchTemplatePreviewRecords", () => {
     expect(await searchTemplatePreviewRecords("alvarez")).toEqual([]);
   });
 });
+
+describe("court formats on filings", () => {
+  const docxXml = async (file: File) => {
+    const { default: JSZip } = await import("jszip");
+    const zip = await JSZip.loadAsync(Buffer.from(await file.arrayBuffer()));
+    const parts = await Promise.all(
+      Object.keys(zip.files)
+        .filter((n) => /^word\/(document|styles)\.xml$/.test(n))
+        .map((n) => zip.files[n]!.async("string")),
+    );
+    return parts.join("\n");
+  };
+
+  /** A venue with a court format (Courier, 13pt, legal, 1.25in top) on the matter. */
+  async function seedCourt(over: Record<string, unknown> = {}, replace?: [string, string]) {
+    const f = await prisma.courtFormat.create({
+      data: {
+        name: "Denver District",
+        fontKey: "courier",
+        fontSizeHalfPt: 26,
+        marginTopIn: "1.25",
+        paperSize: "legal",
+        ...(replace
+          ? { blocks: { create: { blockId: replace[0], replacementBlockId: replace[1] } } }
+          : {}),
+        ...over,
+      },
+    });
+    const v = await prisma.venue.create({
+      data: { name: "Denver", nameKey: "denver", state: "CO", courtFormatId: f.id },
+    });
+    await prisma.matter.update({ where: { id: matterId }, data: { venueId: v.id } });
+    return f;
+  }
+
+  async function seedCaption() {
+    await prisma.templateBlock.createMany({
+      data: [
+        { id: "cap", key: "cap", name: "Caption", content: jsonDoc(para(text("HOUSE CAPTION"))) },
+        {
+          id: "cap2",
+          key: "cap2",
+          name: "Denver caption",
+          content: jsonDoc(para(text("DENVER CAPTION by "), fieldNode("signer.name"))),
+        },
+      ],
+    });
+    return prisma.documentTemplate.create({
+      data: {
+        name: "Motion",
+        category: "general",
+        kind: "filing",
+        appliesTo: "matter",
+        content: jsonDoc(para(text("Body for "), fieldNode("client.name")), {
+          type: "block",
+          attrs: { blockId: "cap" },
+        }),
+      },
+      select: { id: true },
+    });
+  }
+
+  test("preview uses the court's replacement, signer detection follows it, and reports the court", async () => {
+    const t = await seedCaption();
+    await seedCourt({}, ["cap", "cap2"]);
+    const res = await previewDocumentFromTemplate(t.id, M);
+    expect(res).toMatchObject({
+      ok: true,
+      needsSigner: true,
+      court: { name: "Denver District", archived: false },
+    });
+    if (!res.ok) return;
+    expect(res.text).toContain("DENVER CAPTION");
+    expect(res.text).not.toContain("HOUSE CAPTION");
+    expect(res.page.style.font).toBe("courier");
+    expect(res.page.style.paperSize).toBe("legal");
+  });
+
+  test("generated .docx and PDF carry the court font, size, margin, Legal page and caption", async () => {
+    const t = await seedCaption();
+    await seedCourt({}, ["cap", "cap2"]);
+    const res = await gen(t.id, M, { format: "both" });
+    expect(res.ok).toBe(true);
+    const [docx, pdf] = storedFiles();
+    const xml = await docxXml(docx!);
+    expect(xml).toContain("Courier New");
+    expect(xml).toContain('w:val="26"');
+    expect(xml).toMatch(/w:pgSz[^>]*w:h="20160"/);
+    expect(xml).toMatch(/w:pgMar[^>]*w:top="1800"/);
+    expect(xml).toContain("DENVER CAPTION");
+    expect(xml).not.toContain("HOUSE CAPTION");
+    const pdfText = Buffer.from(await pdf!.arrayBuffer()).toString("latin1");
+    expect(pdfText).toMatch(/MediaBox\s*\[\s*0\s+0\s+612(\.0+)?\s+1008/);
+  });
+
+  test("an inactive court format is ignored and flagged archived", async () => {
+    const t = await seedCaption();
+    await seedCourt({ isActive: false }, ["cap", "cap2"]);
+    const res = await previewDocumentFromTemplate(t.id, M);
+    expect(res).toMatchObject({ ok: true, court: { name: "Denver District", archived: true } });
+    if (!res.ok) return;
+    expect(res.text).toContain("HOUSE CAPTION");
+    expect(res.page.style.paperSize).toBe("letter");
+    await gen(t.id, M);
+    const xml = await docxXml(storedFiles().at(-1)!);
+    expect(xml).not.toContain("Courier New");
+    expect(xml).toMatch(/w:pgSz[^>]*w:h="15840"/);
+  });
+
+  test("a venue-less matter and a lead filing are unchanged with court null", async () => {
+    const t = await seedCaption();
+    const res = await previewDocumentFromTemplate(t.id, M);
+    expect(res).toMatchObject({ ok: true, court: null, needsSigner: false });
+    const { leadId } = await seedLead();
+    const lead = await previewDocumentFromTemplate(t.id, { kind: "lead", leadId });
+    expect(lead).toMatchObject({ ok: true, court: null });
+  });
+
+  test("letters ignore the court format and skip the court query", async () => {
+    await seedCourt();
+    const t = await seedTemplate({ body: "Hello {{client.name}}" });
+    const spy = vi.spyOn(prisma.matter, "findUnique");
+    const res = await previewDocumentFromTemplate(t.id, M);
+    expect(res).toMatchObject({ ok: true, court: null });
+    if (!res.ok) return;
+    expect(res.page.style.paperSize).toBe("letter");
+    expect(spy.mock.calls.some(([a]) => JSON.stringify(a).includes("courtFormat"))).toBe(false);
+    spy.mockRestore();
+  });
+
+  test("previewTemplateDraft: real filing target reports the court, sample target null", async () => {
+    await seedCourt();
+    const base = {
+      kind: "filing" as const,
+      appliesTo: "matter" as const,
+      content: docOf(para(text("Hi"))),
+    };
+    const real = await previewTemplateDraft({ ...base, target: { scope: M } });
+    expect(real).toMatchObject({ ok: true, court: { name: "Denver District", archived: false } });
+    if (real.ok) expect(real.page?.style.paperSize).toBe("legal");
+    const sample = await previewTemplateDraft({ ...base, target: { sample: true } });
+    expect(sample).toMatchObject({ ok: true, court: null });
+  });
+});

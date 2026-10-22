@@ -556,4 +556,46 @@ describe("GenerateFromTemplateDialog", () => {
     );
     expect(screen.getByText("Logo couldn't be loaded.")).toBeInTheDocument();
   });
+
+  describe("court format note", () => {
+    const FILING_STYLE = resolvePageStyle("filing", DEFAULT_DOCUMENT_STYLE, null);
+    const filing = (court: unknown) =>
+      okPreview({ court, page: { ...pageOf("Body"), style: FILING_STYLE } });
+
+    async function preview(res: unknown) {
+      previewMock.mockResolvedValue(res);
+      const user = userEvent.setup();
+      render(
+        <GenerateFromTemplateDialog
+          scope={{ kind: "matter", matterId: "m1" }}
+          templates={TEMPLATES}
+          canUpload
+        />,
+      );
+      await openAndPick(user);
+      await screen.findByText("Body");
+    }
+
+    it("names an active court format", async () => {
+      await preview(filing({ name: "Denver District", archived: false }));
+      expect(screen.getByText("Court format: Denver District")).toBeInTheDocument();
+    });
+
+    it("says an archived format fell back to house style", async () => {
+      await preview(filing({ name: "Denver District", archived: true }));
+      expect(
+        screen.getByText("Court format Denver District is archived \u2014 house style used."),
+      ).toBeInTheDocument();
+    });
+
+    it("says there is no format for a filing without one", async () => {
+      await preview(filing(null));
+      expect(screen.getByText("No court format \u2014 house style")).toBeInTheDocument();
+    });
+
+    it("shows nothing for letters", async () => {
+      await preview(okPreview({ text: "Body", court: null, page: pageOf("Body") }));
+      expect(screen.queryByText(/court format/i)).not.toBeInTheDocument();
+    });
+  });
 });
