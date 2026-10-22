@@ -27,3 +27,11 @@ describe("SettingsNav You section", () => {
     expect(links[0].getAttribute("href")).toBe("/settings/notifications");
   });
 });
+
+describe("SettingsNav Documents", () => {
+  test("Documents is linked for every user", () => {
+    render(<SettingsNav isAdmin={false} grantedPermissions={[]} />);
+    const links = screen.getAllByRole("link", { name: "Documents" });
+    expect(links[0].getAttribute("href")).toBe("/settings/documents");
+  });
+});

@@ -71,6 +71,8 @@ const SECTIONS: NavSection[] = [
       // so anyone may browse the library. Manage affordances inside
       // the page gate on the documents.template.* keys.
       { href: "/settings/templates", label: "Document templates" },
+      // Read-only for everyone; editing gates on firm.edit_document_style.
+      { href: "/settings/documents", label: "Documents" },
       {
         href: "/settings/records-types",
         label: "Records request types",
