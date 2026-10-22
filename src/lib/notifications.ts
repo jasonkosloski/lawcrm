@@ -39,6 +39,10 @@ export type NotificationType =
    *  (one per upload batch). */
   | "portal_upload"
   | "portal_message"
+  /** A requested transcript finished (recipient = who requested it). */
+  | "transcript_ready"
+  /** A requested transcript failed (recipient = who requested it). */
+  | "transcript_failed"
   /** Catch-all for callsites that don't fit a specific bucket. */
   | "generic";
 

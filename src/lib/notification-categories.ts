@@ -105,6 +105,8 @@ export const CATEGORY_BY_TYPE: Record<NotificationType, NotificationCategory> =
     portal_upload: "portal",
     portal_message: "portal",
     note_mentioned: "other",
+    transcript_ready: "other",
+    transcript_failed: "other",
     generic: "other",
   };
 

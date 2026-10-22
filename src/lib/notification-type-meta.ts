@@ -21,6 +21,7 @@ import {
   CircleX,
   ClipboardCheck,
   Coins,
+  FileText,
   FileUp,
   ListChecks,
   MessageSquare,
@@ -49,6 +50,8 @@ export const NOTIFICATION_TYPE_META: Record<
   matter_assigned: { icon: UserPlus, tone: "text-brand-700" },
   portal_upload: { icon: FileUp, tone: "text-brand-700" },
   portal_message: { icon: MessageSquare, tone: "text-brand-700" },
+  transcript_ready: { icon: FileText, tone: "text-ok" },
+  transcript_failed: { icon: CircleX, tone: "text-warn" },
   generic: { icon: Calendar, tone: "text-ink-3" },
 };
 

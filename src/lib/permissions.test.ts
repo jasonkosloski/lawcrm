@@ -75,6 +75,15 @@ describe("isKnownPermission", () => {
     expect(isKnownPermission("matters.manage_team")).toBe(true);
   });
 
+  test("transcript keys are catalogued", () => {
+    for (const k of [
+      "documents.transcribe",
+      "documents.transcript.edit",
+      "documents.transcript.delete",
+    ])
+      expect(isKnownPermission(k)).toBe(true);
+  });
+
   test("returns false for typos / removed keys", () => {
     expect(isKnownPermission("matters.manage_teem")).toBe(false);
     expect(isKnownPermission("")).toBe(false);

@@ -22,6 +22,8 @@ describe("notification categories", () => {
       portal_upload: "portal",
       portal_message: "portal",
       note_mentioned: "other",
+      transcript_ready: "other",
+      transcript_failed: "other",
       generic: "other",
     };
     expect(CATEGORY_BY_TYPE).toEqual(expected);

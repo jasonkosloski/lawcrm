@@ -454,6 +454,24 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
           "Re-file documents within a matter's folder tree, and copy a document to another folder (\"Copy to…\" — an independent document that shares the stored file). Distinct from upload/delete — organizing is often delegated to staff who shouldn't remove records.",
       },
       {
+        key: "documents.transcribe",
+        label: "Transcribe recordings",
+        description:
+          "Request a machine transcript of an audio or video document (or re-run one). Sends the recording to the transcription provider and counts against the firm's monthly transcription budget.",
+      },
+      {
+        key: "documents.transcript.edit",
+        label: "Correct transcripts",
+        description:
+          "Correct a transcript's text and rename its speakers. The original machine text of each corrected paragraph is kept.",
+      },
+      {
+        key: "documents.transcript.delete",
+        label: "Delete transcripts",
+        description:
+          "Permanently remove a document's transcript, including any corrections. The recording itself is not affected.",
+      },
+      {
         key: "documents.template.create",
         label: "Create document templates",
         description:

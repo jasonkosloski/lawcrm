@@ -144,6 +144,8 @@ model User {
   /// has performed. Useful for auditing role grants once that
   /// surfaces in the UI.
   roleAssignments         UserRole[]               @relation("UserRoleAssignedBy")
+  transcriptsRequested    Transcript[]             @relation("TranscriptRequestedBy")
+  transcriptsCorrected    Transcript[]             @relation("TranscriptCorrectedBy")
 
   @@index([firmId])
   @@map("users")
@@ -948,6 +950,7 @@ model Document {
   /// expense itself.
   receiptForExpenses Expense[]
   agreement          MatterAgreement?
+  transcript         Transcript?
 
   @@index([matterId])
   @@index([leadId])
@@ -2820,4 +2823,62 @@ model PortalReadState {
   @@unique([threadId, userId])
   @@unique([threadId, identityId])
   @@map("portal_read_states")
+}
+
+model Transcript {
+  id              String    @id @default(cuid())
+  documentId      String    @unique
+  /// queued | processing | completed | failed
+  status          String
+  provider        String    @default("assemblyai")
+  providerJobId   String?   @unique
+  /// Per-job secret the webhook must echo in its auth header. Cleared
+  /// when the job finishes.
+  webhookSecret   String?
+  language        String?
+  durationSeconds Float?
+  /// Speaker labels as the provider returned them, mapped to display
+  /// names: { "A": "Officer Diaz", "B": "Speaker B" }.
+  speakers        Json      @default("{}")
+  /// Set once anyone edits text, speakers or names.
+  correctedAt     DateTime?
+  correctedById   String?
+  error           String?
+  requestedById   String
+  requestedAt     DateTime  @default(now())
+  completedAt     DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  document      Document            @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  requestedBy   User                @relation("TranscriptRequestedBy", fields: [requestedById], references: [id])
+  correctedBy   User?               @relation("TranscriptCorrectedBy", fields: [correctedById], references: [id])
+  segments      TranscriptSegment[]
+
+  @@index([status, requestedAt])
+  @@map("transcripts")
+}
+
+/// One speaker turn / paragraph.
+model TranscriptSegment {
+  id           String     @id @default(cuid())
+  transcriptId String
+  index        Int        /// Order within the transcript
+  speaker      String     /// Provider label key ("A"), names live on Transcript.speakers
+  startSeconds Float
+  endSeconds   Float
+  /// Plain text, words joined: what search matches and export prints.
+  text         String
+  /// [{ w: string, s: number, e: number, c?: number }] — word, start/end
+  /// seconds, provider confidence. Edited words get interpolated s/e.
+  words        Json
+  /// The provider's text before any correction; null when never edited.
+  originalText String?
+  /// Optimistic concurrency for corrections.
+  revision     Int        @default(0)
+
+  transcript Transcript @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+
+  @@unique([transcriptId, index])
+  @@index([transcriptId, startSeconds])
+  @@map("transcript_segments")
 }
