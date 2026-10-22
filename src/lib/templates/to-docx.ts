@@ -25,6 +25,7 @@ import {
   CELL_PAD_TWIPS,
   HEADER_DISTANCE_TWIPS,
   headingSizePt,
+  PAGE_DIMENSIONS,
   type LoadedLogo,
   type PageStyle,
 } from "./page-style";
@@ -264,7 +265,10 @@ export async function resolvedToDocx(input: {
         properties: {
           titlePage: isLetter || footerNumber || undefined,
           page: {
-            size: { width: 12240, height: 15840 },
+            size: {
+              width: PAGE_DIMENSIONS[style.paperSize].twips.w,
+              height: PAGE_DIMENSIONS[style.paperSize].twips.h,
+            },
             margin: {
               top: Math.round(style.marginsIn.top * 1440),
               right: Math.round(style.marginsIn.right * 1440),

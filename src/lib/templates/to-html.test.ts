@@ -105,6 +105,20 @@ describe("resolvedToPageParts", () => {
     expect(mk("filing", { pageNumbers: "bottom_center" }).strip?.pageLabel?.align).toBe("center");
     expect(mk("filing", { pageNumbers: "none" }).strip).toBeNull();
   });
+  it("min height follows the paper size, 96 px per inch", () => {
+    expect(mk("filing", {}).minHeightPx).toBe(11 * 96);
+    const legal = resolvedToPageParts({
+      body: doc,
+      letterhead: null,
+      continuation: null,
+      style: {
+        ...resolvePageStyle("filing", DEFAULT_DOCUMENT_STYLE, null),
+        paperSize: "legal",
+      },
+      logoUrl: null,
+    });
+    expect(legal.minHeightPx).toBe(14 * 96);
+  });
   it("emits one font-face per face with the prefixed family", () => {
     const css = pageFontFaceCss("times");
     expect(css.match(/@font-face/g)).toHaveLength(4);

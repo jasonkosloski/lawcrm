@@ -87,6 +87,13 @@ describe("resolvedToDocx", () => {
     expect(xml).toContain("not on file");
   });
 
+  it("writes the page size for letter and legal", async () => {
+    const letter = await build({ style: letterStyle() });
+    expect(letter.doc).toMatch(/<w:pgSz [^>]*w:w="12240"[^>]*w:h="15840"/);
+    const legal = await build({ style: letterStyle({ paperSize: "legal" }) });
+    expect(legal.doc).toMatch(/<w:pgSz [^>]*w:w="12240"[^>]*w:h="20160"/);
+  });
+
   it("applies margins, defaults, and line spacing", async () => {
     const style = letterStyle({
       marginsIn: { top: 1, right: 1.25, bottom: 0.5, left: 2 },

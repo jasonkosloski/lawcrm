@@ -14,7 +14,12 @@
 
 import { sanitizeDocumentHtml } from "@/lib/sanitize-html";
 import { FONTS, fontPublicUrl, type FontKey } from "./fonts";
-import { CELL_PAD_PT, HEADER_DISTANCE_PT, type PreviewPageStyle } from "./page-style";
+import {
+  CELL_PAD_PT,
+  HEADER_DISTANCE_PT,
+  PAGE_DIMENSIONS,
+  type PreviewPageStyle,
+} from "./page-style";
 import type {
   ResolvedBlock,
   ResolvedDoc,
@@ -92,7 +97,6 @@ const PX_PER_IN = 96;
 const PX_PER_PT = 96 / 72;
 
 export const PAGE_WIDTH_PX = 8.5 * PX_PER_IN;
-export const PAGE_MIN_HEIGHT_PX = 11 * PX_PER_IN;
 export const LOGO_MAX_W_PX = 3 * PX_PER_IN;
 export const LOGO_MAX_H_PX = 1 * PX_PER_IN;
 /** Table cell left/right padding, same as the .docx and PDF. */
@@ -130,6 +134,8 @@ export type PageParts = {
   /** Letters only; null when there is no logo to show. */
   logo: { url: string; position: "left" | "center" | "right" } | null;
   bodyHtml: string;
+  /** The page frame's minimum height for its paper size. */
+  minHeightPx: number;
   /** Page-2 strip; null when nothing would print there. */
   strip: {
     placement: "top" | "bottom";
@@ -193,6 +199,7 @@ export function resolvedToPageParts(input: {
     logo:
       isLetter && logo && input.logoUrl ? { url: input.logoUrl, position: logo.position } : null,
     bodyHtml: resolvedToHtml(input.body),
+    minHeightPx: PAGE_DIMENSIONS[style.paperSize].in.h * PX_PER_IN,
     strip,
   };
 }

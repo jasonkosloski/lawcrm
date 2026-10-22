@@ -66,6 +66,24 @@ const style = (kind: "letter" | "filing", over: Partial<PageStyle> = {}): PageSt
   ...over,
 });
 
+describe("paper size", () => {
+  const firstPage = async (over: Partial<PageStyle>) => {
+    const { buffer } = await resolvedToPdf({
+      body: doc("Body"),
+      letterhead: null,
+      continuation: null,
+      style: style("filing", over),
+    });
+    return (await PDFDocument.load(buffer)).getPage(0).getSize();
+  };
+  it("letter is 612 x 792 pt", async () => {
+    expect(await firstPage({})).toEqual({ width: 612, height: 792 });
+  });
+  it("legal is 612 x 1008 pt", async () => {
+    expect(await firstPage({ paperSize: "legal" })).toEqual({ width: 612, height: 1008 });
+  });
+});
+
 type Item = { str: string; y: number };
 
 async function pages(buf: Buffer): Promise<Item[][]> {

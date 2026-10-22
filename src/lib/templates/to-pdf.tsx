@@ -24,6 +24,7 @@ import {
   CELL_PAD_PT,
   HEADER_DISTANCE_PT,
   headingSizePt,
+  PAGE_DIMENSIONS,
   type LoadedLogo,
   type PageStyle,
 } from "./page-style";
@@ -326,7 +327,7 @@ export async function resolvedToPdf(input: {
   const pdf = (
     <Document>
       <Page
-        size="LETTER"
+        size={[PAGE_DIMENSIONS[style.paperSize].pt.w, PAGE_DIMENSIONS[style.paperSize].pt.h]}
         style={{
           fontFamily: family,
           fontSize: style.sizePt,

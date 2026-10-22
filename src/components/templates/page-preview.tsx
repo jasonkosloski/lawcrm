@@ -15,7 +15,6 @@ import {
   CELL_PAD_PX,
   LOGO_MAX_H_PX,
   LOGO_MAX_W_PX,
-  PAGE_MIN_HEIGHT_PX,
   PAGE_WIDTH_PX,
   pageFontFaceCss,
   resolvedToPageParts,
@@ -71,7 +70,7 @@ export function PagePreview(input: {
     ...parts.style,
     "--page-family": parts.fontFamily,
     width: PAGE_WIDTH_PX,
-    minHeight: PAGE_MIN_HEIGHT_PX,
+    minHeight: parts.minHeightPx,
     transform: `scale(${scale})`,
     transformOrigin: "top left",
   } as CSSProperties;
