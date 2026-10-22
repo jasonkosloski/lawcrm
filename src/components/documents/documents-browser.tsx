@@ -89,7 +89,6 @@ export async function DocumentsBrowser({
     canViewPortal,
     templates,
     tz,
-    generateOptions,
   ] = await Promise.all([
     getDocumentFolders(scope),
     getFolderDocumentCounts(scope),
@@ -126,9 +125,12 @@ export async function DocumentsBrowser({
     // Upload timestamps are real instants — render them on the
     // viewer's calendar, not the server's (UTC in prod).
     getCurrentUserTimeZone(),
-    // Signer / recipient choices; access-checked via assertScopeAccess.
-    loadGenerateOptions(scope),
   ]);
+  // Signer / recipient choices (access-checked), only when the dialog renders.
+  const generateOptions =
+    writable && canUpload
+      ? await loadGenerateOptions(scope)
+      : { team: [], contacts: [], currentUserId: "" };
 
   const isMatter = scope.kind === "matter";
   // Needs portal.view too: the row's clientShare is only populated for its holders.

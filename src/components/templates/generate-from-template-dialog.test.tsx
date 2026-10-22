@@ -447,4 +447,53 @@ describe("GenerateFromTemplateDialog", () => {
     await openAndPick(user);
     expect(await screen.findByText(/Archived blocks:/)).toHaveTextContent("Old footer");
   });
+
+  it("keeps signer/recipient selects when a re-preview is refused", async () => {
+    previewMock.mockResolvedValueOnce(okPreview({ needsSigner: true, needsRecipient: true }));
+    previewMock.mockResolvedValueOnce({ ok: false, error: "That recipient isn't a contact." });
+    const user = userEvent.setup();
+    render(
+      <GenerateFromTemplateDialog
+        scope={M1}
+        templates={TEMPLATES}
+        canUpload
+        team={TEAM}
+        contacts={CONTACTS}
+        currentUserId="u1"
+      />,
+    );
+    await openAndPick(user);
+    await user.selectOptions(await screen.findByLabelText("Recipient"), "c1");
+    expect(await screen.findByText("That recipient isn't a contact.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Recipient")).toBeInTheDocument();
+    expect(screen.getByLabelText("Signer")).toBeInTheDocument();
+  });
+
+  it("ignores an older preview response that arrives after a newer one", async () => {
+    let resolveSlow: (v: unknown) => void = () => {};
+    let resolveFast: (v: unknown) => void = () => {};
+    previewMock.mockResolvedValueOnce(okPreview({ needsRecipient: true }));
+    previewMock.mockImplementationOnce(() => new Promise((r) => (resolveSlow = r)));
+    previewMock.mockImplementationOnce(() => new Promise((r) => (resolveFast = r)));
+    const user = userEvent.setup();
+    render(
+      <GenerateFromTemplateDialog
+        scope={M1}
+        templates={TEMPLATES}
+        canUpload
+        team={TEAM}
+        contacts={[...CONTACTS, { id: "c2", name: "Other", role: null }]}
+        currentUserId="u1"
+      />,
+    );
+    await openAndPick(user);
+    const recipient = await screen.findByLabelText("Recipient");
+    await user.selectOptions(recipient, "c1"); // older
+    await user.selectOptions(recipient, "c2"); // newest
+    resolveFast(okPreview({ html: "<p>Newest</p>", needsRecipient: true }));
+    resolveSlow(okPreview({ html: "<p>Old</p>", needsRecipient: true }));
+    expect(await screen.findByText("Newest")).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText("Old")).not.toBeInTheDocument();
+  });
 });

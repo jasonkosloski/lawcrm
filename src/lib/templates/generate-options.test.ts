@@ -91,4 +91,18 @@ describe("loadGenerateOptions", () => {
     expect(res.contacts).toEqual([{ id: c.contactId, name: "Lee Lead", role: "client" }]);
     expect(res.team.map((t) => t.id).sort()).toEqual([me, other].sort());
   });
+
+  test("inactive users and contacts are not offered", async () => {
+    const live = await seedContact({ name: "Live Client" });
+    const dead = await seedContact({ name: "Dead Witness" });
+    await prisma.matter.update({ where: { id: matterId }, data: { clientId: live.contactId } });
+    await seedMatterContact({ matterId, contactId: dead.contactId, category: "lay_witness" });
+    await prisma.contact.update({ where: { id: dead.contactId }, data: { isActive: false } });
+    await prisma.user.update({ where: { id: other }, data: { isActive: false } });
+    await prisma.matterTeamMember.create({ data: { matterId, userId: other, role: "paralegal" } });
+
+    const res = await loadGenerateOptions({ kind: "matter", matterId });
+    expect(res.contacts.map((c) => c.id)).toEqual([live.contactId]);
+    expect(res.team.map((t) => t.id)).toEqual([me]);
+  });
 });

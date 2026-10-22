@@ -17,7 +17,7 @@
 
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Check, Copy, Sparkles, TriangleAlert } from "lucide-react";
 import {
   Dialog,
@@ -119,17 +119,29 @@ export function GenerateFromTemplateDialog({
   const [previewPending, startPreview] = useTransition();
   const [savePending, startSave] = useTransition();
 
-  const runPreview = (id: string, signer: string, recipient: string) => {
+  // Only the latest preview request may land (slow older responses lose).
+  const previewSeq = useRef(0);
+  // Kept from the last ok preview so the selects survive a refused re-preview.
+  const [needs, setNeeds] = useState({ signer: false, recipient: false });
+  const runPreview = (id: string, signer: string, recipient: string, keepNotice = false) => {
+    const seq = ++previewSeq.current;
     startPreview(async () => {
       const o = buildOpts(signer, recipient);
       const res = await (o
         ? previewDocumentFromTemplate(id, scope, o)
         : previewDocumentFromTemplate(id, scope));
+      if (seq !== previewSeq.current) return;
+      if (res.ok) {
+        setNeeds({ signer: res.needsSigner, recipient: res.needsRecipient });
+        if (!keepNotice) setStaleNotice(null);
+      }
       setPreview(res);
     });
   };
 
   const onPick = (id: string) => {
+    previewSeq.current++;
+    setNeeds({ signer: false, recipient: false });
     setTemplateId(id);
     setPreview(null);
     setSaveError(null);
@@ -155,6 +167,8 @@ export function GenerateFromTemplateDialog({
   // Reset per open so a stale preview never flashes; a request's
   // default template is preselected and previewed straight away.
   const openDialog = () => {
+    previewSeq.current++;
+    setNeeds({ signer: false, recipient: false });
     setTemplateId("");
     setPreview(null);
     setCopied(false);
@@ -207,7 +221,7 @@ export function GenerateFromTemplateDialog({
       } else if (res.error === STALE_TEMPLATE) {
         // Refresh the preview (and its version) so the next save is valid.
         setStaleNotice(res.error);
-        runPreview(templateId, signerId, recipientId);
+        runPreview(templateId, signerId, recipientId, true);
       } else {
         setSaveError(res.error);
       }
@@ -282,9 +296,9 @@ export function GenerateFromTemplateDialog({
                 </NativeSelect>
               </div>
 
-              {preview?.ok && (preview.needsSigner || preview.needsRecipient) && (
+              {(needs.signer || needs.recipient) && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {preview.needsSigner && (
+                  {needs.signer && (
                     <div className="flex flex-col gap-1">
                       <label htmlFor="generate-signer" className="text-xs font-medium text-ink-2">
                         Signer
@@ -303,7 +317,7 @@ export function GenerateFromTemplateDialog({
                       </NativeSelect>
                     </div>
                   )}
-                  {preview.needsRecipient && (
+                  {needs.recipient && (
                     <div className="flex flex-col gap-1">
                       <label
                         htmlFor="generate-recipient"

@@ -40,28 +40,30 @@ export async function loadGenerateOptions(scope: RecordScope): Promise<GenerateO
     const matter = await prisma.matter.findUnique({
       where: { id: scope.matterId },
       select: {
-        client: { select: { id: true, name: true } },
+        client: { where: { isActive: true }, select: { id: true, name: true } },
         contacts: {
           orderBy: { createdAt: "asc" },
           select: {
             category: true,
             role: true,
-            contact: { select: { id: true, name: true } },
-            representationContact: { select: { id: true, name: true } },
+            contact: { select: { id: true, name: true, isActive: true } },
+            representationContact: { select: { id: true, name: true, isActive: true } },
           },
         },
         teamMembers: {
-          where: { removedAt: null },
+          where: { removedAt: null, user: { isActive: true } },
           select: { user: { select: { id: true, name: true } } },
         },
       },
     });
     if (matter?.client) add(matter.client.id, matter.client.name, "client");
     for (const mc of matter?.contacts ?? []) {
-      add(mc.contact.id, mc.contact.name, words(mc.role?.trim() || mc.category));
+      if (mc.contact.isActive) {
+        add(mc.contact.id, mc.contact.name, words(mc.role?.trim() || mc.category));
+      }
     }
     for (const mc of matter?.contacts ?? []) {
-      if (mc.category === "opposing" && mc.representationContact) {
+      if (mc.category === "opposing" && mc.representationContact?.isActive) {
         add(mc.representationContact.id, mc.representationContact.name, "opposing counsel");
       }
     }
@@ -70,11 +72,14 @@ export async function loadGenerateOptions(scope: RecordScope): Promise<GenerateO
     const lead = await prisma.lead.findUnique({
       where: { id: scope.leadId },
       select: {
-        contact: { select: { id: true, name: true } },
-        teamMembers: { select: { user: { select: { id: true, name: true } } } },
+        contact: { select: { id: true, name: true, isActive: true } },
+        teamMembers: {
+          where: { user: { isActive: true } },
+          select: { user: { select: { id: true, name: true } } },
+        },
       },
     });
-    if (lead?.contact) add(lead.contact.id, lead.contact.name, "client");
+    if (lead?.contact?.isActive) add(lead.contact.id, lead.contact.name, "client");
     teamUsers = (lead?.teamMembers ?? []).map((t) => t.user);
   }
 
