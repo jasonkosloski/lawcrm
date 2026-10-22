@@ -138,9 +138,11 @@ export function MediaReview({
     />
   );
 
-  // Once a recording has a transcript (any status), the transcript is
-  // the main surface and the player + flags move to the side column.
-  const transcriptFirst = transcript !== null;
+  // Once a recording has transcript text, the transcript is the main
+  // surface and the player + flags move to the side column. A job in
+  // flight, a failure, or "no speech" with nothing to read keeps the
+  // big-player layout with the status as a line under it.
+  const transcriptFirst = (transcript?.segments.length ?? 0) > 0;
 
   return (
     <ReviewPanel

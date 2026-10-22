@@ -156,7 +156,7 @@ describe("TranscriptPane", () => {
 
   test("completed with zero segments says no speech was detected", () => {
     pane({ transcript: { ...BASE, segments: [] } });
-    expect(screen.getByText("No speech detected")).toBeTruthy();
+    expect(screen.getByText("No speech detected in this recording.")).toBeTruthy();
   });
 
   test("not configured: a disabled control explains instead of a dead button", () => {

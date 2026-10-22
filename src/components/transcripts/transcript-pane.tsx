@@ -429,9 +429,7 @@ export function TranscriptPane({
       )}
 
       {status === "completed" && !hasText && (
-        <p className="rounded-md border border-line bg-paper-2 px-3 py-4 text-sm text-ink-3">
-          No speech detected
-        </p>
+        <p className="text-xs text-ink-3">No speech detected in this recording.</p>
       )}
 
       {hasText && (
