@@ -25,6 +25,11 @@ export function notifySuccess(message: string): void {
   toast.success(message);
 }
 
+/** Done, with a way to take it back (e.g. a drag-and-drop move). */
+export function notifyUndoable(message: string, onUndo: () => void): void {
+  toast.success(message, { action: { label: "Undo", onClick: onUndo } });
+}
+
 export type ConfirmOptions = {
   /** The question, e.g. "Delete this note?" */
   title: string;

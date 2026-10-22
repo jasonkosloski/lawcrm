@@ -4,20 +4,9 @@ import userEvent from "@testing-library/user-event";
 
 vi.mock("@/app/actions/documents", () => ({
   updateDocumentMetadata: vi.fn(),
-  copyDocumentToFolder: vi.fn(),
-  deleteDocument: vi.fn(),
-}));
-vi.mock("@/app/actions/document-folders", () => ({ moveDocuments: vi.fn() }));
-vi.mock("@/app/actions/portal-documents", () => ({
-  setDocumentsClientShare: vi.fn(),
-}));
-vi.mock("@/lib/feedback", () => ({
-  confirmAction: vi.fn(async () => true),
-  notifyError: vi.fn(),
 }));
 
 import { updateDocumentMetadata } from "@/app/actions/documents";
-import { DocumentRowActions } from "./document-row-actions";
 import { EditDocumentDialog } from "./edit-document-dialog";
 
 const update = vi.mocked(updateDocumentMetadata);
@@ -74,32 +63,5 @@ describe("EditDocumentDialog", () => {
     render(<Harness />);
     await userEvent.clear(screen.getByLabelText("Name"));
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
-  });
-});
-
-describe("DocumentRowActions edit item", () => {
-  const open = async (canEdit: boolean) => {
-    render(
-      <DocumentRowActions
-        documentId="d1"
-        name="Doc"
-        canDelete
-        canEdit={canEdit}
-        category="filing"
-      />
-    );
-    await userEvent.click(screen.getByRole("button", { name: "Document actions" }));
-  };
-
-  test("hidden without documents.edit", async () => {
-    await open(false);
-    expect(screen.queryByText("Edit details…")).toBeNull();
-  });
-
-  test("Edit details… opens the prefilled dialog", async () => {
-    await open(true);
-    await userEvent.click(screen.getByText("Edit details…"));
-    expect(await screen.findByLabelText("Name")).toHaveValue("Doc");
-    expect(screen.getByLabelText("Category")).toHaveValue("filing");
   });
 });

@@ -34,6 +34,46 @@ export function NewFolderButton({
   parentName: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={cn(
+          "inline-flex items-center gap-1.5 h-8 px-3 text-xs",
+          "rounded-md border border-line bg-white",
+          "hover:border-brand-300 hover:text-brand-700 transition-colors text-ink-2"
+        )}
+      >
+        <FolderPlus size={13} />
+        New folder
+      </button>
+      <NewFolderDialog
+        open={open}
+        onOpenChange={setOpen}
+        scope={scope}
+        parentId={parentId}
+        parentName={parentName}
+      />
+    </>
+  );
+}
+
+/** The create dialog on its own — the document browser's right-click
+ *  menu opens it for any folder. */
+export function NewFolderDialog({
+  open,
+  onOpenChange: setOpen,
+  scope,
+  parentId,
+  parentName,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  scope: RecordScope;
+  parentId: string | null;
+  parentName: string | null;
+}) {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -58,19 +98,6 @@ export function NewFolderButton({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={cn(
-          "inline-flex items-center gap-1.5 h-8 px-3 text-xs",
-          "rounded-md border border-line bg-white",
-          "hover:border-brand-300 hover:text-brand-700 transition-colors text-ink-2"
-        )}
-      >
-        <FolderPlus size={13} />
-        New folder
-      </button>
-
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>

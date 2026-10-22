@@ -9,13 +9,16 @@
  * folder id falls back to the root rather than 404ing (the folder
  * may have just been deleted in another tab).
  *
- * Write affordances render behind read-side permission flags (the
- * server actions re-check regardless): New folder
+ * This server half loads the folders, the listing and the permission
+ * flags and shapes them into rows; DocumentsWorkspace (client) owns
+ * the interaction: selection, right-click menus, drag-to-move, desktop
+ * file drop. Write affordances render behind read-side permission flags
+ * (the server actions re-check regardless): New folder
  * (documents.folder.create), folder rename/delete
- * (documents.folder.edit/.delete), Move to… on files + folders
- * (documents.organize), multi-file upload into the current folder +
- * single-file composer + template generation (documents.upload),
- * delete (uploader or documents.delete_any).
+ * (documents.folder.edit/.delete), Move/Copy to… and drag-moves
+ * (documents.organize), uploads + single-file composer + template
+ * generation (documents.upload), delete (uploader or
+ * documents.delete_any).
  *
  * File rows link to `{matter|intake}/[id]/documents/[documentId]` — the
  * document viewer route. `writable={false}` (a converted lead) hides
@@ -23,19 +26,8 @@
  * gate on their own permission flags.
  */
 
-import Link from "next/link";
-import { ChevronRight, FileText, Folder, Mail, Paperclip } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { UploadDocumentForm } from "@/components/matters/documents/upload-document-form";
-import { DocumentRowActions } from "@/components/matters/documents/document-row-actions";
 import {
   getFolderListing,
   type ListingAttachment,
@@ -43,10 +35,6 @@ import {
 } from "@/lib/queries/document-listing";
 import { isProtectedFolder } from "@/lib/records-requests/folder-kinds";
 import { FolderSourceBadge } from "@/components/documents/folder-source-badge";
-import { FolderRowActions } from "@/components/matters/documents/folder-row-actions";
-import { FolderTree } from "@/components/matters/documents/folder-tree";
-import { MultiFileUpload } from "@/components/matters/documents/multi-file-upload";
-import { NewFolderButton } from "@/components/matters/documents/new-folder-button";
 import { GenerateFromTemplateDialog } from "@/components/templates/generate-from-template-dialog";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
@@ -59,7 +47,6 @@ import {
   buildFolderTree,
   flattenFolderTree,
   folderDepth,
-  folderPath,
 } from "@/lib/folder-tree";
 import {
   getFolderDocumentCounts,
@@ -70,10 +57,13 @@ import {
   documentStatusMeta,
   formatFileSize,
 } from "@/lib/document-display";
+import { docKey, folderKey } from "@/lib/document-selection";
 import { scopeBasePath, type RecordScope } from "@/lib/record-scope";
 import { ClientShareBadge } from "@/components/documents/client-share-badge";
 import { isEffectivelyShared, shareReason, sharedFolderIds } from "@/lib/portal/document-visibility";
 import { matterHasLivePortalAccess } from "@/lib/queries/document-requests";
+import { DocumentsWorkspace } from "@/components/documents/documents-workspace";
+import type { DocRowData, FolderRowData, RowData } from "@/components/documents/documents-table";
 
 export async function DocumentsBrowser({
   scope,
@@ -154,10 +144,6 @@ export async function DocumentsBrowser({
 
   const tree = buildFolderTree(folders);
   const flat = flattenFolderTree(tree);
-  const crumbs = selectedId ? folderPath(folders, selectedId) : [];
-  const selectedName =
-    crumbs.length > 0 ? crumbs[crumbs.length - 1]!.name : null;
-  // Query orders by (order, name); filter preserves it.
   // Ids that have a protected folder somewhere below them.
   const protectedAncestors = new Set<string>();
   for (const f of folders) {
@@ -168,30 +154,74 @@ export async function DocumentsBrowser({
       cur = folders.find((x) => x.id === cur)?.parentId ?? null;
     }
   }
+  // Query orders by (order, name); filter preserves it.
   const subfolders = folders.filter((f) => f.parentId === selectedId);
-  const atDepthCap =
-    selectedId !== null && folderDepth(folders, selectedId) >= MAX_FOLDER_DEPTH;
+  const atDepthCap = (id: string | null) =>
+    id !== null && folderDepth(folders, id) >= MAX_FOLDER_DEPTH;
 
   const basePath = `${scopeBasePath(scope)}/documents`;
-  const isEmpty = subfolders.length === 0 && listing.documents.length === 0;
+
+  const folderRows: FolderRowData[] = subfolders.map((folder) => ({
+    key: folderKey(folder.id),
+    target: {
+      kind: "folder",
+      id: folder.id,
+      name: folder.name,
+      href: `${basePath}?folder=${folder.id}`,
+      parentId: folder.parentId,
+      isProtected: isProtectedFolder(folder),
+      hasProtectedDescendant: protectedAncestors.has(folder.id),
+      clientShared: folder.clientShared,
+      atDepthCap: atDepthCap(folder.id),
+    },
+    count: counts[folder.id] ?? 0,
+    extras: (
+      <>
+        <FolderSourceBadge folder={folder} scope={scope} />
+        {showShareState && (
+          <ClientShareBadge
+            reason={
+              folder.clientShared
+                ? { kind: "file" }
+                : shareReason({ clientShare: null, folderId: folder.id }, folders)
+            }
+          />
+        )}
+      </>
+    ),
+  }));
 
   /** One document row: an ordinary file, or an email's attachment
    *  (indented under it). */
-  const docRow = (d: ListingRow, kind: "own" | "attachment", attachments: ListingAttachment[] = []) => {
+  const docRow = (d: ListingRow, attachments: ListingAttachment[] = []): DocRowData => {
     const status = documentStatusMeta(d.status);
-    const canDelete = canDeleteAny || d.uploadedBy === currentUserId;
-    const Icon = kind === "attachment" ? Paperclip : d.isEmail ? Mail : FileText;
-    return (
-      <TableRow key={d.id}>
-        <TableCell className={kind === "attachment" ? "pl-10 font-medium text-ink" : "pl-4 font-medium text-ink"}>
-          <Link
-            href={`${basePath}/${d.id}`}
-            className="inline-flex items-center gap-2 hover:text-brand-700 hover:underline"
-            title="Open document"
-          >
-            <Icon size={14} className="shrink-0 text-ink-4" />
-            {d.name}
-          </Link>
+    return {
+      key: docKey(d.id),
+      parentKey: d.parentDocumentId ? docKey(d.parentDocumentId) : null,
+      isEmail: d.isEmail,
+      target: {
+        kind: "doc",
+        id: d.id,
+        name: d.name,
+        href: `${basePath}/${d.id}`,
+        folderId: d.folderId,
+        isAttachment: d.parentDocumentId !== null,
+        hasFile: d.hasFile,
+        canDelete: canDeleteAny || d.uploadedBy === currentUserId,
+        category: d.category,
+        status: d.status,
+        clientShare: d.clientShare,
+        isShared: isEffectivelyShared(d, sharedFolders),
+        unsavedAttachments: attachments.filter((a) => a.copiedTo.length === 0).map((a) => a.name),
+        savedAttachments: attachments.filter((a) => a.copiedTo.length > 0).map((a) => a.name),
+        attachmentShares: attachments.map((a) => ({
+          clientShare: a.clientShare,
+          folderId: a.folderId,
+          status: a.status,
+        })),
+      },
+      extras: (
+        <>
           {showShareState && d.status !== "archived" && <ClientShareBadge reason={shareReason(d, folders)} />}
           {d.portalUploaderName && (
             <div className="text-2xs font-normal text-ink-3 mt-0.5">
@@ -204,241 +234,83 @@ export async function DocumentsBrowser({
               )}
             </div>
           )}
-        </TableCell>
-        <TableCell className="text-xs text-ink-3">{documentCategoryLabel(d.category)}</TableCell>
-        <TableCell>
-          <span className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full ${status.className}`}>
-            {status.label}
-          </span>
-        </TableCell>
-        <TableCell className="text-2xs font-mono text-ink-3">{formatFileSize(d.fileSize)}</TableCell>
-        <TableCell className="text-2xs font-mono text-ink-3">
-          <span title={d.uploaderName ?? undefined}>{d.uploaderInitials ?? "—"}</span>
-        </TableCell>
-        <TableCell className="text-xs text-ink-3">{formatDate(d.createdAt, "medium", tz)}</TableCell>
-        <TableCell className="pr-4 text-right">
-          <DocumentRowActions
-            documentId={d.id}
-            name={d.name}
-            canDelete={canDelete}
-            hasFile={d.hasFile}
-            canMove={canOrganize}
-            canEdit={canEdit}
-            category={d.category}
-            folders={flat}
-            currentFolderId={d.folderId}
-            isAttachment={d.parentDocumentId !== null}
-            unsavedAttachments={attachments.filter((a) => a.copiedTo.length === 0).map((a) => a.name)}
-            savedAttachments={attachments.filter((a) => a.copiedTo.length > 0).map((a) => a.name)}
-            canShare={canShare}
-            isShared={isEffectivelyShared(d, sharedFolders)}
-            clientShare={d.clientShare}
-            status={d.status}
-            attachmentShares={attachments.map((a) => ({
-              clientShare: a.clientShare,
-              folderId: a.folderId,
-              status: a.status,
-            }))}
-            visibilityFolders={isMatter ? folders : undefined}
-          />
-        </TableCell>
-      </TableRow>
-    );
+        </>
+      ),
+      category: documentCategoryLabel(d.category),
+      status: { label: status.label, className: status.className },
+      size: formatFileSize(d.fileSize),
+      uploaderInitials: d.uploaderInitials,
+      uploaderName: d.uploaderName,
+      added: formatDate(d.createdAt, "medium", tz),
+    };
   };
 
+  const rows: RowData[] = [
+    ...folderRows,
+    ...listing.documents.flatMap((d) => [docRow(d, d.attachments), ...d.attachments.map((a) => docRow(a))]),
+  ];
+
   return (
-    <div className="p-5 flex flex-col lg:flex-row gap-5 items-start">
-      {/* ── Folder tree rail ─────────────────────────────────────── */}
-      <div className="w-full lg:w-60 shrink-0">
-        <Card className="p-2">
-          <FolderTree
-            scope={scope}
-            tree={tree}
-            counts={counts}
-            rootCount={rootCount}
-            selectedId={selectedId}
-          />
-        </Card>
-      </div>
-
-      {/* ── Browser ──────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 w-full flex flex-col gap-4">
-        {/* Breadcrumbs + toolbar */}
-        <div className="flex flex-wrap items-center gap-2">
-          <nav
-            aria-label="Folder path"
-            className="flex items-center gap-1 min-w-0 text-xs"
-          >
-            <Link
-              href={basePath}
-              className={
-                selectedId === null
-                  ? "font-semibold text-ink"
-                  : "text-ink-3 hover:text-brand-700 hover:underline"
-              }
-            >
-              All documents
-            </Link>
-            {crumbs.map((crumb, i) => {
-              const isLast = i === crumbs.length - 1;
-              return (
-                <span
-                  key={crumb.id}
-                  className="flex items-center gap-1 min-w-0"
-                >
-                  <ChevronRight size={12} className="shrink-0 text-ink-4" />
-                  {isLast ? (
-                    <span className="font-semibold text-ink truncate">
-                      {crumb.name}
-                    </span>
-                  ) : (
-                    <Link
-                      href={`${basePath}?folder=${crumb.id}`}
-                      className="text-ink-3 hover:text-brand-700 hover:underline truncate"
-                    >
-                      {crumb.name}
-                    </Link>
-                  )}
-                </span>
-              );
-            })}
-          </nav>
-          {noPortalAccess && (
-            <span className="text-2xs text-ink-4">
-              No one has portal access on this matter yet.
-            </span>
-          )}
-          <div className="ml-auto flex items-center gap-2">
-            {writable && canFolderCreate && !atDepthCap && (
-              <NewFolderButton
-                scope={scope}
-                parentId={selectedId}
-                parentName={selectedName}
-              />
-            )}
-            {writable && canUpload && (
-              <MultiFileUpload
-                scope={scope}
-                folderId={selectedId}
-                folderName={selectedName}
-                // Transport selector: local → streaming XHR route,
-                // vercel-blob → client-direct upload (client
-                // components can't read env, so the server decides).
-                storageDriver={activeStorageDriver()}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Folder contents */}
-        {isEmpty ? (
-          <Card>
-            <CardContent className="p-8 text-center flex flex-col items-center gap-3">
-              <div>
-                <div className="text-sm font-semibold text-ink mb-1">
-                  {selectedId === null
-                    ? "No documents yet"
-                    : "This folder is empty"}
-                </div>
-                <div className="text-xs text-ink-3">
-                  {selectedId === null
-                    ? scope.kind === "lead"
-                      ? "Screening paperwork, correspondence, and documents received during intake will appear here."
-                      : "Filings, pleadings, correspondence, contracts, discovery, and expert reports for this matter will appear here."
-                    : "Upload files here or move existing documents into this folder."}
-                </div>
+    <DocumentsWorkspace
+      scope={scope}
+      basePath={basePath}
+      folders={folders}
+      flat={flat}
+      tree={tree}
+      counts={counts}
+      rootCount={rootCount}
+      currentFolderId={selectedId}
+      rows={rows}
+      perms={{
+        organize: canOrganize,
+        edit: canEdit,
+        folderCreate: canFolderCreate,
+        folderEdit: canFolderEdit,
+        folderDelete: canFolderDelete,
+        upload: canUpload,
+        share: canShare,
+        writable,
+      }}
+      storageDriver={activeStorageDriver()}
+      visibilityWarnings={isMatter}
+      toolbarNote={
+        noPortalAccess && (
+          <span className="text-2xs text-ink-4">
+            No one has portal access on this matter yet.
+          </span>
+        )
+      }
+      empty={
+        <Card>
+          <CardContent className="p-8 text-center flex flex-col items-center gap-3">
+            <div>
+              <div className="text-sm font-semibold text-ink mb-1">
+                {selectedId === null
+                  ? "No documents yet"
+                  : "This folder is empty"}
               </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="p-0 overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-4">Name</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead>By</TableHead>
-                  <TableHead>Added</TableHead>
-                  <TableHead className="pr-4 w-8" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {subfolders.map((folder) => {
-                  const count = counts[folder.id] ?? 0;
-                  return (
-                    <TableRow key={folder.id}>
-                      <TableCell className="pl-4 font-medium text-ink">
-                        <Link
-                          href={`${basePath}?folder=${folder.id}`}
-                          className="inline-flex items-center gap-2 hover:text-brand-700"
-                        >
-                          <Folder size={14} className="shrink-0 text-ink-4" />
-                          {folder.name}
-                          {count > 0 && (
-                            <span className="text-2xs font-mono font-normal text-ink-4">
-                              {count} file{count === 1 ? "" : "s"}
-                            </span>
-                          )}
-                        </Link>
-                        <FolderSourceBadge folder={folder} scope={scope} />
-                        {showShareState && (
-                          <ClientShareBadge
-                            reason={
-                              folder.clientShared
-                                ? { kind: "file" }
-                                : shareReason({ clientShare: null, folderId: folder.id }, folders)
-                            }
-                          />
-                        )}
-                      </TableCell>
-                      <TableCell className="text-2xs font-mono text-ink-4">
-                        Folder
-                      </TableCell>
-                      <TableCell className="text-2xs text-ink-4">—</TableCell>
-                      <TableCell className="text-2xs text-ink-4">—</TableCell>
-                      <TableCell className="text-2xs text-ink-4">—</TableCell>
-                      <TableCell className="text-2xs text-ink-4">—</TableCell>
-                      <TableCell className="pr-4 text-right">
-                        <FolderRowActions
-                          folderId={folder.id}
-                          name={folder.name}
-                          parentId={folder.parentId}
-                          folders={flat}
-                          canEdit={canFolderEdit}
-                          canDelete={canFolderDelete}
-                          canOrganize={canOrganize}
-                          isProtected={isProtectedFolder(folder)}
-                          hasProtectedDescendant={protectedAncestors.has(
-                            folder.id
-                          )}
-                          canShare={canShare}
-                          clientShared={folder.clientShared}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {listing.documents.map((d) => [
-                  docRow(d, "own", d.attachments),
-                  ...d.attachments.map((a) => docRow(a, "attachment")),
-                ])}
-              </TableBody>
-            </Table>
-          </Card>
-        )}
-
-        {writable && (
-          <DocumentComposerRow
-            scope={scope}
-            templates={templates}
-            canUpload={canUpload}
-            storageDriver={activeStorageDriver()}
-          />
-        )}
-      </div>
-    </div>
+              <div className="text-xs text-ink-3">
+                {selectedId === null
+                  ? scope.kind === "lead"
+                    ? "Screening paperwork, correspondence, and documents received during intake will appear here."
+                    : "Filings, pleadings, correspondence, contracts, discovery, and expert reports for this matter will appear here."
+                  : "Upload files here or move existing documents into this folder."}
+                {writable && canUpload && " You can also drag files here from your computer."}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      }
+    >
+      {writable && (
+        <DocumentComposerRow
+          scope={scope}
+          templates={templates}
+          canUpload={canUpload}
+          storageDriver={activeStorageDriver()}
+        />
+      )}
+    </DocumentsWorkspace>
   );
 }
 

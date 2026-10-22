@@ -489,6 +489,15 @@ values as the profile-zone wall clock and all-day values as date-only keys
 (`src/lib/event-schedule.ts`, `components/calendar/grid-time.ts`,
 `bucket-items.ts`); bucket multi-day events with `eventDayKeys`.
 
+### Right-click menus (`ContextMenu`)
+
+`components/ui/context-menu.tsx` wraps Base UI's context menu; its items are
+the `DropdownMenuItem`s (same Menu.Item underneath), so a row's ⋯ kebab and
+its right-click menu can render one action list. Build the list once as data
+(see `src/lib/document-entry-actions.ts`) and map ids to handlers; don't keep
+two hand-written menus. One `ContextMenu` per region, reading the clicked row
+from a `data-*` attribute in `onContextMenu`, not one per row.
+
 ### Generated-folder badge
 
 System-generated folders (`DocumentFolder.systemKind`) show
@@ -496,7 +505,8 @@ System-generated folders (`DocumentFolder.systemKind`) show
 rounded chip with a clipboard icon linking to the source record. It renders
 nothing for ordinary folders. Tree rails are already links, so they show only
 an icon (no nested link). Hide menu items the server would refuse
-(`isProtected`, `hasProtectedDescendant` on `FolderRowActions`).
+(`isProtected`, `hasProtectedDescendant` on the folder target in
+`src/lib/document-entry-actions.ts`).
 
 ### Other conventions
 

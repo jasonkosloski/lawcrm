@@ -49,7 +49,7 @@
 
 import type { RecordsDocRole } from "@/lib/records-requests/roles";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { useRouter } from "next/navigation";
 import { TriangleAlert, Upload, X } from "lucide-react";
 import { upload } from "@vercel/blob/client";
@@ -105,6 +105,13 @@ export type UploadScope =
 
 type DraftTarget = { kind: "draft"; draftId: string };
 
+/** Lets a parent start an upload without the picker (files dropped
+ *  from the desktop, "Upload files here" on a folder). */
+export type MultiFileUploadHandle = {
+  /** `folderId` overrides the button's folder (undefined = keep it). */
+  upload: (files: File[], folderId?: string | null) => void;
+};
+
 const formatMiB = (bytes: number): string =>
   `${Math.floor(bytes / (1024 * 1024))} MiB`;
 
@@ -116,6 +123,7 @@ export function MultiFileUpload({
   recordsRequestId,
   recordsRole,
   onUploaded,
+  controlRef,
 }: {
   scope: UploadScope;
   /** Upload destination — the currently browsed folder (null = root). */
@@ -132,6 +140,7 @@ export function MultiFileUpload({
   recordsRole?: RecordsDocRole;
   /** Called once a batch finishes uploading (before the refresh settles). */
   onUploaded?: () => void;
+  controlRef?: Ref<MultiFileUploadHandle>;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -185,7 +194,11 @@ export function MultiFileUpload({
   };
 
   /** local driver: one multipart POST to the streaming route. */
-  const startXhrUpload = (files: File[], target: RecordScope | DraftTarget) => {
+  const startXhrUpload = (
+    files: File[],
+    target: RecordScope | DraftTarget,
+    folderId: string | null
+  ) => {
     // Field order per the route contract: target BEFORE file parts.
     const fd = new FormData();
     if (target.kind === "matter") fd.append("matterId", target.matterId);
@@ -239,7 +252,8 @@ export function MultiFileUpload({
   /** vercel-blob driver: client-direct upload per file. */
   const startBlobUpload = async (
     files: File[],
-    target: RecordScope | DraftTarget
+    target: RecordScope | DraftTarget,
+    folderId: string | null
   ) => {
     const controller = new AbortController();
     cancelRef.current = { abort: () => controller.abort() };
@@ -311,7 +325,7 @@ export function MultiFileUpload({
     }
   };
 
-  const startUpload = async (files: File[]) => {
+  const startUpload = async (files: File[], targetFolderId: string | null = folderId) => {
     setError(null);
     const rejected = preflightError(files);
     if (rejected) {
@@ -345,11 +359,23 @@ export function MultiFileUpload({
     }
 
     if (storageDriver === "vercel-blob") {
-      void startBlobUpload(files, target);
+      void startBlobUpload(files, target, targetFolderId);
     } else {
-      startXhrUpload(files, target);
+      startXhrUpload(files, target, targetFolderId);
     }
   };
+
+  useImperativeHandle(controlRef, () => ({
+    upload: (files, target) => {
+      if (files.length === 0) return;
+      // One batch at a time: the button shows a single progress bar.
+      if (uploading) {
+        setError("An upload is already running. Drop the files again when it finishes.");
+        return;
+      }
+      void startUpload(files, target === undefined ? folderId : target);
+    },
+  }));
 
   if (uploading) {
     return (

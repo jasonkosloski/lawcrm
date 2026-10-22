@@ -66,6 +66,8 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 
 **Documents**
 - [ ] **Expense receipt picker cap**: lists at most 200 documents; needs search-as-you-type. → [issue](issues/receipt-picker-cap.md)
+- [x] **Documents tab as a file manager**: multi-select, right-click menus, drag-to-move with undo, desktop drop to upload. → [documents](features/documents.md)
+- [ ] **File-manager follow-ups**: zip download of a selection, grid view, sortable columns. → [documents](features/documents.md)
 - [ ] **Document versioning** → [documents](features/documents.md)
 - [ ] **Firm-wide document library**: cross-matter folder tree, file grid, category filters. → [documents](features/documents.md)
 - [ ] **Export / print to PDF beyond invoices**: demand letters, trust reports. → [documents](features/documents.md)

@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/lib/prisma", () => ({
   prisma: { documentTemplate: { findMany: vi.fn(async () => []) } },
 }));

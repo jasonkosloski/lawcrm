@@ -9,7 +9,7 @@
 - `DocumentFolder.systemKind` (`records_root`, `records_request`, `records_request_docs`, `records_responsive_docs`) marks a generated folder; `recordsRequestId` (FK to `RecordsRequest`, SetNull) links it to its request. Folders are found by that link, not by name. Kinds and helpers live in `src/lib/records-requests/folder-kinds.ts`.
 - A non-null `systemKind` means protected: the server refuses rename, move and delete (`src/app/actions/document-folders.ts`). An ancestor of a protected folder cannot be deleted either, since delete re-parents children. Deleting a request clears the link and unprotects its folders.
 - Resolution finds a stamped `records_root` scope-wide first, so renaming or moving Investigation (an ordinary folder) never spawns a second tree. `renameFolder` writes conditionally (`systemKind: null`), so a folder stamped between read and write is still refused.
-- The UI mirrors this: `FolderRowActions` hides the refused items (`isProtected`, `hasProtectedDescendant`), and `FolderSourceBadge` links the folder to its request. The server stays the authority; the UI is a convenience.
+- The UI mirrors this: the documents action list (`src/lib/document-entry-actions.ts`) hides the refused items (`isProtected`, `hasProtectedDescendant`), and `FolderSourceBadge` links the folder to its request. The server stays the authority; the UI is a convenience.
 
 **Trade-offs:**
 - (+) No duplicate or orphaned request trees; a folder explains why it cannot be edited
