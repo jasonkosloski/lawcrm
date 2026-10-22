@@ -53,10 +53,7 @@ function wordPoint(el: HTMLElement) {
   return segmentId && Number.isInteger(word) ? { segmentId, word } : undefined;
 }
 
-export function selectionToSpan(
-  selection: Selection,
-  root: HTMLElement,
-): SelectionSpan | null {
+export function selectionToSpan(selection: Selection, root: HTMLElement): SelectionSpan | null {
   if (selection.rangeCount === 0 || selection.isCollapsed) return null;
   const range = selection.getRangeAt(0);
   const words: HTMLElement[] = [];
@@ -64,7 +61,12 @@ export function selectionToSpan(
     if (!range.intersectsNode(el)) continue;
     // A boundary that only touches a word's edge doesn't select it.
     const text = el.firstChild;
-    if (text && range.startContainer === text && range.startOffset >= (text.textContent?.length ?? 0)) continue;
+    if (
+      text &&
+      range.startContainer === text &&
+      range.startOffset >= (text.textContent?.length ?? 0)
+    )
+      continue;
     if (text && range.endContainer === text && range.endOffset === 0) continue;
     words.push(el);
   }
@@ -138,7 +140,11 @@ export function SelectionToolbar({
       }
       setShown((cur) =>
         cur
-          ? { ...cur, left: Math.max(8, rect.left + rect.width / 2), top: Math.max(8, rect.top - 40) }
+          ? {
+              ...cur,
+              left: Math.max(8, rect.left + rect.width / 2),
+              top: Math.max(8, rect.top - 40),
+            }
           : cur,
       );
     };

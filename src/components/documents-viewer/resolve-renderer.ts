@@ -39,8 +39,7 @@ export type DocumentRenderer =
   | "doc_legacy"
   | "unsupported";
 
-const DOCX_TYPE =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 /** Bare media type → renderer. */
 const TYPE_MAP: Record<string, DocumentRenderer> = {
@@ -133,7 +132,7 @@ function extensionOf(fileName: string): string | null {
  */
 export function resolveDocumentRenderer(
   contentType: string | null,
-  fileName: string
+  fileName: string,
 ): DocumentRenderer {
   if (contentType) {
     const bare = bareMediaType(contentType);

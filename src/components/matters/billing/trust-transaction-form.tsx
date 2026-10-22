@@ -58,15 +58,16 @@ export function TrustTransactionForm({
       }
       return res;
     },
-    [matterId]
+    [matterId],
   );
   // Wrapped useActionState: masks state left over from a previous
   // expand, so a failed attempt's error banner doesn't reappear when
   // the form is re-expanded. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    BillingFormState,
-    FormData
-  >(action, billingInitialState, expanded);
+  const [state, formAction, isPending] = useDialogActionState<BillingFormState, FormData>(
+    action,
+    billingInitialState,
+    expanded,
+  );
   // Dispatch via onSubmit + startTransition instead of
   // <form action={formAction}>: React 19 resets every form-action
   // form after the action settles — error or not — which wipes the
@@ -109,10 +110,7 @@ export function TrustTransactionForm({
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor={`${ids}-type`}
-            className="text-2xs font-medium text-ink-3"
-          >
+          <label htmlFor={`${ids}-type`} className="text-2xs font-medium text-ink-3">
             Type <span className="text-warn">*</span>
           </label>
           <NativeSelect
@@ -130,10 +128,7 @@ export function TrustTransactionForm({
           </NativeSelect>
         </div>
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor={`${ids}-amount`}
-            className="text-2xs font-medium text-ink-3"
-          >
+          <label htmlFor={`${ids}-amount`} className="text-2xs font-medium text-ink-3">
             Amount <span className="text-warn">*</span>
           </label>
           <input
@@ -145,15 +140,10 @@ export function TrustTransactionForm({
             required
             className={cn(inputClass(!!errs.amount), "font-mono")}
           />
-          {errs.amount && (
-            <span className="text-2xs text-warn">{errs.amount[0]}</span>
-          )}
+          {errs.amount && <span className="text-2xs text-warn">{errs.amount[0]}</span>}
         </div>
         <div className="flex flex-col gap-1 col-span-2">
-          <label
-            htmlFor={`${ids}-description`}
-            className="text-2xs font-medium text-ink-3"
-          >
+          <label htmlFor={`${ids}-description`} className="text-2xs font-medium text-ink-3">
             Description <span className="text-warn">*</span>
           </label>
           <input
@@ -165,9 +155,7 @@ export function TrustTransactionForm({
             placeholder="e.g. Initial retainer · check #4421"
             className={inputClass(!!errs.description)}
           />
-          {errs.description && (
-            <span className="text-2xs text-warn">{errs.description[0]}</span>
-          )}
+          {errs.description && <span className="text-2xs text-warn">{errs.description[0]}</span>}
           {portalBillingEnabled && (
             <span className="text-2xs text-ink-3">
               Descriptions are visible to the client in the portal.
@@ -175,10 +163,7 @@ export function TrustTransactionForm({
           )}
         </div>
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor={`${ids}-reference`}
-            className="text-2xs font-medium text-ink-3"
-          >
+          <label htmlFor={`${ids}-reference`} className="text-2xs font-medium text-ink-3">
             Reference
           </label>
           <input
@@ -191,10 +176,7 @@ export function TrustTransactionForm({
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor={`${ids}-date`}
-            className="text-2xs font-medium text-ink-3"
-          >
+          <label htmlFor={`${ids}-date`} className="text-2xs font-medium text-ink-3">
             Date
           </label>
           <input
@@ -217,11 +199,7 @@ export function TrustTransactionForm({
         >
           Cancel
         </button>
-        <Button
-          size="sm"
-          type="submit"
-          disabled={isPending}
-        >
+        <Button size="sm" type="submit" disabled={isPending}>
           {isPending ? "Recording…" : "Record transaction"}
         </Button>
       </div>

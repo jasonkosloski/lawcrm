@@ -43,14 +43,14 @@ function getKey(): Buffer {
     throw new Error(
       "EMAIL_TOKEN_KEY is not set. Generate one with `openssl rand -base64 32` " +
         "and add it to your env (locally: .env, production: Vercel project " +
-        "env vars). OAuth tokens cannot be stored without it."
+        "env vars). OAuth tokens cannot be stored without it.",
     );
   }
   const key = Buffer.from(raw, "base64");
   if (key.length !== KEY_BYTES) {
     throw new Error(
       `EMAIL_TOKEN_KEY must be ${KEY_BYTES} bytes of base64 ` +
-        `(\`openssl rand -base64 32\`); got ${key.length} bytes after decoding.`
+        `(\`openssl rand -base64 32\`); got ${key.length} bytes after decoding.`,
     );
   }
   return key;
@@ -66,10 +66,7 @@ export function encryptToken(plaintext: string): string {
   const key = getKey();
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv(ALGORITHM, key, iv);
-  const ciphertext = Buffer.concat([
-    cipher.update(plaintext, "utf8"),
-    cipher.final(),
-  ]);
+  const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return [
     VERSION,
@@ -86,7 +83,7 @@ export function decryptToken(stored: string): string {
     throw new Error(
       "decryptToken: value is not in the v1 encrypted format. " +
         "Tokens must be written through the prisma emailAccount model " +
-        "(or encryptToken) so they're encrypted before storage."
+        "(or encryptToken) so they're encrypted before storage.",
     );
   }
   const [, ivB64, tagB64, ciphertextB64] = stored.split(":");
@@ -100,7 +97,7 @@ export function decryptToken(stored: string): string {
   if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) {
     throw new Error(
       "decryptToken: authentication failed — malformed IV or auth tag " +
-        "length (expected a 12-byte IV and a 16-byte tag)."
+        "length (expected a 12-byte IV and a 16-byte tag).",
     );
   }
   const decipher = createDecipheriv(ALGORITHM, key, iv, {
@@ -115,7 +112,7 @@ export function decryptToken(stored: string): string {
   } catch {
     throw new Error(
       "decryptToken: authentication failed — the value was tampered with " +
-        "or EMAIL_TOKEN_KEY differs from the key that encrypted it."
+        "or EMAIL_TOKEN_KEY differs from the key that encrypted it.",
     );
   }
 }

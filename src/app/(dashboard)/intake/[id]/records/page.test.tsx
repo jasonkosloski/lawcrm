@@ -35,8 +35,7 @@ import LeadRecordsPage from "./page";
 
 const has = vi.mocked(currentUserHasPermission);
 
-const call = () =>
-  LeadRecordsPage({ params: Promise.resolve({ id: "l1" }) } as never);
+const call = () => LeadRecordsPage({ params: Promise.resolve({ id: "l1" }) } as never);
 
 function findAll(node: ReactNode, type: unknown, out: unknown[] = []) {
   if (Array.isArray(node)) node.forEach((n) => findAll(n, type, out));

@@ -31,12 +31,12 @@ describe("AgreementCard", () => {
           signedDate: "2026-10-12",
           document: { id: "d1", name: "fee.pdf" },
         }}
-      />
+      />,
     );
     expect(screen.getByText(/Signed 2026-10-12/)).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: /view document/i }).getAttribute("href")
-    ).toBe("/matters/m1/documents/d1");
+    expect(screen.getByRole("link", { name: /view document/i }).getAttribute("href")).toBe(
+      "/matters/m1/documents/d1",
+    );
   });
 
   test("shows the empty state with the area's label", () => {
@@ -60,10 +60,11 @@ describe("AgreementCard", () => {
         {...base}
         canEdit
         agreement={{ status: "sent", signedDate: null, document: { id: "d1", name: "fee.pdf" } }}
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: /edit/i }));
-    const status = () => document.querySelector('select[name="agreementStatus"]') as HTMLSelectElement;
+    const status = () =>
+      document.querySelector('select[name="agreementStatus"]') as HTMLSelectElement;
     const doc = () => document.querySelector('select[name="documentId"]') as HTMLSelectElement;
     await user.selectOptions(status(), "signed");
     await user.selectOptions(doc(), "");

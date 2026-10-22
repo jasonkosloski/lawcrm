@@ -172,9 +172,7 @@ export function DocxPreviewRenderer({
         }
         const bytes = await res.arrayBuffer();
         if (bytes.byteLength > DOCX_CLIENT_MAX_BYTES) {
-          throw new Error(
-            `docx is ${bytes.byteLength} bytes — over the preview cap`
-          );
+          throw new Error(`docx is ${bytes.byteLength} bytes — over the preview cap`);
         }
         // Dynamic import: docx-preview is a browser-only, docx-page-
         // only dependency — keep it out of the shared client bundle.
@@ -202,9 +200,7 @@ export function DocxPreviewRenderer({
         await new Promise((resolve) => setTimeout(resolve, TAB_STOP_SETTLE_MS));
         if (cancelled) return;
         const sections = container.querySelectorAll<HTMLElement>("section.docx");
-        setPageWidth(
-          Math.max(0, ...Array.from(sections, (section) => section.offsetWidth))
-        );
+        setPageWidth(Math.max(0, ...Array.from(sections, (section) => section.offsetWidth)));
         setPhase("rendered");
       } catch (error) {
         if (cancelled) return;
@@ -215,7 +211,7 @@ export function DocxPreviewRenderer({
         // .doc land here by design. Log for diagnosis, fall back.
         console.warn(
           `docx-preview could not render "${name}" — using the mammoth fallback.`,
-          error
+          error,
         );
         // Clear any partial render so the fallback isn't preceded by
         // half a document (and TextReview can't walk stale text).
@@ -239,9 +235,7 @@ export function DocxPreviewRenderer({
     const update = () => {
       const wrapper = shell.querySelector<HTMLElement>(".docx-wrapper");
       const style = wrapper ? getComputedStyle(wrapper) : null;
-      const padding = style
-        ? parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
-        : 0;
+      const padding = style ? parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) : 0;
       setFitZoom(docxFitZoom(shell.clientWidth - padding, pageWidth));
     };
     update();

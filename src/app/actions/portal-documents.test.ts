@@ -112,7 +112,9 @@ describe("permissions and walls", () => {
     expect(await sendBackDocumentRequest(id, "n")).toMatchObject(denied);
     expect(await cancelDocumentRequest(id)).toMatchObject(denied);
     expect(await deleteDocumentRequest(id)).toMatchObject(denied);
-    expect((await prisma.documentRequest.findUniqueOrThrow({ where: { id } })).status).toBe("submitted");
+    expect((await prisma.documentRequest.findUniqueOrThrow({ where: { id } })).status).toBe(
+      "submitted",
+    );
     expect(await prisma.documentRequest.count()).toBe(1);
   });
 
@@ -167,7 +169,9 @@ describe("createDocumentRequest", () => {
     expect(await createDocumentRequest(matterId, { title: "x" })).toEqual({ ok: true });
     expect(cap.sent).toHaveLength(0);
     expect((await createDocumentRequest(matterId, { title: "  " })).ok).toBe(false);
-    expect((await createDocumentRequest(matterId, { title: "x", dueDate: "2026-02-31" })).ok).toBe(false);
+    expect((await createDocumentRequest(matterId, { title: "x", dueDate: "2026-02-31" })).ok).toBe(
+      false,
+    );
     expect(await prisma.documentRequest.count()).toBe(1);
   });
 
@@ -177,7 +181,9 @@ describe("createDocumentRequest", () => {
     const { __setDriverForTests } = await import("@/lib/email/send");
     __setDriverForTests(async () => ({ ok: false, error: "boom" }));
     expect(await createDocumentRequest(matterId, { title: "x" })).toEqual({ ok: true });
-    const log = await prisma.activityLog.findFirstOrThrow({ where: { matterId, type: "document" } });
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId, type: "document" },
+    });
     expect(log.detail).toContain("— email failed");
     __setDriverForTests(null);
   });
@@ -186,10 +192,17 @@ describe("createDocumentRequest", () => {
 describe("transitions", () => {
   test("update only while open", async () => {
     const open = await seedRequest("open");
-    expect(await updateDocumentRequest(open, { title: "New", dueDate: "2026-12-01" })).toEqual({ ok: true });
-    expect((await prisma.documentRequest.findUniqueOrThrow({ where: { id: open } })).title).toBe("New");
+    expect(await updateDocumentRequest(open, { title: "New", dueDate: "2026-12-01" })).toEqual({
+      ok: true,
+    });
+    expect((await prisma.documentRequest.findUniqueOrThrow({ where: { id: open } })).title).toBe(
+      "New",
+    );
     const sub = await seedRequest("submitted");
-    expect(await updateDocumentRequest(sub, { title: "New" })).toEqual({ ok: false, error: CONFLICT });
+    expect(await updateDocumentRequest(sub, { title: "New" })).toEqual({
+      ok: false,
+      error: CONFLICT,
+    });
   });
 
   test("accept: submitted -> complete with completedAt; wrong status conflicts", async () => {
@@ -199,7 +212,10 @@ describe("transitions", () => {
     expect(row.status).toBe("complete");
     expect(row.completedAt).not.toBeNull();
     expect(await acceptDocumentRequest(id)).toEqual({ ok: false, error: CONFLICT });
-    expect(await acceptDocumentRequest(await seedRequest("open"))).toEqual({ ok: false, error: CONFLICT });
+    expect(await acceptDocumentRequest(await seedRequest("open"))).toEqual({
+      ok: false,
+      error: CONFLICT,
+    });
   });
 
   test("send back: submitted -> open with returnNote; wrong status conflicts", async () => {
@@ -215,10 +231,15 @@ describe("transitions", () => {
     for (const s of ["open", "submitted"]) {
       const id = await seedRequest(s);
       expect(await cancelDocumentRequest(id)).toEqual({ ok: true });
-      expect((await prisma.documentRequest.findUniqueOrThrow({ where: { id } })).status).toBe("cancelled");
+      expect((await prisma.documentRequest.findUniqueOrThrow({ where: { id } })).status).toBe(
+        "cancelled",
+      );
     }
     for (const s of ["complete", "cancelled"]) {
-      expect(await cancelDocumentRequest(await seedRequest(s))).toEqual({ ok: false, error: CONFLICT });
+      expect(await cancelDocumentRequest(await seedRequest(s))).toEqual({
+        ok: false,
+        error: CONFLICT,
+      });
     }
   });
 
@@ -292,7 +313,8 @@ describe("share actions", () => {
     await seedIdentity("a@example.com");
     await seedIdentity("b@example.com");
     const ids: string[] = [];
-    for (let i = 0; i < 50; i++) ids.push((await seedDocument({ matterId, name: `d${i}` })).documentId);
+    for (let i = 0; i < 50; i++)
+      ids.push((await seedDocument({ matterId, name: `d${i}` })).documentId);
     const before = await activityCount();
     expect(await setDocumentsClientShare(ids, true)).toEqual({ ok: true });
     expect(await prisma.document.count({ where: { clientShare: "shared" } })).toBe(50);
@@ -313,7 +335,11 @@ describe("share actions", () => {
   test("unshare inside a shared folder writes hidden", async () => {
     const { folderId } = await seedDocumentFolder({ matterId, name: "Shared" });
     await prisma.documentFolder.update({ where: { id: folderId }, data: { clientShared: true } });
-    const { folderId: childId } = await seedDocumentFolder({ matterId, name: "Kid", parentId: folderId });
+    const { folderId: childId } = await seedDocumentFolder({
+      matterId,
+      name: "Kid",
+      parentId: folderId,
+    });
     const { documentId } = await seedDocument({ matterId, folderId: childId });
     await setDocumentsClientShare([documentId], true);
     expect(await setDocumentsClientShare([documentId], false)).toEqual({ ok: true });
@@ -355,7 +381,10 @@ describe("share actions", () => {
 
   test("refuses lead folders", async () => {
     const { leadId } = await seedLead();
-    const f = await prisma.documentFolder.create({ data: { leadId, name: "LF" }, select: { id: true } });
+    const f = await prisma.documentFolder.create({
+      data: { leadId, name: "LF" },
+      select: { id: true },
+    });
     expect(await setFolderClientShared(f.id, true)).toEqual({
       ok: false,
       error: "Lead documents can't be shared with clients.",
@@ -363,7 +392,9 @@ describe("share actions", () => {
   });
 
   test("refuses a mixed-matter batch and an over-cap batch", async () => {
-    const other = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: admin, name: "Other" })).matterId;
+    const other = (
+      await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: admin, name: "Other" })
+    ).matterId;
     const a = (await seedDocument({ matterId })).documentId;
     const b = (await seedDocument({ matterId: other })).documentId;
     const mixed = await setDocumentsClientShare([a, b], true);
@@ -434,7 +465,9 @@ describe("share actions", () => {
       ok: false,
       error: "This folder is managed by the app and can't be shared. Share its files instead.",
     });
-    expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: f.id } })).clientShared).toBe(false);
+    expect(
+      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: f.id } })).clientShared,
+    ).toBe(false);
   });
 
   test("folder share emails once; unshare does not", async () => {
@@ -444,13 +477,17 @@ describe("share actions", () => {
     await seedDocument({ matterId, folderId });
     const before = await activityCount();
     expect(await setFolderClientShared(folderId, true)).toEqual({ ok: true });
-    expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: folderId } })).clientShared).toBe(true);
+    expect(
+      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: folderId } })).clientShared,
+    ).toBe(true);
     expect(cap.sent).toHaveLength(1);
     expect(cap.sent[0].subject).toBe(SHARED_SUBJECT);
     expect((await activityCount()) - before).toBe(1);
     cap.sent.length = 0;
     expect(await setFolderClientShared(folderId, false)).toEqual({ ok: true });
-    expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: folderId } })).clientShared).toBe(false);
+    expect(
+      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: folderId } })).clientShared,
+    ).toBe(false);
     expect(cap.sent).toHaveLength(0);
   });
 
@@ -479,7 +516,8 @@ describe("previewFolderMoveVisibility", () => {
   const ZERO = { becomesVisible: 0, becomesHidden: 0 };
   const mk = async (name: string, parentId: string | null = null, shared = false) => {
     const { folderId } = await seedDocumentFolder({ matterId, name, parentId });
-    if (shared) await prisma.documentFolder.update({ where: { id: folderId }, data: { clientShared: true } });
+    if (shared)
+      await prisma.documentFolder.update({ where: { id: folderId }, data: { clientShared: true } });
     return folderId;
   };
 
@@ -489,14 +527,20 @@ describe("previewFolderMoveVisibility", () => {
     const inner = await mk("Inner", moving);
     await seedDocument({ matterId, folderId: moving });
     await seedDocument({ matterId, folderId: inner });
-    expect(await previewFolderMoveVisibility(moving, shared)).toEqual({ becomesVisible: 2, becomesHidden: 0 });
+    expect(await previewFolderMoveVisibility(moving, shared)).toEqual({
+      becomesVisible: 2,
+      becomesHidden: 0,
+    });
   });
 
   test("moving out of a shared folder hides its files", async () => {
     const shared = await mk("Shared", null, true);
     const moving = await mk("Moving", shared);
     await seedDocument({ matterId, folderId: moving });
-    expect(await previewFolderMoveVisibility(moving, null)).toEqual({ becomesVisible: 0, becomesHidden: 1 });
+    expect(await previewFolderMoveVisibility(moving, null)).toEqual({
+      becomesVisible: 0,
+      becomesHidden: 1,
+    });
   });
 
   test("a folder that is itself shared stays visible wherever it goes", async () => {
@@ -523,7 +567,10 @@ describe("previewFolderMoveVisibility", () => {
     const archived = (await seedDocument({ matterId, folderId: moving })).documentId;
     await prisma.document.update({ where: { id: archived }, data: { status: "archived" } });
     await seedDocument({ matterId, folderId: moving });
-    expect(await previewFolderMoveVisibility(moving, shared)).toEqual({ becomesVisible: 1, becomesHidden: 0 });
+    expect(await previewFolderMoveVisibility(moving, shared)).toEqual({
+      becomesVisible: 1,
+      becomesHidden: 0,
+    });
   });
 
   test("zeros without portal.share_documents", async () => {

@@ -16,10 +16,7 @@ import { TopBar } from "@/components/layout/topbar";
 import { NotificationsFeed } from "@/components/notifications/notifications-feed";
 import { Pager } from "@/components/shared/pager";
 import { parsePageParam } from "@/lib/pagination";
-import {
-  getNotificationsFeed,
-  NOTIFICATIONS_PAGE_SIZE,
-} from "@/lib/queries/notifications";
+import { getNotificationsFeed, NOTIFICATIONS_PAGE_SIZE } from "@/lib/queries/notifications";
 import { requireUser } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 
@@ -37,7 +34,7 @@ export default async function NotificationsPage({
 
   return (
     <>
-      <TopBar title="Notifications"  />
+      <TopBar title="Notifications" />
 
       <div className="flex-1 overflow-y-auto p-3 sm:p-6 animate-page-enter">
         <div className="max-w-3xl mx-auto flex flex-col gap-3">

@@ -135,12 +135,18 @@ describe("sendInvoice by email", () => {
     expect(key).toMatch(new RegExp(`^invoice-${id}-initial-client@example\\.com-\\d+$`));
     // Deterministic: same inputs in the same minute rebuild the same key.
     const bucket = Math.floor(Date.now() / 60_000);
-    expect([bucket, bucket - 1].map((b) => `invoice-${id}-initial-client@example.com-${b}`)).toContain(key);
+    expect(
+      [bucket, bucket - 1].map((b) => `invoice-${id}-initial-client@example.com-${b}`),
+    ).toContain(key);
   });
 
   test("rejects a multi-recipient string", async () => {
     const id = await makeInvoice();
-    const res = await sendInvoice(id, billingInitialState, sendForm({ recipient: "a@b.com, c@d.com" }));
+    const res = await sendInvoice(
+      id,
+      billingInitialState,
+      sendForm({ recipient: "a@b.com, c@d.com" }),
+    );
     expect(res.status).toBe("error");
     expect(res.errors?.recipient).toBeDefined();
     expect(cap.sent).toHaveLength(0);
@@ -150,7 +156,11 @@ describe("sendInvoice by email", () => {
   test("with applyTrust the PDF shows the trust payment", async () => {
     await prisma.matter.update({ where: { id: matterId }, data: { trustBalance: 2000 } });
     const id = await makeInvoice();
-    const res = await sendInvoice(id, billingInitialState, sendForm({ applyTrust: "true", trustAmount: "123.45" }));
+    const res = await sendInvoice(
+      id,
+      billingInitialState,
+      sendForm({ applyTrust: "true", trustAmount: "123.45" }),
+    );
     expect(res.status).toBe("ok");
     expect(await statusOf(id)).toBe("partial");
     const pdf = cap.sent[0].attachments![0].content as Buffer;
@@ -162,7 +172,11 @@ describe("sendInvoice by email", () => {
     cap = captureEmails({ fail: "boom" });
     await prisma.matter.update({ where: { id: matterId }, data: { trustBalance: 2000 } });
     const id = await makeInvoice();
-    const res = await sendInvoice(id, billingInitialState, sendForm({ applyTrust: "true", trustAmount: "100" }));
+    const res = await sendInvoice(
+      id,
+      billingInitialState,
+      sendForm({ applyTrust: "true", trustAmount: "100" }),
+    );
     expect(res.status).toBe("ok");
     expect(res.warning).toContain("Re-send email");
     expect(res.warning).toContain("Invoice 2026-901 was marked sent.");
@@ -176,7 +190,11 @@ describe("recordInvoicePayment notifyClient", () => {
     const { contactId } = await seedContact({ name: "Pat", email: "pat@example.com" });
     await prisma.matter.update({ where: { id: matterId }, data: { clientId: contactId } });
     const id = await makeInvoice("sent", 100);
-    const res = await recordInvoicePayment(id, billingInitialState, fd({ amount: "25", source: "check", notifyClient: "true" }));
+    const res = await recordInvoicePayment(
+      id,
+      billingInitialState,
+      fd({ amount: "25", source: "check", notifyClient: "true" }),
+    );
     expect(res.status).toBe("ok");
     expect(cap.sent).toHaveLength(1);
     expect(cap.sent[0].to).toBe("pat@example.com");
@@ -188,13 +206,17 @@ describe("recordInvoicePayment notifyClient", () => {
     await prisma.matter.update({ where: { id: matterId }, data: { clientId: contactId } });
     const id = await makeInvoice("sent", 100);
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key: string) => key !== "billing.send_invoice"
+      async (key: string) => key !== "billing.send_invoice",
     );
     try {
-      const res = await recordInvoicePayment(id, billingInitialState, fd({ amount: "25", source: "check", notifyClient: "true" }));
+      const res = await recordInvoicePayment(
+        id,
+        billingInitialState,
+        fd({ amount: "25", source: "check", notifyClient: "true" }),
+      );
       expect(res.status).toBe("ok");
       expect(res.warning).toBe(
-        "Payment recorded. You don't have permission to email invoices, so no updated copy was sent."
+        "Payment recorded. You don't have permission to email invoices, so no updated copy was sent.",
       );
       expect(cap.sent).toHaveLength(0);
       expect(await prisma.invoicePayment.count({ where: { invoiceId: id } })).toBe(1);
@@ -214,10 +236,14 @@ describe("recordInvoicePayment notifyClient", () => {
     });
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      const res = await recordInvoicePayment(id, billingInitialState, fd({ amount: "25", source: "check", notifyClient: "true" }));
+      const res = await recordInvoicePayment(
+        id,
+        billingInitialState,
+        fd({ amount: "25", source: "check", notifyClient: "true" }),
+      );
       expect(res.status).toBe("ok");
       expect(res.warning).toBe(
-        "Payment recorded, but the updated invoice couldn't be emailed. Use Re-send email to retry."
+        "Payment recorded, but the updated invoice couldn't be emailed. Use Re-send email to retry.",
       );
       expect(cap.sent).toHaveLength(0);
       expect(await prisma.invoicePayment.count({ where: { invoiceId: id } })).toBe(1);
@@ -230,7 +256,11 @@ describe("recordInvoicePayment notifyClient", () => {
 
   test("no client email: no email, payment still recorded", async () => {
     const id = await makeInvoice("sent", 100);
-    const res = await recordInvoicePayment(id, billingInitialState, fd({ amount: "25", source: "check", notifyClient: "true" }));
+    const res = await recordInvoicePayment(
+      id,
+      billingInitialState,
+      fd({ amount: "25", source: "check", notifyClient: "true" }),
+    );
     expect(res.status).toBe("ok");
     expect(cap.sent).toHaveLength(0);
     expect(await prisma.invoicePayment.count({ where: { invoiceId: id } })).toBe(1);
@@ -240,7 +270,11 @@ describe("recordInvoicePayment notifyClient", () => {
 describe("resendInvoiceEmail", () => {
   test("re-sends a sent invoice without changing its status", async () => {
     const id = await makeInvoice("sent");
-    const res = await resendInvoiceEmail(id, billingInitialState, fd({ recipient: "a@example.com" }));
+    const res = await resendInvoiceEmail(
+      id,
+      billingInitialState,
+      fd({ recipient: "a@example.com" }),
+    );
     expect(res.status).toBe("ok");
     expect(cap.sent).toHaveLength(1);
     expect(await statusOf(id)).toBe("sent");
@@ -249,7 +283,11 @@ describe("resendInvoiceEmail", () => {
 
   test("rejects a multi-recipient string", async () => {
     const id = await makeInvoice("sent");
-    const res = await resendInvoiceEmail(id, billingInitialState, fd({ recipient: "a@b.com, c@d.com" }));
+    const res = await resendInvoiceEmail(
+      id,
+      billingInitialState,
+      fd({ recipient: "a@b.com, c@d.com" }),
+    );
     expect(res.status).toBe("error");
     expect(res.errors?.recipient).toBeDefined();
     expect(cap.sent).toHaveLength(0);
@@ -257,7 +295,11 @@ describe("resendInvoiceEmail", () => {
 
   test("refuses an approved invoice", async () => {
     const id = await makeInvoice("approved");
-    const res = await resendInvoiceEmail(id, billingInitialState, fd({ recipient: "a@example.com" }));
+    const res = await resendInvoiceEmail(
+      id,
+      billingInitialState,
+      fd({ recipient: "a@example.com" }),
+    );
     expect(res).toMatchObject({ status: "error", error: "Only sent invoices can be re-sent." });
     expect(cap.sent).toHaveLength(0);
   });
@@ -274,7 +316,7 @@ describe("resendInvoiceEmail", () => {
     const id = await makeInvoice("sent");
     vi.mocked(requirePermission).mockRejectedValueOnce(new Error("forbidden"));
     await expect(
-      resendInvoiceEmail(id, billingInitialState, fd({ recipient: "a@example.com" }))
+      resendInvoiceEmail(id, billingInitialState, fd({ recipient: "a@example.com" })),
     ).rejects.toThrow("forbidden");
     expect(requirePermission).toHaveBeenCalledWith("billing.send_invoice");
     expect(cap.sent).toHaveLength(0);
@@ -284,7 +326,7 @@ describe("resendInvoiceEmail", () => {
     const id = await makeInvoice("sent");
     vi.mocked(assertChildMatterAccess).mockImplementationOnce(async () => notFound());
     await expect(
-      resendInvoiceEmail(id, billingInitialState, fd({ recipient: "a@example.com" }))
+      resendInvoiceEmail(id, billingInitialState, fd({ recipient: "a@example.com" })),
     ).rejects.toThrow();
     expect(cap.sent).toHaveLength(0);
   });
@@ -293,7 +335,11 @@ describe("resendInvoiceEmail", () => {
     cap.restore();
     cap = captureEmails({ fail: "boom" });
     const id = await makeInvoice("sent");
-    const res = await resendInvoiceEmail(id, billingInitialState, fd({ recipient: "a@example.com" }));
+    const res = await resendInvoiceEmail(
+      id,
+      billingInitialState,
+      fd({ recipient: "a@example.com" }),
+    );
     expect(res.status).toBe("error");
     expect(res.error).toContain("Re-send email");
   });

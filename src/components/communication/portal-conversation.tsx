@@ -13,10 +13,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  markStaffPortalThreadRead,
-  sendStaffPortalMessage,
-} from "@/app/actions/portal-messages";
+import { markStaffPortalThreadRead, sendStaffPortalMessage } from "@/app/actions/portal-messages";
 import { formatDate } from "@/lib/format-date";
 import type { getPortalConversation } from "@/lib/queries/portal-messages";
 
@@ -86,9 +83,7 @@ export function PortalConversation({
     <div className="flex flex-col flex-1 min-h-0 gap-3">
       <MarkPortalThreadRead matterId={matterId} />
       {!conversation.hasLiveAccess && (
-        <p className="text-xs text-ink-3">
-          No one has portal access on this matter yet.
-        </p>
+        <p className="text-xs text-ink-3">No one has portal access on this matter yet.</p>
       )}
       <div
         ref={threadRef}
@@ -104,14 +99,10 @@ export function PortalConversation({
                 <span data-testid="portal-author" className="font-medium text-ink">
                   {m.authorName}
                 </span>
-                {m.fromClient && (
-                  <span className="rounded bg-paper-2 px-1.5 text-2xs">Client</span>
-                )}
+                {m.fromClient && <span className="rounded bg-paper-2 px-1.5 text-2xs">Client</span>}
                 <span>{formatDate(m.createdAt, "datetime", tz)}</span>
               </div>
-              <p className="mt-1 text-sm text-ink whitespace-pre-line break-words">
-                {m.body}
-              </p>
+              <p className="mt-1 text-sm text-ink whitespace-pre-line break-words">{m.body}</p>
             </div>
           ))
         )}

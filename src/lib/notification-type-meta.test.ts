@@ -9,34 +9,19 @@
  */
 
 import { describe, expect, test } from "vitest";
-import {
-  NOTIFICATION_TYPE_META,
-  notificationTypeMeta,
-} from "@/lib/notification-type-meta";
+import { NOTIFICATION_TYPE_META, notificationTypeMeta } from "@/lib/notification-type-meta";
 
 describe("notificationTypeMeta", () => {
   test("resolves a known type to its meta", () => {
-    expect(notificationTypeMeta("task_assigned")).toBe(
-      NOTIFICATION_TYPE_META.task_assigned
-    );
-    expect(notificationTypeMeta("deadline_overdue")).toBe(
-      NOTIFICATION_TYPE_META.deadline_overdue
-    );
-    expect(notificationTypeMeta("portal_upload")).toBe(
-      NOTIFICATION_TYPE_META.portal_upload
-    );
-    expect(notificationTypeMeta("portal_message")).toBe(
-      NOTIFICATION_TYPE_META.portal_message
-    );
-    expect(notificationTypeMeta("portal_message")).not.toBe(
-      NOTIFICATION_TYPE_META.generic
-    );
+    expect(notificationTypeMeta("task_assigned")).toBe(NOTIFICATION_TYPE_META.task_assigned);
+    expect(notificationTypeMeta("deadline_overdue")).toBe(NOTIFICATION_TYPE_META.deadline_overdue);
+    expect(notificationTypeMeta("portal_upload")).toBe(NOTIFICATION_TYPE_META.portal_upload);
+    expect(notificationTypeMeta("portal_message")).toBe(NOTIFICATION_TYPE_META.portal_message);
+    expect(notificationTypeMeta("portal_message")).not.toBe(NOTIFICATION_TYPE_META.generic);
   });
 
   test("unknown / legacy type strings fall back to generic", () => {
-    expect(notificationTypeMeta("not_a_real_type")).toBe(
-      NOTIFICATION_TYPE_META.generic
-    );
+    expect(notificationTypeMeta("not_a_real_type")).toBe(NOTIFICATION_TYPE_META.generic);
     expect(notificationTypeMeta("")).toBe(NOTIFICATION_TYPE_META.generic);
   });
 

@@ -1,8 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  digestNotificationEmail,
-  instantNotificationEmail,
-} from "@/lib/notification-emails";
+import { digestNotificationEmail, instantNotificationEmail } from "@/lib/notification-emails";
 
 const BASE = "https://app.test";
 const item = (over: Partial<Parameters<typeof instantNotificationEmail>[0]> = {}) => ({
@@ -15,9 +12,7 @@ const item = (over: Partial<Parameters<typeof instantNotificationEmail>[0]> = {}
 
 describe("instantNotificationEmail", () => {
   test("instant uses title as subject", () => {
-    expect(instantNotificationEmail(item(), BASE).subject).toBe(
-      "Task assigned: draft complaint"
-    );
+    expect(instantNotificationEmail(item(), BASE).subject).toBe("Task assigned: draft complaint");
   });
 
   test("absolute link", () => {
@@ -52,34 +47,29 @@ describe("instantNotificationEmail", () => {
 describe("digestNotificationEmail", () => {
   test("digest groups by category in order", () => {
     const e = digestNotificationEmail(
-      [
-        item({ title: "Task one" }),
-        item({ title: "Deadline soon", type: "deadline_approaching" }),
-      ],
-      BASE
+      [item({ title: "Task one" }), item({ title: "Deadline soon", type: "deadline_approaching" })],
+      BASE,
     );
     const deadlines = e.html.indexOf(">Deadlines<");
     const tasks = e.html.indexOf(">Tasks<");
     expect(deadlines).toBeGreaterThan(-1);
     expect(tasks).toBeGreaterThan(deadlines);
     expect(e.html).not.toContain(">Billing<");
-    expect(e.text.indexOf("Deadline soon")).toBeLessThan(
-      e.text.indexOf("Task one")
-    );
+    expect(e.text.indexOf("Deadline soon")).toBeLessThan(e.text.indexOf("Task one"));
   });
 
   test("digest subject pluralises", () => {
     expect(digestNotificationEmail([item()], BASE).subject).toBe(
-      "Your daily summary: 1 notification"
+      "Your daily summary: 1 notification",
     );
     expect(digestNotificationEmail([item(), item()], BASE).subject).toBe(
-      "Your daily summary: 2 notifications"
+      "Your daily summary: 2 notifications",
     );
   });
 
   test("digest footer links to settings", () => {
     expect(digestNotificationEmail([item()], BASE).html).toContain(
-      "https://app.test/settings/notifications"
+      "https://app.test/settings/notifications",
     );
   });
 });

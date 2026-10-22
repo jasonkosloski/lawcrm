@@ -9,10 +9,7 @@ import {
   type ThreadableNote,
 } from "./note-threads";
 
-const note = (
-  id: string,
-  over: Partial<ThreadableNote> = {}
-): ThreadableNote => ({
+const note = (id: string, over: Partial<ThreadableNote> = {}): ThreadableNote => ({
   id,
   parentNoteId: null,
   isPinned: false,
@@ -32,12 +29,7 @@ describe("buildTrees", () => {
       note("pinned-new", { isPinned: true }),
     ]);
     // Pinned keep input order; the rest are reversed to newest-first.
-    expect(trees.map((t) => t.note.id)).toEqual([
-      "pinned-old",
-      "pinned-new",
-      "new",
-      "old",
-    ]);
+    expect(trees.map((t) => t.note.id)).toEqual(["pinned-old", "pinned-new", "new", "old"]);
   });
 
   test("replies nest to any depth and keep oldest-first order", () => {
@@ -62,20 +54,14 @@ describe("buildTrees", () => {
     // Neither note is a root, so both are dropped - the point is that
     // this returns at all.
     expect(
-      buildTrees([
-        note("a", { parentNoteId: "b" }),
-        note("b", { parentNoteId: "a" }),
-      ])
+      buildTrees([note("a", { parentNoteId: "b" }), note("b", { parentNoteId: "a" })]),
     ).toEqual([]);
   });
 });
 
 describe("thread predicates", () => {
   const tree = () =>
-    buildTrees([
-      note("root"),
-      note("reply", { parentNoteId: "root", isRead: false }),
-    ])[0];
+    buildTrees([note("root"), note("reply", { parentNoteId: "root", isRead: false })])[0];
 
   test("subtreeMatches finds a match in a descendant", () => {
     expect(subtreeMatches(tree(), (n) => n.id === "reply")).toBe(true);
@@ -108,8 +94,6 @@ describe("rollupDescendants", () => {
       totalHours: 2,
       notesWithAttachments: 2,
     });
-    expect(summarizeRollup(r)).toBe(
-      "1 task · 1 deadline · 2 time entries (2.0h) across 2 replies"
-    );
+    expect(summarizeRollup(r)).toBe("1 task · 1 deadline · 2 time entries (2.0h) across 2 replies");
   });
 });

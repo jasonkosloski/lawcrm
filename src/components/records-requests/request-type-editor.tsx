@@ -147,9 +147,7 @@ export function RequestTypeEditor({
       )}
 
       <section className="flex flex-col gap-2">
-        <div className="text-2xs font-medium text-ink-3">
-          Active ({active.length})
-        </div>
+        <div className="text-2xs font-medium text-ink-3">Active ({active.length})</div>
         {active.length === 0 ? (
           <Card>
             <CardContent className="px-4 py-6 text-xs text-ink-4">
@@ -163,19 +161,12 @@ export function RequestTypeEditor({
 
       {archived.length > 0 && (
         <section className="flex flex-col gap-2">
-          <div className="text-2xs font-medium text-ink-3">
-            Archived ({archived.length})
-          </div>
+          <div className="text-2xs font-medium text-ink-3">Archived ({archived.length})</div>
           <div className="flex flex-col gap-1.5">{archived.map((t) => row(t))}</div>
         </section>
       )}
 
-      <TypeDialog
-        open={open}
-        onOpenChange={setOpen}
-        type={editing}
-        templates={templates}
-      />
+      <TypeDialog open={open} onOpenChange={setOpen} type={editing} templates={templates} />
     </>
   );
 }
@@ -191,13 +182,11 @@ function TypeDialog({
   type: RecordsRequestTypeRow | null;
   templates: TemplateOption[];
 }) {
-  const action = type
-    ? updateRecordsRequestType.bind(null, type.id)
-    : createRecordsRequestType;
+  const action = type ? updateRecordsRequestType.bind(null, type.id) : createRecordsRequestType;
   const [state, formAction, isPending] = useDialogActionState(
     action,
     recordsRequestInitialState,
-    open
+    open,
   );
   useEffect(() => {
     if (state.status === "ok") onOpenChange(false);
@@ -218,8 +207,8 @@ function TypeDialog({
         <DialogHeader>
           <DialogTitle>{type ? "Edit request type" : "New request type"}</DialogTitle>
           <DialogDescription>
-            The response period feeds the due date on each request; chase interval
-            sets the rolling follow-up task.
+            The response period feeds the due date on each request; chase interval sets the rolling
+            follow-up task.
           </DialogDescription>
         </DialogHeader>
         {/* Keyed so the uncontrolled defaults reset per row / open. */}

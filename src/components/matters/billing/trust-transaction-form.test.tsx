@@ -28,10 +28,8 @@ beforeEach(() => {
   mockedAction.mockReset();
 });
 
-const typeSelect = () =>
-  document.querySelector('select[name="type"]') as HTMLSelectElement;
-const field = (name: string) =>
-  document.querySelector(`[name="${name}"]`) as HTMLInputElement;
+const typeSelect = () => document.querySelector('select[name="type"]') as HTMLSelectElement;
+const field = (name: string) => document.querySelector(`[name="${name}"]`) as HTMLInputElement;
 
 const postedFields = (call: number) => {
   const fd = mockedAction.mock.calls[call]![2] as FormData;
@@ -61,9 +59,7 @@ describe("TrustTransactionForm — keeps input after a server error", () => {
     await user.type(field("reference"), "wire-77");
     await user.click(screen.getByRole("button", { name: /record transaction/i }));
 
-    expect(
-      await screen.findByText(/Trust would overdraw/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Trust would overdraw/i)).toBeInTheDocument();
     expect(postedFields(0)).toMatchObject({
       type: "disbursement",
       amount: "5000",
@@ -101,9 +97,7 @@ describe("TrustTransactionForm — keeps input after a server error", () => {
     await user.click(screen.getByRole("button", { name: /record transaction/i }));
 
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /add transaction/i })
-      ).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: /add transaction/i })).toBeInTheDocument(),
     );
     await user.click(screen.getByRole("button", { name: /add transaction/i }));
     expect(typeSelect().value).toBe("deposit");
@@ -119,13 +113,11 @@ describe("TrustTransactionForm — keeps input after a server error", () => {
       await user.click(screen.getByRole("button", { name: /add transaction/i }));
       await user.type(field("amount"), "10");
       await user.type(field("description"), "Deposit");
-      await user.click(
-        screen.getByRole("button", { name: /record transaction/i })
-      );
+      await user.click(screen.getByRole("button", { name: /record transaction/i }));
       await waitFor(() =>
         expect(
-          screen.queryByRole("button", { name: /record transaction/i })
-        ).not.toBeInTheDocument()
+          screen.queryByRole("button", { name: /record transaction/i }),
+        ).not.toBeInTheDocument(),
       );
     }
     expect(mockedAction).toHaveBeenCalledTimes(2);
@@ -139,14 +131,8 @@ describe("TrustTransactionForm — labels and date default", () => {
     await user.click(screen.getByRole("button", { name: /add transaction/i }));
     expect(screen.getByLabelText(/^type/i)).toHaveAttribute("name", "type");
     expect(screen.getByLabelText(/^amount/i)).toHaveAttribute("name", "amount");
-    expect(screen.getByLabelText(/^description/i)).toHaveAttribute(
-      "name",
-      "description"
-    );
-    expect(screen.getByLabelText(/^reference/i)).toHaveAttribute(
-      "name",
-      "reference"
-    );
+    expect(screen.getByLabelText(/^description/i)).toHaveAttribute("name", "description");
+    expect(screen.getByLabelText(/^reference/i)).toHaveAttribute("name", "reference");
     expect(screen.getByLabelText(/^date/i)).toHaveAttribute("name", "date");
   });
 
@@ -159,7 +145,7 @@ describe("TrustTransactionForm — labels and date default", () => {
       render(
         <UserTimeZoneProvider timeZone="America/Denver">
           <TrustTransactionForm matterId="m1" />
-        </UserTimeZoneProvider>
+        </UserTimeZoneProvider>,
       );
       await user.click(screen.getByRole("button", { name: /add transaction/i }));
       expect(screen.getByLabelText(/^date/i)).toHaveValue("2026-04-27");
@@ -174,11 +160,8 @@ describe("TrustTransactionForm — portal visibility warning", () => {
   const open = async (portalBillingEnabled?: boolean) => {
     render(
       <UserTimeZoneProvider timeZone="America/Denver">
-        <TrustTransactionForm
-          matterId="m1"
-          portalBillingEnabled={portalBillingEnabled}
-        />
-      </UserTimeZoneProvider>
+        <TrustTransactionForm matterId="m1" portalBillingEnabled={portalBillingEnabled} />
+      </UserTimeZoneProvider>,
     );
     await userEvent.click(screen.getByText("Add transaction"));
   };
@@ -193,4 +176,3 @@ describe("TrustTransactionForm — portal visibility warning", () => {
     expect(screen.queryByText(WARNING)).toBeNull();
   });
 });
-

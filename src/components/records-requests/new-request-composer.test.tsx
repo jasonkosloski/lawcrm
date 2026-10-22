@@ -13,7 +13,14 @@ vi.mock("@/app/actions/records-requests", () => ({
 }));
 vi.mock("@/app/actions/attendee-search", () => ({
   searchAttendeesAction: vi.fn(async () => [
-    { kind: "contact", id: "c1", name: "St. Mary's", email: null, type: "medical_provider", organization: null },
+    {
+      kind: "contact",
+      id: "c1",
+      name: "St. Mary's",
+      email: null,
+      type: "medical_provider",
+      organization: null,
+    },
     { kind: "user", id: "u9", name: "A User", email: "a@x.com", initials: "AU", jobTitle: "" },
   ]),
 }));
@@ -32,7 +39,7 @@ async function open(user: ReturnType<typeof userEvent.setup>, canCreateContact =
       users={USERS}
       currentUserId="u1"
       canCreateContact={canCreateContact}
-    />
+    />,
   );
   await user.click(screen.getByRole("button", { name: /new records request/i }));
 }

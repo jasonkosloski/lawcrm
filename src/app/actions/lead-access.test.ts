@@ -72,9 +72,7 @@ describe("setLeadRestricted", () => {
   test("restricting adds the actor to the team, gates on intake.restrict and logs", async () => {
     expect(await setLeadRestricted(leadId, true)).toEqual({ ok: true });
     expect(requirePermission).toHaveBeenCalledWith("intake.restrict");
-    expect((await prisma.lead.findUniqueOrThrow({ where: { id: leadId } })).restricted).toBe(
-      true
-    );
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: leadId } })).restricted).toBe(true);
     expect(await team()).toEqual([`${alice}:co_counsel`]);
     const log = await prisma.activityLog.findFirstOrThrow({ where: { leadId } });
     expect(log.title).toMatch(/restricted/i);
@@ -90,9 +88,7 @@ describe("setLeadRestricted", () => {
   test("reopening keeps the team rows and logs", async () => {
     await setLeadRestricted(leadId, true);
     expect(await setLeadRestricted(leadId, false)).toEqual({ ok: true });
-    expect((await prisma.lead.findUniqueOrThrow({ where: { id: leadId } })).restricted).toBe(
-      false
-    );
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: leadId } })).restricted).toBe(false);
     expect(await team()).toEqual([`${alice}:co_counsel`]);
     expect(await prisma.activityLog.count({ where: { leadId } })).toBe(2);
   });
@@ -159,7 +155,7 @@ describe("setMatterRestricted", () => {
     expect(await setMatterRestricted(matterId, true)).toEqual({ ok: true });
     expect(requirePermission).toHaveBeenCalledWith("matters.restrict");
     expect((await prisma.matter.findUniqueOrThrow({ where: { id: matterId } })).restricted).toBe(
-      true
+      true,
     );
     expect(await prisma.activityLog.count({ where: { matterId } })).toBe(1);
     as(bob);

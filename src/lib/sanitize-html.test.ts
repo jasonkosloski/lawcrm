@@ -24,8 +24,7 @@ describe("sanitizeUserHtml — allowed tags pass through", () => {
   });
 
   test("Tiptap StarterKit shape — bold/italic/strike/underline/code", () => {
-    const html =
-      "<p><strong>b</strong> <em>i</em> <s>s</s> <u>u</u> <code>c</code></p>";
+    const html = "<p><strong>b</strong> <em>i</em> <s>s</s> <u>u</u> <code>c</code></p>";
     expect(sanitizeUserHtml(html)).toBe(html);
   });
 
@@ -118,9 +117,7 @@ describe("sanitizeUserHtml — link safety", () => {
   test("existing rel/target on a link gets replaced (no opt-out)", () => {
     // Even if the user (or a malicious paste) sets rel="opener",
     // the transform forces our values back.
-    const out = sanitizeUserHtml(
-      '<a href="https://example.com" rel="opener" target="_self">x</a>'
-    );
+    const out = sanitizeUserHtml('<a href="https://example.com" rel="opener" target="_self">x</a>');
     expect(out).toContain('rel="noopener noreferrer"');
     expect(out).toContain('target="_blank"');
     expect(out).not.toContain('rel="opener"');
@@ -146,15 +143,14 @@ describe("sanitizeUserHtml — output cleanliness", () => {
 describe("sanitizeDocumentHtml — document structure passes through", () => {
   test("note-profile tags still pass (superset, not a replacement)", () => {
     const html =
-      "<h2>Header</h2><p><strong>b</strong> <em>i</em> <u>u</u></p>" +
-      "<ul><li>one</li></ul>";
+      "<h2>Header</h2><p><strong>b</strong> <em>i</em> <u>u</u></p>" + "<ul><li>one</li></ul>";
     expect(sanitizeDocumentHtml(html)).toBe(html);
   });
 
   test("tables with colspan/rowspan survive", () => {
     const html =
-      "<table><thead><tr><th colspan=\"2\">H</th></tr></thead>" +
-      "<tbody><tr><td rowspan=\"2\">a</td><td>b</td></tr></tbody></table>";
+      '<table><thead><tr><th colspan="2">H</th></tr></thead>' +
+      '<tbody><tr><td rowspan="2">a</td><td>b</td></tr></tbody></table>';
     expect(sanitizeDocumentHtml(html)).toBe(html);
   });
 
@@ -164,8 +160,7 @@ describe("sanitizeDocumentHtml — document structure passes through", () => {
   });
 
   test("embedded images survive with data: URIs only", () => {
-    const data =
-      '<img src="data:image/png;base64,iVBORw0KGgo=" alt="exhibit" />';
+    const data = '<img src="data:image/png;base64,iVBORw0KGgo=" alt="exhibit" />';
     expect(sanitizeDocumentHtml(data)).toBe(data);
   });
 });
@@ -177,9 +172,7 @@ describe("sanitizeDocumentHtml — still a security boundary", () => {
   });
 
   test("event handlers and style attributes are stripped", () => {
-    const out = sanitizeDocumentHtml(
-      '<td onclick="alert(1)" style="position:fixed">x</td>'
-    );
+    const out = sanitizeDocumentHtml('<td onclick="alert(1)" style="position:fixed">x</td>');
     expect(out).not.toContain("onclick");
     expect(out).not.toContain("style");
   });
@@ -196,7 +189,7 @@ describe("sanitizeDocumentHtml — still a security boundary", () => {
 
   test("javascript: links are stripped, links get noopener/_blank", () => {
     const out = sanitizeDocumentHtml(
-      '<a href="javascript:alert(1)">x</a><a href="https://example.com">y</a>'
+      '<a href="javascript:alert(1)">x</a><a href="https://example.com">y</a>',
     );
     expect(out).not.toContain("javascript:");
     expect(out).toContain('rel="noopener noreferrer"');
@@ -206,7 +199,7 @@ describe("sanitizeDocumentHtml — still a security boundary", () => {
   test("iframe / object / style blocks are discarded", () => {
     const out = sanitizeDocumentHtml(
       '<style>p{display:none}</style><iframe src="https://x"></iframe>' +
-        '<object data="x"></object><p>kept</p>'
+        '<object data="x"></object><p>kept</p>',
     );
     expect(out).toBe("<p>kept</p>");
   });
@@ -222,9 +215,7 @@ describe("sanitizeDocumentHtml — note profile is NOT loosened", () => {
   });
 
   test("data-URI images are still stripped from the note profile", () => {
-    const out = sanitizeUserHtml(
-      '<img src="data:image/png;base64,iVBORw0KGgo=" />'
-    );
+    const out = sanitizeUserHtml('<img src="data:image/png;base64,iVBORw0KGgo=" />');
     expect(out).not.toContain("<img");
   });
 });
@@ -322,12 +313,8 @@ describe("sanitizeEmailHtml — remote images become blocked-image notes", () =>
   });
 
   test("alt text is preserved in the placeholder", () => {
-    const out = sanitizeEmailHtml(
-      '<img src="https://cdn.example/logo.png" alt="Firm logo">'
-    );
-    expect(out).toBe(
-      '<span class="email-blocked-image">[image blocked: Firm logo]</span>'
-    );
+    const out = sanitizeEmailHtml('<img src="https://cdn.example/logo.png" alt="Firm logo">');
+    expect(out).toBe('<span class="email-blocked-image">[image blocked: Firm logo]</span>');
   });
 
   test("cid: inline references are blocked too (no fetchable bytes)", () => {
@@ -348,7 +335,7 @@ describe("sanitizeEmailHtml — real-mail structure passes through", () => {
   test("div soup, tables, links survive (links forced safe)", () => {
     const out = sanitizeEmailHtml(
       '<div><table><tbody><tr><td colspan="2">cell</td></tr></tbody></table>' +
-        '<a href="https://court.example/filing">filing</a></div>'
+        '<a href="https://court.example/filing">filing</a></div>',
     );
     expect(out).toContain("<div>");
     expect(out).toContain('<td colspan="2">cell</td>');
@@ -357,9 +344,7 @@ describe("sanitizeEmailHtml — real-mail structure passes through", () => {
   });
 
   test("unknown-but-harmless tags degrade to their text content", () => {
-    expect(sanitizeEmailHtml("<font color=\"red\">warm regards</font>")).toBe(
-      "warm regards"
-    );
+    expect(sanitizeEmailHtml('<font color="red">warm regards</font>')).toBe("warm regards");
   });
 });
 
@@ -391,7 +376,7 @@ describe("class attributes are stripped in every profile", () => {
         `<a class="${OVERLAY}" href="https://x.example/">l</a>` +
         `<span class="sr-only">s</span>` +
         `<table><tr><td class="fixed">c</td></tr></table>` +
-        `<img class="fixed" src="data:image/png;base64,AAAA"></div>`
+        `<img class="fixed" src="data:image/png;base64,AAAA"></div>`,
     );
     expect(out).not.toContain("class=");
     expect(out).not.toContain("fixed");
@@ -401,13 +386,9 @@ describe("class attributes are stripped in every profile", () => {
   });
 
   test("email: only the exact blocked-image class survives on a span", () => {
-    const out = sanitizeEmailHtml(
-      `<span class="email-blocked-image ${OVERLAY}">x</span>`
-    );
+    const out = sanitizeEmailHtml(`<span class="email-blocked-image ${OVERLAY}">x</span>`);
     expect(out).toBe('<span class="email-blocked-image">x</span>');
-    const blocked = sanitizeEmailHtml(
-      '<img class="fixed" src="https://t.example/p.gif">'
-    );
+    const blocked = sanitizeEmailHtml('<img class="fixed" src="https://t.example/p.gif">');
     expect(blocked).toContain('class="email-blocked-image"');
     expect(blocked).not.toContain("fixed");
   });
@@ -419,7 +400,7 @@ describe("class attributes are stripped in every profile", () => {
 
   test("note profile strips class on every tag", () => {
     const out = sanitizeUserHtml(
-      `<p class="${OVERLAY}">Session expired <a class="fixed" href="https://e.example/">in</a></p>`
+      `<p class="${OVERLAY}">Session expired <a class="fixed" href="https://e.example/">in</a></p>`,
     );
     expect(out).not.toContain("class=");
     expect(out).toContain("Session expired");
@@ -429,7 +410,7 @@ describe("class attributes are stripped in every profile", () => {
     const out = sanitizeDocumentHtml(
       `<p class="${OVERLAY}">a</p><table><colgroup class="x"><col class="y"></colgroup>` +
         `<tr><th class="z">h</th><td class="fixed">d</td></tr></table>` +
-        `<img class="fixed" src="data:image/png;base64,AAAA">`
+        `<img class="fixed" src="data:image/png;base64,AAAA">`,
     );
     expect(out).not.toContain("class=");
     expect(out).toContain("<table>");
@@ -445,27 +426,15 @@ describe("protocol-relative and obfuscated hrefs", () => {
   });
 
   test("all profiles drop protocol-relative hrefs", () => {
-    for (const fn of [
-      sanitizeUserHtml,
-      sanitizeDocumentHtml,
-      sanitizeEmailHtml,
-    ]) {
-      expect(fn('<a href="//evil.example/x">x</a>')).not.toContain(
-        "evil.example"
-      );
+    for (const fn of [sanitizeUserHtml, sanitizeDocumentHtml, sanitizeEmailHtml]) {
+      expect(fn('<a href="//evil.example/x">x</a>')).not.toContain("evil.example");
     }
   });
 
   test("mixed-case / tab-split javascript: hrefs are dropped everywhere", () => {
-    for (const fn of [
-      sanitizeUserHtml,
-      sanitizeDocumentHtml,
-      sanitizeEmailHtml,
-    ]) {
+    for (const fn of [sanitizeUserHtml, sanitizeDocumentHtml, sanitizeEmailHtml]) {
       expect(fn('<a href="JaVaScRiPt:alert(1)">x</a>')).not.toContain("alert");
-      expect(fn('<a href="java&#9;script:alert(1)">x</a>')).not.toContain(
-        "alert"
-      );
+      expect(fn('<a href="java&#9;script:alert(1)">x</a>')).not.toContain("alert");
     }
   });
 });
@@ -479,7 +448,7 @@ describe("ordered-list numbering survives every profile (F253)", () => {
 
   test.each(sanitizers)("%s profile keeps <ol start> and a valid type", (_n, fn) => {
     expect(fn('<ol start="3"><li><p>Third</p></li></ol>')).toBe(
-      '<ol start="3"><li><p>Third</p></li></ol>'
+      '<ol start="3"><li><p>Third</p></li></ol>',
     );
     const out = fn('<ol type="a" start="5"><li>x</li></ol>');
     expect(out).toContain('start="5"');
@@ -487,18 +456,12 @@ describe("ordered-list numbering survives every profile (F253)", () => {
   });
 
   test.each(sanitizers)("%s profile drops a non-integer start and an unknown type", (_n, fn) => {
-    expect(fn('<ol start="javascript:1" type="z"><li>x</li></ol>')).toBe(
-      "<ol><li>x</li></ol>"
-    );
-    expect(fn('<ol start="1234567"><li>x</li></ol>')).toBe(
-      "<ol><li>x</li></ol>"
-    );
+    expect(fn('<ol start="javascript:1" type="z"><li>x</li></ol>')).toBe("<ol><li>x</li></ol>");
+    expect(fn('<ol start="1234567"><li>x</li></ol>')).toBe("<ol><li>x</li></ol>");
   });
 
   test.each(sanitizers)("%s profile keeps an integer <li value> and drops junk", (_n, fn) => {
-    expect(fn('<ol><li value="9">x</li></ol>')).toBe(
-      '<ol><li value="9">x</li></ol>'
-    );
+    expect(fn('<ol><li value="9">x</li></ol>')).toBe('<ol><li value="9">x</li></ol>');
     expect(fn('<ol><li value="x">x</li></ol>')).toBe("<ol><li>x</li></ol>");
   });
 
@@ -507,9 +470,7 @@ describe("ordered-list numbering survives every profile (F253)", () => {
   });
 
   test("the note profile keeps <hr> (StarterKit's HorizontalRule)", () => {
-    expect(sanitizeUserHtml("<p>a</p><hr><p>b</p>")).toBe(
-      "<p>a</p><hr /><p>b</p>"
-    );
+    expect(sanitizeUserHtml("<p>a</p><hr><p>b</p>")).toBe("<p>a</p><hr /><p>b</p>");
   });
 });
 
@@ -517,8 +478,8 @@ describe("sanitizeEmailHtml - head/title text does not leak (F203)", () => {
   test("a <title> block is dropped with its text", () => {
     expect(
       sanitizeEmailHtml(
-        "<html><head><title>Your statement</title></head><body><div>Body</div></body></html>"
-      )
+        "<html><head><title>Your statement</title></head><body><div>Body</div></body></html>",
+      ),
     ).toBe("<div>Body</div>");
   });
 });

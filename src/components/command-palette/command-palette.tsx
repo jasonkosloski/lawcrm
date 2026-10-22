@@ -78,11 +78,7 @@ import {
 } from "@/lib/command-palette/destinations";
 import { LEAD_STAGE_LABEL } from "@/lib/constants/lead-stage";
 import { SEARCH_MIN_QUERY_LENGTH } from "@/lib/constants/search";
-import {
-  pushRecent,
-  readRecents,
-  type RecentRef,
-} from "@/lib/command-palette/recents";
+import { pushRecent, readRecents, type RecentRef } from "@/lib/command-palette/recents";
 import { setMatterPin } from "@/app/actions/matter-pins";
 import {
   parsePaletteQuery,
@@ -176,7 +172,7 @@ export function CommandPalette({
   // re-read from localStorage on every open.
   const recents = useMemo<RecentRef[]>(
     () => (open && data ? readRecents(data.userId) : []),
-    [open, data]
+    [open, data],
   );
 
   // Fetch fresh data each time the palette opens.
@@ -195,8 +191,7 @@ export function CommandPalette({
         // not shown and pushRecent no-ops for this open, and canViewReports
         // false hides the Reports row even for permitted users.
         console.warn("[command-palette] fetch failed", err);
-        if (!cancelled)
-          setData({ items: [], userId: "", canViewReports: false });
+        if (!cancelled) setData({ items: [], userId: "", canViewReports: false });
       });
     return () => {
       cancelled = true;
@@ -212,7 +207,7 @@ export function CommandPalette({
   const currentMatter: PaletteMatter | null = useMemo(() => {
     if (!currentMatterId || !data) return null;
     const found = data.items.find(
-      (i): i is PaletteMatter => i.kind === "matter" && i.id === currentMatterId
+      (i): i is PaletteMatter => i.kind === "matter" && i.id === currentMatterId,
     );
     return found ?? null;
   }, [currentMatterId, data]);
@@ -237,15 +232,12 @@ export function CommandPalette({
   // entirely under `>` since actions aren't full-text-searchable.
   const searchType = parsed.scope ? SCOPE_SEARCH_TYPE[parsed.scope] : null;
   const searchRowVisible =
-    parsed.term.length >= SEARCH_MIN_QUERY_LENGTH &&
-    (parsed.scope === null || searchType !== null);
+    parsed.term.length >= SEARCH_MIN_QUERY_LENGTH && (parsed.scope === null || searchType !== null);
   const searchEverywhere = () => {
     if (!searchRowVisible) return;
     close();
     router.push(
-      `/search?q=${encodeURIComponent(parsed.term)}${
-        searchType ? `&type=${searchType}` : ""
-      }`
+      `/search?q=${encodeURIComponent(parsed.term)}${searchType ? `&type=${searchType}` : ""}`,
     );
   };
 
@@ -274,48 +266,44 @@ export function CommandPalette({
     return {
       matters: items.filter((i): i is PaletteMatter => i.kind === "matter"),
       contacts: items.filter(
-        (i): i is Extract<PaletteItem, { kind: "contact" }> =>
-          i.kind === "contact"
+        (i): i is Extract<PaletteItem, { kind: "contact" }> => i.kind === "contact",
       ),
-      leads: items.filter(
-        (i): i is Extract<PaletteItem, { kind: "lead" }> => i.kind === "lead"
-      ),
-      users: items.filter(
-        (i): i is Extract<PaletteItem, { kind: "user" }> => i.kind === "user"
-      ),
+      leads: items.filter((i): i is Extract<PaletteItem, { kind: "lead" }> => i.kind === "lead"),
+      users: items.filter((i): i is Extract<PaletteItem, { kind: "user" }> => i.kind === "user"),
     };
   }, [data]);
-  const pinnedMatters = useMemo(
-    () => matters.filter((m) => m.isPinned),
-    [matters]
-  );
+  const pinnedMatters = useMemo(() => matters.filter((m) => m.isPinned), [matters]);
 
   // Navigation rows the viewer can actually open: Reports needs
   // reports.view (the page bounces everyone else to the dashboard).
   const canViewReports = data?.canViewReports ?? false;
   const navRows = useMemo(
-    () =>
-      NAV_ROWS.filter((d) => d.id !== REPORTS_NAV_ID || canViewReports),
-    [canViewReports]
+    () => NAV_ROWS.filter((d) => d.id !== REPORTS_NAV_ID || canViewReports),
+    [canViewReports],
   );
 
   // Recents — resolved from current data (skip any that no longer exist).
   const resolvedRecents = recents
-    .map((ref): { ref: RecentRef; item: PaletteItem | null; nav: (typeof NAV_DESTINATIONS)[number] | null } | null => {
-      if (ref.kind === "nav") {
-        // Create-new actions store nav-kind refs too ("create:…" ids).
-        const nav =
-          navRows.find((n) => n.id === ref.id) ??
-          CREATE_ROWS.find((n) => n.id === ref.id) ??
-          null;
-        return nav ? { ref, item: null, nav } : null;
-      }
-      const item =
-        data?.items.find(
-          (i) => i.kind === ref.kind && i.id === ref.id
-        ) ?? null;
-      return item ? { ref, item, nav: null } : null;
-    })
+    .map(
+      (
+        ref,
+      ): {
+        ref: RecentRef;
+        item: PaletteItem | null;
+        nav: (typeof NAV_DESTINATIONS)[number] | null;
+      } | null => {
+        if (ref.kind === "nav") {
+          // Create-new actions store nav-kind refs too ("create:…" ids).
+          const nav =
+            navRows.find((n) => n.id === ref.id) ??
+            CREATE_ROWS.find((n) => n.id === ref.id) ??
+            null;
+          return nav ? { ref, item: null, nav } : null;
+        }
+        const item = data?.items.find((i) => i.kind === ref.kind && i.id === ref.id) ?? null;
+        return item ? { ref, item, nav: null } : null;
+      },
+    )
     .filter((x): x is NonNullable<typeof x> => x !== null)
     .slice(0, 5);
 
@@ -357,9 +345,7 @@ export function CommandPalette({
         />
 
         <CommandList>
-          <CommandEmpty>
-            {data ? "No results." : "Loading…"}
-          </CommandEmpty>
+          <CommandEmpty>{data ? "No results." : "Loading…"}</CommandEmpty>
 
           {/* ── Contextual: pin/unpin current matter ─────────────────── */}
           {currentMatter && (
@@ -367,14 +353,12 @@ export function CommandPalette({
               <CommandItem
                 value={paletteValue(
                   "action",
-                  `${currentMatter.isPinned ? "unpin" : "pin"} this matter ${currentMatter.name}`
+                  `${currentMatter.isPinned ? "unpin" : "pin"} this matter ${currentMatter.name}`,
                 )}
                 onSelect={toggleCurrentPin}
               >
                 {currentMatter.isPinned ? <PinOff /> : <Pin />}
-                <span>
-                  {currentMatter.isPinned ? "Unpin" : "Pin"} this matter
-                </span>
+                <span>{currentMatter.isPinned ? "Unpin" : "Pin"} this matter</span>
                 <CommandShortcut>{currentMatter.name}</CommandShortcut>
               </CommandItem>
             </CommandGroup>
@@ -393,11 +377,9 @@ export function CommandPalette({
                         value={paletteValue(
                           "action",
                           `${nav.label} ${nav.keywords}`,
-                          `recent:nav:${nav.id}`
+                          `recent:nav:${nav.id}`,
                         )}
-                        onSelect={() =>
-                          go(nav.href, { kind: "nav", id: nav.id })
-                        }
+                        onSelect={() => go(nav.href, { kind: "nav", id: nav.id })}
                       >
                         <Icon />
                         <span>{nav.label}</span>
@@ -406,11 +388,7 @@ export function CommandPalette({
                   }
                   if (!item) return null;
                   return (
-                    <RecentItemRow
-                      key={`recent-${item.kind}-${item.id}`}
-                      item={item}
-                      onGo={go}
-                    />
+                    <RecentItemRow key={`recent-${item.kind}-${item.id}`} item={item} onGo={go} />
                   );
                 })}
               </CommandGroup>
@@ -436,14 +414,8 @@ export function CommandPalette({
               return (
                 <CommandItem
                   key={dest.id}
-                  value={paletteValue(
-                    "action",
-                    `${dest.label} ${dest.keywords}`,
-                    `nav:${dest.id}`
-                  )}
-                  onSelect={() =>
-                    go(dest.href, { kind: "nav", id: dest.id })
-                  }
+                  value={paletteValue("action", `${dest.label} ${dest.keywords}`, `nav:${dest.id}`)}
+                  onSelect={() => go(dest.href, { kind: "nav", id: dest.id })}
                 >
                   <Icon />
                   <span>{dest.label}</span>
@@ -464,11 +436,9 @@ export function CommandPalette({
                   value={paletteValue(
                     "action",
                     `${action.label} ${action.keywords}`,
-                    `create:${action.id}`
+                    `create:${action.id}`,
                   )}
-                  onSelect={() =>
-                    go(action.href, { kind: "nav", id: action.id })
-                  }
+                  onSelect={() => go(action.href, { kind: "nav", id: action.id })}
                 >
                   <Icon />
                   <span>{action.label}</span>
@@ -498,11 +468,9 @@ export function CommandPalette({
                     value={paletteValue(
                       "person",
                       `${u.name} ${u.jobTitle} ${u.initials} firm user`,
-                      `user:${u.id}`
+                      `user:${u.id}`,
                     )}
-                    onSelect={() =>
-                      go("/settings/team", { kind: "user", id: u.id })
-                    }
+                    onSelect={() => go("/settings/team", { kind: "user", id: u.id })}
                   >
                     <UserSquare />
                     <span>{u.name}</span>
@@ -521,11 +489,9 @@ export function CommandPalette({
                     value={paletteValue(
                       "person",
                       `${c.name} ${c.email ?? ""} ${c.organization ?? ""} ${c.contactType}`,
-                      `contact:${c.id}`
+                      `contact:${c.id}`,
                     )}
-                    onSelect={() =>
-                      go(`/contacts/${c.id}`, { kind: "contact", id: c.id })
-                    }
+                    onSelect={() => go(`/contacts/${c.id}`, { kind: "contact", id: c.id })}
                   >
                     <User />
                     <span>{c.name}</span>
@@ -550,11 +516,9 @@ export function CommandPalette({
                     value={paletteValue(
                       "lead",
                       `${l.name} ${l.email ?? ""} lead intake ${l.stage} ${leadStageLabel(l.stage)}`,
-                      `lead:${l.id}`
+                      `lead:${l.id}`,
                     )}
-                    onSelect={() =>
-                      go(`/intake/${l.id}`, { kind: "lead", id: l.id })
-                    }
+                    onSelect={() => go(`/intake/${l.id}`, { kind: "lead", id: l.id })}
                   >
                     <Inbox />
                     <span>{l.name}</span>
@@ -574,17 +538,10 @@ export function CommandPalette({
               row hides under > (actions have no full-text). */}
           {searchRowVisible && (
             <CommandGroup heading="Everywhere">
-              <CommandItem
-                value={SEARCH_EVERYWHERE_VALUE}
-                onSelect={searchEverywhere}
-              >
+              <CommandItem value={SEARCH_EVERYWHERE_VALUE} onSelect={searchEverywhere}>
                 <Search />
-                <span>
-                  Search everywhere for &ldquo;{parsed.term}&rdquo;
-                </span>
-                <CommandShortcut>
-                  {searchType ? `${searchType}s · ` : ""}full-text
-                </CommandShortcut>
+                <span>Search everywhere for &ldquo;{parsed.term}&rdquo;</span>
+                <CommandShortcut>{searchType ? `${searchType}s · ` : ""}full-text</CommandShortcut>
               </CommandItem>
             </CommandGroup>
           )}
@@ -596,8 +553,7 @@ export function CommandPalette({
             <Kbd>#</Kbd> matters <Kbd>@</Kbd> people <Kbd>&gt;</Kbd> actions
           </span>
           <span>
-            <Kbd>↑</Kbd> <Kbd>↓</Kbd> navigate <Kbd>↵</Kbd> select{" "}
-            <Kbd>esc</Kbd> close
+            <Kbd>↑</Kbd> <Kbd>↓</Kbd> navigate <Kbd>↵</Kbd> select <Kbd>esc</Kbd> close
           </span>
         </div>
       </Command>
@@ -620,19 +576,14 @@ function MatterRow({
   const value = paletteValue(
     "matter",
     `${matter.name} ${matter.caseNumber ?? ""} ${matter.clientName ?? ""} ${matter.area} ${matter.stage}`,
-    `${section}:matter:${matter.id}`
+    `${section}:matter:${matter.id}`,
   );
   return (
     <CommandItem
       value={value}
-      onSelect={() =>
-        onGo(`/matters/${matter.id}`, { kind: "matter", id: matter.id })
-      }
+      onSelect={() => onGo(`/matters/${matter.id}`, { kind: "matter", id: matter.id })}
     >
-      <span
-        className="w-1.5 h-1.5 rounded-full shrink-0"
-        style={{ background: matter.color }}
-      />
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: matter.color }} />
       <span className="flex-1 truncate">{matter.name}</span>
       <CommandShortcut>
         {matter.caseNumber ? `${matter.caseNumber} · ` : ""}
@@ -658,11 +609,9 @@ function RecentItemRow({
         value={paletteValue(
           "person",
           `${item.name} ${item.email ?? ""} ${item.organization ?? ""}`,
-          `recent:contact:${item.id}`
+          `recent:contact:${item.id}`,
         )}
-        onSelect={() =>
-          onGo(`/contacts/${item.id}`, { kind: "contact", id: item.id })
-        }
+        onSelect={() => onGo(`/contacts/${item.id}`, { kind: "contact", id: item.id })}
       >
         <User />
         <span>{item.name}</span>
@@ -675,11 +624,9 @@ function RecentItemRow({
         value={paletteValue(
           "lead",
           `${item.name} lead ${item.stage} ${leadStageLabel(item.stage)}`,
-          `recent:lead:${item.id}`
+          `recent:lead:${item.id}`,
         )}
-        onSelect={() =>
-          onGo(`/intake/${item.id}`, { kind: "lead", id: item.id })
-        }
+        onSelect={() => onGo(`/intake/${item.id}`, { kind: "lead", id: item.id })}
       >
         <Inbox />
         <span>{item.name}</span>
@@ -689,14 +636,8 @@ function RecentItemRow({
   if (item.kind === "user") {
     return (
       <CommandItem
-        value={paletteValue(
-          "person",
-          `${item.name} ${item.jobTitle}`,
-          `recent:user:${item.id}`
-        )}
-        onSelect={() =>
-          onGo("/settings/team", { kind: "user", id: item.id })
-        }
+        value={paletteValue("person", `${item.name} ${item.jobTitle}`, `recent:user:${item.id}`)}
+        onSelect={() => onGo("/settings/team", { kind: "user", id: item.id })}
       >
         <UserSquare />
         <span>{item.name}</span>

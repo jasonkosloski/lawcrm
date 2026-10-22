@@ -8,23 +8,11 @@
 import { useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { createDeadlineWithCaptures } from "@/app/actions/captures";
-import {
-  captureInitialState,
-  type CaptureFormState,
-} from "@/lib/capture-schemas";
-import {
-  DEADLINE_KINDS,
-  type CaptureKind,
-  type NoteCapture,
-} from "@/lib/note-constants";
+import { captureInitialState, type CaptureFormState } from "@/lib/capture-schemas";
+import { DEADLINE_KINDS, type CaptureKind, type NoteCapture } from "@/lib/note-constants";
 import { DEADLINE_KIND_LABEL } from "@/lib/constants/deadline-status";
 import { CaptureComposerShell } from "./capture-composer-shell";
-import {
-  DateField,
-  SelectField,
-  TextField,
-  TextareaField,
-} from "./primary-fields";
+import { DateField, SelectField, TextField, TextareaField } from "./primary-fields";
 
 const SIBLING_KINDS: CaptureKind[] = ["task", "event", "time", "note_sibling"];
 
@@ -46,16 +34,16 @@ export function DeadlineComposer({
   // expand, so a failed attempt's field/attachment errors don't
   // reappear when the composer is re-expanded. See
   // src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    CaptureFormState,
-    FormData
-  >(action, captureInitialState, expanded);
+  const [state, formAction, isPending] = useDialogActionState<CaptureFormState, FormData>(
+    action,
+    captureInitialState,
+    expanded,
+  );
 
   const [captures, setCaptures] = useState<NoteCapture[]>([]);
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [kind, setKind] =
-    useState<(typeof DEADLINE_KINDS)[number]>("manual");
+  const [kind, setKind] = useState<(typeof DEADLINE_KINDS)[number]>("manual");
   const [sourceRef, setSourceRef] = useState("");
   const [description, setDescription] = useState("");
 
@@ -98,9 +86,7 @@ export function DeadlineComposer({
       captures={captures}
       onCapturesChange={setCaptures}
       attachmentErrors={state.attachmentErrors}
-      allowedKinds={SIBLING_KINDS.filter(
-        (k) => !siblingKinds || siblingKinds.includes(k)
-      )}
+      allowedKinds={SIBLING_KINDS.filter((k) => !siblingKinds || siblingKinds.includes(k))}
       canPin={canPin}
       formError={errs._form?.[0]}
     >
@@ -125,9 +111,7 @@ export function DeadlineComposer({
           <SelectField
             name="kind"
             value={kind}
-            onChange={(v) =>
-              setKind(v as (typeof DEADLINE_KINDS)[number])
-            }
+            onChange={(v) => setKind(v as (typeof DEADLINE_KINDS)[number])}
             ariaLabel="Deadline kind"
             options={DEADLINE_KINDS.map((k) => ({
               value: k,

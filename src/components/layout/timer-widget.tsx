@@ -45,20 +45,13 @@ import { useRouter } from "next/navigation";
 import { Play, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import {
-  discardTimer,
-  startTimer,
-  updateTimer,
-} from "@/app/actions/timer";
+import { discardTimer, startTimer, updateTimer } from "@/app/actions/timer";
 import {
   TIME_ENTRY_INCREMENT_HOURS,
   formatElapsed,
   roundElapsedToBillingIncrement,
 } from "@/lib/time-entry-constants";
-import type {
-  ActiveTimerSession,
-  TimerMatterOption,
-} from "@/lib/queries/timer";
+import type { ActiveTimerSession, TimerMatterOption } from "@/lib/queries/timer";
 import { StopTimerDialog } from "@/components/time-entries/stop-timer-dialog";
 import { inputClass } from "@/components/ui/field";
 
@@ -71,9 +64,7 @@ export const TIMER_NETWORK_ERROR =
  *  when this changes, not on object identity (every layout render
  *  delivers a fresh object). */
 function sessionKey(s: ActiveTimerSession | null): string | null {
-  return s
-    ? [s.id, s.startedAt, s.matterId, s.matterName, s.activity].join("|")
-    : null;
+  return s ? [s.id, s.startedAt, s.matterId, s.matterName, s.activity].join("|") : null;
 }
 
 /** Ticking elapsed readout. Mounted only while a timer runs, so its
@@ -87,10 +78,7 @@ function ElapsedClock({ startedAt }: { startedAt: string }) {
     return () => clearInterval(id);
   }, []);
   return (
-    <span
-      className="text-xs tabular-nums"
-      suppressHydrationWarning
-    >
+    <span className="text-xs tabular-nums" suppressHydrationWarning>
       {formatElapsed(Math.max(0, now - Date.parse(startedAt)))}
     </span>
   );
@@ -159,7 +147,7 @@ export function TimerWidget({
    *  rejection escape into an error boundary. */
   const run = (
     action: () => Promise<{ ok: boolean; error?: string; code?: string }>,
-    restore: ActiveTimerSession | null
+    restore: ActiveTimerSession | null,
   ) => {
     setError(null);
     startTransition(async () => {
@@ -225,7 +213,7 @@ export function TimerWidget({
             "flex items-center justify-center w-9 h-9 rounded-full text-ink-3",
             "bg-white border border-line shadow-md",
             "hover:text-ink hover:border-input transition-colors",
-            "disabled:opacity-60"
+            "disabled:opacity-60",
           )}
           title="Start a timer"
           aria-label="Start a timer"
@@ -242,15 +230,12 @@ export function TimerWidget({
       {errorBanner}
       {panelOpen && (
         <div className="w-64 p-3 rounded-lg bg-white border border-line shadow-lg flex flex-col gap-2">
-          <div className="text-xs font-medium text-ink-2">
-            Timer details
-          </div>
+          <div className="text-xs font-medium text-ink-2">Timer details</div>
           <NativeSelect
             value={session.matterId ?? ""}
             onChange={(e) => {
               const matterId = e.target.value || null;
-              const matterName =
-                matterOptions.find((m) => m.id === matterId)?.name ?? null;
+              const matterName = matterOptions.find((m) => m.id === matterId)?.name ?? null;
               const previous = session;
               setSession({ ...session, matterId, matterName });
               run(() => updateTimer({ matterId }), previous);
@@ -298,9 +283,7 @@ export function TimerWidget({
           <span className="w-2 h-2 rounded-full bg-danger motion-safe:animate-pulse" />
           <ElapsedClock startedAt={session.startedAt} />
           {session.matterName && (
-            <span className="text-2xs text-white/70 max-w-36 truncate">
-              {session.matterName}
-            </span>
+            <span className="text-2xs text-white/70 max-w-36 truncate">{session.matterName}</span>
           )}
         </button>
 
@@ -310,9 +293,7 @@ export function TimerWidget({
             // Timer-elapsed prefill, rounded UP to the billing
             // increment at this instant (see stopHours above).
             setStopHours(
-              roundElapsedToBillingIncrement(
-                Date.now() - Date.parse(session.startedAt)
-              )
+              roundElapsedToBillingIncrement(Date.now() - Date.parse(session.startedAt)),
             );
             setStopOpen(true);
           }}
@@ -322,11 +303,7 @@ export function TimerWidget({
           // discard (ADR-013), so don't offer a dead-end composer.
           disabled={session.id === OPTIMISTIC_SESSION_ID || !canLogTime}
           className="flex items-center justify-center w-6 h-6 rounded-full bg-white/15 hover:bg-white/25 transition-colors ml-1 disabled:opacity-50"
-          title={
-            canLogTime
-              ? "Stop timer and log time"
-              : "You do not have permission to log time"
-          }
+          title={canLogTime ? "Stop timer and log time" : "You do not have permission to log time"}
           aria-label="Stop timer"
         >
           <Square size={10} fill="currentColor" />
@@ -338,7 +315,7 @@ export function TimerWidget({
             "flex items-center justify-center h-6 rounded-full transition-colors",
             discardArmed
               ? "px-2 bg-danger text-white text-2xs font-medium"
-              : "w-6 text-white/60 hover:text-white hover:bg-white/15"
+              : "w-6 text-white/60 hover:text-white hover:bg-white/15",
           )}
           title="Discard timer without logging"
           aria-label={discardArmed ? "Confirm discard" : "Discard timer"}

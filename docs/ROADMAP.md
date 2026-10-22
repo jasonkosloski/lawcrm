@@ -38,6 +38,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [x] **UI system v2**: legibility floor, contrast-safe greys, colour only on meaning (ADR-057); dark theme and the matter-tab regroup are open. → [app-shell](features/app-shell.md)
 
 **Matters, intake, records**
+
 - [~] **Matter header "Create" menu**: only Note/Event have quick forms; others link to tabs. → [matters](features/matters.md)
 - [x] **Matter billing types**: per-area allowed types and default, locked after creation, permission to change (ADR-060); fee petition returns as its own switch. → [matters](features/matters.md)
 - [ ] **Matters list: Cards view**: third mode beside Table and Kanban. → [matters](features/matters.md)
@@ -49,15 +50,18 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [ ] **Records follow-ups**: per-item completeness, HIPAA auth expiry, holiday-aware business days, email/fax send, PDF/DOCX letters, firm-wide `/records` page. → [records-requests](features/records-requests.md)
 
 **Calendar and sync**
+
 - [ ] **Calendar visibility v2**: view another user's calendar through the visibility resolver. → [calendar](features/calendar.md)
 - [ ] **Calendar: real RSVP statuses; reassign existing events to a matter** → [calendar](features/calendar.md)
 - [ ] **Google sync: `CalendarEvent.origin` + `EmailAccount.backfillBefore`**: safe cleanup of Google-born events and an explicit backfill anchor (schema change). → [issue](issues/google-sync-origin-and-backfill-anchor.md)
 - [ ] **Google Calendar: attendee fan-out push, delete retry, skipped-event acknowledgement** → [google-calendar-sync](features/google-calendar-sync.md)
 
 **Email**
+
 - [ ] **Email polish**: load-remote-images opt-in, store Message-ID/References, archive/star in reader header + touch affordances, attachment FK on Document + bulk file-all, thread-wide star writeback. → [email](features/communication-email.md)
 
 **Time, billing, money**
+
 - [x] **Invoice email delivery**: send, updated-invoice and re-send email the invoice PDF via Resend. → [time-and-billing](features/time-and-billing.md)
 - [x] **Void stamp + client notice**: voiding a sent invoice stamps filed PDFs VOID and can email the client. → [time-and-billing](features/time-and-billing.md)
 - [ ] **Payment reversal**: no way to undo a mis-recorded payment (or a trust-sourced one) today; void is blocked while payments exist. → [time-and-billing](features/time-and-billing.md)
@@ -65,6 +69,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [ ] **Time follow-ups**: auto-capture, idle detection, admin user picker on `/time`, editable reconciliation lanes. → [time-and-billing](features/time-and-billing.md)
 
 **Documents**
+
 - [x] **Documents tab as a file manager**: multi-select, right-click menus, drag-to-move with undo, desktop drop to upload. → [documents](features/documents.md)
 - [ ] **File-manager follow-ups**: zip download of a selection, grid view, sortable columns. → [documents](features/documents.md)
 - [ ] **Document versioning** → [documents](features/documents.md)
@@ -75,6 +80,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [ ] **Transcript follow-ups**: clip reels, export formats, auto/batch transcribe, portal sharing, launch checklist. → [documents](features/documents.md)
 
 **Shell, settings, automations**
+
 - [~] **Command palette v2 leftovers**: fuzzy highlight, New task, Log a call, Start timer. → [app-shell](features/app-shell.md)
 - [ ] **Dashboard next**: new cards (pinned matters, time this week, new leads, unbilled time, SOLs), then role default layouts (v3 layout and "Needs me now" shipped). → [app-shell](features/app-shell.md)
 - [ ] **Role-based & customizable sidebar**: needs UserPreferences. → [app-shell](features/app-shell.md)
@@ -83,6 +89,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [~] **Settings: Integrations**: Westlaw, e-sign, IOLTA bank feed, PACER. → [settings-admin](features/settings-admin.md)
 
 **Tech debt**
+
 - [x] **Button size convention + one sweep** → [platform-quality](features/platform-quality.md)
 - [ ] **Opportunistic sweeps**: EmptyState, `plural()`, status-label maps as files are touched. → [platform-quality](features/platform-quality.md)
 

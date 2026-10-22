@@ -15,14 +15,7 @@
  */
 
 export type MatterCreateType =
-  | "time"
-  | "note"
-  | "task"
-  | "deadline"
-  | "party"
-  | "document"
-  | "event"
-  | "invoice";
+  "time" | "note" | "task" | "deadline" | "party" | "document" | "event" | "invoice";
 
 export type MatterCreateGroup = "track" | "capture" | "connect" | "bill";
 
@@ -36,15 +29,7 @@ export type MatterCreateEntry = {
   /** Expected form fields / flow — sets expectations for the real build. */
   expected: string[];
   /** Lucide icon name resolved in the UI. */
-  icon:
-    | "clock"
-    | "note"
-    | "task"
-    | "deadline"
-    | "users"
-    | "document"
-    | "calendar"
-    | "invoice";
+  icon: "clock" | "note" | "task" | "deadline" | "users" | "document" | "calendar" | "invoice";
 };
 
 export const MATTER_CREATE_ENTRIES: MatterCreateEntry[] = [
@@ -84,8 +69,7 @@ export const MATTER_CREATE_ENTRIES: MatterCreateEntry[] = [
     group: "capture",
     label: "Add task",
     icon: "task",
-    description:
-      "Create a to-do assigned to a team member with a priority and due date.",
+    description: "Create a to-do assigned to a team member with a priority and due date.",
     expected: [
       "Title + optional description",
       "Owner (team-member picker)",
@@ -160,8 +144,7 @@ export const MATTER_CREATE_ENTRIES: MatterCreateEntry[] = [
     group: "bill",
     label: "Create invoice",
     icon: "invoice",
-    description:
-      "Generate an invoice for this matter from unbilled time entries and expenses.",
+    description: "Generate an invoice for this matter from unbilled time entries and expenses.",
     expected: [
       "Line items from current WIP (select which time entries to include)",
       "Optional expense line items",
@@ -174,9 +157,7 @@ export const MATTER_CREATE_ENTRIES: MatterCreateEntry[] = [
   },
 ];
 
-export function findMatterCreateEntry(
-  type: string
-): MatterCreateEntry | undefined {
+export function findMatterCreateEntry(type: string): MatterCreateEntry | undefined {
   return MATTER_CREATE_ENTRIES.find((e) => e.type === type);
 }
 

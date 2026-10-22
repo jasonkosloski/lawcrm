@@ -54,7 +54,14 @@ describe("TriageCard", () => {
               key: "tasks",
               label: "Your tasks",
               rows: [
-                { id: "t1", title: "Call back", context: null, href: null, dueDate: null, days: null },
+                {
+                  id: "t1",
+                  title: "Call back",
+                  context: null,
+                  href: null,
+                  dueDate: null,
+                  days: null,
+                },
               ],
             }),
           ],

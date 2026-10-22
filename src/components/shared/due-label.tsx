@@ -45,13 +45,7 @@ export function DueLabel({
   // Today and Tomorrow say the date already; elsewhere lead with it.
   const showDate = dueDate && days !== 0 && days !== 1;
   return (
-    <span
-      className={cn(
-        "whitespace-nowrap text-2xs tabular-nums",
-        TONE[tone],
-        className
-      )}
-    >
+    <span className={cn("whitespace-nowrap text-2xs tabular-nums", TONE[tone], className)}>
       {showDate && (
         <span className={tone === "muted" ? "text-ink-3" : undefined}>
           {formatDateOnly(dueDate, "short")}

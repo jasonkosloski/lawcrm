@@ -17,7 +17,7 @@ describe("allDayDropSchedule", () => {
         startTimeIso: iso("2026-04-13T00:00:00Z"), // Mon
         endTimeIso: iso("2026-04-15T00:00:00Z"), // Wed
       },
-      "2026-04-16"
+      "2026-04-16",
     );
     expect(r?.isAllDay).toBe(true);
     expect(r?.start.toISOString()).toBe("2026-04-16T00:00:00.000Z");
@@ -32,8 +32,8 @@ describe("allDayDropSchedule", () => {
           startTimeIso: iso("2026-04-13T00:00:00Z"),
           endTimeIso: iso("2026-04-15T00:00:00Z"),
         },
-        "2026-04-13"
-      )
+        "2026-04-13",
+      ),
     ).toBeNull();
   });
 
@@ -44,7 +44,7 @@ describe("allDayDropSchedule", () => {
         startTimeIso: iso("2026-04-13T15:00:00Z"),
         endTimeIso: iso("2026-04-13T16:00:00Z"),
       },
-      "2026-04-14"
+      "2026-04-14",
     );
     expect(r?.start.toISOString()).toBe("2026-04-14T00:00:00.000Z");
     expect(r?.end.toISOString()).toBe("2026-04-14T00:00:00.000Z");
@@ -58,8 +58,8 @@ describe("allDayDropSchedule", () => {
           startTimeIso: iso("2026-04-13T15:00:00Z"),
           endTimeIso: iso("2026-04-13T16:00:00Z"),
         },
-        "2026-04-13"
-      )
+        "2026-04-13",
+      ),
     ).not.toBeNull();
   });
 });

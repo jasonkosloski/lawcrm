@@ -101,22 +101,16 @@ export function AttendeePicker({
                   <span className="text-ink truncate flex items-center gap-1.5">
                     {a.name}
                     {a.kind === "user" && a.jobTitle && (
-                      <span className="text-2xs text-ink-4 font-normal">
-                        — {a.jobTitle}
-                      </span>
+                      <span className="text-2xs text-ink-4 font-normal">— {a.jobTitle}</span>
                     )}
                     {a.kind === "contact" && a.contactType && (
                       <span className="text-2xs text-ink-4 font-normal">
-                        ·{" "}
-                        {ATTENDEE_TYPE_LABEL[a.contactType] ?? a.contactType}
+                        · {ATTENDEE_TYPE_LABEL[a.contactType] ?? a.contactType}
                       </span>
                     )}
                   </span>
                   {a.email && (
-                    <EmailLink
-                      email={a.email}
-                      className="text-2xs text-ink-4 font-mono"
-                    />
+                    <EmailLink email={a.email} className="text-2xs text-ink-4 font-mono" />
                   )}
                 </div>
               </div>
@@ -145,10 +139,7 @@ export function AttendeePicker({
           ))}
         </ul>
       )}
-      <AttendeeAutocomplete
-        existing={value}
-        onPick={append}
-      />
+      <AttendeeAutocomplete existing={value} onPick={append} />
     </div>
   );
 }
@@ -214,8 +205,7 @@ function AttendeeAutocomplete({
   // An empty or since-edited query has none, so deleting "a" and typing
   // "b" never offers (or lets Enter pick) the old "a" suggestions while
   // the "b" response is still in flight.
-  const results =
-    trimmedQuery.length > 0 && fetched.q === trimmedQuery ? fetched.rows : [];
+  const results = trimmedQuery.length > 0 && fetched.q === trimmedQuery ? fetched.rows : [];
 
   // Compute already-picked ids so the search action excludes
   // duplicates on the server. Names + emails alone aren't
@@ -235,11 +225,7 @@ function AttendeeAutocomplete({
     if (trimmed.length === 0) return;
     const t = setTimeout(async () => {
       try {
-        const r = await searchAttendeesAction(
-          trimmed,
-          excludeUserIds,
-          excludeContactIds
-        );
+        const r = await searchAttendeesAction(trimmed, excludeUserIds, excludeContactIds);
         if (latestQueryRef.current !== trimmed) return; // stale response
         setFetched({ q: trimmed, rows: r });
         setFocusedIdx(0);
@@ -274,9 +260,7 @@ function AttendeeAutocomplete({
   const emailLooksValid = isLenientEmail(trimmedEmail);
   // Show "Add new" option whenever the typed text doesn't have
   // an exact case-insensitive name match in the results.
-  const exactMatchExists = results.some(
-    (r) => r.name.toLowerCase() === trimmedQuery.toLowerCase()
-  );
+  const exactMatchExists = results.some((r) => r.name.toLowerCase() === trimmedQuery.toLowerCase());
   const showAddNew = trimmedQuery.length > 0 && !exactMatchExists;
   // The arbitrary-attendee path creates a real Contact row, so
   // it requires an email. Without one the picker still shows
@@ -337,10 +321,7 @@ function AttendeeAutocomplete({
     clearInputs();
   };
 
-  const handleKeyDown = (
-    e: React.KeyboardEvent<HTMLInputElement>,
-    isEmailField: boolean
-  ) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, isEmailField: boolean) => {
     if (e.key === "Enter" && isEmailField) {
       // In the email box Enter means "add the typed contact", never
       // "pick the highlighted suggestion" — otherwise typing a new
@@ -405,9 +386,7 @@ function AttendeeAutocomplete({
           aria-autocomplete="list"
           aria-controls={dropdownOpen ? listboxId : undefined}
           aria-activedescendant={
-            dropdownOpen
-              ? optionId(Math.min(focusedIdx, totalRows - 1))
-              : undefined
+            dropdownOpen ? optionId(Math.min(focusedIdx, totalRows - 1)) : undefined
           }
         />
         <input
@@ -438,9 +417,7 @@ function AttendeeAutocomplete({
               onClick={() => pickResult(r)}
               className={cn(
                 "px-2.5 py-1.5 cursor-pointer flex items-center gap-2",
-                i === focusedIdx
-                  ? "bg-brand-tint"
-                  : "hover:bg-paper-2"
+                i === focusedIdx ? "bg-brand-tint" : "hover:bg-paper-2",
               )}
             >
               <ResultAvatar result={r} />
@@ -470,17 +447,11 @@ function AttendeeAutocomplete({
                 addNewEnabled
                   ? cn(
                       "cursor-pointer",
-                      focusedIdx === results.length
-                        ? "bg-brand-tint"
-                        : "hover:bg-paper-2"
+                      focusedIdx === results.length ? "bg-brand-tint" : "hover:bg-paper-2",
                     )
-                  : "cursor-not-allowed opacity-60"
+                  : "cursor-not-allowed opacity-60",
               )}
-              title={
-                addNewEnabled
-                  ? undefined
-                  : "Email is required to create a new contact"
-              }
+              title={addNewEnabled ? undefined : "Email is required to create a new contact"}
             >
               <span className="shrink-0 w-6 h-6 rounded-full bg-paper-2 text-ink-3 text-2xs font-mono inline-flex items-center justify-center border border-dashed border-line">
                 +
@@ -535,6 +506,6 @@ export function serializeAttendees(list: EditableAttendee[]): string {
       contactId: a.contactId ?? "",
       name: a.name,
       email: a.email,
-    }))
+    })),
   );
 }

@@ -42,19 +42,12 @@ describe("LogTimeOnCommButton — dialog title matches source kind", () => {
     ["default", MESSENGER_SOURCE, "Log time on message"],
     ["compact", EMAIL_SOURCE, "Log time on email"],
     ["compact", MESSENGER_SOURCE, "Log time on message"],
-  ] as const)(
-    "%s variant with %o opens a dialog titled '%s'",
-    async (variant, source, title) => {
-      const user = setupUser();
-      render(
-        <LogTimeOnCommButton source={source} isFiled variant={variant} />
-      );
+  ] as const)("%s variant with %o opens a dialog titled '%s'", async (variant, source, title) => {
+    const user = setupUser();
+    render(<LogTimeOnCommButton source={source} isFiled variant={variant} />);
 
-      await user.click(screen.getByRole("button", { name: /log time/i }));
+    await user.click(screen.getByRole("button", { name: /log time/i }));
 
-      expect(
-        await screen.findByRole("heading", { name: title })
-      ).toBeInTheDocument();
-    }
-  );
+    expect(await screen.findByRole("heading", { name: title })).toBeInTheDocument();
+  });
 });

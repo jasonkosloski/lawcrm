@@ -37,7 +37,7 @@ import { revokeGoogleToken } from "@/lib/google/oauth";
 import { parseAccessTokenEnvelope } from "@/lib/google/gmail-client";
 
 export async function disconnectEmailAccount(
-  accountId: string
+  accountId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const userId = await getCurrentUserId();
 
@@ -59,9 +59,7 @@ export async function disconnectEmailAccount(
   // either token of a grant revokes the grant; prefer the refresh
   // token since the access token may already be expired.
   const revocable =
-    account.refreshToken ??
-    parseAccessTokenEnvelope(account.accessToken)?.token ??
-    null;
+    account.refreshToken ?? parseAccessTokenEnvelope(account.accessToken)?.token ?? null;
   if (revocable) {
     await revokeGoogleToken(revocable);
   }

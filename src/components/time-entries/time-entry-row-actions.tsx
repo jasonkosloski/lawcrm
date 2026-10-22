@@ -37,16 +37,10 @@ import {
   TIME_ENTRY_STATUS_LABEL as STATUS_LABEL,
   type TimeEntryStatus,
 } from "@/lib/constants/time-entry-status";
-import {
-  deleteTimeEntry,
-  setTimeEntryStatus,
-} from "@/app/actions/time-entries";
+import { deleteTimeEntry, setTimeEntryStatus } from "@/app/actions/time-entries";
 import { formatHours } from "@/lib/time-entry-constants";
 import { confirmAction, notifyError } from "@/lib/feedback";
-import {
-  EditTimeEntryDialog,
-  type EditableTimeEntry,
-} from "./edit-time-entry-dialog";
+import { EditTimeEntryDialog, type EditableTimeEntry } from "./edit-time-entry-dialog";
 
 export function TimeEntryRowMenu({
   entry,
@@ -67,10 +61,7 @@ export function TimeEntryRowMenu({
   const onSelectStatus = (next: string) => {
     if (next === entry.status) return;
     startTransition(async () => {
-      const result = await setTimeEntryStatus(
-        entry.id,
-        next as TimeEntryStatus
-      );
+      const result = await setTimeEntryStatus(entry.id, next as TimeEntryStatus);
       // The radio group is controlled by entry.status, so a refusal
       // just snaps back — say why (billed by invoice generation,
       // still on an invoice, changed in another tab…).
@@ -119,10 +110,7 @@ export function TimeEntryRowMenu({
         <DropdownMenuContent align="end" className="min-w-44">
           {canEdit && (
             <>
-              <DropdownMenuItem
-                disabled={locked}
-                onClick={() => setEditOpen(true)}
-              >
+              <DropdownMenuItem disabled={locked} onClick={() => setEditOpen(true)}>
                 <Pencil />
                 Edit
               </DropdownMenuItem>
@@ -131,19 +119,14 @@ export function TimeEntryRowMenu({
                 <DropdownMenuLabel>
                   {locked ? "Status (on an invoice)" : "Set status"}
                 </DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={entry.status}
-                  onValueChange={onSelectStatus}
-                >
+                <DropdownMenuRadioGroup value={entry.status} onValueChange={onSelectStatus}>
                   {TIME_ENTRY_STATUSES.map((s) => (
                     <DropdownMenuRadioItem
                       key={s}
                       value={s}
                       // Only invoice generation sets "billed"; a
                       // billed entry's status moves via its invoice.
-                      disabled={
-                        locked || (s === "billed" && entry.status !== "billed")
-                      }
+                      disabled={locked || (s === "billed" && entry.status !== "billed")}
                     >
                       {STATUS_LABEL[s]}
                     </DropdownMenuRadioItem>
@@ -154,11 +137,7 @@ export function TimeEntryRowMenu({
           )}
           {canEdit && canDelete && <DropdownMenuSeparator />}
           {canDelete && (
-            <DropdownMenuItem
-              variant="destructive"
-              disabled={locked}
-              onClick={onDelete}
-            >
+            <DropdownMenuItem variant="destructive" disabled={locked} onClick={onDelete}>
               <Trash2 />
               Delete
             </DropdownMenuItem>
@@ -166,13 +145,7 @@ export function TimeEntryRowMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {canEdit && (
-        <EditTimeEntryDialog
-          open={editOpen}
-          onOpenChange={setEditOpen}
-          entry={entry}
-        />
-      )}
+      {canEdit && <EditTimeEntryDialog open={editOpen} onOpenChange={setEditOpen} entry={entry} />}
     </>
   );
 }

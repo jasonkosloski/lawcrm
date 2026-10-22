@@ -35,11 +35,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { deleteFlaggedMoment } from "@/app/actions/flagged-moments";
 import { confirmAction } from "@/lib/feedback";
-import {
-  FLAG_NOT_FOUND,
-  flagAnchorKind,
-  flagAnchorLabel,
-} from "@/lib/flag-anchor";
+import { FLAG_NOT_FOUND, flagAnchorKind, flagAnchorLabel } from "@/lib/flag-anchor";
 import { FlagCategoryChip } from "./flag-category-chip";
 import { FlagComposer, type ComposerFlag } from "./flag-composer";
 
@@ -110,9 +106,7 @@ export function MomentsRail({
       } catch (err) {
         unstable_rethrow(err); // redirects / not-found are not failures
         console.error("Flag delete failed", err);
-        setDeleteError(
-          "Couldn't delete the flag — check your connection and try again.",
-        );
+        setDeleteError("Couldn't delete the flag — check your connection and try again.");
       } finally {
         setDeletingId(null);
       }
@@ -165,13 +159,9 @@ export function MomentsRail({
             <>
               <div className="flex flex-wrap items-center gap-1.5">
                 <FlagCategoryChip category={m.category} />
-                <span className="min-w-0 truncate font-mono text-2xs text-brand-700">
-                  {label}
-                </span>
+                <span className="min-w-0 truncate font-mono text-2xs text-brand-700">{label}</span>
               </div>
-              <div className="mt-1 text-xs leading-snug text-ink-2">
-                {m.description}
-              </div>
+              <div className="mt-1 text-xs leading-snug text-ink-2">{m.description}</div>
             </>
           );
 

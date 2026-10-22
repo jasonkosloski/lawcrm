@@ -66,10 +66,7 @@ import {
   optionalRecordAccessClause,
 } from "@/lib/matter-access";
 import { leadAccessWhere } from "@/lib/lead-access";
-import {
-  SNIPPET_MARK_END,
-  SNIPPET_MARK_START,
-} from "@/components/search/snippet";
+import { SNIPPET_MARK_END, SNIPPET_MARK_START } from "@/components/search/snippet";
 
 // ── Public shapes ───────────────────────────────────────────────────────
 
@@ -163,10 +160,7 @@ const EMAIL_SCAN_PAGE = 50;
  *  context, ellipses when truncated, original casing preserved.
  *  Null when text is empty or the query doesn't occur (caller then
  *  tries the next field). */
-export function makeSnippet(
-  text: string | null | undefined,
-  query: string
-): string | null {
+export function makeSnippet(text: string | null | undefined, query: string): string | null {
   if (!text) return null;
   const idx = text.toLowerCase().indexOf(query.toLowerCase());
   if (idx === -1) return null;
@@ -220,14 +214,14 @@ export type GlobalSearchOptions = {
 
 export async function globalSearch(
   rawQuery: string,
-  opts?: GlobalSearchOptions
+  opts?: GlobalSearchOptions,
 ): Promise<GlobalSearchResult> {
   const q = normalizeSearchQuery(rawQuery);
   if (q.length < SEARCH_MIN_QUERY_LENGTH) return { query: q, groups: [] };
 
   const take = Math.min(
     Math.max(1, opts?.take ?? (opts?.type ? SEARCH_EXPANDED_TAKE : SEARCH_GROUP_TAKE)),
-    SEARCH_EXPANDED_TAKE
+    SEARCH_EXPANDED_TAKE,
   );
   const viewerId = await getCurrentUserId();
   const qLower = q.toLowerCase();
@@ -244,9 +238,7 @@ export async function globalSearch(
    *  & < > " is stored entity-encoded, so also try the encoded form. */
   const qHtml = escapeHtmlText(q);
   const ciHtml: Array<{ contains: string; mode: "insensitive" }> =
-    qHtml === q
-      ? [ci]
-      : [ci, { contains: escapeLike(qHtml), mode: "insensitive" as const }];
+    qHtml === q ? [ci] : [ci, { contains: escapeLike(qHtml), mode: "insensitive" as const }];
 
   // ── Per-type searchers ────────────────────────────────────────────
   // Each returns a full SearchGroup. They are invoked together in
@@ -346,13 +338,7 @@ export async function globalSearch(
     // leads only for their team (ADR-049).
     const where = {
       ...accessLead,
-      OR: [
-        { name: ci },
-        { email: ci },
-        { summary: ci },
-        { injuries: ci },
-        { location: ci },
-      ],
+      OR: [{ name: ci }, { email: ci }, { summary: ci }, { injuries: ci }, { location: ci }],
     };
     const [rows, total] = await Promise.all([
       prisma.lead.findMany({
@@ -444,9 +430,7 @@ export async function globalSearch(
             : n.leadId
               ? `/intake/${n.leadId}/notes`
               : `/search`,
-          context:
-            n.matter?.name ??
-            (n.lead ? `Intake · ${n.lead.name}` : "Intake"),
+          context: n.matter?.name ?? (n.lead ? `Intake · ${n.lead.name}` : "Intake"),
         });
       }
       if (hits.length >= take || rows.length < NOTE_SCAN_PAGE) break;
@@ -499,8 +483,7 @@ export async function globalSearch(
             // The viewer route, not the tab root: the Documents tab lists
             // one folder at a time, so a file in a subfolder isn't there.
             href: `${base}/documents/${d.id}`,
-            context:
-              d.matter?.name ?? (d.lead ? `Intake · ${d.lead.name}` : "Intake"),
+            context: d.matter?.name ?? (d.lead ? `Intake · ${d.lead.name}` : "Intake"),
           },
         ];
       }),
@@ -571,13 +554,9 @@ export async function globalSearch(
             title: d.name,
             snippet: makeSnippet(r.text, q),
             href: `${base}/documents/${d.id}?t=${Math.floor(r.startSeconds)}`,
-            context:
-              d.matter?.name ?? (d.lead ? `Intake · ${d.lead.name}` : "Intake"),
+            context: d.matter?.name ?? (d.lead ? `Intake · ${d.lead.name}` : "Intake"),
             documentId: d.id,
-            speakerName:
-              typeof mapped === "string" && mapped
-                ? mapped
-                : `Speaker ${r.speaker}`,
+            speakerName: typeof mapped === "string" && mapped ? mapped : `Speaker ${r.speaker}`,
             startSeconds: r.startSeconds,
           },
         ];
@@ -622,8 +601,7 @@ export async function globalSearch(
           : t.lead
             ? `/intake/${t.lead.id}/tasks`
             : null,
-        context:
-          t.matter?.name ?? (t.lead ? `Intake · ${t.lead.name}` : "Firm-wide"),
+        context: t.matter?.name ?? (t.lead ? `Intake · ${t.lead.name}` : "Firm-wide"),
       })),
     };
   };
@@ -703,14 +681,11 @@ export async function globalSearch(
         viewerId,
         createdById: e.createdById,
         eventVisibility: e.visibility,
-        creatorDefaultEventVisibility:
-          e.createdBy?.defaultEventVisibility ?? null,
+        creatorDefaultEventVisibility: e.createdBy?.defaultEventVisibility ?? null,
         matterId: e.matter?.id ?? null,
-        attendeeUserIds: e.attendees
-          .map((a) => a.userId)
-          .filter((id): id is string => !!id),
+        attendeeUserIds: e.attendees.map((a) => a.userId).filter((id): id is string => !!id),
         matterTeamUserIds: e.matter?.teamMembers.map((m) => m.userId) ?? [],
-      })
+      }),
     );
     return {
       type: "event",
@@ -722,8 +697,7 @@ export async function globalSearch(
         snippet: makeSnippet(e.description, q) ?? makeSnippet(e.location, q),
         // ?event= drives the calendar's URL-driven detail modal.
         href: `/calendar?event=${e.id}`,
-        context:
-          e.matter?.name ?? (e.lead ? `Intake · ${e.lead.name}` : null),
+        context: e.matter?.name ?? (e.lead ? `Intake · ${e.lead.name}` : null),
       })),
     };
   };
@@ -752,11 +726,7 @@ export async function globalSearch(
           ? []
           : [{ OR: [{ leadId: null }, { lead: emailLeadWall }] }]),
         {
-          OR: [
-            { subject: ci },
-            { snippet: ci },
-            { messages: { some: bodyMatch } },
-          ],
+          OR: [{ subject: ci }, { snippet: ci }, { messages: { some: bodyMatch } }],
         },
       ],
     };
@@ -790,7 +760,7 @@ export async function globalSearch(
       });
       const visibleMatters = await filterAccessibleMatterIds(
         viewerId,
-        rows.flatMap((r) => (r.matterId ? [r.matterId] : []))
+        rows.flatMap((r) => (r.matterId ? [r.matterId] : [])),
       );
       for (const t of rows) {
         if (hits.length >= take) break;
@@ -811,11 +781,7 @@ export async function globalSearch(
           // real match still surfaces.
           let skip = t.messages.length;
           let more = t.messages.length >= EMAIL_BODY_CANDIDATES;
-          for (
-            let extra = 0;
-            !bodySnippet && more && extra < EMAIL_BODY_MAX_EXTRA_PAGES;
-            extra++
-          ) {
+          for (let extra = 0; !bodySnippet && more && extra < EMAIL_BODY_MAX_EXTRA_PAGES; extra++) {
             const older = await prisma.emailMessage.findMany({
               where: { threadId: t.id, ...bodyMatch },
               orderBy: [{ sentAt: "desc" }, { id: "desc" }],
@@ -838,10 +804,7 @@ export async function globalSearch(
           title: t.subject || "(no subject)",
           snippet: snippetCol ?? bodySnippet,
           href: `/communication?view=email&thread=${t.id}`,
-          context:
-            t.matterId && !visibleMatters.has(t.matterId)
-              ? null
-              : (t.matter?.name ?? null),
+          context: t.matterId && !visibleMatters.has(t.matterId) ? null : (t.matter?.name ?? null),
         });
       }
       if (hits.length >= take || rows.length < EMAIL_SCAN_PAGE) break;
@@ -958,9 +921,7 @@ export async function globalSearch(
           type: "time",
           id: t.id,
           title: clip(t.activity),
-          snippet:
-            makeSnippet(t.activity, q) ??
-            makeSnippet(t.narrative, q),
+          snippet: makeSnippet(t.activity, q) ?? makeSnippet(t.narrative, q),
           // Intake entries route to the lead's Time tab; the
           // no-scope fallback (invariant breach) degrades to the
           // standalone /time page rather than a broken matter link.
@@ -969,9 +930,7 @@ export async function globalSearch(
             : t.leadId
               ? `/intake/${t.leadId}/time`
               : `/time`,
-          context:
-            t.matter?.name ??
-            (t.lead ? `Intake · ${t.lead.name}` : "Intake"),
+          context: t.matter?.name ?? (t.lead ? `Intake · ${t.lead.name}` : "Intake"),
         };
       }),
     };
@@ -986,11 +945,7 @@ export async function globalSearch(
       AND: [
         ...accessOpt,
         {
-          OR: [
-            { subject: ci },
-            { description: ci },
-            { custodian: { name: ci } },
-          ],
+          OR: [{ subject: ci }, { description: ci }, { custodian: { name: ci } }],
         },
       ],
     };
@@ -1036,8 +991,7 @@ export async function globalSearch(
               makeSnippet(r.description, q) ??
               makeSnippet(r.custodian.name, q),
             href: `${base}/records/${r.id}`,
-            context:
-              r.matter?.name ?? (r.lead ? `Intake \u00b7 ${r.lead.name}` : "Intake"),
+            context: r.matter?.name ?? (r.lead ? `Intake \u00b7 ${r.lead.name}` : "Intake"),
           },
         ];
       }),
@@ -1062,9 +1016,7 @@ export async function globalSearch(
 
   // Every enabled type is issued together (on the one-connection
   // production pool the statements still run back to back).
-  const enabledTypes = SEARCH_HIT_TYPES.filter(
-    (t) => !opts?.type || opts.type === t
-  );
+  const enabledTypes = SEARCH_HIT_TYPES.filter((t) => !opts?.type || opts.type === t);
   const groups = await Promise.all(enabledTypes.map((t) => SEARCHERS[t]()));
 
   return {

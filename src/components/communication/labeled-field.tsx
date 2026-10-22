@@ -7,18 +7,10 @@
 
 import type { ReactNode } from "react";
 
-export function LabeledField({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+export function LabeledField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-2xs font-medium text-ink-3 shrink-0 w-10">
-        {label}
-      </span>
+      <span className="text-2xs font-medium text-ink-3 shrink-0 w-10">{label}</span>
       <div className="flex-1 min-w-0">{children}</div>
     </div>
   );

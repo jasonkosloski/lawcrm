@@ -26,21 +26,10 @@ import { assertLeadAccess } from "@/lib/lead-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
-import {
-  getLeadEvents,
-  type MatterEventRow,
-} from "@/lib/queries/matter-detail";
-import {
-  getCalendarEventById,
-  getEventNotes,
-  getEventTimeEntries,
-} from "@/lib/queries/calendar";
+import { getLeadEvents, type MatterEventRow } from "@/lib/queries/matter-detail";
+import { getCalendarEventById, getEventNotes, getEventTimeEntries } from "@/lib/queries/calendar";
 import { EVENT_TYPE_LABEL } from "@/lib/constants/calendar-event-type";
-import {
-  dateKeyInTz,
-  formatDate,
-  formatDateOnly,
-} from "@/lib/format-date";
+import { dateKeyInTz, formatDate, formatDateOnly } from "@/lib/format-date";
 import { Badge } from "@/components/ui/badge";
 import { firstParam } from "@/lib/search-params";
 
@@ -54,8 +43,7 @@ export default async function LeadEventsPage({
   await assertLeadAccess(id);
   const sp = await searchParams;
   const rawEventParam = firstParam(sp.event);
-  const requestedEventId =
-    typeof rawEventParam === "string" ? rawEventParam : null;
+  const requestedEventId = typeof rawEventParam === "string" ? rawEventParam : null;
 
   const tz = await getCurrentUserTimeZone();
   const [lead, events, canCreateEvent] = await Promise.all([
@@ -77,9 +65,7 @@ export default async function LeadEventsPage({
   // resolves before its notes / time: getCalendarEventById scrubs a
   // Busy event, and the other two have no visibility check of their own.
   const eventId =
-    requestedEventId && events.some((e) => e.id === requestedEventId)
-      ? requestedEventId
-      : null;
+    requestedEventId && events.some((e) => e.id === requestedEventId) ? requestedEventId : null;
   const selectedEvent = eventId ? await getCalendarEventById(eventId) : null;
   const [selectedEventNotes, selectedEventTime] =
     selectedEvent?.viewerCanSeeDetails && eventId
@@ -94,8 +80,8 @@ export default async function LeadEventsPage({
       {isConverted ? (
         <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-paper-2 px-3 py-2.5">
           <p className="text-xs text-ink-3">
-            This lead converted — its intake events were carried forward to
-            the matter. Schedule new events there.
+            This lead converted — its intake events were carried forward to the matter. Schedule new
+            events there.
           </p>
           {lead.convertedMatterId && (
             <Link
@@ -108,18 +94,14 @@ export default async function LeadEventsPage({
           )}
         </div>
       ) : (
-        canCreateEvent && (
-          <EventComposer scope={{ kind: "lead", leadId: id }} siblingKinds={[]} />
-        )
+        canCreateEvent && <EventComposer scope={{ kind: "lead", leadId: id }} siblingKinds={[]} />
       )}
 
       {events.length === 0 ? (
         <EmptyState
           icon={CalendarDays}
           title="No intake events yet"
-          description={
-            canCreateEvent && !isConverted ? "Schedule one above." : undefined
-          }
+          description={canCreateEvent && !isConverted ? "Schedule one above." : undefined}
           className="py-6"
         />
       ) : null}
@@ -127,9 +109,7 @@ export default async function LeadEventsPage({
       {upcoming.length > 0 && (
         <EventSection title="Upcoming" events={upcoming} leadId={id} tz={tz} />
       )}
-      {past.length > 0 && (
-        <EventSection title="Past" events={past} leadId={id} tz={tz} />
-      )}
+      {past.length > 0 && <EventSection title="Past" events={past} leadId={id} tz={tz} />}
 
       {selectedEvent && (
         <EventDetailModal
@@ -156,9 +136,7 @@ function EventSection({
   return (
     <section>
       <div className="flex items-center gap-2 mb-2">
-        <h2 className="text-xs font-semibold text-ink-2">
-          {title}
-        </h2>
+        <h2 className="text-xs font-semibold text-ink-2">{title}</h2>
         <span className="text-2xs font-mono text-ink-4">{events.length}</span>
       </div>
       <Card className="p-0 overflow-hidden">
@@ -191,8 +169,7 @@ function LeadEventRow({
   const dateLabel = event.isAllDay
     ? formatDateOnly(event.startTime, "short_weekday")
     : formatDate(event.startTime, "short_weekday", tz);
-  const typeLabel =
-    (EVENT_TYPE_LABEL as Record<string, string>)[event.type] ?? event.type;
+  const typeLabel = (EVENT_TYPE_LABEL as Record<string, string>)[event.type] ?? event.type;
 
   const body = (
     <div className="flex items-center gap-3 px-4 py-2.5">
@@ -205,9 +182,7 @@ function LeadEventRow({
         <span className="text-2xs font-mono text-ink-4">{timeLabel}</span>
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium text-ink truncate">
-          {event.title}
-        </div>
+        <div className="text-xs font-medium text-ink truncate">{event.title}</div>
         {event.viewerCanSeeDetails && event.location && (
           <div className="flex items-center gap-1 text-2xs text-ink-3 truncate">
             <MapPin size={10} className="shrink-0" />
@@ -215,11 +190,7 @@ function LeadEventRow({
           </div>
         )}
       </div>
-      {event.viewerCanSeeDetails && (
-        <Badge variant="neutral">
-          {typeLabel}
-        </Badge>
-      )}
+      {event.viewerCanSeeDetails && <Badge variant="neutral">{typeLabel}</Badge>}
     </div>
   );
 

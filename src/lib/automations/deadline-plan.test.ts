@@ -99,7 +99,7 @@ describe("calendar offsets (ADR-035)", () => {
   const at = (incident: string, offsetDays: number, offsetUnit: string) =>
     planDeadlineRules(
       [rule({ id: "r", offsetDays, offsetUnit })],
-      ctx({ incidentDate: new Date(`${incident}T00:00:00Z`) })
+      ctx({ incidentDate: new Date(`${incident}T00:00:00Z`) }),
     );
 
   test("N years/months land on the same calendar date, not N*365/30 days", () => {
@@ -123,8 +123,8 @@ describe("calendar offsets (ADR-035)", () => {
     expect(
       planDeadlineRules(
         [rule({ id: "r", offsetDays: 180 })],
-        ctx({ incidentDate: new Date("2026-01-15T00:00:00Z") })
-      ).planned[0].dueKey
+        ctx({ incidentDate: new Date("2026-01-15T00:00:00Z") }),
+      ).planned[0].dueKey,
     ).toBe("2026-07-14");
   });
 
@@ -145,7 +145,7 @@ describe("planDeadlineRules — anchors", () => {
   test("matter opened uses the day in the caller's TZ", () => {
     const { planned } = planDeadlineRules(
       [rule({ id: "r", anchor: "matter_opened", offsetDays: 14 })],
-      ctx()
+      ctx(),
     );
     expect(planned[0].anchorKey).toBe("2026-10-16");
     expect(planned[0].dueKey).toBe("2026-10-30");
@@ -156,7 +156,7 @@ describe("planDeadlineRules — anchors", () => {
     expect(planDeadlineRules([r], ctx()).unplanned[0].reason).toBe("needs_date");
     const { planned } = planDeadlineRules(
       [r],
-      ctx({ anchorDates: new Map([["svc", "2026-11-01"]]) })
+      ctx({ anchorDates: new Map([["svc", "2026-11-01"]]) }),
     );
     expect(planned[0].dueKey).toBe("2026-11-22");
   });
@@ -164,7 +164,7 @@ describe("planDeadlineRules — anchors", () => {
   test("missing incident date is reported, not guessed", () => {
     const { planned, unplanned } = planDeadlineRules(
       [rule({ id: "cgia", offsetDays: 182 })],
-      ctx({ incidentDate: null })
+      ctx({ incidentDate: null }),
     );
     expect(planned).toHaveLength(0);
     expect(unplanned[0].reason).toBe("no_incident_date");
@@ -173,7 +173,7 @@ describe("planDeadlineRules — anchors", () => {
   test("an explicit date overrides an unresolvable anchor", () => {
     const { planned } = planDeadlineRules(
       [rule({ id: "cgia", offsetDays: 10 })],
-      ctx({ incidentDate: null, anchorDates: new Map([["cgia", "2026-05-01"]]) })
+      ctx({ incidentDate: null, anchorDates: new Map([["cgia", "2026-05-01"]]) }),
     );
     expect(planned[0].dueKey).toBe("2026-05-11");
   });
@@ -184,7 +184,10 @@ describe("planDeadlineRules — absurd offsets", () => {
     // 36,500 years packed to days: the shape a bad stored rule has.
     const huge = packOffset({ amount: 36500, unit: "years", direction: "after" });
     expect(huge).toBeGreaterThan(MAX_OFFSET_DAYS);
-    const { planned, unplanned } = planDeadlineRules([rule({ id: "typo", offsetDays: huge })], ctx());
+    const { planned, unplanned } = planDeadlineRules(
+      [rule({ id: "typo", offsetDays: huge })],
+      ctx(),
+    );
     expect(planned).toHaveLength(0);
     expect(unplanned.map((u) => [u.rule.id, u.reason])).toEqual([["typo", "out_of_range"]]);
     const before = planDeadlineRules([rule({ id: "typo", offsetDays: -huge })], ctx());
@@ -192,7 +195,10 @@ describe("planDeadlineRules — absurd offsets", () => {
   });
 
   test("a rule counting from an out-of-range rule is unplanned too", () => {
-    const huge = rule({ id: "huge", offsetDays: packOffset({ amount: 20000, unit: "years", direction: "after" }) });
+    const huge = rule({
+      id: "huge",
+      offsetDays: packOffset({ amount: 20000, unit: "years", direction: "after" }),
+    });
     const dep = rule({ id: "dep", anchor: "rule", anchorRuleId: "huge", offsetDays: 1 });
     const { planned, unplanned } = planDeadlineRules([huge, dep], ctx());
     expect(planned).toHaveLength(0);
@@ -200,7 +206,10 @@ describe("planDeadlineRules — absurd offsets", () => {
   });
 
   test("the largest allowed offset still plans", () => {
-    const { planned } = planDeadlineRules([rule({ id: "max", offsetDays: MAX_OFFSET_DAYS })], ctx());
+    const { planned } = planDeadlineRules(
+      [rule({ id: "max", offsetDays: MAX_OFFSET_DAYS })],
+      ctx(),
+    );
     expect(planned[0].dueKey).toBe("2126-02-14");
   });
 });
@@ -212,7 +221,7 @@ describe("planDeadlineRules — rule anchors", () => {
   test("chains within a batch regardless of input order", () => {
     const { planned } = planDeadlineRules(
       [motions, trial],
-      ctx({ anchorDates: new Map([["trial", "2027-04-15"]]) })
+      ctx({ anchorDates: new Map([["trial", "2027-04-15"]]) }),
     );
     const byId = new Map(planned.map((p) => [p.rule.id, p.dueKey]));
     expect(byId.get("trial")).toBe("2027-04-15");
@@ -224,7 +233,7 @@ describe("planDeadlineRules — rule anchors", () => {
   test("counts from a rule deadline already on the matter", () => {
     const { planned } = planDeadlineRules(
       [motions],
-      ctx({ existingRuleDeadlines: new Map([["trial", deadlineDateFromKey("2027-04-15")]]) })
+      ctx({ existingRuleDeadlines: new Map([["trial", deadlineDateFromKey("2027-04-15")]]) }),
     );
     expect(planned[0].dueKey).toBe("2027-03-16");
   });

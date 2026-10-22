@@ -17,17 +17,12 @@ export function PulseCard({ pulse }: { pulse: FirmPulse | null }) {
           </span>
         </div>
         <div className="h-1.5 overflow-hidden rounded-full bg-paper-2">
-          <div
-            className="h-full rounded-full bg-brand-700"
-            style={{ width: `${mtdPct}%` }}
-          />
+          <div className="h-full rounded-full bg-brand-700" style={{ width: `${mtdPct}%` }} />
         </div>
         <div className="flex items-center justify-between">
           <span className="text-xs text-ink-3">Collection rate</span>
           <span className="text-sm font-medium text-ink tabular-nums">
-            {pulse.collectionRate > 0
-              ? `${pulse.collectionRate.toFixed(1)}%`
-              : "—"}
+            {pulse.collectionRate > 0 ? `${pulse.collectionRate.toFixed(1)}%` : "—"}
           </span>
         </div>
         <div className="flex items-center justify-between">

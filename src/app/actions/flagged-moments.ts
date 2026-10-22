@@ -131,21 +131,27 @@ const flagSchema = z
     // documents refuse — it can't stand in for the time.
     const kinds = [
       val.timeSeconds !== undefined,
-      val.pageNumber !== undefined ||
-        (val.quote !== undefined && val.timeSeconds === undefined),
+      val.pageNumber !== undefined || (val.quote !== undefined && val.timeSeconds === undefined),
     ].filter(Boolean).length;
     if (kinds > 1) {
       ctx.addIssue({
         code: "custom",
-        message:
-          "A flag carries at most one anchor kind — time, page, or quote",
+        message: "A flag carries at most one anchor kind — time, page, or quote",
       });
     }
     if (val.endPageNumber !== undefined) {
       if (val.pageNumber === undefined) {
-        ctx.addIssue({ code: "custom", path: ["endPageNumber"], message: "A page span needs a start page" });
+        ctx.addIssue({
+          code: "custom",
+          path: ["endPageNumber"],
+          message: "A page span needs a start page",
+        });
       } else if (val.endPageNumber <= val.pageNumber) {
-        ctx.addIssue({ code: "custom", path: ["endPageNumber"], message: "The span's last page must be after its first" });
+        ctx.addIssue({
+          code: "custom",
+          path: ["endPageNumber"],
+          message: "The span's last page must be after its first",
+        });
       } else if (val.endPageNumber - val.pageNumber + 1 > MAX_PDF_PAGE_SPAN) {
         ctx.addIssue({
           code: "custom",
@@ -194,26 +200,22 @@ function inputAnchorKind(data: ParsedFlag): FlagAnchorKind {
 
 /** The one ANCHORED kind each renderer accepts ("document" —
  *  anchorless — is accepted by every renderer and isn't listed). */
-const RENDERER_ANCHOR_KIND: Partial<Record<DocumentRenderer, FlagAnchorKind>> =
-  {
-    video: "time",
-    audio: "time",
-    pdf: "page",
-    docx: "quote",
-    text: "quote",
-    csv: "quote",
-    // Rendered as text in the page, so selections quote like Word.
-    spreadsheet: "quote",
-    eml: "quote",
-    msg: "quote",
-    // image / tiff / heic / doc_legacy / unsupported: anchorless only.
-  };
+const RENDERER_ANCHOR_KIND: Partial<Record<DocumentRenderer, FlagAnchorKind>> = {
+  video: "time",
+  audio: "time",
+  pdf: "page",
+  docx: "quote",
+  text: "quote",
+  csv: "quote",
+  // Rendered as text in the page, so selections quote like Word.
+  spreadsheet: "quote",
+  eml: "quote",
+  msg: "quote",
+  // image / tiff / heic / doc_legacy / unsupported: anchorless only.
+};
 
 /** null = the anchor fits this document; string = user-facing error. */
-function anchorFitError(
-  renderer: DocumentRenderer,
-  kind: FlagAnchorKind
-): string | null {
+function anchorFitError(renderer: DocumentRenderer, kind: FlagAnchorKind): string | null {
   if (kind === "document") return null; // anchorless flags any document
   const allowed = RENDERER_ANCHOR_KIND[renderer];
   if (allowed === kind) return null;
@@ -244,7 +246,7 @@ function anchorData(data: ParsedFlag) {
 
 export async function createFlaggedMoment(
   documentId: string,
-  input: FlagInput
+  input: FlagInput,
 ): Promise<FlagActionResult> {
   const userId = await requirePermission("evidence.flag.create");
   await assertChildMatterAccess("document", documentId);
@@ -304,7 +306,7 @@ function createTitle(
     pageNumber: number | null;
     endPageNumber: number | null;
     quote: string | null;
-  }
+  },
 ): string {
   switch (kind) {
     case "time":
@@ -326,7 +328,7 @@ function createTitle(
 
 export async function updateFlaggedMoment(
   flagId: string,
-  input: FlagInput
+  input: FlagInput,
 ): Promise<FlagActionResult> {
   // Authenticate before validating or touching the DB — an
   // unauthenticated caller must not get "Flag not found" /
@@ -373,8 +375,7 @@ export async function updateFlaggedMoment(
   if (existingKind !== nextKind) {
     return {
       ok: false,
-      error:
-        "A flag's anchor kind can't change — delete this flag and add a new one instead.",
+      error: "A flag's anchor kind can't change — delete this flag and add a new one instead.",
     };
   }
 
@@ -424,9 +425,7 @@ export async function updateFlaggedMoment(
 
 // ── Delete ──────────────────────────────────────────────────────────────
 
-export async function deleteFlaggedMoment(
-  flagId: string
-): Promise<FlagActionResult> {
+export async function deleteFlaggedMoment(flagId: string): Promise<FlagActionResult> {
   // Authenticate before any DB read (see updateFlaggedMoment).
   const actorId = await getCurrentUserId();
 
@@ -508,7 +507,7 @@ function editDetail(
     pageNumber: number | null;
     endPageNumber: number | null;
     quote: string | null;
-  }
+  },
 ): string {
   let detail = `${was.document?.name ?? ""} — was: ${was.description.slice(0, 60)} → now: ${now.description.slice(0, 60)}`;
   const before = flagAnchorLabel(was);

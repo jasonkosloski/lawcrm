@@ -52,8 +52,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const pinCount = (uid = userId) =>
-  prisma.userMatterPin.count({ where: { userId: uid, matterId } });
+const pinCount = (uid = userId) => prisma.userMatterPin.count({ where: { userId: uid, matterId } });
 
 describe("setMatterPin", () => {
   test("pins, and revalidates the layout tree", async () => {
@@ -105,9 +104,9 @@ describe("setMatterPin", () => {
 
   test("an unknown matter is not found (matter wall: unknown == hidden)", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    await expect(
-      setMatterPin("00000000-0000-0000-0000-000000000000", true)
-    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
+    await expect(setMatterPin("00000000-0000-0000-0000-000000000000", true)).rejects.toThrow(
+      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/,
+    );
     spy.mockRestore();
   });
 });

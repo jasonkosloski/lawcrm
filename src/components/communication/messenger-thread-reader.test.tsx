@@ -20,10 +20,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MessengerThreadReader } from "./messenger-thread-reader";
 import { currentUserHasPermission } from "@/lib/permission-check";
-import type {
-  MessengerItemRow,
-  MessengerThreadDetail,
-} from "@/lib/queries/messenger";
+import type { MessengerItemRow, MessengerThreadDetail } from "@/lib/queries/messenger";
 
 vi.mock("@/app/actions/follow-ups", () => ({
   setMessengerThreadFollowUp: vi.fn(),
@@ -69,13 +66,7 @@ vi.mock("./log-time-on-comm-button", () => ({
 vi.mock("./manual-call-actions", () => ({
   // Marker exposing the gating props — the real component pulls in
   // the deleteCallLog server action (prisma), not loadable here.
-  ManualCallActions: ({
-    canEdit,
-    canDelete,
-  }: {
-    canEdit: boolean;
-    canDelete: boolean;
-  }) => (
+  ManualCallActions: ({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean }) => (
     <span
       data-testid="manual-call-actions"
       data-can-edit={String(canEdit)}
@@ -87,18 +78,8 @@ vi.mock("./mark-thread-read", () => ({
   // Marker exposing the props so the mount test below can assert the
   // reader wires the right channel + thread id. The real island
   // imports server actions (prisma) — not loadable in happy-dom.
-  MarkThreadRead: ({
-    threadId,
-    channel,
-  }: {
-    threadId: string;
-    channel: string;
-  }) => (
-    <span
-      data-testid="mark-thread-read"
-      data-thread-id={threadId}
-      data-channel={channel}
-    />
+  MarkThreadRead: ({ threadId, channel }: { threadId: string; channel: string }) => (
+    <span data-testid="mark-thread-read" data-thread-id={threadId} data-channel={channel} />
   ),
 }));
 
@@ -163,9 +144,7 @@ beforeEach(() => {
 describe("VoicemailCard duration guard", () => {
   test("a 0-second voicemail renders no stray '0' in the header row", async () => {
     await renderReader({
-      thread: makeThread([
-        makeItem({ kind: "voicemail", body: null, callDurationSec: 0 }),
-      ]),
+      thread: makeThread([makeItem({ kind: "voicemail", body: null, callDurationSec: 0 })]),
     });
     const label = screen.getByText("Voicemail");
     // The buggy `{0 && ...}` rendered "Voicemail" + "0" + time.
@@ -174,9 +153,7 @@ describe("VoicemailCard duration guard", () => {
 
   test("a positive duration still renders formatted", async () => {
     await renderReader({
-      thread: makeThread([
-        makeItem({ kind: "voicemail", body: null, callDurationSec: 62 }),
-      ]),
+      thread: makeThread([makeItem({ kind: "voicemail", body: null, callDurationSec: 62 })]),
     });
     expect(screen.getByText("1m 2s")).toBeInTheDocument();
   });
@@ -282,9 +259,7 @@ describe("call labelling matches the shared isMissedCall predicate", () => {
 
   test("outbound no-answer is the firm's own call, not 'Missed call'", async () => {
     await renderReader({
-      thread: makeThread([
-        call({ direction: "outbound", callStatus: "no_answer" }),
-      ]),
+      thread: makeThread([call({ direction: "outbound", callStatus: "no_answer" })]),
     });
     expect(screen.queryByText(/Missed call/)).toBeNull();
     expect(screen.getByText("Outbound call, no answer")).toBeInTheDocument();
@@ -292,27 +267,21 @@ describe("call labelling matches the shared isMissedCall predicate", () => {
 
   test("inbound declined IS a missed call (list parity)", async () => {
     await renderReader({
-      thread: makeThread([
-        call({ direction: "inbound", callStatus: "declined" }),
-      ]),
+      thread: makeThread([call({ direction: "inbound", callStatus: "declined" })]),
     });
     expect(screen.getByText(/^Missed call/)).toBeInTheDocument();
   });
 
   test("inbound no-answer is a missed call", async () => {
     await renderReader({
-      thread: makeThread([
-        call({ direction: "inbound", callStatus: "no_answer" }),
-      ]),
+      thread: makeThread([call({ direction: "inbound", callStatus: "no_answer" })]),
     });
     expect(screen.getByText(/^Missed call/)).toBeInTheDocument();
   });
 
   test("an answered call with unknown duration shows no '0s'", async () => {
     await renderReader({
-      thread: makeThread([
-        call({ direction: "outbound", callStatus: "answered" }),
-      ]),
+      thread: makeThread([call({ direction: "outbound", callStatus: "answered" })]),
     });
     const label = screen.getByText(/^Outbound call/);
     expect(label.textContent).toBe("Outbound call");
@@ -345,30 +314,21 @@ describe("day dividers + full timestamps", () => {
       tz: "America/Denver",
     });
     const dividers = screen.getAllByRole("separator");
-    expect(dividers.map((d) => d.textContent)).toEqual([
-      "Mon, Jul 6, 2026",
-      "Tue, Jul 7, 2026",
-    ]);
+    expect(dividers.map((d) => d.textContent)).toEqual(["Mon, Jul 6, 2026", "Tue, Jul 7, 2026"]);
   });
 
   test("timestamps carry the full date and time as a tooltip", async () => {
     await renderReader({
-      thread: makeThread([
-        makeItem({ occurredAt: new Date("2026-07-07T02:05:00Z") }),
-      ]),
+      thread: makeThread([makeItem({ occurredAt: new Date("2026-07-07T02:05:00Z") })]),
       tz: "America/Denver",
     });
     const stamp = screen.getByText("8:05 PM");
-    expect(stamp).toHaveAttribute(
-      "title",
-      expect.stringContaining("July 6, 2026"),
-    );
+    expect(stamp).toHaveAttribute("title", expect.stringContaining("July 6, 2026"));
   });
 });
 
 describe("action affordances honour the viewer's permissions", () => {
-  const voicemail = () =>
-    makeItem({ kind: "voicemail", body: null, transcript: "Call me back" });
+  const voicemail = () => makeItem({ kind: "voicemail", body: null, transcript: "Call me back" });
 
   test("without time_entries.create the log-time buttons are not rendered", async () => {
     vi.mocked(currentUserHasPermission).mockImplementation(

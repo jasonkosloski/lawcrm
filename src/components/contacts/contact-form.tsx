@@ -18,14 +18,8 @@ import {
   TextField,
   TextareaField,
 } from "@/components/matters/captures/primary-fields";
-import {
-  CONTACT_TYPES,
-  CONTACT_TYPE_LABEL,
-} from "@/lib/contact-constants";
-import {
-  contactFormInitialState,
-  type ContactFormState,
-} from "@/lib/contact-form";
+import { CONTACT_TYPES, CONTACT_TYPE_LABEL } from "@/lib/contact-constants";
+import { contactFormInitialState, type ContactFormState } from "@/lib/contact-form";
 
 export type ContactFormValues = {
   name: string;
@@ -64,30 +58,25 @@ export function ContactForm({
    *  (edit flow), the page navigates to backHref on success. */
   redirectsOnSuccess,
 }: {
-  action: (
-    prev: ContactFormState,
-    formData: FormData
-  ) => Promise<ContactFormState>;
+  action: (prev: ContactFormState, formData: FormData) => Promise<ContactFormState>;
   initial?: Partial<ContactFormValues>;
   submitLabel: string;
   backHref: string;
   redirectsOnSuccess: boolean;
 }) {
   const router = useRouter();
-  const [state, formAction, isPending] = useActionState<
-    ContactFormState,
-    FormData
-  >(action, contactFormInitialState);
+  const [state, formAction, isPending] = useActionState<ContactFormState, FormData>(
+    action,
+    contactFormInitialState,
+  );
 
   const [v, setV] = useState<ContactFormValues>({
     ...EMPTY_VALUES,
     ...initial,
   });
 
-  const set = <K extends keyof ContactFormValues>(
-    key: K,
-    val: ContactFormValues[K]
-  ) => setV((prev) => ({ ...prev, [key]: val }));
+  const set = <K extends keyof ContactFormValues>(key: K, val: ContactFormValues[K]) =>
+    setV((prev) => ({ ...prev, [key]: val }));
 
   // Edit-flow success → bounce back.
   useEffect(() => {
@@ -214,10 +203,7 @@ export function ContactForm({
         )}
 
         <div className="flex items-center justify-end gap-2">
-          <Link
-            href={backHref}
-            className="text-xs text-ink-3 hover:text-ink px-3 py-1.5"
-          >
+          <Link href={backHref} className="text-xs text-ink-3 hover:text-ink px-3 py-1.5">
             Cancel
           </Link>
           <Button type="submit" disabled={isPending}>

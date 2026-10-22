@@ -11,13 +11,7 @@ import { cn } from "@/lib/utils";
 import type { FirmGoals, FirmProfile } from "@/lib/firm";
 import { formatDateOnly } from "@/lib/format-date";
 
-export function FirmReadView({
-  firm,
-  goals,
-}: {
-  firm: FirmProfile;
-  goals: FirmGoals;
-}) {
+export function FirmReadView({ firm, goals }: { firm: FirmProfile; goals: FirmGoals }) {
   const addressLines = [
     firm.addressLine1,
     firm.addressLine2,
@@ -63,11 +57,7 @@ export function FirmReadView({
       </Section>
 
       <Section label="Goals">
-        <Row
-          label="Daily hours goal"
-          value={`${goals.dailyHoursGoal.toFixed(1)}h`}
-          mono
-        />
+        <Row label="Daily hours goal" value={`${goals.dailyHoursGoal.toFixed(1)}h`} mono />
         <Row
           label="Monthly billable goal"
           value={`${goals.monthlyBillableGoal.toFixed(1)}h`}
@@ -78,18 +68,10 @@ export function FirmReadView({
   );
 }
 
-function Section({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-2xs font-medium text-ink-3">
-        {label}
-      </div>
+      <div className="text-2xs font-medium text-ink-3">{label}</div>
       <dl className="grid grid-cols-1 sm:grid-cols-[12rem_1fr] gap-y-0.5 sm:gap-y-1.5 text-xs">
         {children}
       </dl>
@@ -97,24 +79,11 @@ function Section({
   );
 }
 
-function Row({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string | null;
-  mono?: boolean;
-}) {
+function Row({ label, value, mono }: { label: string; value: string | null; mono?: boolean }) {
   return (
     <>
       <dt className="text-ink-4 mt-1.5 sm:mt-0">{label}</dt>
-      <dd
-        className={cn(
-          "min-w-0 break-words",
-          mono ? "text-ink font-mono" : "text-ink"
-        )}
-      >
+      <dd className={cn("min-w-0 break-words", mono ? "text-ink font-mono" : "text-ink")}>
         {value ?? "—"}
       </dd>
     </>

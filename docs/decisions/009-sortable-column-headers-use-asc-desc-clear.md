@@ -6,6 +6,7 @@
 **Context:** Matters list column headers are clickable sort toggles. Users expect a consistent interaction model across columns.
 
 **Decision:** Three-state cycle per column:
+
 1. First click — sort ascending (smallest-first / A-Z)
 2. Second click — sort descending
 3. Third click — clear sort (default ordering applies)

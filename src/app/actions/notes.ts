@@ -55,11 +55,7 @@ import { requiredCapturePermissions } from "@/lib/capture-permissions";
 import { resolveAutoAddTeam } from "@/lib/calendar-default-attendees";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { pushEventToGoogle } from "@/lib/google/google-calendar-push";
-import {
-  NOTE_TYPES,
-  REACTION_EMOJIS,
-  type NoteFormState,
-} from "@/lib/note-constants";
+import { NOTE_TYPES, REACTION_EMOJIS, type NoteFormState } from "@/lib/note-constants";
 import {
   createCaptureRecord,
   missingPermissions,
@@ -68,16 +64,9 @@ import {
 } from "@/lib/note-captures";
 import { noteToPlainText } from "@/lib/note-text";
 import { logActivity } from "@/lib/activity-log";
-import {
-  notePathsToRevalidate,
-  noteScopeOf,
-  type NoteScope,
-} from "@/lib/note-scope";
+import { notePathsToRevalidate, noteScopeOf, type NoteScope } from "@/lib/note-scope";
 import type { LeadStage } from "@/lib/constants/lead-stage";
-import {
-  isEffectivelyEmpty,
-  sanitizeUserHtml as sanitize,
-} from "@/lib/sanitize-html";
+import { isEffectivelyEmpty, sanitizeUserHtml as sanitize } from "@/lib/sanitize-html";
 import { assertLeadAccess } from "@/lib/lead-access";
 
 const noteSchema = z.object({
@@ -108,7 +97,7 @@ const CONVERTED = "converted" satisfies LeadStage;
 
 function revalidateNoteScope(
   scope: NoteScope,
-  opts: { calendarEventId?: string | null } = {}
+  opts: { calendarEventId?: string | null } = {},
 ): void {
   for (const path of notePathsToRevalidate(scope, opts)) revalidatePath(path);
 }
@@ -130,7 +119,7 @@ function notePreview(html: string): string {
 export async function createNote(
   matterId: string,
   _prev: NoteFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<NoteFormState> {
   await requirePermission("notes.create");
   await assertMatterAccess(matterId);
@@ -328,16 +317,13 @@ export async function createNote(
   // their own tabs — revalidate each touched tab so the side trip is
   // immediately visible.
   revalidatePath(`/matters/${matterId}`);
-  if (validCaptures.some((c) => c.kind === "task"))
-    revalidatePath(`/matters/${matterId}/tasks`);
+  if (validCaptures.some((c) => c.kind === "task")) revalidatePath(`/matters/${matterId}/tasks`);
   if (validCaptures.some((c) => c.kind === "event")) {
     revalidatePath(`/matters/${matterId}/events`);
     revalidatePath(`/calendar`);
   }
-  if (validCaptures.some((c) => c.kind === "deadline"))
-    revalidateDeadlineSurfaces(matterId);
-  if (validCaptures.some((c) => c.kind === "time"))
-    revalidatePath(`/matters/${matterId}/time`);
+  if (validCaptures.some((c) => c.kind === "deadline")) revalidateDeadlineSurfaces(matterId);
+  if (validCaptures.some((c) => c.kind === "time")) revalidatePath(`/matters/${matterId}/time`);
 
   // When the primary note itself is attached to a calendar event we
   // need to refresh the matter's events tab + the main calendar so the
@@ -369,7 +355,7 @@ export async function createNote(
 export async function createLeadNote(
   leadId: string,
   _prev: NoteFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<NoteFormState> {
   await requirePermission("notes.create");
   // Restricted intake: 404 unless the viewer may see this lead (ADR-049).
@@ -396,13 +382,7 @@ export async function createLeadNote(
   // The composer never sends captures or entity links for a lead; a
   // request that does is refused rather than silently dropping them.
   const d = parsed.data;
-  if (
-    d.attachments !== "[]" ||
-    d.calendarEventId ||
-    d.taskId ||
-    d.deadlineId ||
-    d.timeEntryId
-  ) {
+  if (d.attachments !== "[]" || d.calendarEventId || d.taskId || d.deadlineId || d.timeEntryId) {
     return {
       status: "error",
       errors: {
@@ -498,9 +478,7 @@ export async function createLeadNote(
 
 // ── Toggle pin ──────────────────────────────────────────────────────────
 
-export async function toggleNotePin(
-  noteId: string
-): Promise<{ ok: boolean; error?: string }> {
+export async function toggleNotePin(noteId: string): Promise<{ ok: boolean; error?: string }> {
   const actorId = await requirePermission("notes.pin");
   await assertChildMatterAccess("note", noteId);
   const note = await prisma.note.findUnique({
@@ -542,7 +520,7 @@ export async function toggleNotePin(
  *  one-level lookup would miss deeper replies by other people. */
 async function collectReplies(
   tx: Tx,
-  rootId: string
+  rootId: string,
 ): Promise<Array<{ id: string; authorId: string | null }>> {
   const found: Array<{ id: string; authorId: string | null }> = [];
   let level = [rootId];
@@ -557,9 +535,7 @@ async function collectReplies(
   return found;
 }
 
-export async function deleteNote(
-  noteId: string
-): Promise<{ ok: boolean; error?: string }> {
+export async function deleteNote(noteId: string): Promise<{ ok: boolean; error?: string }> {
   await assertChildMatterAccess("note", noteId);
   const note = await prisma.note.findUnique({
     where: { id: noteId },
@@ -619,8 +595,8 @@ export async function deleteNote(
       scope.kind === "lead"
         ? null
         : outcome.replyCount > 0
-        ? `${notePreview(note.content)} (+ ${outcome.replyCount} ${outcome.replyCount === 1 ? "reply" : "replies"})`
-        : notePreview(note.content),
+          ? `${notePreview(note.content)} (+ ${outcome.replyCount} ${outcome.replyCount === 1 ? "reply" : "replies"})`
+          : notePreview(note.content),
   });
   return { ok: true };
 }
@@ -630,7 +606,7 @@ export async function deleteNote(
 export async function updateNote(
   noteId: string,
   _prev: NoteFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<NoteFormState> {
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = noteSchema.safeParse(raw);
@@ -703,9 +679,7 @@ export async function updateNote(
 // unread state, so refreshing would collapse threads mid-read. The
 // DB update only matters for the NEXT page visit.
 
-export async function markMatterNotesRead(
-  noteIds: string[]
-): Promise<{ ok: boolean }> {
+export async function markMatterNotesRead(noteIds: string[]): Promise<{ ok: boolean }> {
   if (noteIds.length === 0) return { ok: true };
   const userId = await getCurrentUserId();
   // Scope to notes that actually exist so a stale client call can't
@@ -740,7 +714,7 @@ export async function markMatterNotesRead(
  *  so the DB doesn't accumulate arbitrary strings. */
 export async function toggleNoteReaction(
   noteId: string,
-  emoji: string
+  emoji: string,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!(REACTION_EMOJIS as readonly string[]).includes(emoji)) {
     return { ok: false, error: "Emoji not in reaction palette" };

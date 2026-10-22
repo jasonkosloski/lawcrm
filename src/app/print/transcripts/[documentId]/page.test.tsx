@@ -35,7 +35,17 @@ const view = (over: Record<string, unknown> = {}) =>
     correctedByName: null,
     speakers: { A: "Officer Diaz" },
     segments: [
-      { id: "s1", index: 0, speaker: "A", startSeconds: 252, endSeconds: 260, text: "Stop right there.", words: [], originalText: null, revision: 0 },
+      {
+        id: "s1",
+        index: 0,
+        speaker: "A",
+        startSeconds: 252,
+        endSeconds: 260,
+        text: "Stop right there.",
+        words: [],
+        originalText: null,
+        revision: 0,
+      },
     ],
     ...over,
   }) as never;

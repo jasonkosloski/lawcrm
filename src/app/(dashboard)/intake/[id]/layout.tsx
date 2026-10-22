@@ -46,10 +46,7 @@ async function loadEngagementInputs(leadId: string, userId: string) {
   };
 }
 
-export default async function LeadDetailLayout({
-  children,
-  params,
-}: LayoutProps<"/intake/[id]">) {
+export default async function LeadDetailLayout({ children, params }: LayoutProps<"/intake/[id]">) {
   const userId = await requireUser();
   const { id } = await params;
   await assertLeadAccess(id);
@@ -57,13 +54,7 @@ export default async function LeadDetailLayout({
   // server actions still gate, but a refused click just bounces to "/"
   // after the user has typed into the dialog. Convert creates a Matter
   // (matters.create); Decline has its own key.
-  const [
-    lead,
-    areas,
-    canConvert,
-    canDecline,
-    canViewRecords,
-  ] = await Promise.all([
+  const [lead, areas, canConvert, canDecline, canViewRecords] = await Promise.all([
     getLeadById(id),
     getPracticeAreaOptions(),
     currentUserHasPermission("matters.create"),
@@ -76,8 +67,7 @@ export default async function LeadDetailLayout({
   // Engagement block of the convert dialog: the lead's live documents
   // (assertLeadAccess above already scoped the viewer to this lead) and
   // the firm's signed-document switch. Only loaded when the button renders.
-  const engagement =
-    canConvert && !isResolved ? await loadEngagementInputs(id, userId) : null;
+  const engagement = canConvert && !isResolved ? await loadEngagementInputs(id, userId) : null;
 
   return (
     <>
@@ -107,18 +97,13 @@ export default async function LeadDetailLayout({
                   requireOriginatingDoc={engagement.requireOriginatingDoc}
                   todayKey={engagement.todayKey}
                   restrictedTo={
-                    lead.restricted
-                      ? lead.teamMembers.map((m) => m.user.name)
-                      : undefined
+                    lead.restricted ? lead.teamMembers.map((m) => m.user.name) : undefined
                   }
                 />
               )}
             </>
           ) : lead.convertedMatter ? (
-            <Button
-              size="sm"
-              render={<Link href={`/matters/${lead.convertedMatter.id}`} />}
-            >
+            <Button size="sm" render={<Link href={`/matters/${lead.convertedMatter.id}`} />}>
               <Briefcase />
               Open matter
             </Button>
@@ -128,9 +113,7 @@ export default async function LeadDetailLayout({
 
       <IntakeTabs leadId={lead.id} canViewRecords={canViewRecords} />
 
-      <div className="flex-1 overflow-y-auto animate-page-enter">
-        {children}
-      </div>
+      <div className="flex-1 overflow-y-auto animate-page-enter">{children}</div>
     </>
   );
 }

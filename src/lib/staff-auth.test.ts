@@ -78,9 +78,7 @@ describe("getStaffAuthFromRequest", () => {
   });
 
   test("a signed-out auth object -> signed_out", async () => {
-    hoisted.authenticateRequest.mockResolvedValue(
-      stateWith({ userId: null, sessionId: null })
-    );
+    hoisted.authenticateRequest.mockResolvedValue(stateWith({ userId: null, sessionId: null }));
     await expect(getStaffAuthFromRequest(req)).resolves.toEqual({
       status: "signed_out",
     });
@@ -89,7 +87,7 @@ describe("getStaffAuthFromRequest", () => {
 
   test("a linked active user -> ok", async () => {
     hoisted.authenticateRequest.mockResolvedValue(
-      stateWith({ userId: "user_clerk_1", sessionId: "sess_1" })
+      stateWith({ userId: "user_clerk_1", sessionId: "sess_1" }),
     );
     hoisted.findUnique.mockResolvedValue({ id: "u1", isActive: true });
     await expect(getStaffAuthFromRequest(req)).resolves.toEqual({

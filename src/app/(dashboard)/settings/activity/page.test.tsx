@@ -27,11 +27,7 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -44,10 +40,7 @@ vi.mock("@/lib/queries/firm-activity", () => ({
 }));
 
 import { currentUserHasPermission } from "@/lib/permission-check";
-import {
-  getFirmActivity,
-  listFirmActivityAuthors,
-} from "@/lib/queries/firm-activity";
+import { getFirmActivity, listFirmActivityAuthors } from "@/lib/queries/firm-activity";
 import FirmActivityPage from "./page";
 
 const mockedHasPermission = vi.mocked(currentUserHasPermission);
@@ -78,8 +71,8 @@ describe("/settings/activity page gate", () => {
 
     render(
       await FirmActivityPage(
-        props({ type: "communications", from: "2026-10-15", to: "2026-10-16" })
-      )
+        props({ type: "communications", from: "2026-10-15", to: "2026-10-16" }),
+      ),
     );
 
     expect(getFirmActivity).toHaveBeenCalledWith({
@@ -96,9 +89,7 @@ describe("/settings/activity page gate", () => {
 
     render(await FirmActivityPage(props({ type: "toString" })));
 
-    expect(getFirmActivity).toHaveBeenCalledWith(
-      expect.objectContaining({ types: undefined })
-    );
+    expect(getFirmActivity).toHaveBeenCalledWith(expect.objectContaining({ types: undefined }));
   });
 
   test("calls, documents and evidence each have a pill", async () => {

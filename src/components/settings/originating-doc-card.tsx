@@ -30,9 +30,7 @@ export function OriginatingDocCard({
         await setRequireOriginatingDoc(next);
       } catch (e) {
         setOn(prev);
-        notifyError(
-          e instanceof Error ? e.message : "Couldn't save the setting."
-        );
+        notifyError(e instanceof Error ? e.message : "Couldn't save the setting.");
       }
     });
   };
@@ -40,9 +38,7 @@ export function OriginatingDocCard({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-semibold">
-          Originating document
-        </CardTitle>
+        <CardTitle className="text-sm font-semibold">Originating document</CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-4">
         <label className="inline-flex items-center gap-2 text-xs text-ink-2 select-none">
@@ -56,20 +52,17 @@ export function OriginatingDocCard({
           <span>Require originating document</span>
         </label>
         <p className="text-2xs text-ink-3 mt-2 leading-relaxed">
-          When on, a matter needs a signed fee agreement (or the label set on
-          its practice area) before it can be created or converted from a
-          lead. This applies to new matters only; existing matters are not
-          affected.
+          When on, a matter needs a signed fee agreement (or the label set on its practice area)
+          before it can be created or converted from a lead. This applies to new matters only;
+          existing matters are not affected.
         </p>
         <div className="mt-3 pt-3 border-t border-line text-xs text-ink-2">
           {missingCount === 0 ? (
-            <span className="text-ok">
-              Every open matter has a signed originating document.
-            </span>
+            <span className="text-ok">Every open matter has a signed originating document.</span>
           ) : (
             <span>
-              {missingCount} open {missingCount === 1 ? "matter" : "matters"} without a
-              signed originating document on file.
+              {missingCount} open {missingCount === 1 ? "matter" : "matters"} without a signed
+              originating document on file.
             </span>
           )}
         </div>

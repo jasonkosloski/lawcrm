@@ -17,23 +17,17 @@ export async function register() {
   }
 }
 
-export const onRequestError: Instrumentation.onRequestError = (
-  err,
-  request,
-  context
-) => {
+export const onRequestError: Instrumentation.onRequestError = (err, request, context) => {
   console.error(
     "[server-error]",
     JSON.stringify({
       message: err instanceof Error ? err.message : String(err),
       digest:
-        typeof err === "object" && err !== null && "digest" in err
-          ? String(err.digest)
-          : undefined,
+        typeof err === "object" && err !== null && "digest" in err ? String(err.digest) : undefined,
       method: request.method,
       path: request.path,
       routePath: context.routePath,
       routeType: context.routeType,
-    })
+    }),
   );
 };

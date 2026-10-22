@@ -115,9 +115,7 @@ describe("where fragments", () => {
   });
 
   test("filterAccessibleLeadIds keeps only visible ids", async () => {
-    expect([...(await filterAccessibleLeadIds(bob, [openLead, walled]))]).toEqual([
-      openLead,
-    ]);
+    expect([...(await filterAccessibleLeadIds(bob, [openLead, walled]))]).toEqual([openLead]);
     expect((await filterAccessibleLeadIds(alice, [walled])).size).toBe(1);
   });
 });

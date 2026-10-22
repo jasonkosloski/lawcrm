@@ -142,10 +142,7 @@ function GridBody() {
       </div>
       <div className="grid grid-cols-7 min-h-[60vh]">
         {Array.from({ length: 7 }).map((_, col) => (
-          <div
-            key={col}
-            className="border-l border-line first:border-l-0 p-2 flex flex-col gap-2"
-          >
+          <div key={col} className="border-l border-line first:border-l-0 p-2 flex flex-col gap-2">
             {Array.from({ length: 3 }).map((_, row) => (
               <Skeleton key={row} className="h-10 w-full" />
             ))}
@@ -162,7 +159,10 @@ function CardBlock({ lines }: { lines: number }) {
       <Skeleton className="h-4 w-32 mb-3" />
       <div className="flex flex-col gap-2">
         {Array.from({ length: lines }).map((_, i) => (
-          <Skeleton key={i} className={`h-3 ${i % 3 === 0 ? "w-3/4" : i % 3 === 1 ? "w-full" : "w-2/3"}`} />
+          <Skeleton
+            key={i}
+            className={`h-3 ${i % 3 === 0 ? "w-3/4" : i % 3 === 1 ? "w-full" : "w-2/3"}`}
+          />
         ))}
       </div>
     </Card>

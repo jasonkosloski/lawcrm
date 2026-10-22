@@ -20,9 +20,7 @@ import { sanitizeUserHtml } from "@/lib/sanitize-html";
 
 describe("RichTextEditor — placeholder", () => {
   test("shows the placeholder while empty", async () => {
-    render(
-      <RichTextEditor onChange={() => {}} placeholder="Write your reply…" />
-    );
+    render(<RichTextEditor onChange={() => {}} placeholder="Write your reply…" />);
     expect(await screen.findByText("Write your reply…")).toBeInTheDocument();
   });
 
@@ -32,7 +30,7 @@ describe("RichTextEditor — placeholder", () => {
         onChange={() => {}}
         initialHTML="<p>Already typed</p>"
         placeholder="Write your reply…"
-      />
+      />,
     );
     await screen.findByRole("button", { name: "Bold" });
     expect(screen.queryByText("Write your reply…")).toBeNull();
@@ -55,8 +53,7 @@ describe("RichTextEditor — toolbar state", () => {
 });
 
 describe("editor extensions stay in lockstep with the sanitizer", () => {
-  const make = (content: string) =>
-    new Editor({ extensions: createEditorExtensions(), content });
+  const make = (content: string) => new Editor({ extensions: createEditorExtensions(), content });
 
   test("horizontal rule is not part of the schema (a typed --- can't emit <hr>)", () => {
     const editor = make("<p>a</p>");
@@ -76,7 +73,7 @@ describe("editor extensions stay in lockstep with the sanitizer", () => {
         "<ul><li><p>one</p></li></ul>",
         "<ol><li><p>two</p></li></ol>",
         "<pre><code>block</code></pre>",
-      ].join("")
+      ].join(""),
     );
     const html = editor.getHTML();
     expect(html).toContain("<h2>");

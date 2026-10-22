@@ -57,9 +57,7 @@ export function ContactPhonesCard({
       <CardHeader className="pb-2 flex-row items-center justify-between">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
           Phone numbers
-          <span className="text-2xs font-mono font-normal text-ink-4">
-            {phones.length}
-          </span>
+          <span className="text-2xs font-mono font-normal text-ink-4">{phones.length}</span>
         </CardTitle>
         {canEdit && (
           <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
@@ -70,9 +68,7 @@ export function ContactPhonesCard({
       </CardHeader>
       <CardContent className="px-4 pb-4">
         {phones.length === 0 ? (
-          <div className="py-2 text-xs text-ink-4">
-            No phone numbers on file.
-          </div>
+          <div className="py-2 text-xs text-ink-4">No phone numbers on file.</div>
         ) : (
           <ul className="flex flex-col">
             {phones.map((p) => (
@@ -81,15 +77,9 @@ export function ContactPhonesCard({
                 className="flex items-center gap-2.5 py-1.5 border-b border-line last:border-b-0 text-xs"
               >
                 <Phone size={12} className="text-ink-4 shrink-0" />
-                <span className="font-mono text-ink">
-                  {formatPhone(p.number)}
-                </span>
+                <span className="font-mono text-ink">{formatPhone(p.number)}</span>
                 {p.label && <span className="text-ink-3">{p.label}</span>}
-                {p.isPrimary && (
-                  <Badge className="ml-auto">
-                    Primary
-                  </Badge>
-                )}
+                {p.isPrimary && <Badge className="ml-auto">Primary</Badge>}
               </li>
             ))}
           </ul>
@@ -194,15 +184,12 @@ function ManagePhonesBody({
   const [pending, startTransition] = useTransition();
 
   const patch = (i: number, changes: Partial<ContactPhoneEntry>) =>
-    setRows((prev) =>
-      prev.map((r, idx) => (idx === i ? { ...r, ...changes } : r)),
-    );
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...changes } : r)));
 
   const setPrimary = (i: number) =>
     setRows((prev) => prev.map((r, idx) => ({ ...r, isPrimary: idx === i })));
 
-  const remove = (i: number) =>
-    setRows((prev) => prev.filter((_, idx) => idx !== i));
+  const remove = (i: number) => setRows((prev) => prev.filter((_, idx) => idx !== i));
 
   const move = (i: number, delta: -1 | 1) =>
     setRows((prev) => {
@@ -244,16 +231,13 @@ function ManagePhonesBody({
       <DialogHeader>
         <DialogTitle>Manage phone numbers</DialogTitle>
         <DialogDescription>
-          The primary number is what shows across the app (matters, call
-          logging, the directory).
+          The primary number is what shows across the app (matters, call logging, the directory).
         </DialogDescription>
       </DialogHeader>
 
       <div className="flex flex-col gap-2">
         {rows.length === 0 && (
-          <div className="py-2 text-xs text-ink-4">
-            No phone numbers — add one below.
-          </div>
+          <div className="py-2 text-xs text-ink-4">No phone numbers — add one below.</div>
         )}
         {rows.map((r, i) => (
           <div key={r.key} className="flex items-center gap-1.5">
@@ -313,13 +297,7 @@ function ManagePhonesBody({
           </div>
         ))}
 
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="w-fit"
-          onClick={add}
-        >
+        <Button type="button" size="sm" variant="outline" className="w-fit" onClick={add}>
           <Plus />
           Add phone
         </Button>
@@ -332,11 +310,7 @@ function ManagePhonesBody({
       </div>
 
       <DialogFooter>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => onOpenChange(false)}
-        >
+        <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
           Cancel
         </Button>
         <Button type="button" onClick={save} disabled={pending}>

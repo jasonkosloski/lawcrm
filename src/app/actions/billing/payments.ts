@@ -92,7 +92,7 @@ const recordPaymentSchema = z.object({
 export async function recordInvoicePayment(
   invoiceId: string,
   _prev: BillingFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<BillingFormState> {
   await requirePermission("billing.record_payment");
   await assertChildMatterAccess("invoice", invoiceId);
@@ -155,12 +155,12 @@ export async function recordInvoicePayment(
       if (!invoice) throw new UserFacingError("Invoice not found.");
       if (invoice.kind !== "client") {
         throw new UserFacingError(
-          "Payments only apply to client invoices — internal records have no AR balance."
+          "Payments only apply to client invoices — internal records have no AR balance.",
         );
       }
       if (invoice.status !== "sent" && invoice.status !== "partial") {
         throw new UserFacingError(
-          `Payments are only recordable on sent or partially-paid invoices (this one is ${invoice.status}). Approve and send the invoice first.`
+          `Payments are only recordable on sent or partially-paid invoices (this one is ${invoice.status}). Approve and send the invoice first.`,
         );
       }
 
@@ -174,7 +174,7 @@ export async function recordInvoicePayment(
       }
       if (requested.greaterThan(balance)) {
         throw new UserFacingError(
-          `Amount exceeds the invoice's $${balance.toFixed(2)} balance — record the balance or less.`
+          `Amount exceeds the invoice's $${balance.toFixed(2)} balance — record the balance or less.`,
         );
       }
 
@@ -185,13 +185,10 @@ export async function recordInvoicePayment(
         // Same lost-update hazard on trustBalance — lock the matter
         // row so concurrent disbursements can't both pass the
         // overdraw check (invoice → matter lock order, see helper).
-        const trustBalance = await lockMatterTrustBalance(
-          tx,
-          invoice.matterId
-        );
+        const trustBalance = await lockMatterTrustBalance(tx, invoice.matterId);
         if (requested.greaterThan(trustBalance)) {
           throw new UserFacingError(
-            `Trust balance is $${trustBalance.toFixed(2)} — not enough to cover $${requested.toFixed(2)}.`
+            `Trust balance is $${trustBalance.toFixed(2)} — not enough to cover $${requested.toFixed(2)}.`,
           );
         }
         await payInvoiceFromTrust(tx, {
@@ -295,11 +292,9 @@ export async function recordInvoicePayment(
       // The body carries the payment amount, and billing data is
       // gated by billing.view (ADR-038) — so only notify members who
       // may see it.
-      const candidates = team
-        .map((t) => t.userId)
-        .filter((id) => id !== userId);
+      const candidates = team.map((t) => t.userId).filter((id) => id !== userId);
       const canView = await Promise.all(
-        candidates.map((id) => userHasPermission(id, "billing.view"))
+        candidates.map((id) => userHasPermission(id, "billing.view")),
       );
       const recipients = candidates.filter((_, i) => canView[i]);
       if (recipients.length > 0) {
@@ -326,11 +321,7 @@ export async function recordInvoicePayment(
   } catch (err) {
     return {
       status: "error",
-      error: toUserMessage(
-        err,
-        "Couldn't record the payment.",
-        "billing.recordInvoicePayment"
-      ),
+      error: toUserMessage(err, "Couldn't record the payment.", "billing.recordInvoicePayment"),
     };
   }
 }
@@ -349,35 +340,32 @@ export async function recordInvoicePayment(
 
 const sendInvoiceSchema = z
   .object({
-  /** "email" records a manual send; "portal" posts the invoice to the
-   *  client portal and emails the billed contact a notice; "mail" is
-   *  reserved for the future US-mail workflow but rejected here so the
-   *  dialog's disabled state is enforced server-side too. */
-  method: z.enum(["email", "mail", "portal"]),
-  /** Recipient — for email, validated as an email address. For
-   *  mail, will become the bill-to mailing address (pulled from
-   *  the client) once that path lands. Ignored for portal (the
-   *  billed identity is resolved server-side). */
-  recipient: z.string().trim().max(320).default(""),
-  /** "true" when the apply-trust checkbox was ticked. */
-  applyTrust: z
-    .string()
-    .optional()
-    .transform((v) => v === "true" || v === "on"),
-  /** Amount of trust to apply, only consulted when applyTrust=true.
-   *  Defaults to MIN(trust balance, invoice balance) on the client.
-   *  Same strict money format as every other amount in this file —
-   *  a bare string would let "abc" throw a raw DecimalError at the
-   *  user and "5.999" put sub-cent amounts into the trust ledger. */
-  trustAmount: z
-    .string()
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => (v ? v.replace(/[$,]/g, "") : v))
-    .refine(
-      (v) => !v || /^\d+(\.\d{1,2})?$/.test(v),
-      "Enter a valid amount"
-    ),
+    /** "email" records a manual send; "portal" posts the invoice to the
+     *  client portal and emails the billed contact a notice; "mail" is
+     *  reserved for the future US-mail workflow but rejected here so the
+     *  dialog's disabled state is enforced server-side too. */
+    method: z.enum(["email", "mail", "portal"]),
+    /** Recipient — for email, validated as an email address. For
+     *  mail, will become the bill-to mailing address (pulled from
+     *  the client) once that path lands. Ignored for portal (the
+     *  billed identity is resolved server-side). */
+    recipient: z.string().trim().max(320).default(""),
+    /** "true" when the apply-trust checkbox was ticked. */
+    applyTrust: z
+      .string()
+      .optional()
+      .transform((v) => v === "true" || v === "on"),
+    /** Amount of trust to apply, only consulted when applyTrust=true.
+     *  Defaults to MIN(trust balance, invoice balance) on the client.
+     *  Same strict money format as every other amount in this file —
+     *  a bare string would let "abc" throw a raw DecimalError at the
+     *  user and "5.999" put sub-cent amounts into the trust ledger. */
+    trustAmount: z
+      .string()
+      .optional()
+      .or(z.literal(""))
+      .transform((v) => (v ? v.replace(/[$,]/g, "") : v))
+      .refine((v) => !v || /^\d+(\.\d{1,2})?$/.test(v), "Enter a valid amount"),
   })
   .superRefine((v, ctx) => {
     if (v.method !== "portal" && v.recipient.length === 0) {
@@ -392,7 +380,7 @@ const sendInvoiceSchema = z
 export async function sendInvoice(
   invoiceId: string,
   _prev: BillingFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<BillingFormState> {
   await requirePermission("billing.send_invoice");
   await assertChildMatterAccess("invoice", invoiceId);
@@ -465,7 +453,7 @@ export async function sendInvoice(
       }
       if (invoice.status !== "approved") {
         throw new UserFacingError(
-          `Send is only available on approved invoices (this one is ${invoice.status}). Approve it first.`
+          `Send is only available on approved invoices (this one is ${invoice.status}). Approve it first.`,
         );
       }
       // A $0 invoice would satisfy `paid >= total` below and flip
@@ -483,20 +471,13 @@ export async function sendInvoice(
       if (data.applyTrust) {
         // Lock the matter row (trustBalance read-modify-write) —
         // see recordInvoicePayment's trust branch.
-        const trustBalance = await lockMatterTrustBalance(
-          tx,
-          invoice.matterId
-        );
-        const balance = roundMoney(invoice.totalAmount).sub(
-          roundMoney(invoice.paidAmount)
-        );
+        const trustBalance = await lockMatterTrustBalance(tx, invoice.matterId);
+        const balance = roundMoney(invoice.totalAmount).sub(roundMoney(invoice.paidAmount));
         // Default: cap at MIN(trust, balance). User-supplied amount
         // can step down but never up past the cap. trustAmount was
         // format-validated + $/comma-stripped by the schema.
         const cap = trustBalance.lessThan(balance) ? trustBalance : balance;
-        const applied = roundMoney(
-          data.trustAmount ? new Prisma.Decimal(data.trustAmount) : cap
-        );
+        const applied = roundMoney(data.trustAmount ? new Prisma.Decimal(data.trustAmount) : cap);
         if (applied.lessThanOrEqualTo(0)) {
           throw new UserFacingError("Trust application amount must be greater than 0.");
         }
@@ -504,7 +485,7 @@ export async function sendInvoice(
           throw new UserFacingError(
             `Can apply at most $${cap.toFixed(2)} from trust (limited by ${
               trustBalance.lessThan(balance) ? "trust balance" : "invoice balance"
-            }).`
+            }).`,
           );
         }
         await payInvoiceFromTrust(tx, {
@@ -522,23 +503,14 @@ export async function sendInvoice(
 
       // Final status: paid if trust covered the whole thing, partial
       // if it covered some, sent otherwise.
-      const fullyPaid = newPaid.greaterThanOrEqualTo(
-        roundMoney(invoice.totalAmount)
-      );
-      const finalStatus = fullyPaid
-        ? "paid"
-        : trustApplied
-          ? "partial"
-          : "sent";
+      const fullyPaid = newPaid.greaterThanOrEqualTo(roundMoney(invoice.totalAmount));
+      const finalStatus = fullyPaid ? "paid" : trustApplied ? "partial" : "sent";
       // Sending is when the client first sees the document, so the
       // invoice is dated now with its payment terms preserved. A
       // draft generated Oct 1 (30-day terms) and sent Nov 5 must not
       // arrive already overdue.
       const sentAt = new Date();
-      const termMs = Math.max(
-        0,
-        invoice.dueDate.getTime() - invoice.issueDate.getTime()
-      );
+      const termMs = Math.max(0, invoice.dueDate.getTime() - invoice.issueDate.getTime());
       await tx.invoice.update({
         where: { id: invoice.id },
         data: {
@@ -613,11 +585,7 @@ export async function sendInvoice(
   } catch (err) {
     return {
       status: "error",
-      error: toUserMessage(
-        err,
-        "Couldn't send the invoice.",
-        "billing.sendInvoice"
-      ),
+      error: toUserMessage(err, "Couldn't send the invoice.", "billing.sendInvoice"),
     };
   }
 }
@@ -628,16 +596,13 @@ export async function sendInvoice(
 // wrong address, client lost it). Status never changes.
 
 const resendSchema = z.object({
-  recipient: z
-    .string()
-    .trim()
-    .regex(RECIPIENT_EMAIL_RE, "Enter a valid email address."),
+  recipient: z.string().trim().regex(RECIPIENT_EMAIL_RE, "Enter a valid email address."),
 });
 
 export async function resendInvoiceEmail(
   invoiceId: string,
   _prev: BillingFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<BillingFormState> {
   await requirePermission("billing.send_invoice");
   await assertChildMatterAccess("invoice", invoiceId);
@@ -652,10 +617,7 @@ export async function resendInvoiceEmail(
       select: { kind: true, status: true, matterId: true },
     });
     if (!invoice) throw new UserFacingError("Invoice not found.");
-    if (
-      invoice.kind !== "client" ||
-      !["sent", "partial", "paid"].includes(invoice.status)
-    ) {
+    if (invoice.kind !== "client" || !["sent", "partial", "paid"].includes(invoice.status)) {
       throw new UserFacingError("Only sent invoices can be re-sent.");
     }
     const delivery = await deliverInvoiceEmail({

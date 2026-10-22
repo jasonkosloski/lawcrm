@@ -31,11 +31,9 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { CALENDAR_EVENTS_SCOPE } from "@/lib/google/calendar-shared";
 
-export const GOOGLE_AUTH_ENDPOINT =
-  "https://accounts.google.com/o/oauth2/v2/auth";
+export const GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 export const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
-export const GOOGLE_USERINFO_ENDPOINT =
-  "https://openidconnect.googleapis.com/v1/userinfo";
+export const GOOGLE_USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo";
 export const GOOGLE_REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
 
 /** gmail.modify (read/label/archive for sync) + gmail.send, plus
@@ -47,8 +45,7 @@ export const GOOGLE_REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
  *  the calendar scope joined this list lack it in
  *  `EmailAccount.grantedScopes`; features gate on
  *  `hasCalendarScope` and prompt to reconnect. */
-export const GMAIL_MODIFY_SCOPE =
-  "https://www.googleapis.com/auth/gmail.modify";
+export const GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
 export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 
 export const GMAIL_SCOPES = [
@@ -87,9 +84,7 @@ export const GOOGLE_CALLBACK_PATH = "/api/integrations/google/callback";
  *  The UI uses this to render "not configured" guidance instead of
  *  a connect button that would 500. */
 export function googleIntegrationConfigured(): boolean {
-  return Boolean(
-    process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-  );
+  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 }
 
 function requireEnv(name: "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "AUTH_SECRET"): string {
@@ -97,7 +92,7 @@ function requireEnv(name: "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "AUTH_SE
   if (!value) {
     throw new Error(
       `${name} is not set — the Google integration requires it. ` +
-        "See .env.example for setup instructions."
+        "See .env.example for setup instructions.",
     );
   }
   return value;
@@ -124,7 +119,7 @@ export function createOAuthState(): { state: string; nonce: string } {
  *  never throws on attacker-controlled input. */
 export function verifyOAuthState(
   state: string | null | undefined,
-  cookieNonce: string | null | undefined
+  cookieNonce: string | null | undefined,
 ): boolean {
   if (!state || !cookieNonce) return false;
   const dot = state.indexOf(".");
@@ -150,18 +145,13 @@ export function verifyOAuthState(
  */
 export function resolveGoogleRedirectUri(requestUrl: string | URL): string {
   const authUrl = process.env.AUTH_URL;
-  const origin = authUrl
-    ? new URL(authUrl).origin
-    : new URL(requestUrl).origin;
+  const origin = authUrl ? new URL(authUrl).origin : new URL(requestUrl).origin;
   return `${origin}${GOOGLE_CALLBACK_PATH}`;
 }
 
 // ── Authorization URL ────────────────────────────────────────────────────
 
-export function buildGoogleAuthUrl(opts: {
-  redirectUri: string;
-  state: string;
-}): string {
+export function buildGoogleAuthUrl(opts: { redirectUri: string; state: string }): string {
   const url = new URL(GOOGLE_AUTH_ENDPOINT);
   url.searchParams.set("client_id", requireEnv("GOOGLE_CLIENT_ID"));
   url.searchParams.set("redirect_uri", opts.redirectUri);
@@ -202,16 +192,14 @@ export class GoogleOAuthError extends Error {
   constructor(
     message: string,
     readonly code: string | null = null,
-    readonly status: number | null = null
+    readonly status: number | null = null,
   ) {
     super(message);
     this.name = "GoogleOAuthError";
   }
 }
 
-async function tokenEndpointCall(
-  params: Record<string, string>
-): Promise<GoogleTokenResponse> {
+async function tokenEndpointCall(params: Record<string, string>): Promise<GoogleTokenResponse> {
   const response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
     method: "POST",
     signal: AbortSignal.timeout(OAUTH_FETCH_TIMEOUT_MS),
@@ -233,17 +221,14 @@ async function tokenEndpointCall(
       // Non-JSON error body; status alone will have to do.
     }
     throw new GoogleOAuthError(
-      `Google token endpoint returned ${response.status}` +
-        (code ? ` (${code})` : ""),
+      `Google token endpoint returned ${response.status}` + (code ? ` (${code})` : ""),
       code,
-      response.status
+      response.status,
     );
   }
   const body = (await response.json()) as GoogleTokenResponse;
   if (!body.access_token || typeof body.expires_in !== "number") {
-    throw new GoogleOAuthError(
-      "Google token endpoint returned an unexpected payload shape."
-    );
+    throw new GoogleOAuthError("Google token endpoint returned an unexpected payload shape.");
   }
   return body;
 }
@@ -251,7 +236,7 @@ async function tokenEndpointCall(
 /** Exchange an authorization code (from the callback) for tokens. */
 export async function exchangeCodeForTokens(
   code: string,
-  redirectUri: string
+  redirectUri: string,
 ): Promise<GoogleTokenResponse> {
   return tokenEndpointCall({
     grant_type: "authorization_code",
@@ -263,9 +248,7 @@ export async function exchangeCodeForTokens(
 /** Refresh an expired access token. Throws GoogleOAuthError with
  *  code "invalid_grant" when the user revoked access — the caller
  *  (gmail-client) marks the account for reconnect. */
-export async function refreshGoogleAccessToken(
-  refreshToken: string
-): Promise<GoogleTokenResponse> {
+export async function refreshGoogleAccessToken(refreshToken: string): Promise<GoogleTokenResponse> {
   return tokenEndpointCall({
     grant_type: "refresh_token",
     refresh_token: refreshToken,
@@ -274,9 +257,7 @@ export async function refreshGoogleAccessToken(
 
 /** The connected account's email address via the OIDC userinfo
  *  endpoint (covered by the openid+email scopes). */
-export async function fetchGoogleUserInfo(
-  accessToken: string
-): Promise<{ email: string | null }> {
+export async function fetchGoogleUserInfo(accessToken: string): Promise<{ email: string | null }> {
   const response = await fetch(GOOGLE_USERINFO_ENDPOINT, {
     signal: AbortSignal.timeout(OAUTH_FETCH_TIMEOUT_MS),
     headers: { authorization: `Bearer ${accessToken}` },
@@ -285,7 +266,7 @@ export async function fetchGoogleUserInfo(
     throw new GoogleOAuthError(
       `Google userinfo endpoint returned ${response.status}`,
       null,
-      response.status
+      response.status,
     );
   }
   const body = (await response.json()) as { email?: string };

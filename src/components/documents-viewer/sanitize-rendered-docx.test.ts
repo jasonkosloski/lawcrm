@@ -41,7 +41,7 @@ describe("sanitizeRenderedDocx — anchor hrefs", () => {
     const root = build(
       '<a href="JaVaScRiPt:alert(1)">a</a>' +
         '<a href="   javascript:alert(2)">b</a>' +
-        '<a href="java\tscript:alert(3)">c</a>'
+        '<a href="java\tscript:alert(3)">c</a>',
     );
     const summary = sanitizeRenderedDocx(root);
     for (const a of root.querySelectorAll("a")) {
@@ -53,7 +53,7 @@ describe("sanitizeRenderedDocx — anchor hrefs", () => {
   test("data: and vbscript: hrefs are removed", () => {
     const root = build(
       '<a href="data:text/html,<script>alert(1)</script>">d</a>' +
-        '<a href="vbscript:MsgBox(1)">v</a>'
+        '<a href="vbscript:MsgBox(1)">v</a>',
     );
     const summary = sanitizeRenderedDocx(root);
     for (const a of root.querySelectorAll("a")) {
@@ -63,9 +63,7 @@ describe("sanitizeRenderedDocx — anchor hrefs", () => {
   });
 
   test("http(s) links keep their href and gain _blank + noopener", () => {
-    const root = build(
-      '<a href="https://example.com/x">s</a><a href="http://example.com/y">p</a>'
-    );
+    const root = build('<a href="https://example.com/x">s</a><a href="http://example.com/y">p</a>');
     const summary = sanitizeRenderedDocx(root);
     for (const a of root.querySelectorAll("a")) {
       expect(a.getAttribute("target")).toBe("_blank");
@@ -102,7 +100,7 @@ describe("sanitizeRenderedDocx — active content nodes", () => {
         '<iframe srcdoc="<script>alert(2)</script>"></iframe>' +
         '<object data="x"></object>' +
         '<embed src="x">' +
-        "<p>after</p>"
+        "<p>after</p>",
     );
     const summary = sanitizeRenderedDocx(root);
     expect(root.querySelector("script, iframe, object, embed")).toBeNull();
@@ -113,7 +111,7 @@ describe("sanitizeRenderedDocx — active content nodes", () => {
 
   test("inline handler attributes are stripped everywhere", () => {
     const root = build(
-      '<p onclick="alert(1)">x</p><img onerror="alert(2)" src="data:image/gif;base64,R0lGOD">'
+      '<p onclick="alert(1)">x</p><img onerror="alert(2)" src="data:image/gif;base64,R0lGOD">',
     );
     const summary = sanitizeRenderedDocx(root);
     expect(root.querySelector("[onclick]")).toBeNull();
@@ -124,7 +122,7 @@ describe("sanitizeRenderedDocx — active content nodes", () => {
   test("ping / srcset / formaction attributes are stripped", () => {
     const root = build(
       '<a href="https://example.com" ping="https://evil.example/track">x</a>' +
-        '<img srcset="https://evil.example/1x.png 1x" src="data:image/gif;base64,R0lGOD">'
+        '<img srcset="https://evil.example/1x.png 1x" src="data:image/gif;base64,R0lGOD">',
     );
     sanitizeRenderedDocx(root);
     expect(root.querySelector("[ping]")).toBeNull();
@@ -137,20 +135,18 @@ describe("sanitizeRenderedDocx — remote fetch canaries", () => {
     const root = build(
       '<img src="https://evil.example/pixel.gif">' +
         '<img src="data:image/png;base64,iVBOR">' +
-        '<img src="blob:https://app.example/123-456">'
+        '<img src="blob:https://app.example/123-456">',
     );
     sanitizeRenderedDocx(root);
     const imgs = root.querySelectorAll("img");
     expect(imgs[0].hasAttribute("src")).toBe(false);
     expect(imgs[1].getAttribute("src")).toBe("data:image/png;base64,iVBOR");
-    expect(imgs[2].getAttribute("src")).toBe(
-      "blob:https://app.example/123-456"
-    );
+    expect(imgs[2].getAttribute("src")).toBe("blob:https://app.example/123-456");
   });
 
   test("external url() in a style attribute is emptied", () => {
     const root = build(
-      '<p style="background-image: url(https://evil.example/bg.png); color: red">x</p>'
+      '<p style="background-image: url(https://evil.example/bg.png); color: red">x</p>',
     );
     const summary = sanitizeRenderedDocx(root);
     const style = root.querySelector("p")!.getAttribute("style")!;
@@ -164,7 +160,7 @@ describe("sanitizeRenderedDocx — remote fetch canaries", () => {
       "<style>" +
         '@font-face { font-family: X; src: url("blob:https://app.example/font-1"); }' +
         ".docx p { background: url(//evil.example/c.png); }" +
-        "</style>"
+        "</style>",
     );
     const summary = sanitizeRenderedDocx(root);
     const css = root.querySelector("style")!.textContent!;
@@ -178,8 +174,8 @@ describe("neutralizeExternalCssUrls", () => {
   test("quoted and unquoted external urls are emptied", () => {
     expect(
       neutralizeExternalCssUrls(
-        'a { background: url("https://e.example/a") } b { background: url(https://e.example/b) }'
-      )
+        'a { background: url("https://e.example/a") } b { background: url(https://e.example/b) }',
+      ),
     ).toEqual({
       css: "a { background: url() } b { background: url() }",
       neutralized: 2,
@@ -212,17 +208,11 @@ describe("neutralizeExternalCssUrls — obfuscated forms (F124)", () => {
   });
 
   test("quoted targets containing ) or the other quote are emptied whole", () => {
-    const a = neutralizeExternalCssUrls(
-      'a { b: url("https://e.example/a)b") }'
-    );
+    const a = neutralizeExternalCssUrls('a { b: url("https://e.example/a)b") }');
     expect(a.css).toBe("a { b: url() }");
-    const b = neutralizeExternalCssUrls(
-      `a { b: url("https://e.example/a'b") }`
-    );
+    const b = neutralizeExternalCssUrls(`a { b: url("https://e.example/a'b") }`);
     expect(b.css).toBe("a { b: url() }");
-    const c = neutralizeExternalCssUrls(
-      "a { b: url( 'https://e.example/x' ) }"
-    );
+    const c = neutralizeExternalCssUrls("a { b: url( 'https://e.example/x' ) }");
     expect(c.css).toBe("a { b: url() }");
   });
 
@@ -304,15 +294,12 @@ describe("sanitizeDocxStyleSheet — page-wide CSS breakout (F124)", () => {
       ".docx p:not(.no-vband):has(a)",
       "body:not(.no-vband)",
     ]) {
-      expect(sanitizeDocxStyleSheet(`${sel} { color: red; }`).css, sel).toBe(
-        ""
-      );
+      expect(sanitizeDocxStyleSheet(`${sel} { color: red; }`).css, sel).toBe("");
     }
   });
 
   test("@font-face with data:/blob: src survives, other at-rules go", () => {
-    const font =
-      "@font-face { font-family: F; src: url(data:font/ttf;base64,AAAA); }";
+    const font = "@font-face { font-family: F; src: url(data:font/ttf;base64,AAAA); }";
     const css =
       font +
       "@import url(https://evil.example/x.css);" +
@@ -328,8 +315,7 @@ describe("sanitizeDocxStyleSheet — page-wide CSS breakout (F124)", () => {
   test("a url token containing ; { } does not desync the walker", () => {
     // Browser reads url(...) as ONE token, so the real rule ends at the
     // final }. A walker that split on ; or } inside would leak the body rule.
-    const css =
-      ".docx p { background: url(https://e.example/a;b}c); }\r\nbody { color: red }";
+    const css = ".docx p { background: url(https://e.example/a;b}c); }\r\nbody { color: red }";
     const out = sanitizeDocxStyleSheet(css);
     expect(out.css).not.toContain("e.example");
     expect(out.css).not.toContain("body");
@@ -347,7 +333,7 @@ describe("sanitizeDocxStyleSheet — page-wide CSS breakout (F124)", () => {
         "background: image-set('https://evil.example/t' 1x); " +
         "background: -webkit-image-set(url(https://evil.example/t) 1x); " +
         "width: expression(alert(1)); position: sticky; " +
-        "list-style: src(https://evil.example/x); behavior: url(x) }"
+        "list-style: src(https://evil.example/x); behavior: url(x) }",
     );
     expect(out.css).toContain("color: red");
     for (const bad of [
@@ -371,8 +357,7 @@ describe("sanitizeDocxStyleSheet — page-wide CSS breakout (F124)", () => {
 
   test("comment tricks cannot hide an external url or fetch function", () => {
     const out = sanitizeDocxStyleSheet(
-      ".docx p { background: /* x */ url(https://evil.example/a) /* y */; " +
-        "color: red; }"
+      ".docx p { background: /* x */ url(https://evil.example/a) /* y */; " + "color: red; }",
     );
     expect(out.css).not.toContain("evil.example");
     expect(out.css).toContain("color: red");
@@ -383,7 +368,7 @@ describe("sanitizeRenderedDocx — style attribute hardening (F124)", () => {
   test("escaped url(, image-set() and overlay positioning are removed", () => {
     const root = build(
       "<svg style=\"position:fixed;inset:0;z-index:2147483647;background:image-set('https://evil.example/t' 1x)\"></svg>" +
-        '<p style="color: red; background: u\\rl(https://evil.example/a)">x</p>'
+        '<p style="color: red; background: u\\rl(https://evil.example/a)">x</p>',
     );
     const summary = sanitizeRenderedDocx(root);
     const svg = root.querySelector("svg")!.getAttribute("style") ?? "";
@@ -401,7 +386,7 @@ describe("sanitizeRenderedDocx — style attribute hardening (F124)", () => {
     const root = build(
       '<svg><image href="https://evil.example/p.png"></image>' +
         '<use href="#local"></use>' +
-        '<image href="data:image/png;base64,AAAA"></image></svg>'
+        '<image href="data:image/png;base64,AAAA"></image></svg>',
     );
     sanitizeRenderedDocx(root);
     const imgs = root.querySelectorAll("image");

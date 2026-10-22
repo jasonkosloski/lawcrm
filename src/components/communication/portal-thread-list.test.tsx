@@ -41,7 +41,7 @@ describe("PortalThreadList", () => {
           row({ matterId: "b", matterName: "Beta" }),
         ]}
         paging={{ ...paging, total: 2 }}
-      />
+      />,
     );
     const alpha = screen.getByRole("link", { name: /Alpha/ });
     const beta = screen.getByRole("link", { name: /Beta/ });
@@ -50,9 +50,7 @@ describe("PortalThreadList", () => {
   });
 
   test("unread badge is announced as 'N unread'", () => {
-    render(
-      <PortalThreadList rows={[row({ matterName: "Alpha", unread: 4 })]} paging={paging} />
-    );
+    render(<PortalThreadList rows={[row({ matterName: "Alpha", unread: 4 })]} paging={paging} />);
     expect(screen.getByRole("link", { name: /4 unread/ })).toBeInTheDocument();
   });
 
@@ -64,7 +62,7 @@ describe("PortalThreadList", () => {
           row({ matterId: "b", matterName: "Beta", unread: 0 }),
         ]}
         paging={{ ...paging, total: 2 }}
-      />
+      />,
     );
     expect(within(screen.getByRole("link", { name: /Alpha/ })).getByText("4")).toBeInTheDocument();
     expect(within(screen.getByRole("link", { name: /Beta/ })).queryByText("0")).toBeNull();
@@ -72,10 +70,7 @@ describe("PortalThreadList", () => {
 
   test("empty state", () => {
     render(
-      <PortalThreadList
-        rows={[]}
-        paging={{ page: 1, pageCount: 1, total: 0, pageSize: 100 }}
-      />
+      <PortalThreadList rows={[]} paging={{ page: 1, pageCount: 1, total: 0, pageSize: 100 }} />,
     );
     expect(screen.getByText("No client portal messages yet.")).toBeInTheDocument();
   });
@@ -85,7 +80,7 @@ describe("PortalThreadList", () => {
       <PortalThreadList
         rows={[row()]}
         paging={{ page: 1, pageCount: 2, total: 150, pageSize: 100 }}
-      />
+      />,
     );
     const next = screen.getByRole("link", { name: /Older/ });
     expect(next.getAttribute("href")).toContain("view=portal");

@@ -24,7 +24,7 @@ export type PendingMove = {
  *  reference unchanged). */
 export function applyPending(
   items: CalendarItem[],
-  pending: Map<string, PendingMove>
+  pending: Map<string, PendingMove>,
 ): CalendarItem[] {
   if (pending.size === 0) return items;
   return items.map((item) => {
@@ -47,15 +47,13 @@ export function applyPending(
  *  reconciles pending state when fresh server data arrives. */
 export function reconcilePending(
   items: CalendarItem[],
-  pending: Map<string, PendingMove>
+  pending: Map<string, PendingMove>,
 ): Map<string, PendingMove> {
   if (pending.size === 0) return pending;
   const next = new Map(pending);
   let changed = false;
   for (const [id, move] of pending) {
-    const serverItem = items.find(
-      (i) => i.kind === "event" && i.id === id
-    );
+    const serverItem = items.find((i) => i.kind === "event" && i.id === id);
     if (!serverItem || serverItem.kind !== "event") continue;
     // All-day bounds are date-only values (ADR-012): the optimistic
     // target is whatever the drop computed (browser-local midnight)

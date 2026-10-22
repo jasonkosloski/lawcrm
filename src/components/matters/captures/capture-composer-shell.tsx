@@ -94,11 +94,7 @@ export function CaptureComposerShell({
           </Button>
         ) : (
           <form onSubmit={onSubmit} className="flex flex-col gap-3">
-            <input
-              type="hidden"
-              name="attachments"
-              value={JSON.stringify(captures)}
-            />
+            <input type="hidden" name="attachments" value={JSON.stringify(captures)} />
 
             {/* Primary form fields from the parent. */}
             {children}
@@ -125,11 +121,7 @@ export function CaptureComposerShell({
               >
                 Cancel
               </button>
-              <Button
-                size="xs"
-                type="submit"
-                disabled={isPending || !hasContent}
-              >
+              <Button size="xs" type="submit" disabled={isPending || !hasContent}>
                 {isPending
                   ? "Saving…"
                   : captures.length > 0

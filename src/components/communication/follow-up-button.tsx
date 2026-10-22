@@ -30,17 +30,13 @@ import {
   todayKey,
 } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { inputClass } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 
 export type FollowUpAction = (
   threadId: string,
-  dateString: string | null
+  dateString: string | null,
 ) => Promise<{ ok: boolean; error?: string }>;
 
 export function FollowUpButton({
@@ -117,7 +113,7 @@ export function FollowUpButton({
                   : isToday
                     ? "bg-brand-soft text-brand-700 border-brand-200 hover:border-brand-300"
                     : "bg-paper-2/60 text-ink-2 border-line hover:border-brand-300 hover:text-brand-700",
-              "disabled:opacity-50"
+              "disabled:opacity-50",
             )}
           >
             {followUpAt ? (
@@ -136,22 +132,14 @@ export function FollowUpButton({
       />
       <PopoverContent align="end" className="w-64">
         <div className="flex flex-col gap-2.5">
-          <div className="text-2xs font-medium text-ink-3">
-            Follow up by
-          </div>
+          <div className="text-2xs font-medium text-ink-3">Follow up by</div>
 
           {/* Presets */}
           <div className="flex flex-wrap gap-1.5">
             <PresetPill onClick={() => save(today)}>Today</PresetPill>
-            <PresetPill onClick={() => save(addDaysToKey(today, 1))}>
-              Tomorrow
-            </PresetPill>
-            <PresetPill onClick={() => save(nextMondayKey(today))}>
-              Next Mon
-            </PresetPill>
-            <PresetPill onClick={() => save(addDaysToKey(today, 7))}>
-              In a week
-            </PresetPill>
+            <PresetPill onClick={() => save(addDaysToKey(today, 1))}>Tomorrow</PresetPill>
+            <PresetPill onClick={() => save(nextMondayKey(today))}>Next Mon</PresetPill>
+            <PresetPill onClick={() => save(addDaysToKey(today, 7))}>In a week</PresetPill>
           </div>
 
           {/* Date picker */}
@@ -190,13 +178,7 @@ export function FollowUpButton({
   );
 }
 
-function PresetPill({
-  onClick,
-  children,
-}: {
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+function PresetPill({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"

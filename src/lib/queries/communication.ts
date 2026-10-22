@@ -14,10 +14,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
-import {
-  matterAccessWhere,
-  optionalRecordAccessClause,
-} from "@/lib/matter-access";
+import { matterAccessWhere, optionalRecordAccessClause } from "@/lib/matter-access";
 import { leadAccessWhere } from "@/lib/lead-access";
 import { paginate, type Page } from "@/lib/pagination";
 
@@ -28,40 +25,33 @@ export const THREAD_PAGE_SIZE = 100;
 /** Ethical walls: a thread filed to a matter or lead the viewer can't
  *  see is hidden from every list / count / reader (unfiled threads
  *  stay). Spread as `AND: await threadRecordAccessAnd(userId)`. */
-async function threadRecordAccessAnd(
-  userId: string
-): Promise<Prisma.EmailThreadWhereInput[]> {
-  return (await optionalRecordAccessClause(
-    userId
-  )) as Prisma.EmailThreadWhereInput[];
+async function threadRecordAccessAnd(userId: string): Promise<Prisma.EmailThreadWhereInput[]> {
+  return (await optionalRecordAccessClause(userId)) as Prisma.EmailThreadWhereInput[];
 }
 
 /** Raw-SQL twin of `threadRecordAccessAnd` for the rail-count scan
  *  (alias `t`). Empty when unrestricted on both sides. */
 async function threadRecordAccessSql(userId: string): Promise<Prisma.Sql> {
-  const [mWhere, lWhere] = await Promise.all([
-    matterAccessWhere(userId),
-    leadAccessWhere(userId),
-  ]);
+  const [mWhere, lWhere] = await Promise.all([matterAccessWhere(userId), leadAccessWhere(userId)]);
   const parts: Prisma.Sql[] = [];
   if (Object.keys(mWhere).length > 0) {
-    const ids = (
-      await prisma.matter.findMany({ where: mWhere, select: { id: true } })
-    ).map((m) => m.id);
+    const ids = (await prisma.matter.findMany({ where: mWhere, select: { id: true } })).map(
+      (m) => m.id,
+    );
     parts.push(
       ids.length === 0
         ? Prisma.sql`AND t."matterId" IS NULL`
-        : Prisma.sql`AND (t."matterId" IS NULL OR t."matterId" IN (${Prisma.join(ids)}))`
+        : Prisma.sql`AND (t."matterId" IS NULL OR t."matterId" IN (${Prisma.join(ids)}))`,
     );
   }
   if (Object.keys(lWhere).length > 0) {
-    const ids = (
-      await prisma.lead.findMany({ where: lWhere, select: { id: true } })
-    ).map((l) => l.id);
+    const ids = (await prisma.lead.findMany({ where: lWhere, select: { id: true } })).map(
+      (l) => l.id,
+    );
     parts.push(
       ids.length === 0
         ? Prisma.sql`AND t."leadId" IS NULL`
-        : Prisma.sql`AND (t."leadId" IS NULL OR t."leadId" IN (${Prisma.join(ids)}))`
+        : Prisma.sql`AND (t."leadId" IS NULL OR t."leadId" IN (${Prisma.join(ids)}))`,
     );
   }
   return parts.length === 0 ? Prisma.empty : Prisma.join(parts, " ");
@@ -112,9 +102,7 @@ export type ThreadListRow = {
  *  in a pinned-matter drilldown where the rail badge counts every
  *  thread filed to the matter - archived ones included (filing then
  *  archiving is the normal workflow) - so the list must show them too. */
-export function defaultEmailFilter(
-  matterId: string | null | undefined
-): CommunicationFilter {
+export function defaultEmailFilter(matterId: string | null | undefined): CommunicationFilter {
   return matterId ? "all" : "inbox";
 }
 
@@ -146,8 +134,7 @@ function toThreadListRow(t: ThreadListRecord): ThreadListRow {
     messageCount: t.messageCount,
     lastMessageAt: t.lastMessageAt,
     followUpAt: t.followUpAt,
-    fromDisplay:
-      t.messages[0]?.fromName ?? t.messages[0]?.fromEmail ?? "Unknown",
+    fromDisplay: t.messages[0]?.fromName ?? t.messages[0]?.fromEmail ?? "Unknown",
     matter: t.matter,
     lead: t.lead,
   };
@@ -160,7 +147,7 @@ export async function listThreads(
    *  filters. */
   matterId?: string,
   /** 1-based `?page=`; clamped into range. */
-  page = 1
+  page = 1,
 ): Promise<Page<ThreadListRow>> {
   const userId = await getCurrentUserId();
 
@@ -205,7 +192,7 @@ export async function listThreads(
  *  tiebreak keeps rows sharing a lastMessageAt stable across pages. */
 async function pageThreads(
   where: Prisma.EmailThreadWhereInput,
-  page: number
+  page: number,
 ): Promise<Page<ThreadListRow>> {
   return paginate(
     page,
@@ -220,7 +207,7 @@ async function pageThreads(
           include: threadListInclude,
           orderBy: [{ lastMessageAt: "desc" }, { id: "desc" }],
         })
-      ).map(toThreadListRow)
+      ).map(toThreadListRow),
   );
 }
 
@@ -282,7 +269,7 @@ function parseRecipients(raw: string | null): Array<{ name?: string; email: stri
     if (!Array.isArray(v)) return [];
     return v.filter(
       (e): e is { name?: string; email: string } =>
-        e && typeof e === "object" && typeof e.email === "string"
+        e && typeof e === "object" && typeof e.email === "string",
     );
   } catch {
     return [];
@@ -373,7 +360,7 @@ export async function getThreadById(id: string): Promise<ThreadDetail | null> {
 export async function listThreadsForMatter(
   matterId: string,
   /** 1-based `?page=`; clamped into range. */
-  page = 1
+  page = 1,
 ): Promise<Page<ThreadListRow>> {
   const userId = await getCurrentUserId();
   return pageThreads(
@@ -382,7 +369,7 @@ export async function listThreadsForMatter(
       ...visibleEmailThreadWhere(userId),
       AND: await threadRecordAccessAnd(userId),
     },
-    page
+    page,
   );
 }
 
@@ -391,7 +378,7 @@ export async function listThreadsForMatter(
 export async function listThreadsForLead(
   leadId: string,
   /** 1-based `?page=`; clamped into range. */
-  page = 1
+  page = 1,
 ): Promise<Page<ThreadListRow>> {
   const userId = await getCurrentUserId();
   return pageThreads(
@@ -400,7 +387,7 @@ export async function listThreadsForLead(
       ...visibleEmailThreadWhere(userId),
       AND: await threadRecordAccessAnd(userId),
     },
-    page
+    page,
   );
 }
 
@@ -601,9 +588,7 @@ export type CommPinnedMatter = {
   threadCount: number;
 };
 
-export async function getCommunicationPinnedMatters(): Promise<
-  CommPinnedMatter[]
-> {
+export async function getCommunicationPinnedMatters(): Promise<CommPinnedMatter[]> {
   const userId = await getCurrentUserId();
   const pins = await prisma.userMatterPin.findMany({
     where: {

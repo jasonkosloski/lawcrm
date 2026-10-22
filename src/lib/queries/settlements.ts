@@ -64,9 +64,7 @@ export type MatterSettlement = {
   updatedAt: Date;
 };
 
-export async function getMatterSettlement(
-  matterId: string
-): Promise<MatterSettlement | null> {
+export async function getMatterSettlement(matterId: string): Promise<MatterSettlement | null> {
   // `matterId` is unique (one settlement per matter, ADR-036).
   const row = await prisma.settlement.findUnique({
     where: { matterId },

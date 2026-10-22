@@ -33,9 +33,7 @@ beforeEach(async () => {
   const { firmId } = await seedFirm();
   const { userId } = await seedUser({ firmId, name: "Atty" });
   const { areaId, stageId } = await seedPracticeArea();
-  matterId = (
-    await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId })
-  ).matterId;
+  matterId = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId })).matterId;
   custodianId = (await seedContact({ name: "Memorial Hospital" })).contactId;
 });
 
@@ -123,13 +121,13 @@ describe("resolveRecordsFolder", () => {
     expect(moved.systemKind).toBe("records_root");
     // Adopted children are linked, not duplicated as "(2)".
     expect(
-      await prisma.documentFolder.findUniqueOrThrow({ where: { id: reqFolder.folderId } })
+      await prisma.documentFolder.findUniqueOrThrow({ where: { id: reqFolder.folderId } }),
     ).toMatchObject({ systemKind: "records_request", recordsRequestId: r.id });
     expect(
-      await prisma.documentFolder.findUniqueOrThrow({ where: { id: subA.folderId } })
+      await prisma.documentFolder.findUniqueOrThrow({ where: { id: subA.folderId } }),
     ).toMatchObject({ systemKind: "records_request_docs", recordsRequestId: r.id });
     expect(
-      await prisma.documentFolder.findUniqueOrThrow({ where: { id: subB.folderId } })
+      await prisma.documentFolder.findUniqueOrThrow({ where: { id: subB.folderId } }),
     ).toMatchObject({ systemKind: "records_responsive_docs", recordsRequestId: r.id });
   });
 
@@ -176,17 +174,19 @@ describe("resolveRecordsFolder", () => {
     expect(f).toMatchObject({ systemKind: "records_request", recordsRequestId: r.id });
     expect(f.parent?.systemKind).toBe("records_root");
     const letter = await prisma.$transaction((tx) =>
-      resolveRecordsRoleFolder(tx, args(r.id), "request_letter")
+      resolveRecordsRoleFolder(tx, args(r.id), "request_letter"),
     );
     const resp = await prisma.$transaction((tx) =>
-      resolveRecordsRoleFolder(tx, args(r.id), "received_records")
+      resolveRecordsRoleFolder(tx, args(r.id), "received_records"),
     );
-    expect(
-      await prisma.documentFolder.findUniqueOrThrow({ where: { id: letter } })
-    ).toMatchObject({ systemKind: "records_request_docs", recordsRequestId: r.id });
-    expect(
-      await prisma.documentFolder.findUniqueOrThrow({ where: { id: resp } })
-    ).toMatchObject({ systemKind: "records_responsive_docs", recordsRequestId: r.id });
+    expect(await prisma.documentFolder.findUniqueOrThrow({ where: { id: letter } })).toMatchObject({
+      systemKind: "records_request_docs",
+      recordsRequestId: r.id,
+    });
+    expect(await prisma.documentFolder.findUniqueOrThrow({ where: { id: resp } })).toMatchObject({
+      systemKind: "records_responsive_docs",
+      recordsRequestId: r.id,
+    });
   });
 
   test("a renamed linked folder is returned as is; nothing new is created", async () => {
@@ -217,7 +217,7 @@ describe("resolveRecordsFolder", () => {
     expect(f2.parentId).toBe(f.parentId);
     expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(before + 1);
     expect(
-      await prisma.documentFolder.count({ where: { matterId, systemKind: "records_root" } })
+      await prisma.documentFolder.count({ where: { matterId, systemKind: "records_root" } }),
     ).toBe(1);
   });
 
@@ -239,9 +239,9 @@ describe("resolveRecordsFolder", () => {
     const f2 = await prisma.documentFolder.findUniqueOrThrow({ where: { id: id2 } });
     expect(f2.parentId).toBe(f.parentId);
     expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(before + 1);
-    expect(
-      await prisma.documentFolder.count({ where: { matterId, name: "Investigation" } })
-    ).toBe(1);
+    expect(await prisma.documentFolder.count({ where: { matterId, name: "Investigation" } })).toBe(
+      1,
+    );
   });
 
   test("an existing Records Requests folder found by name is stamped records_root", async () => {
@@ -317,9 +317,7 @@ describe("resolveRecordsUpload", () => {
 
   test("in-scope request: tagged and filed in the Responsive documents subfolder", async () => {
     const r = await mkRequest();
-    const tag = await prisma.$transaction((tx) =>
-      resolveRecordsUpload(tx, r.id, M(), null)
-    );
+    const tag = await prisma.$transaction((tx) => resolveRecordsUpload(tx, r.id, M(), null));
     expect(tag).toMatchObject({
       recordsRequestId: r.id,
       recordsRequestRole: "received_records",
@@ -333,7 +331,7 @@ describe("resolveRecordsUpload", () => {
   test("the request_letter role files into Request documents", async () => {
     const r = await mkRequest();
     const tag = await prisma.$transaction((tx) =>
-      resolveRecordsUpload(tx, r.id, M(), null, "request_letter")
+      resolveRecordsUpload(tx, r.id, M(), null, "request_letter"),
     );
     expect(tag?.recordsRequestRole).toBe("request_letter");
     const f = await prisma.documentFolder.findUniqueOrThrow({
@@ -353,9 +351,7 @@ describe("resolveRecordsUpload", () => {
       },
       select: { id: true },
     });
-    const tag = await prisma.$transaction((tx) =>
-      resolveRecordsUpload(tx, r.id, M(), null)
-    );
+    const tag = await prisma.$transaction((tx) => resolveRecordsUpload(tx, r.id, M(), null));
     expect(tag).toBeNull();
     expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(0);
   });
@@ -363,9 +359,7 @@ describe("resolveRecordsUpload", () => {
   test("an explicit folderId is kept and no records folder is created", async () => {
     const r = await mkRequest();
     const { folderId } = await seedDocumentFolder({ matterId, name: "Mine" });
-    const tag = await prisma.$transaction((tx) =>
-      resolveRecordsUpload(tx, r.id, M(), folderId)
-    );
+    const tag = await prisma.$transaction((tx) => resolveRecordsUpload(tx, r.id, M(), folderId));
     expect(tag?.folderId).toBe(folderId);
     expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(1);
   });
@@ -373,11 +367,9 @@ describe("resolveRecordsUpload", () => {
   test("a null folderId falls back to the role folder", async () => {
     const r = await mkRequest();
     const direct = await prisma.$transaction((tx) =>
-      resolveRecordsRoleFolder(tx, args(r.id), "received_records")
+      resolveRecordsRoleFolder(tx, args(r.id), "received_records"),
     );
-    const tag = await prisma.$transaction((tx) =>
-      resolveRecordsUpload(tx, r.id, M(), null)
-    );
+    const tag = await prisma.$transaction((tx) => resolveRecordsUpload(tx, r.id, M(), null));
     expect(tag?.folderId).toBe(direct);
   });
 
@@ -396,9 +388,7 @@ describe("resolveRecordsUpload", () => {
       where: { id: r.id },
       data: { matterId, leadId: null },
     });
-    const tag = await prisma.$transaction((tx) =>
-      resolveRecordsUpload(tx, r.id, M(), null)
-    );
+    const tag = await prisma.$transaction((tx) => resolveRecordsUpload(tx, r.id, M(), null));
     expect(tag?.recordsRequestId).toBe(r.id);
     const f = await prisma.documentFolder.findUniqueOrThrow({
       where: { id: tag!.folderId },
@@ -406,7 +396,7 @@ describe("resolveRecordsUpload", () => {
     expect(f.matterId).toBe(matterId);
     // The stale lead scope no longer matches.
     const stale = await prisma.$transaction((tx) =>
-      resolveRecordsUpload(tx, r.id, { kind: "lead", leadId }, null)
+      resolveRecordsUpload(tx, r.id, { kind: "lead", leadId }, null),
     );
     expect(stale).toBeNull();
   });
@@ -414,9 +404,7 @@ describe("resolveRecordsUpload", () => {
   test("deleted request -> null, so the upload files untagged", async () => {
     const r = await mkRequest();
     await prisma.recordsRequest.delete({ where: { id: r.id } });
-    const tag = await prisma.$transaction((tx) =>
-      resolveRecordsUpload(tx, r.id, M(), null)
-    );
+    const tag = await prisma.$transaction((tx) => resolveRecordsUpload(tx, r.id, M(), null));
     expect(tag).toBeNull();
   });
 });

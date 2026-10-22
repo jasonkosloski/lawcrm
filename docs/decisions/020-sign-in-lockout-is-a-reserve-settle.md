@@ -6,6 +6,7 @@
 **Context:** The lockout (5 failures / 15 min, counted from `ActivityLog` auth rows) was check-then-act: N parallel guesses could all pass the count before any failure row existed, so the threshold did not bound guessing. Separately, a lock keyed on the account lets anyone who knows an email lock that account on purpose.
 
 **Decision:**
+
 - `reserveAttempt` (`src/lib/credentials-authorize.ts`) opens a short transaction, takes `pg_advisory_xact_lock(hashtext(<key>))` (key = normalised email for sign-in, user id for password change), counts failures including in-flight ones, and inserts the failure row **before** the password is verified. `settleAttempt` deletes the row on success or annotates it with the reason on failure. The lock is released before argon2 runs. A crash mid-verify leaves a counted failure (fail closed).
 - `changePasswordAction` reuses the same mechanism (`password_change_failed` rows) so a hijacked session can't brute-force the current password.
 - `AUTH_EVENT_TITLES` values are query keys; never rename them.
@@ -14,6 +15,7 @@
 - The unlock action exists server-side only; there is no button on the team page yet (follow-up: wire it in `member-row.tsx`).
 
 **Trade-offs:**
+
 - (+) The threshold actually bounds parallel guessing
 - (+) No schema change; same audit rows drive the lock and the history
 - (-) A deliberate lockout DoS against any known email remains possible until edge rate limiting is configured

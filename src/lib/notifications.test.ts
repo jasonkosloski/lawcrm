@@ -20,10 +20,7 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
-import {
-  createNotification,
-  createNotifications,
-} from "@/lib/notifications";
+import { createNotification, createNotifications } from "@/lib/notifications";
 import { getNotificationsBell } from "@/lib/queries/notifications";
 import {
   resetDb,
@@ -107,7 +104,7 @@ describe("createNotification", () => {
         userId: "no-such-user",
         type: "generic",
         title: "Doomed",
-      })
+      }),
     ).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
@@ -123,9 +120,7 @@ describe("createNotifications (fan-out)", () => {
     });
     const rows = await prisma.notification.findMany();
     expect(rows).toHaveLength(2);
-    expect(new Set(rows.map((r) => r.userId))).toEqual(
-      new Set([userId, otherUserId])
-    );
+    expect(new Set(rows.map((r) => r.userId))).toEqual(new Set([userId, otherUserId]));
   });
 
   test("dedupes duplicate recipients", async () => {
@@ -195,10 +190,7 @@ describe("getNotificationsBell", () => {
       "unread-2",
       "unread-3",
     ]);
-    expect(bell.recent.slice(3, 5).map((r) => r.title)).toEqual([
-      "read-newer",
-      "read-older",
-    ]);
+    expect(bell.recent.slice(3, 5).map((r) => r.title)).toEqual(["read-newer", "read-older"]);
     expect(bell.recent[0]!.isRead).toBe(false);
     expect(bell.recent[3]!.isRead).toBe(true);
   });

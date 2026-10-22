@@ -46,11 +46,7 @@
 import { prisma } from "@/lib/prisma";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
 import { GoogleOAuthError } from "@/lib/google/oauth";
-import {
-  deleteFile,
-  readStoredFile,
-  storeFile,
-} from "@/lib/file-storage";
+import { deleteFile, readStoredFile, storeFile } from "@/lib/file-storage";
 import { contentTypeForFilename } from "@/app/api/documents/upload/upload-config";
 
 /** `fileUrl` prefix the sync engine parks Gmail attachment ids
@@ -61,15 +57,12 @@ export function isParkedGmailKey(fileUrl: string | null): fileUrl is string {
   return fileUrl !== null && fileUrl.startsWith(GMAIL_PARKED_PREFIX);
 }
 
-export type AttachmentBytesFailure =
-  | "no_bytes"
-  | "disconnected"
-  | "fetch_failed";
+export type AttachmentBytesFailure = "no_bytes" | "disconnected" | "fetch_failed";
 
 export class AttachmentBytesError extends Error {
   constructor(
     readonly code: AttachmentBytesFailure,
-    message: string
+    message: string,
   ) {
     super(message);
     this.name = "AttachmentBytesError";
@@ -90,9 +83,7 @@ const RECONNECT_MESSAGE =
  * + scope the row first, so that's a programming error, not a user
  * state.
  */
-export async function ensureAttachmentBytes(
-  attachmentId: string
-): Promise<{ key: string }> {
+export async function ensureAttachmentBytes(attachmentId: string): Promise<{ key: string }> {
   const attachment = await prisma.emailAttachment.findUnique({
     where: { id: attachmentId },
     select: {
@@ -124,7 +115,7 @@ export async function ensureAttachmentBytes(
   if (parked === null || !attachment.message.externalId) {
     throw new AttachmentBytesError(
       "no_bytes",
-      "This attachment has no downloadable content on record."
+      "This attachment has no downloadable content on record.",
     );
   }
 
@@ -146,8 +137,8 @@ export async function ensureAttachmentBytes(
     res = await gmailFetch(
       accountId,
       `/users/me/messages/${encodeURIComponent(
-        attachment.message.externalId
-      )}/attachments/${encodeURIComponent(gmailAttachmentId)}`
+        attachment.message.externalId,
+      )}/attachments/${encodeURIComponent(gmailAttachmentId)}`,
     );
     // MessagePartBody: `data` is base64url. `size` is Gmail's claim;
     // we persist the decoded length instead.
@@ -164,7 +155,7 @@ export async function ensureAttachmentBytes(
       console.error("[email-attachments] Gmail fetch failed", err);
       throw new AttachmentBytesError(
         "fetch_failed",
-        "Couldn't fetch the attachment from Gmail right now - try again in a moment."
+        "Couldn't fetch the attachment from Gmail right now - try again in a moment.",
       );
     }
     throw err;
@@ -172,14 +163,11 @@ export async function ensureAttachmentBytes(
   if (!res.ok) {
     throw new AttachmentBytesError(
       "fetch_failed",
-      `Gmail returned ${res.status} while fetching the attachment.`
+      `Gmail returned ${res.status} while fetching the attachment.`,
     );
   }
   if (typeof body.data !== "string" || body.data.length === 0) {
-    throw new AttachmentBytesError(
-      "fetch_failed",
-      "Gmail returned an empty attachment payload."
-    );
+    throw new AttachmentBytesError("fetch_failed", "Gmail returned an empty attachment payload.");
   }
   const bytes = Buffer.from(body.data, "base64url");
 
@@ -189,7 +177,7 @@ export async function ensureAttachmentBytes(
   const stored = await storeFile(
     new File([new Uint8Array(bytes)], attachment.filename, {
       type: contentTypeForFilename(attachment.filename),
-    })
+    }),
   );
 
   // Exactly-once transition: only flip fileUrl if it's STILL the
@@ -211,7 +199,7 @@ export async function ensureAttachmentBytes(
     // Row vanished / reverted mid-flight — treat as transient.
     throw new AttachmentBytesError(
       "fetch_failed",
-      "The attachment changed while downloading — try again."
+      "The attachment changed while downloading — try again.",
     );
   }
   return { key: stored.key };

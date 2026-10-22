@@ -26,10 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { voidInvoice } from "@/app/actions/billing";
-import {
-  billingInitialState,
-  type BillingFormState,
-} from "@/lib/billing-form";
+import { billingInitialState, type BillingFormState } from "@/lib/billing-form";
 import { notifySuccess, notifyWarning } from "@/lib/feedback";
 import { inputClass, FormErrorBanner } from "@/components/ui/field";
 
@@ -49,10 +46,11 @@ export function VoidInvoiceDialog({
   canSendInvoice: boolean;
 }) {
   const action = voidInvoice.bind(null, invoiceId);
-  const [state, formAction, isPending] = useDialogActionState<
-    BillingFormState,
-    FormData
-  >(action, billingInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<BillingFormState, FormData>(
+    action,
+    billingInitialState,
+    open,
+  );
 
   // Keyed on the state object: each submission returns a fresh one.
   useEffect(() => {
@@ -68,8 +66,7 @@ export function VoidInvoiceDialog({
         <DialogHeader>
           <DialogTitle>Void invoice {invoiceNumber}</DialogTitle>
           <DialogDescription>
-            Voiding returns its time and expenses to unbilled. Filed copies are
-            stamped VOID.
+            Voiding returns its time and expenses to unbilled. Filed copies are stamped VOID.
           </DialogDescription>
         </DialogHeader>
         <VoidInvoiceForm
@@ -144,9 +141,7 @@ function VoidInvoiceForm({
                 placeholder="client@example.com"
                 className={cn(inputClass(!!errs.recipient, "md"), "text-sm")}
               />
-              {errs.recipient && (
-                <span className="text-2xs text-warn">{errs.recipient[0]}</span>
-              )}
+              {errs.recipient && <span className="text-2xs text-warn">{errs.recipient[0]}</span>}
             </div>
           )}
         </>

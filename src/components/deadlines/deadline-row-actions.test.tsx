@@ -66,9 +66,7 @@ describe("DeadlineRowMenu", () => {
     render(<DeadlineRowMenu deadline={base} {...all} />);
     await user.click(screen.getByRole("button", { name: /deadline actions/i }));
     await user.click(await screen.findByText("Delete"));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("Deadline not found")
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Deadline not found"));
   });
 
   test("shows the server error when a status change is refused", async () => {
@@ -80,18 +78,13 @@ describe("DeadlineRowMenu", () => {
     render(<DeadlineRowMenu deadline={base} {...all} />);
     await user.click(screen.getByRole("button", { name: /deadline actions/i }));
     await user.click(await screen.findByText("Completed"));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("Nope")
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Nope"));
   });
 
   test("the auto-managed SOL row has no Delete item", async () => {
     const user = setupUser();
     render(
-      <DeadlineRowMenu
-        deadline={{ ...base, sourceType: "statute_of_limitations" }}
-        {...all}
-      />
+      <DeadlineRowMenu deadline={{ ...base, sourceType: "statute_of_limitations" }} {...all} />,
     );
     await user.click(screen.getByRole("button", { name: /deadline actions/i }));
     await screen.findByText("Edit");
@@ -113,7 +106,7 @@ describe("DeadlineRowMenu - permission-gated items", () => {
         canDelete={false}
         canLogTime={false}
         canAddNote={false}
-      />
+      />,
     );
     await open(user);
     await screen.findByText("Edit");
@@ -131,7 +124,7 @@ describe("DeadlineRowMenu - permission-gated items", () => {
         canDelete
         canLogTime={false}
         canAddNote={false}
-      />
+      />,
     );
     await open(user);
     await screen.findByText("Delete");
@@ -147,11 +140,9 @@ describe("DeadlineRowMenu - permission-gated items", () => {
         canDelete={false}
         canLogTime={false}
         canAddNote={false}
-      />
+      />,
     );
-    expect(
-      screen.queryByRole("button", { name: /deadline actions/i })
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /deadline actions/i })).toBeNull();
   });
 });
 
@@ -167,7 +158,7 @@ describe("DeadlineRowMenu — Add note", () => {
         canDelete={false}
         canLogTime={false}
         canAddNote
-      />
+      />,
     );
     await openMenu(user);
     await user.click(await screen.findByText("Add note on this deadline"));

@@ -15,7 +15,7 @@ import { ADMIN_ROLE_NAME } from "@/lib/role-constants";
 /** The subset of `userIds` that currently hold `permission`. */
 export async function filterUsersWithPermission(
   userIds: readonly string[],
-  permission: string
+  permission: string,
 ): Promise<string[]> {
   if (userIds.length === 0) return [];
   const rows = await prisma.user.findMany({
@@ -25,10 +25,7 @@ export async function filterUsersWithPermission(
       userRoles: {
         some: {
           role: {
-            OR: [
-              { name: ADMIN_ROLE_NAME },
-              { permissions: { some: { permission } } },
-            ],
+            OR: [{ name: ADMIN_ROLE_NAME }, { permissions: { some: { permission } } }],
           },
         },
       },

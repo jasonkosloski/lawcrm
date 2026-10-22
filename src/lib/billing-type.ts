@@ -40,8 +40,9 @@ export const BILLING_TYPE_LABEL: Record<BillingTypeOrLegacy, string> = {
   hybrid: "Hybrid",
 };
 
-export const BILLING_TYPE_OPTIONS: Array<{ value: BillingType; label: string }> =
-  BILLING_TYPES.map((value) => ({ value, label: BILLING_TYPE_LABEL[value] }));
+export const BILLING_TYPE_OPTIONS: Array<{ value: BillingType; label: string }> = BILLING_TYPES.map(
+  (value) => ({ value, label: BILLING_TYPE_LABEL[value] }),
+);
 
 export function isBillingType(v: unknown): v is BillingType {
   return (BILLING_TYPES as readonly unknown[]).includes(v);

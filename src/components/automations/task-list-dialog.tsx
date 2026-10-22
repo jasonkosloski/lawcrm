@@ -66,7 +66,7 @@ export function TaskListDialog({
   const [state, formAction, isPending] = useDialogActionState<AutomationFormState, FormData>(
     action,
     automationInitialState,
-    open
+    open,
   );
 
   const [name, setName] = useState("");
@@ -92,7 +92,7 @@ export function TaskListDialog({
               assignTo: i.assignTo === "lead" ? "lead" : "unassigned",
               due: i.dueOffsetDays === null ? "" : String(i.dueOffsetDays),
             }))
-          : [blankItem()]
+          : [blankItem()],
       );
     }
   }
@@ -130,8 +130,7 @@ export function TaskListDialog({
         <DialogHeader>
           <DialogTitle>{list ? "Edit task list" : "New task list"}</DialogTitle>
           <DialogDescription>
-            Applying the list adds every task to the matter. Edits affect
-            future applications only.
+            Applying the list adds every task to the matter. Edits affect future applications only.
           </DialogDescription>
         </DialogHeader>
 
@@ -140,12 +139,26 @@ export function TaskListDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="flex flex-col gap-1">
               <span className={labelClass}>Name</span>
-              <input name="name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} placeholder="§1983 intake checklist" className={inputClass()} />
+              <input
+                name="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                maxLength={120}
+                placeholder="§1983 intake checklist"
+                className={inputClass()}
+              />
               {errs.name?.[0] && <span className="text-2xs text-warn">{errs.name[0]}</span>}
             </label>
             <label className="flex flex-col gap-1">
               <span className={labelClass}>Description (optional)</span>
-              <input name="description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} className={inputClass()} />
+              <input
+                name="description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={2000}
+                className={inputClass()}
+              />
             </label>
           </div>
 
@@ -159,28 +172,92 @@ export function TaskListDialog({
             </div>
             <div className="flex flex-col gap-2 max-h-[45vh] overflow-y-auto pr-1">
               {items.map((item, idx) => (
-                <div key={item.key} className="flex flex-col gap-1 p-1.5 rounded-md border border-line bg-paper">
+                <div
+                  key={item.key}
+                  className="flex flex-col gap-1 p-1.5 rounded-md border border-line bg-paper"
+                >
                   <div className="grid grid-cols-1 sm:grid-cols-[1fr_96px_120px_88px_76px] gap-2 items-center">
-                    <input aria-label="Task title" value={item.title} onChange={(e) => update(item.key, { title: e.target.value })} maxLength={200} placeholder={`Task ${idx + 1}`} className={inputClass()} />
-                    <NativeSelect aria-label="Priority" value={item.priority} onChange={(e) => update(item.key, { priority: e.target.value as DraftItem["priority"] })} className="w-full">
-                      {TASK_PRIORITIES.map((p) => <NativeSelectOption key={p} value={p}>{TASK_PRIORITY_LABEL[p]}</NativeSelectOption>)}
+                    <input
+                      aria-label="Task title"
+                      value={item.title}
+                      onChange={(e) => update(item.key, { title: e.target.value })}
+                      maxLength={200}
+                      placeholder={`Task ${idx + 1}`}
+                      className={inputClass()}
+                    />
+                    <NativeSelect
+                      aria-label="Priority"
+                      value={item.priority}
+                      onChange={(e) =>
+                        update(item.key, { priority: e.target.value as DraftItem["priority"] })
+                      }
+                      className="w-full"
+                    >
+                      {TASK_PRIORITIES.map((p) => (
+                        <NativeSelectOption key={p} value={p}>
+                          {TASK_PRIORITY_LABEL[p]}
+                        </NativeSelectOption>
+                      ))}
                     </NativeSelect>
-                    <NativeSelect aria-label="Assign to" value={item.assignTo} onChange={(e) => update(item.key, { assignTo: e.target.value as DraftItem["assignTo"] })} className="w-full">
+                    <NativeSelect
+                      aria-label="Assign to"
+                      value={item.assignTo}
+                      onChange={(e) =>
+                        update(item.key, { assignTo: e.target.value as DraftItem["assignTo"] })
+                      }
+                      className="w-full"
+                    >
                       <NativeSelectOption value="lead">Lead attorney</NativeSelectOption>
                       <NativeSelectOption value="unassigned">Unassigned</NativeSelectOption>
                     </NativeSelect>
-                    <input aria-label="Due days after applied" type="number" min={0} max={3650} value={item.due} onChange={(e) => update(item.key, { due: e.target.value })} placeholder="none" className={inputClass()} />
+                    <input
+                      aria-label="Due days after applied"
+                      type="number"
+                      min={0}
+                      max={3650}
+                      value={item.due}
+                      onChange={(e) => update(item.key, { due: e.target.value })}
+                      placeholder="none"
+                      className={inputClass()}
+                    />
                     <div className="flex items-center gap-0.5 justify-end">
-                      <IconBtn label="Move up" onClick={() => move(idx, -1)} disabled={idx === 0}><ArrowUp size={13} /></IconBtn>
-                      <IconBtn label="Move down" onClick={() => move(idx, 1)} disabled={idx === items.length - 1}><ArrowDown size={13} /></IconBtn>
-                      <IconBtn label="Remove task" onClick={() => setItems((xs) => xs.filter((x) => x.key !== item.key))} disabled={items.length === 1}><Trash2 size={13} /></IconBtn>
+                      <IconBtn label="Move up" onClick={() => move(idx, -1)} disabled={idx === 0}>
+                        <ArrowUp size={13} />
+                      </IconBtn>
+                      <IconBtn
+                        label="Move down"
+                        onClick={() => move(idx, 1)}
+                        disabled={idx === items.length - 1}
+                      >
+                        <ArrowDown size={13} />
+                      </IconBtn>
+                      <IconBtn
+                        label="Remove task"
+                        onClick={() => setItems((xs) => xs.filter((x) => x.key !== item.key))}
+                        disabled={items.length === 1}
+                      >
+                        <Trash2 size={13} />
+                      </IconBtn>
                     </div>
                   </div>
-                  <input aria-label="Task details" value={item.description} onChange={(e) => update(item.key, { description: e.target.value })} maxLength={4000} placeholder="Details (optional)" className={`${inputClass()} h-7 text-2xs`} />
+                  <input
+                    aria-label="Task details"
+                    value={item.description}
+                    onChange={(e) => update(item.key, { description: e.target.value })}
+                    maxLength={4000}
+                    placeholder="Details (optional)"
+                    className={`${inputClass()} h-7 text-2xs`}
+                  />
                 </div>
               ))}
             </div>
-            <Button variant="ghost" size="xs" type="button" onClick={() => setItems((xs) => [...xs, blankItem()])} className="self-start text-brand-700 hover:bg-brand-soft">
+            <Button
+              variant="ghost"
+              size="xs"
+              type="button"
+              onClick={() => setItems((xs) => [...xs, blankItem()])}
+              className="self-start text-brand-700 hover:bg-brand-soft"
+            >
               <Plus size={13} /> Add task
             </Button>
             <span className="text-3xs text-ink-4">
@@ -195,7 +272,9 @@ export function TaskListDialog({
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
             <Button type="submit" disabled={isPending || payload.length === 0}>
               {isPending ? "Saving…" : list ? "Save list" : "Create list"}
             </Button>

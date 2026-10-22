@@ -9,11 +9,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -29,10 +25,7 @@ vi.mock("@/app/actions/email-filing", () => ({
   setEmailThreadRecord: (...args: unknown[]) => setEmailThreadRecord(...args),
 }));
 
-import type {
-  FilingLeadOption,
-  FilingMatterOption,
-} from "@/lib/queries/communication";
+import type { FilingLeadOption, FilingMatterOption } from "@/lib/queries/communication";
 import { notifyError } from "@/lib/feedback";
 import { FileThreadPicker } from "./file-thread-picker";
 
@@ -45,9 +38,7 @@ const matters = [
     isPinned: false,
   },
 ] as unknown as FilingMatterOption[];
-const leads = [
-  { id: "l1", name: "Pat Prospect", stage: "new" },
-] as unknown as FilingLeadOption[];
+const leads = [{ id: "l1", name: "Pat Prospect", stage: "new" }] as unknown as FilingLeadOption[];
 
 const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
 
@@ -122,12 +113,8 @@ describe("filing", () => {
         canUnfile
       />,
     );
-    await user.click(
-      screen.getByRole("button", { name: /file to matter or lead/i }),
-    );
-    await user.click(
-      await screen.findByRole("button", { name: /Pat Prospect/ }),
-    );
+    await user.click(screen.getByRole("button", { name: /file to matter or lead/i }));
+    await user.click(await screen.findByRole("button", { name: /Pat Prospect/ }));
     await waitFor(() =>
       expect(setEmailThreadRecord).toHaveBeenCalledWith("t1", {
         kind: "lead",
@@ -149,9 +136,7 @@ describe("filing", () => {
         canUnfile={false}
       />,
     );
-    await user.click(
-      screen.getByRole("button", { name: /change matter or lead/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /change matter or lead/i }));
     await screen.findByRole("button", { name: /Smith v\. Jones/ });
     expect(screen.queryByText(/Unfile/)).toBeNull();
   });
@@ -170,13 +155,9 @@ describe("filing", () => {
         canUnfile
       />,
     );
-    await user.click(
-      screen.getByRole("button", { name: /change matter or lead/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /change matter or lead/i }));
     await user.click(await screen.findByRole("button", { name: /Unfile/ }));
-    await waitFor(() =>
-      expect(setEmailThreadRecord).toHaveBeenCalledWith("t1", null),
-    );
+    await waitFor(() => expect(setEmailThreadRecord).toHaveBeenCalledWith("t1", null));
   });
 
   test("an action error shows inline", async () => {
@@ -193,12 +174,8 @@ describe("filing", () => {
         canUnfile
       />,
     );
-    await user.click(
-      screen.getByRole("button", { name: /file to matter or lead/i }),
-    );
-    await user.click(
-      await screen.findByRole("button", { name: /Smith v\. Jones/ }),
-    );
+    await user.click(screen.getByRole("button", { name: /file to matter or lead/i }));
+    await user.click(await screen.findByRole("button", { name: /Smith v\. Jones/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Nope.");
   });
 
@@ -218,16 +195,10 @@ describe("filing", () => {
         canUnfile
       />,
     );
-    await user.click(
-      screen.getByRole("button", { name: /file to matter or lead/i }),
-    );
-    await user.click(
-      await screen.findByRole("button", { name: /Smith v\. Jones/ }),
-    );
+    await user.click(screen.getByRole("button", { name: /file to matter or lead/i }));
+    await user.click(await screen.findByRole("button", { name: /Smith v\. Jones/ }));
     await waitFor(() =>
-      expect(notifyError).toHaveBeenCalledWith(
-        expect.stringMatching(/try again/i),
-      ),
+      expect(notifyError).toHaveBeenCalledWith(expect.stringMatching(/try again/i)),
     );
   });
 });

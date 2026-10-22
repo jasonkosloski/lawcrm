@@ -1,10 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { Prisma } from "@/generated/prisma/client";
-import {
-  isForeignKeyViolation,
-  isRecordNotFound,
-  isUniqueViolation,
-} from "./prisma-errors";
+import { isForeignKeyViolation, isRecordNotFound, isUniqueViolation } from "./prisma-errors";
 
 function known(code: string) {
   return new Prisma.PrismaClientKnownRequestError("boom", {

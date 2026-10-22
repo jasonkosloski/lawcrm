@@ -12,15 +12,38 @@ const view = (over: Partial<TranscriptView> = {}): TranscriptView => ({
   correctedByName: null,
   speakers: { A: "Officer Diaz" },
   segments: [
-    { id: "s1", index: 0, speaker: "A", startSeconds: 252.7, endSeconds: 260, text: "Hello.", words: [], originalText: null, revision: 0 },
-    { id: "s2", index: 1, speaker: "B", startSeconds: 3725, endSeconds: 3730, text: "Hi.", words: [], originalText: null, revision: 0 },
+    {
+      id: "s1",
+      index: 0,
+      speaker: "A",
+      startSeconds: 252.7,
+      endSeconds: 260,
+      text: "Hello.",
+      words: [],
+      originalText: null,
+      revision: 0,
+    },
+    {
+      id: "s2",
+      index: 1,
+      speaker: "B",
+      startSeconds: 3725,
+      endSeconds: 3730,
+      text: "Hi.",
+      words: [],
+      originalText: null,
+      revision: 0,
+    },
   ],
   ...over,
 });
 
 describe("toTranscriptExport", () => {
   test("maps speaker names and [hh:mm:ss] timecodes", () => {
-    const e = toTranscriptExport(view(), { caption: "Alvarez v. City", documentName: "bodycam.mp4" });
+    const e = toTranscriptExport(view(), {
+      caption: "Alvarez v. City",
+      documentName: "bodycam.mp4",
+    });
     expect(e.paragraphs).toEqual([
       { speaker: "Officer Diaz", timecode: "[00:04:12]", text: "Hello." },
       { speaker: "Speaker B", timecode: "[01:02:05]", text: "Hi." },
@@ -32,7 +55,10 @@ describe("toTranscriptExport", () => {
 
   test("corrected vs uncorrected notice", () => {
     const at = new Date("2026-10-02T00:00:00Z");
-    const c = toTranscriptExport(view({ correctedAt: at, correctedByName: "Jo" }), { caption: "", documentName: "d" });
+    const c = toTranscriptExport(view({ correctedAt: at, correctedByName: "Jo" }), {
+      caption: "",
+      documentName: "d",
+    });
     expect(c.corrected).toEqual({ by: "Jo", at });
     expect(exportNotice(c)).toBe("Machine transcript, corrected by staff");
     expect(exportNotice(toTranscriptExport(view(), { caption: "", documentName: "d" }))).toBe(

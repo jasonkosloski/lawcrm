@@ -5,12 +5,7 @@
  */
 
 import { describe, expect, test } from "vitest";
-import {
-  MAX_MEDIA_SECONDS,
-  formatMediaSpan,
-  formatMediaTime,
-  parseMediaTime,
-} from "./media-time";
+import { MAX_MEDIA_SECONDS, formatMediaSpan, formatMediaTime, parseMediaTime } from "./media-time";
 
 describe("formatMediaTime", () => {
   test("under a minute", () => {

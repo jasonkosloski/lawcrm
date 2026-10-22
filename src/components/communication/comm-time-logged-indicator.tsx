@@ -55,15 +55,11 @@ export function CommTimeLoggedIndicator({
   if (entries.length === 0) return null;
 
   const totalHours = entries.reduce((s, e) => s + e.hours, 0);
-  const billableHours = entries
-    .filter((e) => e.billable)
-    .reduce((s, e) => s + e.hours, 0);
+  const billableHours = entries.filter((e) => e.billable).reduce((s, e) => s + e.hours, 0);
   const byUser = aggregateByUser(entries);
   const userBreakdown =
     byUser.length > 1
-      ? byUser
-          .map((u) => `${u.initials} ${formatHours(u.hours)}h`)
-          .join(" · ")
+      ? byUser.map((u) => `${u.initials} ${formatHours(u.hours)}h`).join(" · ")
       : null;
 
   return (
@@ -81,7 +77,7 @@ export function CommTimeLoggedIndicator({
           "inline-flex items-center gap-1 rounded-md border transition-colors",
           "bg-white text-ink-3 border-line",
           "hover:border-brand-300 hover:bg-brand-soft hover:text-brand-700",
-          compact ? "h-5 px-1 text-3xs" : "h-6 px-1.5 text-2xs"
+          compact ? "h-5 px-1 text-3xs" : "h-6 px-1.5 text-2xs",
         )}
       >
         {expanded ? (
@@ -90,15 +86,11 @@ export function CommTimeLoggedIndicator({
           <ChevronRight size={9} className="shrink-0 text-ink-4" />
         )}
         <Clock size={compact ? 9 : 10} className="shrink-0 text-ink-4" />
-        <span className="font-mono">
-          {formatHours(totalHours)}h
-        </span>
+        <span className="font-mono">{formatHours(totalHours)}h</span>
         {userBreakdown ? (
           <span className="text-ink-4 font-mono">· {userBreakdown}</span>
         ) : (
-          <span className="text-ink-4 font-mono">
-            · {byUser[0]?.initials ?? ""}
-          </span>
+          <span className="text-ink-4 font-mono">· {byUser[0]?.initials ?? ""}</span>
         )}
       </button>
 
@@ -106,34 +98,24 @@ export function CommTimeLoggedIndicator({
         <ul
           className={cn(
             "flex flex-col gap-1 rounded-md border border-line bg-paper-2/40 px-2 py-1.5",
-            compact ? "min-w-48 max-w-72" : "min-w-56 max-w-80"
+            compact ? "min-w-48 max-w-72" : "min-w-56 max-w-80",
           )}
         >
           {entries.map((e) => (
-            <li
-              key={e.id}
-              className="flex items-center gap-2 text-2xs"
-            >
+            <li key={e.id} className="flex items-center gap-2 text-2xs">
               <span
                 className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-50 text-3xs font-mono font-medium text-brand-700 border border-brand-100 shrink-0"
                 title={e.userName}
               >
                 {e.userInitials}
               </span>
-              <span className="flex-1 min-w-0 text-ink truncate">
-                {e.activity}
-              </span>
+              <span className="flex-1 min-w-0 text-ink truncate">{e.activity}</span>
               <span className="font-mono text-ink-4 shrink-0">
                 {formatDateOnly(e.date, "short")}
               </span>
-              <span className="font-mono text-ink shrink-0">
-                {formatHours(e.hours)}h
-              </span>
+              <span className="font-mono text-ink shrink-0">{formatHours(e.hours)}h</span>
               {!e.billable && (
-                <span
-                  title="Non-billable"
-                  className="text-3xs text-ink-4"
-                >
+                <span title="Non-billable" className="text-3xs text-ink-4">
                   nb
                 </span>
               )}
@@ -157,12 +139,9 @@ export function CommTimeLoggedIndicator({
  *  note-attachments-section; the NUL separator can't appear in
  *  either. Exported for tests. */
 export function aggregateByUser(
-  entries: CommTimeEntryView[]
+  entries: CommTimeEntryView[],
 ): Array<{ key: string; initials: string; name: string; hours: number }> {
-  const byUser = new Map<
-    string,
-    { key: string; initials: string; name: string; hours: number }
-  >();
+  const byUser = new Map<string, { key: string; initials: string; name: string; hours: number }>();
   for (const e of entries) {
     const key = `${e.userName}\u0000${e.userInitials}`;
     const existing = byUser.get(key);

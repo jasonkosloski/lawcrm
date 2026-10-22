@@ -17,15 +17,7 @@
 "use client";
 
 import { useId, useRef } from "react";
-import {
-  Calendar,
-  CircleAlert,
-  Clock,
-  ListTodo,
-  Plus,
-  StickyNote,
-  X,
-} from "lucide-react";
+import { Calendar, CircleAlert, Clock, ListTodo, Plus, StickyNote, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import {
@@ -96,11 +88,7 @@ export function CaptureStack({
     onChange(captures.filter((c) => c.tempId !== tempId));
   };
   const update = (tempId: string, patch: Partial<NoteCapture>) => {
-    onChange(
-      captures.map((c) =>
-        c.tempId === tempId ? ({ ...c, ...patch } as NoteCapture) : c
-      )
-    );
+    onChange(captures.map((c) => (c.tempId === tempId ? ({ ...c, ...patch } as NoteCapture) : c)));
   };
 
   // Nothing the viewer may add and nothing queued: render no stray
@@ -110,9 +98,7 @@ export function CaptureStack({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-2xs font-medium text-ink-3">
-          Also capture
-        </span>
+        <span className="text-2xs font-medium text-ink-3">Also capture</span>
         {allowedKinds.map((kind) => {
           const Icon = KIND_ICON[kind];
           return (
@@ -122,7 +108,7 @@ export function CaptureStack({
               onClick={() => add(kind)}
               className={cn(
                 "inline-flex items-center gap-1 h-6 px-2 rounded-md text-2xs font-medium border transition-colors",
-                "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700"
+                "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700",
               )}
             >
               <Plus size={11} />
@@ -171,9 +157,7 @@ function CaptureCard({
     <div className="rounded-md border border-line bg-paper-2/30 p-2.5 flex flex-col gap-2">
       <div className="flex items-center gap-2">
         <Icon size={12} className="text-ink-3 shrink-0" />
-        <span className="text-2xs font-medium text-ink-3">
-          {CAPTURE_KIND_LABEL[capture.kind]}
-        </span>
+        <span className="text-2xs font-medium text-ink-3">{CAPTURE_KIND_LABEL[capture.kind]}</span>
         <button
           type="button"
           onClick={onRemove}
@@ -423,11 +407,12 @@ function NoteSiblingFields({
         onChange={(e) => onUpdate({ content: e.target.value })}
         placeholder="Note content…"
         rows={3}
-        className={cn(textareaClass(!!errors?.content), "px-2 leading-relaxed w-full resize-y font-sans")}
+        className={cn(
+          textareaClass(!!errors?.content),
+          "px-2 leading-relaxed w-full resize-y font-sans",
+        )}
       />
-      {errors?.content && (
-        <div className="text-2xs text-warn">{errors.content[0]}</div>
-      )}
+      {errors?.content && <div className="text-2xs text-warn">{errors.content[0]}</div>}
       <div className="flex items-center gap-1.5">
         <div className="flex items-center gap-0.5 rounded-md border border-line bg-white p-0.5">
           {NOTE_TYPES.map((t) => (
@@ -437,9 +422,7 @@ function NoteSiblingFields({
               onClick={() => onUpdate({ type: t })}
               className={cn(
                 "text-2xs font-medium px-1.5 py-0.5 rounded transition-colors",
-                capture.type === t
-                  ? "bg-paper-2 text-ink"
-                  : "text-ink-3 hover:text-brand-700"
+                capture.type === t ? "bg-paper-2 text-ink" : "text-ink-3 hover:text-brand-700",
               )}
             >
               {NOTE_TYPE_LABEL[t]}
@@ -560,7 +543,8 @@ function Select({
   ariaLabel: string;
 }) {
   return (
-    <NativeSelect size="sm"
+    <NativeSelect
+      size="sm"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={ariaLabel}

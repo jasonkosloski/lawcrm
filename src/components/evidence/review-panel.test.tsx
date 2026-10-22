@@ -35,7 +35,7 @@ describe("ReviewPanel", () => {
     render(
       <ReviewPanel {...props}>
         <div data-testid="body" />
-      </ReviewPanel>
+      </ReviewPanel>,
     );
     const body = screen.getByTestId("body");
     const capture = screen.getByRole("button", { name: /Flag this moment/ });
@@ -47,7 +47,7 @@ describe("ReviewPanel", () => {
     render(
       <ReviewPanel {...props} aside={<div data-testid="player" />}>
         <div data-testid="transcript" />
-      </ReviewPanel>
+      </ReviewPanel>,
     );
     const player = screen.getByTestId("player");
     const transcript = screen.getByTestId("transcript");

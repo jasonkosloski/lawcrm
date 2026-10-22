@@ -93,7 +93,7 @@ try {
     if (diff.status === 2) {
       console.error(
         "\ncheck-migrations: prisma/migrations does not produce prisma/schema.prisma.\n" +
-          "Create the missing migration (prisma migrate dev --create-only) and commit it."
+          "Create the missing migration (prisma migrate dev --create-only) and commit it.",
       );
       exitCode = 2;
     } else if (diff.status !== 0) {
@@ -107,7 +107,7 @@ try {
   console.error(
     "check-migrations: could not use the test Postgres " +
       "(is `docker compose -f docker-compose.test.yml up -d` running?):",
-    err.message
+    err.message,
   );
   exitCode = 1;
 } finally {

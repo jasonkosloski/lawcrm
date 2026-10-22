@@ -36,16 +36,13 @@ export type FieldControlProps = {
 /** Text-like control classes (input / select / textarea). `xs` is the
  *  dense inline-row size, `sm` the default form size, `md` the roomier
  *  page-level forms. Add height-free classes for textareas via `cn`. */
-export function inputClass(
-  hasError = false,
-  size: "xs" | "sm" | "md" = "sm"
-): string {
+export function inputClass(hasError = false, size: "xs" | "sm" | "md" = "sm"): string {
   return cn(
     "rounded-md border bg-white text-xs text-ink",
     size === "xs" ? "h-7 px-2" : size === "md" ? "h-9 px-3" : "h-8 px-2.5",
     "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
     "placeholder:text-ink-4",
-    hasError ? "border-warn" : "border-line"
+    hasError ? "border-warn" : "border-line",
   );
 }
 
@@ -55,20 +52,14 @@ export function textareaClass(hasError = false): string {
     "rounded-md border bg-white px-2.5 py-1.5 text-xs text-ink",
     "focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30",
     "placeholder:text-ink-4",
-    hasError ? "border-warn" : "border-line"
+    hasError ? "border-warn" : "border-line",
   );
 }
 
 export const labelClass = "text-xs font-medium text-ink-2";
 
 /** One inline field error; renders nothing without a message. */
-export function FieldError({
-  id,
-  children,
-}: {
-  id?: string;
-  children?: ReactNode;
-}) {
+export function FieldError({ id, children }: { id?: string; children?: ReactNode }) {
   if (children == null || children === "" || children === false) return null;
   return (
     <span id={id} className="text-2xs text-warn">
@@ -184,7 +175,7 @@ export function FormErrorBanner({ message }: { message?: string | null }) {
  *  errors. Field errors are rendered next to their fields. */
 export function formErrorMessage(
   state: { status: "idle" | "ok" | "error"; errors?: Record<string, string[]> },
-  fallback: string
+  fallback: string,
 ): string | null {
   if (state.status !== "error") return null;
   const form = state.errors?._form?.[0];

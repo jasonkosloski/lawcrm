@@ -49,7 +49,7 @@ export type ViewerDocument = {
 
 export async function getDocumentForViewer(
   scope: RecordScope,
-  documentId: string
+  documentId: string,
 ): Promise<ViewerDocument | null> {
   const doc = await prisma.document.findFirst({
     // The scope in the where clause is the mismatch guard — a valid
@@ -73,7 +73,10 @@ export async function getDocumentForViewer(
       parentDocumentId: true,
       attachmentsExtractedAt: true,
       parentDocument: { select: { id: true, name: true } },
-      attachments: { select: { id: true, attachmentIndex: true }, orderBy: { attachmentIndex: "asc" } },
+      attachments: {
+        select: { id: true, attachmentIndex: true },
+        orderBy: { attachmentIndex: "asc" },
+      },
     },
   });
   if (!doc) return null;
@@ -86,7 +89,11 @@ export async function getDocumentForViewer(
   // comparison and the ORDER BY run in Postgres under the same
   // collation, so they agree. `folderId: null` matches the matter
   // root (Prisma turns the null into IS NULL).
-  const folderScope = { ...scopeWhere(scope), folderId: doc.folderId, parentDocumentId: doc.parentDocumentId };
+  const folderScope = {
+    ...scopeWhere(scope),
+    folderId: doc.folderId,
+    parentDocumentId: doc.parentDocumentId,
+  };
   const [uploader, prev, next] = await Promise.all([
     doc.uploadedBy
       ? prisma.user.findUnique({
@@ -97,10 +104,7 @@ export async function getDocumentForViewer(
     prisma.document.findFirst({
       where: {
         ...folderScope,
-        OR: [
-          { name: { lt: doc.name } },
-          { name: doc.name, id: { lt: doc.id } },
-        ],
+        OR: [{ name: { lt: doc.name } }, { name: doc.name, id: { lt: doc.id } }],
       },
       orderBy: [{ name: "desc" }, { id: "desc" }],
       select: { id: true },
@@ -108,10 +112,7 @@ export async function getDocumentForViewer(
     prisma.document.findFirst({
       where: {
         ...folderScope,
-        OR: [
-          { name: { gt: doc.name } },
-          { name: doc.name, id: { gt: doc.id } },
-        ],
+        OR: [{ name: { gt: doc.name } }, { name: doc.name, id: { gt: doc.id } }],
       },
       orderBy: [{ name: "asc" }, { id: "asc" }],
       select: { id: true },
@@ -155,7 +156,6 @@ export type FileTreeDocument = {
   attachmentIndex: number | null;
 };
 
-
 /** Cap on files loaded into the viewer's tree in one go. A discovery
  *  production can hold many thousands of files; past this the tree
  *  still lists every folder, but only the current folder's files —
@@ -171,7 +171,7 @@ export const FILE_TREE_MAX_DOCUMENTS = 3000;
  */
 export async function getViewerFileTree(
   scope: RecordScope,
-  currentFolderId: string | null
+  currentFolderId: string | null,
 ): Promise<{ documents: FileTreeDocument[]; complete: boolean }> {
   const select = {
     id: true,

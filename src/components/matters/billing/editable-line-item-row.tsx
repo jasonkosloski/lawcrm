@@ -28,11 +28,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { updateInvoiceLineItem } from "@/app/actions/billing";
-import {
-  dateOnlyKey,
-  formatDateOnly,
-  parseDateOnly,
-} from "@/lib/format-date";
+import { dateOnlyKey, formatDateOnly, parseDateOnly } from "@/lib/format-date";
 import { lineItemEditInitialState } from "@/lib/billing-form";
 import { formatMoney } from "@/lib/format-money";
 
@@ -152,11 +148,7 @@ export function EditableLineItemRow({
     fd.set("rate", next.rate);
 
     startTransition(async () => {
-      const res = await updateInvoiceLineItem(
-        timeEntryId,
-        lineItemEditInitialState,
-        fd
-      );
+      const res = await updateInvoiceLineItem(timeEntryId, lineItemEditInitialState, fd);
       if (res.status === "error") {
         // Revert the optimistic change. Surface the error inline
         // — the row's last cell will render a small warn note.
@@ -184,14 +176,12 @@ export function EditableLineItemRow({
 
   // ── Cell renderers ────────────────────────────────────────────────────
 
-  const cellClass =
-    "cursor-text rounded-sm hover:bg-paper-2 transition-colors px-1 -mx-1";
+  const cellClass = "cursor-text rounded-sm hover:bg-paper-2 transition-colors px-1 -mx-1";
   const inputBase =
     "border border-brand-300 rounded-sm px-1 -mx-1 bg-white text-ink text-2xs outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200";
 
   const onKeyDown =
-    (field: Field) =>
-    (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    (field: Field) => (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !(e.shiftKey && field === "narrative")) {
         e.preventDefault();
         commitField(field, e.currentTarget.value);
@@ -272,9 +262,7 @@ export function EditableLineItemRow({
               maxLength={4000}
               rows={2}
               className={cn(inputBase, "w-full resize-y")}
-              onBlur={(e) =>
-                commitField("narrative", e.currentTarget.value)
-              }
+              onBlur={(e) => commitField("narrative", e.currentTarget.value)}
               onKeyDown={onKeyDown("narrative")}
             />
           ) : committed.narrative.length > 0 ? (
@@ -400,9 +388,7 @@ export function EditableLineItemRow({
 // auto-select on programmatic focus; this gives the click-to-edit
 // flow the "type to replace" feel users expect.
 
-function AutoFocusInput(
-  props: React.InputHTMLAttributes<HTMLInputElement>
-): React.ReactElement {
+function AutoFocusInput(props: React.InputHTMLAttributes<HTMLInputElement>): React.ReactElement {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -416,7 +402,7 @@ function AutoFocusInput(
 }
 
 function AutoFocusTextarea(
-  props: React.TextareaHTMLAttributes<HTMLTextAreaElement>
+  props: React.TextareaHTMLAttributes<HTMLTextAreaElement>,
 ): React.ReactElement {
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {

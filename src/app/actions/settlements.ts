@@ -32,21 +32,11 @@ import { assertChildMatterAccess, assertMatterAccess } from "@/lib/matter-access
 import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
 import { createNotifications } from "@/lib/notifications";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { filterUsersWithPermission } from "@/lib/permission-holders";
-import {
-  MONEY_TOO_LARGE_MESSAGE,
-  fitsMoneyColumn,
-  roundMoney,
-} from "@/lib/money";
+import { MONEY_TOO_LARGE_MESSAGE, fitsMoneyColumn, roundMoney } from "@/lib/money";
 import { firmFeeFromPercent } from "@/lib/settlement-waterfall";
-import {
-  LIENHOLDER_TYPES,
-  type SettlementFormState,
-} from "@/lib/settlement-constants";
+import { LIENHOLDER_TYPES, type SettlementFormState } from "@/lib/settlement-constants";
 import {
   SETTLEMENT_APPROVAL_STATUSES,
   SETTLEMENT_STATUSES,
@@ -72,27 +62,15 @@ const moneyField = (required: boolean) => {
   return required
     ? base
         .refine((v: string) => v.length > 0, "Required")
-        .refine(
-          (v: string) => /^\d+(\.\d{1,2})?$/.test(v),
-          "Enter a valid amount"
-        )
+        .refine((v: string) => /^\d+(\.\d{1,2})?$/.test(v), "Enter a valid amount")
         .refine(fitsMoneyColumn, MONEY_TOO_LARGE_MESSAGE)
     : base
-        .refine(
-          (v: string) => v === "" || /^\d+(\.\d{1,2})?$/.test(v),
-          "Enter a valid amount"
-        )
-        .refine(
-          (v: string) => v === "" || fitsMoneyColumn(v),
-          MONEY_TOO_LARGE_MESSAGE
-        );
+        .refine((v: string) => v === "" || /^\d+(\.\d{1,2})?$/.test(v), "Enter a valid amount")
+        .refine((v: string) => v === "" || fitsMoneyColumn(v), MONEY_TOO_LARGE_MESSAGE);
 };
 
 const upsertSchema = z.object({
-  grossAmount: moneyField(true).refine(
-    (v) => parseFloat(v) > 0,
-    "Gross must be greater than 0"
-  ),
+  grossAmount: moneyField(true).refine((v) => parseFloat(v) > 0, "Gross must be greater than 0"),
   /** Percent as a number — "33.33" not "0.3333". Stored as
    *  Decimal in the same form. Optional; firms running hourly
    *  contingency hybrids may set firmFee directly. */
@@ -102,12 +80,8 @@ const upsertSchema = z.object({
     .optional()
     .or(z.literal(""))
     .refine(
-      (v) =>
-        !v ||
-        (/^\d+(\.\d{1,2})?$/.test(v) &&
-          parseFloat(v) >= 0 &&
-          parseFloat(v) <= 100),
-      "Enter a percent from 0 to 100 with up to 2 decimals"
+      (v) => !v || (/^\d+(\.\d{1,2})?$/.test(v) && parseFloat(v) >= 0 && parseFloat(v) <= 100),
+      "Enter a percent from 0 to 100 with up to 2 decimals",
     ),
   /** Explicit fee column. Only used when percent is blank. */
   firmFee: moneyField(false),
@@ -118,7 +92,7 @@ const upsertSchema = z.object({
 export async function upsertSettlement(
   matterId: string,
   _prev: SettlementFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<SettlementFormState> {
   await requirePermission("matters.settlement.edit");
   await assertMatterAccess(matterId);
@@ -141,9 +115,7 @@ export async function upsertSettlement(
   if (!matter) return { status: "error", error: "Matter not found." };
 
   const grossAmount = new Prisma.Decimal(data.grossAmount);
-  const firmFeePercent = data.firmFeePercent
-    ? new Prisma.Decimal(data.firmFeePercent)
-    : null;
+  const firmFeePercent = data.firmFeePercent ? new Prisma.Decimal(data.firmFeePercent) : null;
   // When percent is set, recompute firmFee on the way in so the
   // stored column matches. Rounded to cents HALF_UP by the same
   // helper the read side uses, so the stored and displayed fee can't
@@ -160,9 +132,7 @@ export async function upsertSettlement(
   // Only the approval chain / sign-off permission moves a settlement
   // forward (approved -> disbursed -> closed) or back (reopen).
   // Resolved up front: the gate runs inside the transaction below.
-  const canApprove = await currentUserHasPermission(
-    "matters.settlement.approve"
-  );
+  const canApprove = await currentUserHasPermission("matters.settlement.approve");
 
   // One settlement per matter is a database guarantee
   // (`Settlement.matterId` is unique, ADR-036), so two racing "Open
@@ -227,12 +197,10 @@ export async function upsertSettlement(
     const statusChanged = to !== from;
     if (statusChanged) {
       const allStepsApproved =
-        existing.approvals.length > 0 &&
-        existing.approvals.every((a) => a.status === "approved");
+        existing.approvals.length > 0 && existing.approvals.every((a) => a.status === "approved");
       let denied: string | null = null;
       if (!canApprove) {
-        denied =
-          "Changing a settlement's status requires the settlement approval permission.";
+        denied = "Changing a settlement's status requires the settlement approval permission.";
       } else if (to === "pending") {
         // Reopen — legal from any state; amounts stay locked until
         // the reopen has been saved (checked below).
@@ -290,8 +258,7 @@ export async function upsertSettlement(
     // apply: clear every step and drop back to pending.
     const chainComplete =
       from === "approved" ||
-      (existing.approvals.length > 0 &&
-        existing.approvals.every((a) => a.status === "approved"));
+      (existing.approvals.length > 0 && existing.approvals.every((a) => a.status === "approved"));
     const resetApprovals = amountsChanged && chainComplete;
     if (resetApprovals && !canApprove) {
       // Wiping approvers' sign-offs is an approval-chain action; an
@@ -375,14 +342,14 @@ const lienAddSchema = z.object({
   lienholderType: z.enum(LIENHOLDER_TYPES).optional().or(z.literal("")),
   originalAmount: moneyField(true).refine(
     (v) => parseFloat(v) > 0,
-    "Amount must be greater than 0"
+    "Amount must be greater than 0",
   ),
 });
 
 export async function addSettlementLien(
   settlementId: string,
   _prev: SettlementFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<SettlementFormState> {
   await requirePermission("matters.settlement.manage_liens");
   await assertChildMatterAccess("settlement", settlementId);
@@ -453,7 +420,7 @@ const lienUpdateSchema = z.object({
 export async function updateSettlementLien(
   lienId: string,
   _prev: SettlementFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<SettlementFormState> {
   await requirePermission("matters.settlement.manage_liens");
   await assertChildMatterAccess("settlementLien", lienId);
@@ -475,9 +442,7 @@ export async function updateSettlementLien(
   });
   if (!found) return { status: "error", error: "Lien not found." };
 
-  const negotiatedAmount = data.negotiatedAmount
-    ? new Prisma.Decimal(data.negotiatedAmount)
-    : null;
+  const negotiatedAmount = data.negotiatedAmount ? new Prisma.Decimal(data.negotiatedAmount) : null;
 
   // Lock check + write are one unit under the per-matter advisory
   // lock (same as upsertSettlement), so the status can't change to
@@ -526,7 +491,7 @@ export async function updateSettlementLien(
 }
 
 export async function deleteSettlementLien(
-  lienId: string
+  lienId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("matters.settlement.manage_liens");
   await assertChildMatterAccess("settlementLien", lienId);
@@ -584,7 +549,7 @@ const approvalStepSchema = z.object({
 export async function setApprovalStepStatus(
   approvalIdArg: string,
   statusArg: "pending" | "approved" | "rejected",
-  notesArg?: string
+  notesArg?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("matters.settlement.approve");
   const actorId = await getCurrentUserId();
@@ -629,14 +594,10 @@ export async function setApprovalStepStatus(
       },
     });
     if (!approval) return { kind: "error" as const, error: "Approval step not found." };
-    if (
-      approval.settlement.status === "disbursed" ||
-      approval.settlement.status === "closed"
-    ) {
+    if (approval.settlement.status === "disbursed" || approval.settlement.status === "closed") {
       return {
         kind: "error" as const,
-        error:
-          "Settlement is already disbursed or closed — approvals are locked.",
+        error: "Settlement is already disbursed or closed — approvals are locked.",
       };
     }
 
@@ -651,11 +612,7 @@ export async function setApprovalStepStatus(
         // was rejected must survive a Reset — it's where the next
         // approver looks), but an Approve clears it, so an approved
         // row never shows a stale rejection reason beneath it.
-        ...(notes && notes.length > 0
-          ? { notes }
-          : status === "approved"
-            ? { notes: null }
-            : {}),
+        ...(notes && notes.length > 0 ? { notes } : status === "approved" ? { notes: null } : {}),
       },
     });
 
@@ -669,8 +626,7 @@ export async function setApprovalStepStatus(
       where: { settlementId: approval.settlement.id },
       select: { status: true },
     });
-    const allApproved =
-      allSteps.length > 0 && allSteps.every((s) => s.status === "approved");
+    const allApproved = allSteps.length > 0 && allSteps.every((s) => s.status === "approved");
     let settlementChange: "promoted" | "demoted" | null = null;
     if (allApproved && approval.settlement.status === "pending") {
       await tx.settlement.update({
@@ -741,7 +697,7 @@ export async function setApprovalStepStatus(
       });
       const recipients = await filterUsersWithPermission(
         team.map((t) => t.userId).filter((id) => id !== actorId),
-        "matters.settlement.view"
+        "matters.settlement.view",
       );
       await createNotifications(recipients, {
         type: "settlement_step_approved",
@@ -761,7 +717,7 @@ export async function setApprovalStepStatus(
           .filter((t) => t.role === "lead")
           .map((t) => t.userId)
           .filter((id) => id !== actorId),
-        "matters.settlement.view"
+        "matters.settlement.view",
       );
       await createNotifications(recipients, {
         type: "settlement_step_rejected",

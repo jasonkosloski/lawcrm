@@ -33,7 +33,7 @@ export async function setEmailThreadFollowUp(
    *  up by Friday" doesn't expire at midnight that morning. The
    *  dashboard compares against the same server-local end-of-day, so
    *  the two stay consistent. */
-  dateString: string | null
+  dateString: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await getCurrentUserId();
   const followUpAt = parseEndOfDay(dateString);
@@ -64,7 +64,7 @@ export async function setEmailThreadFollowUp(
 
 export async function setMessengerThreadFollowUp(
   threadId: string,
-  dateString: string | null
+  dateString: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
   // Messenger inbox is firm-wide (see module header) — session
   // check only, no per-account scoping to mirror.
@@ -104,13 +104,5 @@ function parseEndOfDay(dateString: string | null): Date | null {
   // rolling it into March); its UTC components are the intended Y/M/D.
   const day = parseDateOnly(dateString);
   if (!day) return null;
-  return new Date(
-    day.getUTCFullYear(),
-    day.getUTCMonth(),
-    day.getUTCDate(),
-    23,
-    59,
-    59,
-    999
-  );
+  return new Date(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 23, 59, 59, 999);
 }

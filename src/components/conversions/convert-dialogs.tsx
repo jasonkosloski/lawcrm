@@ -20,18 +20,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import {
-  convertNoteToTask,
-  convertTaskToDeadline,
-} from "@/app/actions/conversions";
-import {
-  inboxActionInitialState,
-  type InboxActionFormState,
-} from "@/lib/inbox-action-form";
-import {
-  DEADLINE_KINDS,
-  TASK_PRIORITIES,
-} from "@/lib/note-constants";
+import { convertNoteToTask, convertTaskToDeadline } from "@/app/actions/conversions";
+import { inboxActionInitialState, type InboxActionFormState } from "@/lib/inbox-action-form";
+import { DEADLINE_KINDS, TASK_PRIORITIES } from "@/lib/note-constants";
 import {
   DateField,
   SelectField,
@@ -66,15 +57,16 @@ export function ConvertNoteToTaskDialog({
       if (res.status === "ok") onOpenChange(false);
       return res;
     },
-    [noteId, onOpenChange]
+    [noteId, onOpenChange],
   );
   // Wrapped useActionState: masks state left over from a previous
   // open, so a failed attempt's errors don't reappear when the
   // dialog is reopened. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    InboxActionFormState,
-    FormData
-  >(action, inboxActionInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<InboxActionFormState, FormData>(
+    action,
+    inboxActionInitialState,
+    open,
+  );
 
   const [title, setTitle] = useState(defaultTitle);
   const [description, setDescription] = useState(defaultDescription);
@@ -152,11 +144,7 @@ export function ConvertNoteToTaskDialog({
           />
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
@@ -201,13 +189,14 @@ export function ConvertTaskToDeadlineDialog({
       if (res.status === "ok") onOpenChange(false);
       return res;
     },
-    [taskId, onOpenChange]
+    [taskId, onOpenChange],
   );
   // Wrapped useActionState — see ConvertNoteToTaskDialog above.
-  const [state, formAction, isPending] = useDialogActionState<
-    InboxActionFormState,
-    FormData
-  >(action, inboxActionInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<InboxActionFormState, FormData>(
+    action,
+    inboxActionInitialState,
+    open,
+  );
 
   const [title, setTitle] = useState(defaultTitle);
   const [dueDate, setDueDate] = useState(defaultDueDate);
@@ -241,8 +230,8 @@ export function ConvertTaskToDeadlineDialog({
         <DialogHeader>
           <DialogTitle>Convert task to deadline</DialogTitle>
           <DialogDescription>
-            Creates a deadline linked back to this task. The task stays
-            as-is — close it if it shouldn&apos;t live as a task too.
+            Creates a deadline linked back to this task. The task stays as-is — close it if it
+            shouldn&apos;t live as a task too.
           </DialogDescription>
         </DialogHeader>
 
@@ -267,9 +256,7 @@ export function ConvertTaskToDeadlineDialog({
             <SelectField
               name="kind"
               value={kind}
-              onChange={(v) =>
-                setKind(v as (typeof DEADLINE_KINDS)[number])
-              }
+              onChange={(v) => setKind(v as (typeof DEADLINE_KINDS)[number])}
               options={DEADLINE_KINDS.map((k) => ({
                 value: k,
                 label: KIND_LABEL[k] ?? k,
@@ -287,11 +274,7 @@ export function ConvertTaskToDeadlineDialog({
           />
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>

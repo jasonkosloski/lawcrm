@@ -85,7 +85,7 @@ function serializePhones(phones: PhoneDraft[]): string {
         label: p.label.trim(),
         number: p.number.trim(),
         isPrimary: p.isPrimary,
-      }))
+      })),
   );
 }
 
@@ -113,17 +113,13 @@ export function PartyEditForm({
 
   const [contactName, setContactName] = useState(party.name);
   const [contactEmail, setContactEmail] = useState(party.email ?? "");
-  const [contactOrganization, setContactOrganization] = useState(
-    party.organization ?? ""
-  );
+  const [contactOrganization, setContactOrganization] = useState(party.organization ?? "");
   const [role, setRole] = useState(party.role ?? "");
   const [notes, setNotes] = useState(party.notes ?? "");
 
   const idPrefix = useId();
   const phoneSeq = useRef(0);
-  const [phones, setPhones] = useState<PhoneDraft[]>(() =>
-    initialPhoneDrafts(party, idPrefix)
-  );
+  const [phones, setPhones] = useState<PhoneDraft[]>(() => initialPhoneDrafts(party, idPrefix));
   // The list as loaded, posted back so the server can tell what this
   // user changed from what someone else changed in the meantime.
   const [orig] = useState(() => ({
@@ -131,9 +127,7 @@ export function PartyEditForm({
     email: party.email ?? "",
     organization: party.organization ?? "",
   }));
-  const [origPhonesJson] = useState(() =>
-    serializePhones(initialPhoneDrafts(party, idPrefix))
-  );
+  const [origPhonesJson] = useState(() => serializePhones(initialPhoneDrafts(party, idPrefix)));
 
   const addPhone = () => {
     setPhones((prev) => [
@@ -159,23 +153,15 @@ export function PartyEditForm({
     });
   };
   const updatePhone = (tempId: string, patch: Partial<PhoneDraft>) => {
-    setPhones((prev) =>
-      prev.map((p) => (p.tempId === tempId ? { ...p, ...patch } : p))
-    );
+    setPhones((prev) => prev.map((p) => (p.tempId === tempId ? { ...p, ...patch } : p)));
   };
   const setPrimary = (tempId: string) => {
-    setPhones((prev) =>
-      prev.map((p) => ({ ...p, isPrimary: p.tempId === tempId }))
-    );
+    setPhones((prev) => prev.map((p) => ({ ...p, isPrimary: p.tempId === tempId })));
   };
 
   const phonesJson = serializePhones(phones);
   const [representation, setRepresentation] = useState<RepresentationChoice>(
-    party.isRepresented === true
-      ? "yes"
-      : party.isRepresented === false
-        ? "no"
-        : "unknown"
+    party.isRepresented === true ? "yes" : party.isRepresented === false ? "no" : "unknown",
   );
   // Representation picker — pre-populate from the existing FK if any
   // (preferred), else from the legacy free-text columns so partial-
@@ -199,10 +185,10 @@ export function PartyEditForm({
       })
     : null;
   const [repSelectedId, setRepSelectedId] = useState<string | null>(
-    party.representationContactId ?? null
+    party.representationContactId ?? null,
   );
   const [repQuery, setRepQuery] = useState(
-    linkedRepContact?.name ?? party.representationName ?? ""
+    linkedRepContact?.name ?? party.representationName ?? "",
   );
   const [repFirm, setRepFirm] = useState(party.representationFirm ?? "");
   const [repEmail, setRepEmail] = useState(party.representationEmail ?? "");
@@ -262,11 +248,7 @@ export function PartyEditForm({
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     startTransition(async () => {
-      const res = await updateMatterContact(
-        party.id,
-        partyInitialState,
-        fd
-      );
+      const res = await updateMatterContact(party.id, partyInitialState, fd);
       if (res.status === "ok") onDone();
       else setState(res);
     });
@@ -278,19 +260,13 @@ export function PartyEditForm({
           this user changed and spot a concurrent edit. */}
       <input type="hidden" name="origContactName" value={orig.name} />
       <input type="hidden" name="origContactEmail" value={orig.email} />
-      <input
-        type="hidden"
-        name="origContactOrganization"
-        value={orig.organization}
-      />
+      <input type="hidden" name="origContactOrganization" value={orig.organization} />
       <input type="hidden" name="origPhones" value={origPhonesJson} />
 
       {/* Contact core — edits flow back to the global Contact record
           and affect every matter this contact appears on. */}
       <div className="flex flex-col gap-1.5">
-        <div className="text-2xs font-medium text-ink-3">
-          Contact
-        </div>
+        <div className="text-2xs font-medium text-ink-3">Contact</div>
         <input
           type="text"
           name="contactName"
@@ -303,9 +279,7 @@ export function PartyEditForm({
           placeholder="Name"
           className={cn(inputClass(false, "xs"), errs.contactName && "border-warn")}
         />
-        {errs.contactName && (
-          <div className="text-2xs text-warn">{errs.contactName[0]}</div>
-        )}
+        {errs.contactName && <div className="text-2xs text-warn">{errs.contactName[0]}</div>}
         <input
           type="email"
           name="contactEmail"
@@ -335,9 +309,7 @@ export function PartyEditForm({
         <input type="hidden" name="phones" value={phonesJson} />
         <div className="flex flex-col gap-1.5 pt-1">
           <div className="flex items-center justify-between">
-            <div className="text-2xs font-medium text-ink-3">
-              Phones
-            </div>
+            <div className="text-2xs font-medium text-ink-3">Phones</div>
             <button
               type="button"
               onClick={addPhone}
@@ -363,20 +335,12 @@ export function PartyEditForm({
                     type="button"
                     onClick={() => setPrimary(p.tempId)}
                     disabled={!canEditContact}
-                    title={
-                      p.isPrimary
-                        ? "Primary phone"
-                        : "Make this the primary phone"
-                    }
-                    aria-label={
-                      p.isPrimary ? "Primary phone" : "Set as primary"
-                    }
+                    title={p.isPrimary ? "Primary phone" : "Make this the primary phone"}
+                    aria-label={p.isPrimary ? "Primary phone" : "Set as primary"}
                     aria-pressed={p.isPrimary}
                     className={cn(
                       "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors",
-                      p.isPrimary
-                        ? "text-brand-700"
-                        : "text-ink-4 hover:text-brand-700"
+                      p.isPrimary ? "text-brand-700" : "text-ink-4 hover:text-brand-700",
                     )}
                   >
                     <Star
@@ -389,9 +353,7 @@ export function PartyEditForm({
                     aria-label="Phone label"
                     maxLength={40}
                     value={p.label}
-                    onChange={(e) =>
-                      updatePhone(p.tempId, { label: e.target.value })
-                    }
+                    onChange={(e) => updatePhone(p.tempId, { label: e.target.value })}
                     readOnly={!canEditContact}
                     placeholder="Label (Mobile…)"
                     className={inputClass(false, "xs")}
@@ -401,9 +363,7 @@ export function PartyEditForm({
                     aria-label="Phone number"
                     maxLength={80}
                     value={p.number}
-                    onChange={(e) =>
-                      updatePhone(p.tempId, { number: e.target.value })
-                    }
+                    onChange={(e) => updatePhone(p.tempId, { number: e.target.value })}
                     readOnly={!canEditContact}
                     placeholder="(303) 555-0000"
                     className={cn(inputClass(false, "xs"), "font-mono")}
@@ -422,9 +382,7 @@ export function PartyEditForm({
               ))}
             </div>
           )}
-          {errs.phones && (
-            <div className="text-2xs text-warn">{errs.phones[0]}</div>
-          )}
+          {errs.phones && <div className="text-2xs text-warn">{errs.phones[0]}</div>}
         </div>
 
         <div className="text-3xs text-ink-4 leading-relaxed pt-0.5">
@@ -436,9 +394,7 @@ export function PartyEditForm({
 
       {/* Matter-specific fields — only apply to this matter. */}
       <div className="flex flex-col gap-1.5 pt-2 border-t border-line">
-        <div className="text-2xs font-medium text-ink-3">
-          Role on this matter
-        </div>
+        <div className="text-2xs font-medium text-ink-3">Role on this matter</div>
         <div className="grid grid-cols-[1fr_2fr] gap-2">
           <input
             type="text"
@@ -468,47 +424,20 @@ export function PartyEditForm({
           <input type="hidden" name="representation" value={representation} />
           {representation === "yes" && (
             <>
-              <input
-                type="hidden"
-                name="representationContactMode"
-                value={repContactMode}
-              />
+              <input type="hidden" name="representationContactMode" value={repContactMode} />
               {repSelected ? (
-                <input
-                  type="hidden"
-                  name="representationContactId"
-                  value={repSelected.id}
-                />
+                <input type="hidden" name="representationContactId" value={repSelected.id} />
               ) : (
                 <>
-                  <input
-                    type="hidden"
-                    name="newRepresentationName"
-                    value={repQuery}
-                  />
-                  <input
-                    type="hidden"
-                    name="newRepresentationFirm"
-                    value={repFirm}
-                  />
-                  <input
-                    type="hidden"
-                    name="newRepresentationEmail"
-                    value={repEmail}
-                  />
-                  <input
-                    type="hidden"
-                    name="newRepresentationPhone"
-                    value={repPhone}
-                  />
+                  <input type="hidden" name="newRepresentationName" value={repQuery} />
+                  <input type="hidden" name="newRepresentationFirm" value={repFirm} />
+                  <input type="hidden" name="newRepresentationEmail" value={repEmail} />
+                  <input type="hidden" name="newRepresentationPhone" value={repPhone} />
                 </>
               )}
             </>
           )}
-          <RepresentationToggle
-            value={representation}
-            onChange={setRepresentation}
-          />
+          <RepresentationToggle value={representation} onChange={setRepresentation} />
           {representation === "yes" && (
             <div className="flex flex-col gap-2">
               {repSelected ? (
@@ -528,17 +457,12 @@ export function PartyEditForm({
                     ariaLabel="Attorney name"
                     variant="attorney"
                     compact
-                    invalid={Boolean(
-                      errs.newRepresentationName ||
-                        errs.representationContactId
-                    )}
+                    invalid={Boolean(errs.newRepresentationName || errs.representationContactId)}
                     autoFocus={refocusRep}
                   />
-                  {(errs.newRepresentationName ||
-                    errs.representationContactId) && (
+                  {(errs.newRepresentationName || errs.representationContactId) && (
                     <div className="text-2xs text-warn mt-0.5">
-                      {errs.newRepresentationName?.[0] ??
-                        errs.representationContactId?.[0]}
+                      {errs.newRepresentationName?.[0] ?? errs.representationContactId?.[0]}
                     </div>
                   )}
                 </div>
@@ -564,7 +488,7 @@ export function PartyEditForm({
                     placeholder="Email (optional)"
                     className={cn(
                       inputClass(false, "xs"),
-                      errs.newRepresentationEmail && "border-warn"
+                      errs.newRepresentationEmail && "border-warn",
                     )}
                   />
                   <input
@@ -597,11 +521,7 @@ export function PartyEditForm({
         >
           Cancel
         </button>
-        <Button
-          size="xs"
-          type="submit"
-          disabled={isPending}
-        >
+        <Button size="xs" type="submit" disabled={isPending}>
           {isPending ? "Saving…" : "Save"}
         </Button>
       </div>

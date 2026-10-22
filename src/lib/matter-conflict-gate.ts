@@ -51,9 +51,7 @@ export async function screenMatter(input: {
  *  the unredacted matches, so two viewers see the same fingerprint. */
 export function conflictFingerprint(matches: ConflictMatch[]): string {
   const keys = matches
-    .map((m) =>
-      [m.kind, m.severity, m.matchedField, m.contactId ?? "", m.matterId ?? ""].join(":")
-    )
+    .map((m) => [m.kind, m.severity, m.matchedField, m.contactId ?? "", m.matterId ?? ""].join(":"))
     .sort();
   return createHash("sha256").update(keys.join("|")).digest("hex").slice(0, 16);
 }
@@ -85,7 +83,7 @@ export async function evaluateConflictGate(
   screen: ConflictCheckResult,
   posted: { conflictAck?: string; conflictOverrideReason?: string },
   viewerId: string,
-  opts: { keepPrompt?: boolean } = {}
+  opts: { keepPrompt?: boolean } = {},
 ): Promise<ConflictGateOutcome> {
   if (screen.severity === "clear") return { ok: true, outcome: "clear" };
   const fingerprint = conflictFingerprint(screen.matches);
@@ -109,8 +107,7 @@ export async function evaluateConflictGate(
       canOverride,
     };
   };
-  const passedPrompt = async () =>
-    opts.keepPrompt ? { prompt: await buildPrompt() } : {};
+  const passedPrompt = async () => (opts.keepPrompt ? { prompt: await buildPrompt() } : {});
 
   if (acknowledged && screen.severity === "warn") {
     return { ok: true, outcome: "warn", matchCount, ...(await passedPrompt()) };
@@ -157,7 +154,7 @@ export async function evaluateConflictGate(
  *  write, e.g. "Created", "Saved", "Party added". */
 export function conflictGateLogEntry(
   gate: Extract<ConflictGateOutcome, { ok: true }>,
-  action: string
+  action: string,
 ): { title: string; detail: string } | null {
   if (gate.outcome === "clear") return null;
   const n = gate.matchCount;

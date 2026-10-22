@@ -16,10 +16,7 @@
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 const TEST_DB_NAME_RE = /^lawcrm_test(?:_[A-Za-z0-9_]+)?$/;
 
-export function assertTestDatabaseUrl(
-  url: string | undefined,
-  label = "DATABASE_URL"
-): void {
+export function assertTestDatabaseUrl(url: string | undefined, label = "DATABASE_URL"): void {
   if (!url) {
     throw new Error(`${label} is not set; refusing to run destructive test helpers.`);
   }
@@ -32,13 +29,13 @@ export function assertTestDatabaseUrl(
   const host = parsed.hostname.toLowerCase();
   if (!LOCAL_HOSTS.has(host)) {
     throw new Error(
-      `${label} points at host "${host}", not localhost; refusing to wipe a non-local database.`
+      `${label} points at host "${host}", not localhost; refusing to wipe a non-local database.`,
     );
   }
   const dbName = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
   if (!TEST_DB_NAME_RE.test(dbName)) {
     throw new Error(
-      `${label} points at database "${dbName}"; destructive test helpers only run against databases named lawcrm_test*.`
+      `${label} points at database "${dbName}"; destructive test helpers only run against databases named lawcrm_test*.`,
     );
   }
 }

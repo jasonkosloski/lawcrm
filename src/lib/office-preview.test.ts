@@ -46,7 +46,9 @@ beforeEach(() => {
   sizes.clear();
   vi.mocked(statFile).mockImplementation(async (key: string) => {
     const f = files.get(key);
-    return f ? ({ size: sizes.get(key) ?? f.length } as Awaited<ReturnType<typeof statFile>>) : null;
+    return f
+      ? ({ size: sizes.get(key) ?? f.length } as Awaited<ReturnType<typeof statFile>>)
+      : null;
   });
   vi.mocked(readStoredFile).mockImplementation(async (key: string) => files.get(key) ?? null);
 });
@@ -56,31 +58,31 @@ async function workbook(): Promise<Buffer> {
   const zip = new JSZip();
   zip.file(
     "[Content_Types].xml",
-    `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/></Types>`
+    `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/></Types>`,
   );
   zip.file(
     "_rels/.rels",
-    `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`
+    `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
   );
   zip.file(
     "xl/workbook.xml",
-    `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Calls" sheetId="1" r:id="rId1"/><sheet name="Texts" sheetId="2" r:id="rId2"/></sheets></workbook>`
+    `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Calls" sheetId="1" r:id="rId1"/><sheet name="Texts" sheetId="2" r:id="rId2"/></sheets></workbook>`,
   );
   zip.file(
     "xl/_rels/workbook.xml.rels",
-    `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>`
+    `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>`,
   );
   zip.file(
     "xl/sharedStrings.xml",
-    `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="4" uniqueCount="4"><si><t>Number</t></si><si><t>Minutes</t></si><si><t>555-0100</t></si><si><t>hello there</t></si></sst>`
+    `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="4" uniqueCount="4"><si><t>Number</t></si><si><t>Minutes</t></si><si><t>555-0100</t></si><si><t>hello there</t></si></sst>`,
   );
   zip.file(
     "xl/worksheets/sheet1.xml",
-    `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>12</v></c></row></sheetData></worksheet>`
+    `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>12</v></c></row></sheetData></worksheet>`,
   );
   zip.file(
     "xl/worksheets/sheet2.xml",
-    `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>3</v></c></row></sheetData></worksheet>`
+    `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>3</v></c></row></sheetData></worksheet>`,
   );
   return zip.generateAsync({ type: "nodebuffer" });
 }
@@ -139,7 +141,10 @@ describe("renderStoredSpreadsheet", () => {
   });
 
   test("missing file → a reason", async () => {
-    expect(await renderStoredSpreadsheet("nope")).toMatchObject({ ok: false, reason: expect.stringMatching(/missing/i) });
+    expect(await renderStoredSpreadsheet("nope")).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/missing/i),
+    });
   });
 });
 
@@ -188,13 +193,16 @@ describe("renderStoredEmail — .eml", () => {
   test("over the size cap → a reason", async () => {
     files.set("e", Buffer.from(EML));
     sizes.set("e", EMAIL_MAX_BYTES + 1);
-    expect(await renderStoredEmail("e", "eml")).toMatchObject({ ok: false, reason: expect.stringMatching(/larger than/i) });
+    expect(await renderStoredEmail("e", "eml")).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/larger than/i),
+    });
   });
 });
 
 const PNG_1PX = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-  "base64"
+  "base64",
 );
 
 const EML_WITH_LOGO = [
@@ -243,29 +251,27 @@ describe("embedded (cid:) images", () => {
 
 describe("parseMsg — Outlook field mapping", () => {
   test("sender, recipients by type, html body, visible attachments", () => {
-    vi.mocked(MsgReader).mockImplementation(
-      function () {
-        return {
-          getFileData: () => ({
-            subject: "Re: settlement",
-            senderName: "Opposing Counsel",
-            senderSmtpAddress: "oc@firm.example",
-            clientSubmitTime: "Tue, 03 Mar 2026 10:00:00 GMT",
-            recipients: [
-              { name: "Ann", smtpAddress: "ann@x.example", recipType: "to" },
-              { name: "Bo", email: "bo@x.example", recipType: "cc" },
-              { name: "Hidden", email: "h@x.example", recipType: "bcc" },
-            ],
-            bodyHtml: "<p>Offer: $10k</p><img src='http://t.example/p.png'>",
-            body: "Offer: $10k",
-            attachments: [
-              { fileName: "offer.docx", contentLength: 2048 },
-              { fileName: "image001.png", attachmentHidden: true },
-            ],
-          }),
-        } as unknown as MsgReader;
-      }
-    );
+    vi.mocked(MsgReader).mockImplementation(function () {
+      return {
+        getFileData: () => ({
+          subject: "Re: settlement",
+          senderName: "Opposing Counsel",
+          senderSmtpAddress: "oc@firm.example",
+          clientSubmitTime: "Tue, 03 Mar 2026 10:00:00 GMT",
+          recipients: [
+            { name: "Ann", smtpAddress: "ann@x.example", recipType: "to" },
+            { name: "Bo", email: "bo@x.example", recipType: "cc" },
+            { name: "Hidden", email: "h@x.example", recipType: "bcc" },
+          ],
+          bodyHtml: "<p>Offer: $10k</p><img src='http://t.example/p.png'>",
+          body: "Offer: $10k",
+          attachments: [
+            { fileName: "offer.docx", contentLength: 2048 },
+            { fileName: "image001.png", attachmentHidden: true },
+          ],
+        }),
+      } as unknown as MsgReader;
+    });
     const email = parseMsg(Buffer.from("x"));
     expect(email.from).toBe("Opposing Counsel <oc@firm.example>");
     expect(email.to).toEqual(["Ann <ann@x.example>"]);
@@ -277,12 +283,13 @@ describe("parseMsg — Outlook field mapping", () => {
   });
 
   test("an unreadable .msg is a reason, not a throw", async () => {
-    vi.mocked(MsgReader).mockImplementation(
-      function () {
-        return { getFileData: () => ({ error: "Unsupported file type!" }) } as unknown as MsgReader;
-      }
-    );
+    vi.mocked(MsgReader).mockImplementation(function () {
+      return { getFileData: () => ({ error: "Unsupported file type!" }) } as unknown as MsgReader;
+    });
     files.set("m", Buffer.from("junk"));
-    expect(await renderStoredEmail("m", "msg")).toMatchObject({ ok: false, reason: expect.stringMatching(/could not be read/i) });
+    expect(await renderStoredEmail("m", "msg")).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/could not be read/i),
+    });
   });
 });

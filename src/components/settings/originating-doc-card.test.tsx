@@ -21,8 +21,6 @@ describe("OriginatingDocCard", () => {
   test("toggling calls the action with the new value", async () => {
     render(<OriginatingDocCard current={false} missingCount={0} />);
     await userEvent.click(screen.getByRole("checkbox"));
-    await waitFor(() =>
-      expect(setRequireOriginatingDoc).toHaveBeenCalledWith(true)
-    );
+    await waitFor(() => expect(setRequireOriginatingDoc).toHaveBeenCalledWith(true));
   });
 });

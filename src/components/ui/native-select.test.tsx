@@ -24,7 +24,7 @@ describe("NativeSelect", () => {
           <NativeSelectOption value="hourly">Hourly</NativeSelectOption>
           <NativeSelectOption value="flat">Flat</NativeSelectOption>
         </NativeSelect>
-      </>
+      </>,
     );
     const select = screen.getByLabelText("Fee") as HTMLSelectElement;
     expect(select.tagName).toBe("SELECT");
@@ -46,7 +46,7 @@ describe("NativeSelect", () => {
           <NativeSelectOption value="a">A</NativeSelectOption>
           <NativeSelectOption value="b">B</NativeSelectOption>
         </NativeSelect>
-      </form>
+      </form>,
     );
     const fd = new FormData(screen.getByTestId("f") as HTMLFormElement);
     expect(fd.get("stage")).toBe("b");

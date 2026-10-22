@@ -35,19 +35,12 @@ import {
   useTransition,
   type ReactNode,
 } from "react";
-import {
-  markAllNotificationsRead,
-  markNotificationRead,
-} from "@/app/actions/notifications";
-import type {
-  NotificationRow,
-  NotificationsBell,
-} from "@/lib/queries/notifications";
+import { markAllNotificationsRead, markNotificationRead } from "@/app/actions/notifications";
+import type { NotificationRow, NotificationsBell } from "@/lib/queries/notifications";
 
 const POLL_MS = 60_000;
 export const BELL_ENDPOINT = "/api/notifications/bell";
-export const BELL_MUTATION_ERROR =
-  "Couldn't update notifications. Please try again.";
+export const BELL_MUTATION_ERROR = "Couldn't update notifications. Please try again.";
 
 type BellWire = {
   unreadCount: number;
@@ -90,11 +83,7 @@ const INERT: BellContextValue = {
 
 const Ctx = createContext<BellContextValue>(INERT);
 
-export function NotificationBellProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export function NotificationBellProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<NotificationsBell | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -143,7 +132,7 @@ export function NotificationBellProvider({
   const mutate = useCallback(
     (
       optimistic: (prev: NotificationsBell | null) => NotificationsBell | null,
-      action: () => Promise<{ ok: boolean }>
+      action: () => Promise<{ ok: boolean }>,
     ) => {
       mutationSeq.current++;
       pending.current++;
@@ -164,7 +153,7 @@ export function NotificationBellProvider({
         }
       });
     },
-    [refresh]
+    [refresh],
   );
 
   const markOne = useCallback(
@@ -175,15 +164,13 @@ export function NotificationBellProvider({
           prev
             ? {
                 unreadCount: Math.max(0, prev.unreadCount - 1),
-                recent: prev.recent.map((r) =>
-                  r.id === row.id ? { ...r, isRead: true } : r
-                ),
+                recent: prev.recent.map((r) => (r.id === row.id ? { ...r, isRead: true } : r)),
               }
             : prev,
-        () => markNotificationRead(row.id)
+        () => markNotificationRead(row.id),
       );
     },
-    [mutate]
+    [mutate],
   );
 
   const markAll = useCallback(() => {
@@ -195,13 +182,13 @@ export function NotificationBellProvider({
               recent: prev.recent.map((r) => ({ ...r, isRead: true })),
             }
           : prev,
-      () => markAllNotificationsRead()
+      () => markAllNotificationsRead(),
     );
   }, [mutate]);
 
   const value = useMemo<BellContextValue>(
     () => ({ state, error, refresh, markOne, markAll }),
-    [state, error, refresh, markOne, markAll]
+    [state, error, refresh, markOne, markAll],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

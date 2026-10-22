@@ -165,9 +165,7 @@ describe("filing", () => {
     expect(activity.title).toBe("Email filed to matter");
     expect(activity.detail).toBe("RE: Discovery responses");
 
-    expect(revalidatePath).toHaveBeenCalledWith(
-      `/matters/${matterId}/communication`,
-    );
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/communication`);
   });
 });
 
@@ -193,9 +191,7 @@ describe("unfiling", () => {
     expect(activity.detail).toBe("RE: Discovery responses");
 
     // Moved-out matter's Communication tab refreshes too.
-    expect(revalidatePath).toHaveBeenCalledWith(
-      `/matters/${matterId}/communication`,
-    );
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/communication`);
   });
 
   test("unfiling an already-unfiled thread logs nothing", async () => {
@@ -253,9 +249,7 @@ describe("mailbox ownership", () => {
       ok: false,
       error: "Thread not found",
     });
-    expect(
-      await setEmailThreadRecord(threadId, { kind: "matter", matterId }),
-    ).toEqual({
+    expect(await setEmailThreadRecord(threadId, { kind: "matter", matterId })).toEqual({
       ok: false,
       error: "Thread not found",
     });
@@ -309,12 +303,8 @@ describe("moving and re-filing (F557 / F662)", () => {
     expect(onB.map((a) => a.title)).toEqual(["Email filed to matter"]);
 
     // Both sides' Communication tabs refresh.
-    expect(revalidatePath).toHaveBeenCalledWith(
-      `/matters/${matterId}/communication`,
-    );
-    expect(revalidatePath).toHaveBeenCalledWith(
-      `/matters/${otherMatterId}/communication`,
-    );
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/communication`);
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${otherMatterId}/communication`);
   });
 
   test("re-selecting the matter the thread is already on writes and logs nothing", async () => {
@@ -349,9 +339,7 @@ describe("filing to a lead", () => {
     const rows = await prisma.activityLog.findMany({ where: { leadId } });
     expect(rows.map((r) => r.title)).toEqual(["Email filed to lead"]);
     expect(rows[0].matterId).toBeNull();
-    expect(revalidatePath).toHaveBeenCalledWith(
-      `/intake/${leadId}/communication`,
-    );
+    expect(revalidatePath).toHaveBeenCalledWith(`/intake/${leadId}/communication`);
   });
 
   test("moves matter -> lead", async () => {
@@ -369,9 +357,7 @@ describe("filing to a lead", () => {
     expect(onMatter.map((r) => r.title)).toEqual(["Email removed from matter"]);
     const onLead = await prisma.activityLog.findMany({ where: { leadId } });
     expect(onLead.map((r) => r.title)).toEqual(["Email filed to lead"]);
-    expect(revalidatePath).toHaveBeenCalledWith(
-      `/matters/${matterId}/communication`,
-    );
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/communication`);
   });
 
   test("refuses a converted lead", async () => {
@@ -396,9 +382,7 @@ describe("filing to a lead", () => {
   test("a restricted lead the caller is not on is not found", async () => {
     const { leadId } = await seedLead({ restricted: true });
     const threadId = await seedThread();
-    await expect(
-      setEmailThreadRecord(threadId, toLead(leadId)),
-    ).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(setEmailThreadRecord(threadId, toLead(leadId))).rejects.toThrow("NEXT_NOT_FOUND");
     const thread = await prisma.emailThread.findUniqueOrThrow({
       where: { id: threadId },
     });
@@ -451,9 +435,7 @@ describe("unfiling app-sent threads", () => {
   test("moving an app-sent thread is allowed", async () => {
     const { leadId } = await seedLead();
     const threadId = await seedThread({ matterId, appSent: true });
-    expect(
-      await setEmailThreadRecord(threadId, { kind: "lead", leadId }),
-    ).toEqual({ ok: true });
+    expect(await setEmailThreadRecord(threadId, { kind: "lead", leadId })).toEqual({ ok: true });
   });
 });
 
@@ -483,16 +465,16 @@ describe("fileEmailThread onlyIfUnfiled (file-on-reply)", () => {
     const { leadId } = await seedLead();
     const threadId = await seedThread();
     const real = prisma.emailThread.findFirst.bind(prisma.emailThread);
-    const spy = vi
-      .spyOn(prisma.emailThread, "findFirst")
-      .mockImplementationOnce((async (args: never) => {
-        const stale = await real(args);
-        await prisma.emailThread.update({
-          where: { id: threadId },
-          data: { matterId },
-        });
-        return stale;
-      }) as never);
+    const spy = vi.spyOn(prisma.emailThread, "findFirst").mockImplementationOnce((async (
+      args: never,
+    ) => {
+      const stale = await real(args);
+      await prisma.emailThread.update({
+        where: { id: threadId },
+        data: { matterId },
+      });
+      return stale;
+    }) as never);
     const res = await fileEmailThread(
       userId,
       threadId,

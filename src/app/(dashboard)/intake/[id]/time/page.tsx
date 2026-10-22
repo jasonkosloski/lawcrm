@@ -49,19 +49,11 @@ import {
 import { requireUser } from "@/lib/current-user";
 import { assertLeadAccess } from "@/lib/lead-access";
 
-export default async function LeadTimePage({
-  params,
-}: PageProps<"/intake/[id]/time">) {
+export default async function LeadTimePage({ params }: PageProps<"/intake/[id]/time">) {
   const currentUserId = await requireUser();
   const { id } = await params;
   await assertLeadAccess(id);
-  const [
-    lead,
-    entries,
-    canCreateTime,
-    canEditAnyTime,
-    canDeleteAnyTime,
-  ] = await Promise.all([
+  const [lead, entries, canCreateTime, canEditAnyTime, canDeleteAnyTime] = await Promise.all([
     // Stage decides whether the composer renders: converted leads
     // are read-only here (their intake time already rolled forward
     // to the matter; createLeadTimeEntry refuses them server-side).
@@ -88,8 +80,8 @@ export default async function LeadTimePage({
       {isConverted ? (
         <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-paper-2 px-3 py-2.5">
           <p className="text-xs text-ink-3">
-            This lead converted — its intake time was carried forward to
-            the matter. Log new work there.
+            This lead converted — its intake time was carried forward to the matter. Log new work
+            there.
           </p>
           {lead.convertedMatterId && (
             <Link
@@ -138,12 +130,8 @@ export default async function LeadTimePage({
 
           <section>
             <div className="flex items-center gap-2 mb-2">
-              <h2 className="text-xs font-semibold text-ink-2">
-                Intake time entries
-              </h2>
-              <span className="text-2xs font-mono text-ink-4">
-                {entries.length}
-              </span>
+              <h2 className="text-xs font-semibold text-ink-2">Intake time entries</h2>
+              <span className="text-2xs font-mono text-ink-4">{entries.length}</span>
             </div>
             <Card className="p-0 overflow-hidden">
               <Table>
@@ -178,23 +166,11 @@ export default async function LeadTimePage({
   );
 }
 
-function SummaryCard({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-}) {
+function SummaryCard({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
     <Card className="p-3">
-      <div className="text-2xs font-medium text-ink-3 mb-1">
-        {label}
-      </div>
-      <div className="text-xl font-display font-medium tracking-tight text-ink">
-        {value}
-      </div>
+      <div className="text-2xs font-medium text-ink-3 mb-1">{label}</div>
+      <div className="text-xl font-display font-medium tracking-tight text-ink">{value}</div>
       <div className="text-2xs text-ink-4 mt-0.5">{sub}</div>
     </Card>
   );
@@ -227,24 +203,14 @@ function EntryRow({
       </TableCell>
       <TableCell>
         <div className="flex flex-col leading-tight max-w-xl">
-          <span className="text-xs font-medium text-ink truncate">
-            {entry.activity}
-          </span>
+          <span className="text-xs font-medium text-ink truncate">{entry.activity}</span>
           {entry.narrative && (
-            <span className="text-2xs text-ink-3 truncate">
-              {entry.narrative}
-            </span>
+            <span className="text-2xs text-ink-3 truncate">{entry.narrative}</span>
           )}
           <div className="flex items-center gap-2 mt-0.5">
-            {!entry.billable && (
-              <span className="text-2xs text-ink-4">Non-billable</span>
-            )}
-            {entry.noCharge && (
-              <span className="text-2xs text-warn">No-charge</span>
-            )}
-            {entry.privileged && (
-              <span className="text-2xs text-brand-700">Privileged</span>
-            )}
+            {!entry.billable && <span className="text-2xs text-ink-4">Non-billable</span>}
+            {entry.noCharge && <span className="text-2xs text-warn">No-charge</span>}
+            {entry.privileged && <span className="text-2xs text-brand-700">Privileged</span>}
           </div>
         </div>
       </TableCell>
@@ -263,9 +229,7 @@ function EntryRow({
       <TableCell className="text-right font-mono text-xs text-ink">
         {formatHours(entry.hours)}
       </TableCell>
-      <TableCell className="text-2xs text-ink-4">
-        {timeEntrySourceLabel(entry.source)}
-      </TableCell>
+      <TableCell className="text-2xs text-ink-4">{timeEntrySourceLabel(entry.source)}</TableCell>
       <TableCell>
         <span
           className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${status.className}`}

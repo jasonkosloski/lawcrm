@@ -106,7 +106,7 @@ describe("createTimeEntry — validation", () => {
     const res = await createTimeEntry(
       matterId,
       timeEntryInitialState,
-      buildCreateForm({ hours: "0" })
+      buildCreateForm({ hours: "0" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.hours?.length).toBeGreaterThan(0);
@@ -116,7 +116,7 @@ describe("createTimeEntry — validation", () => {
     const res = await createTimeEntry(
       matterId,
       timeEntryInitialState,
-      buildCreateForm({ hours: "25" })
+      buildCreateForm({ hours: "25" }),
     );
     expect(res.status).toBe("error");
   });
@@ -125,7 +125,7 @@ describe("createTimeEntry — validation", () => {
     const res = await createTimeEntry(
       matterId,
       timeEntryInitialState,
-      buildCreateForm({ activity: "   " })
+      buildCreateForm({ activity: "   " }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.activity?.length).toBeGreaterThan(0);
@@ -134,7 +134,7 @@ describe("createTimeEntry — validation", () => {
   test("returns error when matter doesn't exist", async () => {
     // Unknown == hidden: the matter wall answers with notFound().
     await expect(
-      createTimeEntry("missing-matter", timeEntryInitialState, buildCreateForm({}))
+      createTimeEntry("missing-matter", timeEntryInitialState, buildCreateForm({})),
     ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
   });
 });
@@ -149,7 +149,7 @@ describe("createTimeEntry — happy path", () => {
         activity: "Phone call",
         billable: "on",
         narrative: "Strategy chat",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
 
@@ -170,7 +170,7 @@ describe("createTimeEntry — happy path", () => {
     const res = await createTimeEntry(
       matterId,
       timeEntryInitialState,
-      buildCreateForm({ date: "2026-04-01" })
+      buildCreateForm({ date: "2026-04-01" }),
     );
     expect(res.status).toBe("ok");
 
@@ -184,7 +184,7 @@ describe("createTimeEntry — happy path", () => {
     const res = await createTimeEntry(
       matterId,
       timeEntryInitialState,
-      buildCreateForm({ date: "2026-02-31" })
+      buildCreateForm({ date: "2026-02-31" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.date).toBeTruthy();
@@ -195,7 +195,7 @@ describe("createTimeEntry — happy path", () => {
     const res = await createTimeEntry(
       matterId,
       timeEntryInitialState,
-      buildCreateForm({ date: "not-a-date" })
+      buildCreateForm({ date: "not-a-date" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.date).toBeTruthy();
@@ -218,18 +218,14 @@ describe("createTimeEntry — happy path", () => {
     await createTimeEntry(
       matterId,
       timeEntryInitialState,
-      buildCreateForm({ calendarEventId: ev.id })
+      buildCreateForm({ calendarEventId: ev.id }),
     );
     const linked = await prisma.timeEntry.findFirst({
       where: { matterId, calendarEventId: ev.id },
     });
     expect(linked!.source).toBe("calendar");
 
-    await createTimeEntry(
-      matterId,
-      timeEntryInitialState,
-      buildCreateForm({})
-    );
+    await createTimeEntry(matterId, timeEntryInitialState, buildCreateForm({}));
     const manual = await prisma.timeEntry.findFirst({
       where: { matterId, calendarEventId: null },
     });
@@ -240,7 +236,7 @@ describe("createTimeEntry — happy path", () => {
     const res = await createTimeEntry(
       matterId,
       timeEntryInitialState,
-      buildCreateForm({ calendarEventId: "no-such-event" })
+      buildCreateForm({ calendarEventId: "no-such-event" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.calendarEventId?.[0]).toMatch(/not found/i);
@@ -268,7 +264,7 @@ describe("createTimeEntry — happy path", () => {
     const res = await createTimeEntry(
       matterId,
       timeEntryInitialState,
-      buildCreateForm({ calendarEventId: ev.id })
+      buildCreateForm({ calendarEventId: ev.id }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.calendarEventId?.[0]).toMatch(/not found/i);
@@ -276,11 +272,7 @@ describe("createTimeEntry — happy path", () => {
   });
 
   test("normalizes empty narrative to null", async () => {
-    await createTimeEntry(
-      matterId,
-      timeEntryInitialState,
-      buildCreateForm({ narrative: "" })
-    );
+    await createTimeEntry(matterId, timeEntryInitialState, buildCreateForm({ narrative: "" }));
     const row = await prisma.timeEntry.findFirst({ where: { matterId } });
     expect(row!.narrative).toBeNull();
   });
@@ -290,11 +282,7 @@ describe("createTimeEntry — happy path", () => {
 
 describe("utbmsCode field", () => {
   test("create persists a catalog code; empty string normalizes to null", async () => {
-    await createTimeEntry(
-      matterId,
-      timeEntryInitialState,
-      buildCreateForm({ utbmsCode: "A103" })
-    );
+    await createTimeEntry(matterId, timeEntryInitialState, buildCreateForm({ utbmsCode: "A103" }));
     const coded = await prisma.timeEntry.findFirstOrThrow({
       where: { matterId },
     });
@@ -303,7 +291,7 @@ describe("utbmsCode field", () => {
     await createTimeEntry(
       matterId,
       timeEntryInitialState,
-      buildCreateForm({ utbmsCode: "", activity: "Uncoded work" })
+      buildCreateForm({ utbmsCode: "", activity: "Uncoded work" }),
     );
     const uncoded = await prisma.timeEntry.findFirstOrThrow({
       where: { matterId, activity: "Uncoded work" },
@@ -315,7 +303,7 @@ describe("utbmsCode field", () => {
     const res = await createTimeEntry(
       matterId,
       timeEntryInitialState,
-      buildCreateForm({ utbmsCode: "X999" })
+      buildCreateForm({ utbmsCode: "X999" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.utbmsCode?.length).toBeGreaterThan(0);
@@ -328,7 +316,7 @@ describe("utbmsCode field", () => {
     await updateTimeEntry(
       timeEntryId,
       timeEntryInitialState,
-      buildUpdateForm({ utbmsCode: "L330" })
+      buildUpdateForm({ utbmsCode: "L330" }),
     );
     let row = await prisma.timeEntry.findUniqueOrThrow({
       where: { id: timeEntryId },
@@ -336,11 +324,7 @@ describe("utbmsCode field", () => {
     expect(row.utbmsCode).toBe("L330");
 
     // Posting empty (the picker's "no code" option) clears it.
-    await updateTimeEntry(
-      timeEntryId,
-      timeEntryInitialState,
-      buildUpdateForm({ utbmsCode: "" })
-    );
+    await updateTimeEntry(timeEntryId, timeEntryInitialState, buildUpdateForm({ utbmsCode: "" }));
     row = await prisma.timeEntry.findUniqueOrThrow({
       where: { id: timeEntryId },
     });
@@ -352,7 +336,7 @@ describe("utbmsCode field", () => {
     const res = await updateTimeEntry(
       timeEntryId,
       timeEntryInitialState,
-      buildUpdateForm({ utbmsCode: "BOGUS" })
+      buildUpdateForm({ utbmsCode: "BOGUS" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.utbmsCode?.length).toBeGreaterThan(0);
@@ -378,11 +362,7 @@ const buildUpdateForm = (overrides: Partial<Record<string, string>> = {}) => {
 
 describe("updateTimeEntry", () => {
   test("rejects when entry doesn't exist", async () => {
-    const res = await updateTimeEntry(
-      "missing",
-      timeEntryInitialState,
-      buildUpdateForm()
-    );
+    const res = await updateTimeEntry("missing", timeEntryInitialState, buildUpdateForm());
     expect(res.status).toBe("error");
     expect(res.errors?.activity?.[0]).toMatch(/no longer exists/i);
   });
@@ -396,7 +376,7 @@ describe("updateTimeEntry", () => {
     const res = await updateTimeEntry(
       timeEntryId,
       timeEntryInitialState,
-      buildUpdateForm({ status: "billed" })
+      buildUpdateForm({ status: "billed" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.activity?.[0]).toMatch(/billed/i);
@@ -415,7 +395,7 @@ describe("updateTimeEntry", () => {
     const res = await updateTimeEntry(
       timeEntryId,
       timeEntryInitialState,
-      buildUpdateForm({ hours: "9", status: "draft" })
+      buildUpdateForm({ hours: "9", status: "draft" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.activity?.[0]).toMatch(/billed/i);
@@ -435,7 +415,7 @@ describe("updateTimeEntry", () => {
     const res = await updateTimeEntry(
       timeEntryId,
       timeEntryInitialState,
-      buildUpdateForm({ hours: "5", status: "billed" })
+      buildUpdateForm({ hours: "5", status: "billed" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.status?.[0]).toMatch(/invoice/i);
@@ -476,7 +456,7 @@ describe("updateTimeEntry", () => {
     const res = await updateTimeEntry(
       timeEntryId,
       timeEntryInitialState,
-      buildUpdateForm({ hours: "3", status: "billable" })
+      buildUpdateForm({ hours: "3", status: "billable" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
@@ -499,7 +479,7 @@ describe("updateTimeEntry", () => {
     const res = await updateTimeEntry(
       entry.id,
       timeEntryInitialState,
-      buildUpdateForm({ hours: "4" })
+      buildUpdateForm({ hours: "4" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.timeEntry.findUnique({ where: { id: entry.id } });
@@ -520,7 +500,7 @@ describe("updateTimeEntry", () => {
     const res = await updateTimeEntry(
       timeEntryId,
       timeEntryInitialState,
-      buildUpdateForm({ hours: "0.25" })
+      buildUpdateForm({ hours: "0.25" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
@@ -541,7 +521,7 @@ describe("updateTimeEntry", () => {
         activity: "Updated activity",
         narrative: "More detail",
         status: "submitted",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.timeEntry.findUnique({ where: { id: timeEntryId } });
@@ -651,9 +631,7 @@ describe("deleteTimeEntry", () => {
     });
     const res = await deleteTimeEntry(timeEntryId);
     expect(res.ok).toBe(true);
-    expect(
-      await prisma.timeEntry.findUnique({ where: { id: timeEntryId } })
-    ).toBeNull();
+    expect(await prisma.timeEntry.findUnique({ where: { id: timeEntryId } })).toBeNull();
   });
 
   test("refuses billed entries (accounting hygiene)", async () => {
@@ -666,9 +644,7 @@ describe("deleteTimeEntry", () => {
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/billed/i);
     // The row remains.
-    expect(
-      await prisma.timeEntry.findUnique({ where: { id: timeEntryId } })
-    ).not.toBeNull();
+    expect(await prisma.timeEntry.findUnique({ where: { id: timeEntryId } })).not.toBeNull();
   });
 
   test("returns error for unknown id", async () => {
@@ -691,7 +667,7 @@ describe("time-entry mutations write an activity log row", () => {
     await createTimeEntry(
       matterId,
       timeEntryInitialState,
-      buildCreateForm({ hours: "2", activity: "Drafting complaint" })
+      buildCreateForm({ hours: "2", activity: "Drafting complaint" }),
     );
     const entry = await prisma.timeEntry.findFirstOrThrow({
       where: { matterId },
@@ -699,7 +675,7 @@ describe("time-entry mutations write an activity log row", () => {
     await updateTimeEntry(
       entry.id,
       timeEntryInitialState,
-      buildUpdateForm({ hours: "3", activity: "Drafting complaint" })
+      buildUpdateForm({ hours: "3", activity: "Drafting complaint" }),
     );
     await setTimeEntryStatus(entry.id, "written_off");
     await deleteTimeEntry(entry.id);
@@ -717,11 +693,7 @@ describe("time-entry mutations write an activity log row", () => {
 
   test("lead-scoped create logs with a null matter", async () => {
     const { leadId } = await seedLead();
-    await createLeadTimeEntry(
-      leadId,
-      timeEntryInitialState,
-      buildCreateForm({ hours: "0.5" })
-    );
+    await createLeadTimeEntry(leadId, timeEntryInitialState, buildCreateForm({ hours: "0.5" }));
     const rows = await logs();
     expect(rows).toHaveLength(1);
     expect(rows[0]!.matterId).toBeNull();
@@ -732,7 +704,7 @@ describe("time-entry mutations write an activity log row", () => {
     await createTimeEntry(
       matterId,
       timeEntryInitialState,
-      buildCreateForm({ hours: "1", activity: secret, privileged: "on" })
+      buildCreateForm({ hours: "1", activity: secret, privileged: "on" }),
     );
     const entry = await prisma.timeEntry.findFirstOrThrow({
       where: { matterId },
@@ -741,7 +713,7 @@ describe("time-entry mutations write an activity log row", () => {
     await updateTimeEntry(
       entry.id,
       timeEntryInitialState,
-      buildUpdateForm({ hours: "2", activity: secret, privileged: "on" })
+      buildUpdateForm({ hours: "2", activity: secret, privileged: "on" }),
     );
     await deleteTimeEntry(entry.id);
     const rows = await logs({ matterId });
@@ -771,11 +743,7 @@ describe("time-entry mutations write an activity log row", () => {
 describe("time-entries action gates", () => {
   test("createTimeEntry gates on time_entries.create", async () => {
     mockedRequirePermission.mockClear();
-    await createTimeEntry(
-      matterId,
-      timeEntryInitialState,
-      buildCreateForm({})
-    );
+    await createTimeEntry(matterId, timeEntryInitialState, buildCreateForm({}));
     expect(mockedRequirePermission).toHaveBeenCalledWith("time_entries.create");
   });
 
@@ -783,14 +751,8 @@ describe("time-entries action gates", () => {
     mockedRequirePermission.mockClear();
     const { timeEntryId } = await seedTimeEntry({ matterId, userId });
     // Actor is the entry's author.
-    await updateTimeEntry(
-      timeEntryId,
-      timeEntryInitialState,
-      buildUpdateForm()
-    );
-    expect(mockedRequirePermission).not.toHaveBeenCalledWith(
-      "time_entries.edit_any"
-    );
+    await updateTimeEntry(timeEntryId, timeEntryInitialState, buildUpdateForm());
+    expect(mockedRequirePermission).not.toHaveBeenCalledWith("time_entries.edit_any");
   });
 
   test("updateTimeEntry by NON-author requires .edit_any", async () => {
@@ -811,18 +773,14 @@ describe("time-entries action gates", () => {
       select: { id: true },
     });
     await updateTimeEntry(entry.id, timeEntryInitialState, buildUpdateForm());
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "time_entries.edit_any"
-    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith("time_entries.edit_any");
   });
 
   test("deleteTimeEntry by author DOESN'T require .delete_any", async () => {
     mockedRequirePermission.mockClear();
     const { timeEntryId } = await seedTimeEntry({ matterId, userId });
     await deleteTimeEntry(timeEntryId);
-    expect(mockedRequirePermission).not.toHaveBeenCalledWith(
-      "time_entries.delete_any"
-    );
+    expect(mockedRequirePermission).not.toHaveBeenCalledWith("time_entries.delete_any");
   });
 
   test("deleteTimeEntry by NON-author requires .delete_any", async () => {
@@ -842,9 +800,7 @@ describe("time-entries action gates", () => {
       select: { id: true },
     });
     await deleteTimeEntry(entry.id);
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "time_entries.delete_any"
-    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith("time_entries.delete_any");
   });
 
   test("setTimeEntryStatus by NON-author requires .edit_any", async () => {
@@ -864,9 +820,7 @@ describe("time-entries action gates", () => {
       select: { id: true },
     });
     await setTimeEntryStatus(entry.id, "submitted");
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "time_entries.edit_any"
-    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith("time_entries.edit_any");
   });
 });
 
@@ -885,7 +839,7 @@ describe("createLeadTimeEntry", () => {
     const res = await createLeadTimeEntry(
       leadId,
       timeEntryInitialState,
-      buildCreateForm({ hours: "0.5", activity: "Intake call", utbmsCode: "A106" })
+      buildCreateForm({ hours: "0.5", activity: "Intake call", utbmsCode: "A106" }),
     );
     expect(res.status).toBe("ok");
 
@@ -919,7 +873,7 @@ describe("createLeadTimeEntry", () => {
     await createLeadTimeEntry(leadId, timeEntryInitialState, buildCreateForm());
     expect(mockedRevalidate).toHaveBeenCalledWith(`/intake/${leadId}/time`);
     const matterCalls = mockedRevalidate.mock.calls.filter(([p]) =>
-      String(p).startsWith("/matters/")
+      String(p).startsWith("/matters/"),
     );
     expect(matterCalls).toHaveLength(0);
   });
@@ -929,18 +883,14 @@ describe("createLeadTimeEntry", () => {
       data: { name: "Converted Lead", stage: "converted" },
       select: { id: true },
     });
-    const res = await createLeadTimeEntry(
-      lead.id,
-      timeEntryInitialState,
-      buildCreateForm()
-    );
+    const res = await createLeadTimeEntry(lead.id, timeEntryInitialState, buildCreateForm());
     expect(res.status).toBe("error");
     expect(await prisma.timeEntry.count()).toBe(0);
   });
 
   test("404s when the lead no longer exists (lead wall, ADR-049)", async () => {
     await expect(
-      createLeadTimeEntry("nonexistent-lead", timeEntryInitialState, buildCreateForm())
+      createLeadTimeEntry("nonexistent-lead", timeEntryInitialState, buildCreateForm()),
     ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
     expect(await prisma.timeEntry.count()).toBe(0);
   });
@@ -950,7 +900,7 @@ describe("createLeadTimeEntry", () => {
     const res = await createLeadTimeEntry(
       leadId,
       timeEntryInitialState,
-      buildCreateForm({ hours: "0" })
+      buildCreateForm({ hours: "0" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.hours?.length).toBeGreaterThan(0);
@@ -970,7 +920,7 @@ describe("lead-scoped entries — edit/status/delete revalidate the intake tab",
     expect(res.ok).toBe(true);
     expect(mockedRevalidate).toHaveBeenCalledWith(`/intake/${leadId}/time`);
     const matterCalls = mockedRevalidate.mock.calls.filter(([p]) =>
-      String(p).startsWith("/matters/")
+      String(p).startsWith("/matters/"),
     );
     expect(matterCalls).toHaveLength(0);
   });
@@ -1016,7 +966,7 @@ describe("updateTimeEntry - date-only values", () => {
     const res = await updateTimeEntry(
       timeEntryId,
       timeEntryInitialState,
-      buildUpdateForm({ date: "2026-10-16" })
+      buildUpdateForm({ date: "2026-10-16" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.timeEntry.findUniqueOrThrow({
@@ -1033,7 +983,7 @@ describe("updateTimeEntry - date-only values", () => {
     const res = await updateTimeEntry(
       timeEntryId,
       timeEntryInitialState,
-      buildUpdateForm({ date: "2026-13-01" })
+      buildUpdateForm({ date: "2026-13-01" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.date).toBeTruthy();
@@ -1052,7 +1002,7 @@ describe("updateTimeEntry - date-only values", () => {
     await updateTimeEntry(
       timeEntryId,
       timeEntryInitialState,
-      buildUpdateForm({ date: "2026-04-03" })
+      buildUpdateForm({ date: "2026-04-03" }),
     );
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { type: "time_entry", title: { startsWith: "Time entry edited" } },
@@ -1069,14 +1019,14 @@ describe("billed-row races (read says unbilled, row was billed since)", () => {
   // findUnique returns the pre-invoice snapshot.
   const staleRead = (status: string) => {
     const real = prisma.timeEntry.findUnique.bind(prisma.timeEntry) as (
-      args: unknown
+      args: unknown,
     ) => Promise<Record<string, unknown> | null>;
-    return vi
-      .spyOn(prisma.timeEntry, "findUnique")
-      .mockImplementationOnce((async (args: unknown) => {
-        const row = await real(args);
-        return row ? { ...row, status } : row;
-      }) as never);
+    return vi.spyOn(prisma.timeEntry, "findUnique").mockImplementationOnce((async (
+      args: unknown,
+    ) => {
+      const row = await real(args);
+      return row ? { ...row, status } : row;
+    }) as never);
   };
 
   test("updateTimeEntry does not overwrite a row that just got billed", async () => {
@@ -1091,7 +1041,7 @@ describe("billed-row races (read says unbilled, row was billed since)", () => {
     const res = await updateTimeEntry(
       timeEntryId,
       timeEntryInitialState,
-      buildUpdateForm({ hours: "9", status: "draft" })
+      buildUpdateForm({ hours: "9", status: "draft" }),
     );
 
     expect(res.status).toBe("error");
@@ -1133,8 +1083,6 @@ describe("billed-row races (read says unbilled, row was billed since)", () => {
 
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/billed/i);
-    expect(
-      await prisma.timeEntry.findUnique({ where: { id: timeEntryId } })
-    ).not.toBeNull();
+    expect(await prisma.timeEntry.findUnique({ where: { id: timeEntryId } })).not.toBeNull();
   });
 });

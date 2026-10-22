@@ -7,11 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  decryptToken,
-  encryptToken,
-  isEncryptedToken,
-} from "./email-token-crypto";
+import { decryptToken, encryptToken, isEncryptedToken } from "./email-token-crypto";
 
 const KEY_A = Buffer.alloc(32, 1).toString("base64");
 const KEY_B = Buffer.alloc(32, 2).toString("base64");
@@ -63,9 +59,7 @@ describe("encryptToken / decryptToken", () => {
     for (const len of [4, 8, 12, 15]) {
       const copy = [...parts];
       copy[2] = tag.subarray(0, len).toString("base64");
-      expect(() => decryptToken(copy.join(":"))).toThrow(
-        /authentication failed/
-      );
+      expect(() => decryptToken(copy.join(":"))).toThrow(/authentication failed/);
     }
     // sanity: the untouched value still decrypts
     expect(decryptToken(stored)).toBe("secret");
@@ -73,17 +67,12 @@ describe("encryptToken / decryptToken", () => {
 
   it("rejects an over-long tag and an empty tag", () => {
     const parts = encryptToken("secret").split(":");
-    parts[2] = Buffer.concat([
-      Buffer.from(parts[2], "base64"),
-      Buffer.alloc(4),
-    ]).toString("base64");
+    parts[2] = Buffer.concat([Buffer.from(parts[2], "base64"), Buffer.alloc(4)]).toString("base64");
     expect(() => decryptToken(parts.join(":"))).toThrow(/authentication failed/);
     // An empty segment is rejected by the wire-format check before it
     // ever reaches the cipher.
     parts[2] = "";
-    expect(() => decryptToken(parts.join(":"))).toThrow(
-      /not in the v1 encrypted format/
-    );
+    expect(() => decryptToken(parts.join(":"))).toThrow(/not in the v1 encrypted format/);
   });
 
   it("rejects an IV that is not 12 bytes", () => {
@@ -91,9 +80,7 @@ describe("encryptToken / decryptToken", () => {
     for (const bytes of [1, 8, 16]) {
       const copy = [...parts];
       copy[1] = Buffer.alloc(bytes, 7).toString("base64");
-      expect(() => decryptToken(copy.join(":"))).toThrow(
-        /authentication failed/
-      );
+      expect(() => decryptToken(copy.join(":"))).toThrow(/authentication failed/);
     }
   });
 
@@ -104,9 +91,7 @@ describe("encryptToken / decryptToken", () => {
   });
 
   it("rejects plaintext input to decryptToken", () => {
-    expect(() => decryptToken("just-a-plain-token")).toThrow(
-      /not in the v1 encrypted format/
-    );
+    expect(() => decryptToken("just-a-plain-token")).toThrow(/not in the v1 encrypted format/);
   });
 
   it("fails loudly when the key is missing", () => {

@@ -10,11 +10,7 @@
 
 import { describe, expect, test } from "vitest";
 import type { CalendarEventRow, CalendarItem } from "@/lib/queries/calendar";
-import {
-  applyPending,
-  reconcilePending,
-  type PendingMove,
-} from "./optimistic-moves";
+import { applyPending, reconcilePending, type PendingMove } from "./optimistic-moves";
 
 const baseEvent: CalendarEventRow = {
   id: "evt-1",

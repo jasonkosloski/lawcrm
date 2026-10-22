@@ -10,7 +10,13 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { PERMISSION_DENIED_MESSAGE } from "@/lib/permission-check";
 import { PERMISSION_CATEGORIES } from "@/lib/permissions";
-import { resetDb, seedFirm, seedMatter, seedPracticeArea, seedUser } from "@/test/integration-helpers";
+import {
+  resetDb,
+  seedFirm,
+  seedMatter,
+  seedPracticeArea,
+  seedUser,
+} from "@/test/integration-helpers";
 import { setPortalBilling } from "./portal-billing";
 
 beforeAll(() => {
@@ -34,10 +40,13 @@ async function userWith(permissions: string[]) {
 }
 
 const flag = async () =>
-  (await prisma.matter.findUniqueOrThrow({ where: { id: matterId }, select: { portalBillingEnabled: true } }))
-    .portalBillingEnabled;
-const activity = (title: string) =>
-  prisma.activityLog.count({ where: { matterId, title } });
+  (
+    await prisma.matter.findUniqueOrThrow({
+      where: { id: matterId },
+      select: { portalBillingEnabled: true },
+    })
+  ).portalBillingEnabled;
+const activity = (title: string) => prisma.activityLog.count({ where: { matterId, title } });
 
 beforeEach(async () => {
   await resetDb();

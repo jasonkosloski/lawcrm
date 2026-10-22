@@ -21,18 +21,11 @@ describe("invoiceStatusTransitions — client invoice flow", () => {
   });
 
   test("approved → sent or void", () => {
-    expect(invoiceStatusTransitions("approved", "client")).toEqual([
-      "sent",
-      "void",
-    ]);
+    expect(invoiceStatusTransitions("approved", "client")).toEqual(["sent", "void"]);
   });
 
   test("sent → partial / paid / void", () => {
-    expect(invoiceStatusTransitions("sent", "client")).toEqual([
-      "partial",
-      "paid",
-      "void",
-    ]);
+    expect(invoiceStatusTransitions("sent", "client")).toEqual(["partial", "paid", "void"]);
   });
 
   test("partial → paid (no void once payments exist)", () => {
@@ -51,19 +44,12 @@ describe("invoiceStatusTransitions — client invoice flow", () => {
 
 describe("invoiceStatusTransitions — internal record flow", () => {
   test("draft → paid or void; paid → void", () => {
-    expect(invoiceStatusTransitions("draft", "internal_record")).toEqual([
-      "paid",
-      "void",
-    ]);
-    expect(invoiceStatusTransitions("paid", "internal_record")).toEqual([
-      "void",
-    ]);
+    expect(invoiceStatusTransitions("draft", "internal_record")).toEqual(["paid", "void"]);
+    expect(invoiceStatusTransitions("paid", "internal_record")).toEqual(["void"]);
   });
 
   test("internal records skip 'sent' entirely (no AR meaning)", () => {
-    expect(
-      invoiceStatusTransitions("draft", "internal_record")
-    ).not.toContain("sent");
+    expect(invoiceStatusTransitions("draft", "internal_record")).not.toContain("sent");
   });
 });
 

@@ -17,9 +17,36 @@ import type { RecalcChange } from "@/lib/automations/recalc-plan";
 afterEach(() => vi.mocked(updateDeadline).mockReset());
 
 const changes: RecalcChange[] = [
-  { deadlineId: "m", title: "Motions in limine", ruleTitle: "Motions", fromKey: "2027-05-02", toKey: "2027-06-01", manual: false, anchorDeadlineId: null, anchorText: "Trial" },
-  { deadlineId: "w", title: "Witness list", ruleTitle: "Witness", fromKey: "2027-04-25", toKey: "2027-05-25", manual: false, anchorDeadlineId: "m", anchorText: "Motions in limine" },
-  { deadlineId: "x", title: "Exhibit list", ruleTitle: "Exhibits", fromKey: "2027-04-20", toKey: "2027-05-20", manual: true, anchorDeadlineId: null, anchorText: "Trial" },
+  {
+    deadlineId: "m",
+    title: "Motions in limine",
+    ruleTitle: "Motions",
+    fromKey: "2027-05-02",
+    toKey: "2027-06-01",
+    manual: false,
+    anchorDeadlineId: null,
+    anchorText: "Trial",
+  },
+  {
+    deadlineId: "w",
+    title: "Witness list",
+    ruleTitle: "Witness",
+    fromKey: "2027-04-25",
+    toKey: "2027-05-25",
+    manual: false,
+    anchorDeadlineId: "m",
+    anchorText: "Motions in limine",
+  },
+  {
+    deadlineId: "x",
+    title: "Exhibit list",
+    ruleTitle: "Exhibits",
+    fromKey: "2027-04-20",
+    toKey: "2027-05-20",
+    manual: true,
+    anchorDeadlineId: null,
+    anchorText: "Trial",
+  },
 ];
 
 /** Render inside a form and capture what each submit button posts. */
@@ -32,8 +59,13 @@ function renderInForm() {
         posted.push(new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter));
       }}
     >
-      <CascadeConfirm changes={changes} changedLabel="this deadline's date" isPending={false} onCancel={() => {}} />
-    </form>
+      <CascadeConfirm
+        changes={changes}
+        changedLabel="this deadline's date"
+        isPending={false}
+        onCancel={() => {}}
+      />
+    </form>,
   );
   return posted;
 }
@@ -109,7 +141,10 @@ describe("EditDeadlineDialog — confirm round-trip", () => {
 
   it("editing the date again drops the stale list (the next Save asks afresh)", async () => {
     const user = userEvent.setup();
-    vi.mocked(updateDeadline).mockResolvedValueOnce({ status: "confirm", cascade: changes.slice(0, 1) });
+    vi.mocked(updateDeadline).mockResolvedValueOnce({
+      status: "confirm",
+      cascade: changes.slice(0, 1),
+    });
     render(<EditDeadlineDialog open onOpenChange={() => {}} deadline={deadline} />);
     const date = document.querySelector<HTMLInputElement>('input[name="dueDate"]')!;
     await user.clear(date);

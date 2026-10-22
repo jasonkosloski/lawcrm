@@ -85,7 +85,7 @@ export class FileTooLargeError extends Error {
 export async function storeStreamLocal(
   source: Readable,
   originalName: string,
-  maxBytes: number
+  maxBytes: number,
 ): Promise<{ key: string; size: number }> {
   const key = makeStorageKey(originalName);
   const path = resolveKey(key);
@@ -115,7 +115,7 @@ export async function storeStreamLocal(
  *  media seeking reads a slice instead of the whole file. */
 export function openReadStreamLocal(
   key: string,
-  range?: { start: number; end: number }
+  range?: { start: number; end: number },
 ): NodeJS.ReadableStream {
   return createReadStream(resolveKey(key), range);
 }
@@ -133,9 +133,7 @@ export async function deleteFileLocal(key: string): Promise<void> {
 
 /** Existence + size probe for the download route to set
  *  Content-Length without re-reading the whole file. */
-export async function statFileLocal(
-  key: string
-): Promise<{ size: number } | null> {
+export async function statFileLocal(key: string): Promise<{ size: number } | null> {
   try {
     const s = await stat(resolveKey(key));
     return { size: s.size };

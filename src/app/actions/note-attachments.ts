@@ -24,10 +24,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 // in UTC (ADR-012) - parseDateOnly, never `new Date(value)`.
 import { parseDateOnly } from "@/lib/format-date";
 import { plural } from "@/lib/utils";
-import {
-  requirePermission,
-  requirePermissions,
-} from "@/lib/permission-check";
+import { requirePermission, requirePermissions } from "@/lib/permission-check";
 import { requiredCapturePermissions } from "@/lib/capture-permissions";
 import { resolveAutoAddTeam } from "@/lib/calendar-default-attendees";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
@@ -36,10 +33,7 @@ import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import { logActivity } from "@/lib/activity-log";
 import { isKnownUtbmsCode } from "@/lib/time-entry-constants";
-import type {
-  BulkAttachFormState,
-  NoteAttachmentFormState,
-} from "@/lib/note-attachment-form";
+import type { BulkAttachFormState, NoteAttachmentFormState } from "@/lib/note-attachment-form";
 import {
   createCaptureRecord,
   missingPermissions,
@@ -97,7 +91,7 @@ const addTaskSchema = z.object({
 export async function addTaskToNote(
   noteId: string,
   _prev: NoteAttachmentFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<NoteAttachmentFormState> {
   // Same gate as the standalone task composer — attaching to a note
   // still creates a Task row, so the same capability applies.
@@ -117,9 +111,7 @@ export async function addTaskToNote(
     };
   }
 
-  const dueDate = parsed.data.dueDate
-    ? parseDateOnly(parsed.data.dueDate)
-    : null;
+  const dueDate = parsed.data.dueDate ? parseDateOnly(parsed.data.dueDate) : null;
   if (parsed.data.dueDate && !dueDate) {
     return { status: "error", errors: { dueDate: ["Invalid due date"] } };
   }
@@ -160,7 +152,7 @@ const addDeadlineSchema = z.object({
 export async function addDeadlineToNote(
   noteId: string,
   _prev: NoteAttachmentFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<NoteAttachmentFormState> {
   await requirePermission("deadlines.create");
   await assertChildMatterAccess("note", noteId);
@@ -235,7 +227,7 @@ const addTimeEntrySchema = z.object({
 export async function addTimeEntryToNote(
   noteId: string,
   _prev: NoteAttachmentFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<NoteAttachmentFormState> {
   await requirePermission("time_entries.create");
   await assertChildMatterAccess("note", noteId);
@@ -309,7 +301,7 @@ const bulkSchema = z.object({
 export async function addCapturesToNoteBulk(
   noteId: string,
   _prev: BulkAttachFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<BulkAttachFormState> {
   await assertChildMatterAccess("note", noteId);
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -336,9 +328,7 @@ export async function addCapturesToNoteBulk(
 
   // Creatable kinds only (see the docstring). Everything below -
   // gates, rows, activity tally - works from this filtered list.
-  const prepared = parsedCaptures.captures.filter(
-    (p) => p.cap.kind !== "note_sibling"
-  );
+  const prepared = parsedCaptures.captures.filter((p) => p.cap.kind !== "note_sibling");
   if (prepared.length === 0) {
     return { status: "error", errors: { attachments: ["Nothing to save"] } };
   }
@@ -411,9 +401,7 @@ export async function addCapturesToNoteBulk(
     return acc;
   }, {});
   const summary = Object.entries(tally)
-    .map(([k, n]) =>
-      plural(n, (CAPTURE_KIND_LABEL[k as CaptureKind] ?? k).toLowerCase())
-    )
+    .map(([k, n]) => plural(n, (CAPTURE_KIND_LABEL[k as CaptureKind] ?? k).toLowerCase()))
     .join(" · ");
   await logActivity({
     matterId: note.matterId,

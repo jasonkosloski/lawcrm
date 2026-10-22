@@ -63,7 +63,10 @@ export function EntryMenuItems({
     return (
       <Fragment key={a.id}>
         {prev && prev.group !== a.group && <DropdownMenuSeparator />}
-        <DropdownMenuItem variant={a.destructive ? "destructive" : "default"} onClick={() => onRun(a.id)}>
+        <DropdownMenuItem
+          variant={a.destructive ? "destructive" : "default"}
+          onClick={() => onRun(a.id)}
+        >
           <Icon />
           {a.label}
           {a.shortcut && <DropdownMenuShortcut>{a.shortcut}</DropdownMenuShortcut>}

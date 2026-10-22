@@ -48,9 +48,7 @@ async function expand(user: ReturnType<typeof userEvent.setup>) {
 }
 
 const render_ = () =>
-  render(
-    <PartyComposer matterId="m1" category="lay_witness" contacts={contacts} />
-  );
+  render(<PartyComposer matterId="m1" category="lay_witness" contacts={contacts} />);
 
 describe("PartyComposer - Enter in the name typeahead", () => {
   test("Enter never submits, so a partial name can't create a junk contact", async () => {
@@ -70,14 +68,10 @@ describe("PartyComposer - Enter in the name typeahead", () => {
     await user.type(input, "Mar");
     await user.keyboard("{ArrowDown}{Enter}");
     expect(mockedAction).not.toHaveBeenCalled();
-    expect(
-      container.querySelector<HTMLInputElement>('input[name="contactMode"]')
-        ?.value
-    ).toBe("__existing__");
-    expect(
-      container.querySelector<HTMLInputElement>('input[name="contactId"]')
-        ?.value
-    ).toBe("c1");
+    expect(container.querySelector<HTMLInputElement>('input[name="contactMode"]')?.value).toBe(
+      "__existing__",
+    );
+    expect(container.querySelector<HTMLInputElement>('input[name="contactId"]')?.value).toBe("c1");
   });
 
   test("the input is a labelled combobox wired to its listbox", async () => {
@@ -103,13 +97,10 @@ describe("PartyComposer - unlink", () => {
     const input = await expand(user);
     await user.type(input, "Mar");
     await user.click(screen.getByRole("option", { name: /maria alvarez/i }));
-    await user.click(
-      screen.getByRole("button", { name: /unlink selected contact/i })
+    await user.click(screen.getByRole("button", { name: /unlink selected contact/i }));
+    expect(container.querySelector<HTMLInputElement>('input[name="newContactName"]')?.value).toBe(
+      "",
     );
-    expect(
-      container.querySelector<HTMLInputElement>('input[name="newContactName"]')
-        ?.value
-    ).toBe("");
     expect(screen.getByRole("combobox", { name: /party name/i })).toHaveFocus();
   });
 });
@@ -131,9 +122,7 @@ describe("PartyComposer - submit", () => {
     expect(fd.get("role")).toBe("eyewitness");
     expect(fd.get("category")).toBe("lay_witness");
     // Collapsed back to the add button.
-    expect(
-      await screen.findByRole("button", { name: /add a lay witness/i })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /add a lay witness/i })).toBeInTheDocument();
   });
 
   test("a rejected submit keeps the typed input and surfaces hidden-field errors", async () => {
@@ -149,9 +138,7 @@ describe("PartyComposer - submit", () => {
 
     // The role error has no inline slot: it must still be visible.
     expect(await screen.findByRole("alert")).toHaveTextContent(/at most 80/i);
-    expect(screen.getByRole("combobox", { name: /party name/i })).toHaveValue(
-      "Zed Newperson"
-    );
+    expect(screen.getByRole("combobox", { name: /party name/i })).toHaveValue("Zed Newperson");
   });
 
   test("an error on a picked contact (no typeahead on screen) is shown", async () => {
@@ -190,9 +177,7 @@ describe("PartyComposer - conflict gate (ADR-054)", () => {
         canOverride: false,
       },
     });
-    render(
-      <PartyComposer matterId="m1" category="opposing" contacts={contacts} />
-    );
+    render(<PartyComposer matterId="m1" category="opposing" contacts={contacts} />);
     await user.click(screen.getByRole("button", { name: /opposing/i }));
     await user.type(screen.getByRole("combobox", { name: /party name/i }), "Acme");
     await user.keyboard("{Escape}");

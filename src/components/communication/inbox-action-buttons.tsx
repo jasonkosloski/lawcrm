@@ -42,15 +42,9 @@ import {
   createTaskFromEmail,
   createTaskFromMessage,
 } from "@/app/actions/inbox-actions";
-import {
-  inboxActionInitialState,
-  type InboxActionFormState,
-} from "@/lib/inbox-action-form";
+import { inboxActionInitialState, type InboxActionFormState } from "@/lib/inbox-action-form";
 import { NOTE_TYPES, NOTE_TYPE_LABEL } from "@/lib/note-constants";
-import {
-  DEADLINE_KINDS,
-  DEADLINE_KIND_LABEL,
-} from "@/lib/constants/deadline-status";
+import { DEADLINE_KINDS, DEADLINE_KIND_LABEL } from "@/lib/constants/deadline-status";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import { paragraphsToHtml } from "@/lib/text-to-html";
 import { escapeHtml } from "@/lib/email/escape";
@@ -95,11 +89,7 @@ export function InboxActionButtons({
             icon={<StickyNote size={11} />}
             label="Save as note"
             disabled={!isFiled}
-            tooltip={
-              isFiled
-                ? "Save this as a note on the matter"
-                : sourceUnfiledMsg(source)
-            }
+            tooltip={isFiled ? "Save this as a note on the matter" : sourceUnfiledMsg(source)}
             onClick={() => setOpen("note")}
           />
         )}
@@ -108,11 +98,7 @@ export function InboxActionButtons({
             icon={<ListTodo size={11} />}
             label="Create task"
             disabled={!isFiled}
-            tooltip={
-              isFiled
-                ? "Create a task with this as context"
-                : sourceUnfiledMsg(source)
-            }
+            tooltip={isFiled ? "Create a task with this as context" : sourceUnfiledMsg(source)}
             onClick={() => setOpen("task")}
           />
         )}
@@ -121,25 +107,17 @@ export function InboxActionButtons({
             icon={<CircleAlert size={11} />}
             label="Create deadline"
             disabled={!isFiled}
-            tooltip={
-              isFiled
-                ? "Create a deadline tied to this"
-                : sourceUnfiledMsg(source)
-            }
+            tooltip={isFiled ? "Create a deadline tied to this" : sourceUnfiledMsg(source)}
             onClick={() => setOpen("deadline")}
           />
         )}
       </div>
 
-      {open === "task" && (
-        <CreateTaskDialog source={source} onClose={() => setOpen(null)} />
-      )}
+      {open === "task" && <CreateTaskDialog source={source} onClose={() => setOpen(null)} />}
       {open === "deadline" && (
         <CreateDeadlineDialog source={source} onClose={() => setOpen(null)} />
       )}
-      {open === "note" && (
-        <CreateNoteDialog source={source} onClose={() => setOpen(null)} />
-      )}
+      {open === "note" && <CreateNoteDialog source={source} onClose={() => setOpen(null)} />}
     </>
   );
 }
@@ -190,9 +168,7 @@ export function defaultTitleFromSource(source: InboxSource): string {
     // "Re :", repeated or mixed) so the task title isn't
     // "Re: Re: Fwd: Discovery cutoff…". A subject that is ONLY a
     // prefix keeps its original text rather than going blank.
-    const stripped = source.subject
-      .replace(/^(?:\s*(?:re|fwd?|fw)\s*:\s*)+/i, "")
-      .trim();
+    const stripped = source.subject.replace(/^(?:\s*(?:re|fwd?|fw)\s*:\s*)+/i, "").trim();
     return stripped || source.subject.trim();
   }
   return `Re: ${source.contactLabel}`;
@@ -211,21 +187,15 @@ function defaultNoteHtml(source: InboxSource): string {
 
 // ── Dialogs ────────────────────────────────────────────────────────────
 
-function CreateTaskDialog({
-  source,
-  onClose,
-}: {
-  source: InboxSource;
-  onClose: () => void;
-}) {
+function CreateTaskDialog({ source, onClose }: { source: InboxSource; onClose: () => void }) {
   const action =
     source.kind === "email"
       ? createTaskFromEmail.bind(null, source.id)
       : createTaskFromMessage.bind(null, source.id);
-  const [state, formAction, isPending] = useActionState<
-    InboxActionFormState,
-    FormData
-  >(action, inboxActionInitialState);
+  const [state, formAction, isPending] = useActionState<InboxActionFormState, FormData>(
+    action,
+    inboxActionInitialState,
+  );
 
   const [title, setTitle] = useState(defaultTitleFromSource(source));
   const [dueDate, setDueDate] = useState("");
@@ -260,9 +230,7 @@ function CreateTaskDialog({
               autoFocus
               className={inputClass(!!errs.title)}
             />
-            {errs.title && (
-              <div className="text-2xs text-warn">{errs.title[0]}</div>
-            )}
+            {errs.title && <div className="text-2xs text-warn">{errs.title[0]}</div>}
           </div>
 
           <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -275,9 +243,7 @@ function CreateTaskDialog({
                 aria-label="Due date"
                 className={inputClass(!!errs.dueDate)}
               />
-              {errs.dueDate && (
-                <div className="text-2xs text-warn">{errs.dueDate[0]}</div>
-              )}
+              {errs.dueDate && <div className="text-2xs text-warn">{errs.dueDate[0]}</div>}
             </div>
             <NativeSelect
               name="priority"
@@ -301,9 +267,7 @@ function CreateTaskDialog({
             rows={3}
             className={cn(textareaClass(), "leading-relaxed resize-y font-sans")}
           />
-          {errs.description && (
-            <div className="text-2xs text-warn">{errs.description[0]}</div>
-          )}
+          {errs.description && <div className="text-2xs text-warn">{errs.description[0]}</div>}
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>
@@ -319,21 +283,15 @@ function CreateTaskDialog({
   );
 }
 
-function CreateDeadlineDialog({
-  source,
-  onClose,
-}: {
-  source: InboxSource;
-  onClose: () => void;
-}) {
+function CreateDeadlineDialog({ source, onClose }: { source: InboxSource; onClose: () => void }) {
   const action =
     source.kind === "email"
       ? createDeadlineFromEmail.bind(null, source.id)
       : createDeadlineFromMessage.bind(null, source.id);
-  const [state, formAction, isPending] = useActionState<
-    InboxActionFormState,
-    FormData
-  >(action, inboxActionInitialState);
+  const [state, formAction, isPending] = useActionState<InboxActionFormState, FormData>(
+    action,
+    inboxActionInitialState,
+  );
 
   const [title, setTitle] = useState(defaultTitleFromSource(source));
   const [dueDate, setDueDate] = useState("");
@@ -368,9 +326,7 @@ function CreateDeadlineDialog({
               autoFocus
               className={inputClass(!!errs.title)}
             />
-            {errs.title && (
-              <div className="text-2xs text-warn">{errs.title[0]}</div>
-            )}
+            {errs.title && <div className="text-2xs text-warn">{errs.title[0]}</div>}
           </div>
 
           <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -384,16 +340,12 @@ function CreateDeadlineDialog({
                 required
                 className={inputClass(!!errs.dueDate)}
               />
-              {errs.dueDate && (
-                <div className="text-2xs text-warn">{errs.dueDate[0]}</div>
-              )}
+              {errs.dueDate && <div className="text-2xs text-warn">{errs.dueDate[0]}</div>}
             </div>
             <NativeSelect
               name="kind"
               value={kind}
-              onChange={(e) =>
-                setKind(e.target.value as (typeof DEADLINE_KINDS)[number])
-              }
+              onChange={(e) => setKind(e.target.value as (typeof DEADLINE_KINDS)[number])}
               className="w-full"
             >
               {DEADLINE_KINDS.map((k) => (
@@ -412,12 +364,8 @@ function CreateDeadlineDialog({
             rows={3}
             className={cn(textareaClass(), "leading-relaxed resize-y font-sans")}
           />
-          {errs.description && (
-            <div className="text-2xs text-warn">{errs.description[0]}</div>
-          )}
-          {errs.kind && (
-            <div className="text-2xs text-warn">{errs.kind[0]}</div>
-          )}
+          {errs.description && <div className="text-2xs text-warn">{errs.description[0]}</div>}
+          {errs.kind && <div className="text-2xs text-warn">{errs.kind[0]}</div>}
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>
@@ -433,21 +381,15 @@ function CreateDeadlineDialog({
   );
 }
 
-function CreateNoteDialog({
-  source,
-  onClose,
-}: {
-  source: InboxSource;
-  onClose: () => void;
-}) {
+function CreateNoteDialog({ source, onClose }: { source: InboxSource; onClose: () => void }) {
   const action =
     source.kind === "email"
       ? createNoteFromEmail.bind(null, source.id)
       : createNoteFromMessage.bind(null, source.id);
-  const [state, formAction, isPending] = useActionState<
-    InboxActionFormState,
-    FormData
-  >(action, inboxActionInitialState);
+  const [state, formAction, isPending] = useActionState<InboxActionFormState, FormData>(
+    action,
+    inboxActionInitialState,
+  );
 
   // Plain textarea for v1 — the dialog is for quick capture, not full
   // formatting. The note itself supports rich text once viewed in the
@@ -476,11 +418,7 @@ function CreateNoteDialog({
         <form action={formAction} className="flex flex-col gap-3">
           {/* Wrap the textarea in HTML before posting so the server's
               HTML sanitizer + storage path stays consistent. */}
-          <input
-            type="hidden"
-            name="content"
-            value={paragraphsToHtml(content)}
-          />
+          <input type="hidden" name="content" value={paragraphsToHtml(content)} />
 
           <NativeSelect
             name="type"
@@ -502,9 +440,7 @@ function CreateNoteDialog({
             autoFocus
             className={cn(textareaClass(), "leading-relaxed resize-y font-sans")}
           />
-          {errs.content && (
-            <div className="text-2xs text-warn">{errs.content[0]}</div>
-          )}
+          {errs.content && <div className="text-2xs text-warn">{errs.content[0]}</div>}
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>
@@ -527,22 +463,23 @@ function CreateNoteDialog({
  *
  *  Exported for tests only — not part of the component's API. */
 export function stripHtmlForTextarea(html: string): string {
-  return html
-    .replace(/<\/p>\s*<p>/g, "\n\n")
-    // "From email: ..." header, then a blank line, then the quote.
-    .replace(/<\/p>\s*<blockquote>/g, "\n\n> ")
-    .replace(/<blockquote>/g, "> ")
-    .replace(/<\/blockquote>/g, "")
-    .replace(/<em>(.*?)<\/em>/g, "$1")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    // Decode &amp; LAST: a snippet containing literal "&lt;" arrives
-    // here as "&amp;lt;"; decoding &amp; first would turn that into
-    // "&lt;" and then a second pass into "<", corrupting the text.
-    .replace(/&amp;/g, "&")
-    .trim();
+  return (
+    html
+      .replace(/<\/p>\s*<p>/g, "\n\n")
+      // "From email: ..." header, then a blank line, then the quote.
+      .replace(/<\/p>\s*<blockquote>/g, "\n\n> ")
+      .replace(/<blockquote>/g, "> ")
+      .replace(/<\/blockquote>/g, "")
+      .replace(/<em>(.*?)<\/em>/g, "$1")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      // Decode &amp; LAST: a snippet containing literal "&lt;" arrives
+      // here as "&amp;lt;"; decoding &amp; first would turn that into
+      // "&lt;" and then a second pass into "<", corrupting the text.
+      .replace(/&amp;/g, "&")
+      .trim()
+  );
 }
-

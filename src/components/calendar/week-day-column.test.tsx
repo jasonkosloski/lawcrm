@@ -54,8 +54,7 @@ const event = (over: Partial<CalendarEventRow>): CalendarEventRow => ({
 afterEach(cleanup);
 
 const noop = () => {};
-const draggables = (c: HTMLElement) =>
-  c.querySelectorAll('[draggable="true"]').length;
+const draggables = (c: HTMLElement) => c.querySelectorAll('[draggable="true"]').length;
 
 describe("WeekAllDayCell", () => {
   test("the first day's chip of a multi-day event is draggable", () => {
@@ -66,7 +65,7 @@ describe("WeekAllDayCell", () => {
         deadlines={[]}
         canEdit
         move={noop}
-      />
+      />,
     );
     expect(draggables(container)).toBe(1);
   });
@@ -79,7 +78,7 @@ describe("WeekAllDayCell", () => {
         deadlines={[]}
         canEdit
         move={noop}
-      />
+      />,
     );
     expect(draggables(container)).toBe(0);
     expect(container.querySelector("a")).not.toBeNull();
@@ -89,15 +88,12 @@ describe("WeekAllDayCell", () => {
     const { container } = render(
       <WeekAllDayCell
         day={new Date("2026-04-13T12:00:00Z")}
-        events={[
-          event({ id: "mine" }),
-          event({ id: "theirs", title: "Colleague" }),
-        ]}
+        events={[event({ id: "mine" }), event({ id: "theirs", title: "Colleague" })]}
         deadlines={[]}
         canEdit
         canDragEvent={(id) => id === "mine"}
         move={noop}
-      />
+      />,
     );
     expect(draggables(container)).toBe(1);
     expect(container.querySelectorAll("a")).toHaveLength(1);
@@ -122,7 +118,7 @@ describe("WeekTimeColumn", () => {
         canEdit
         canDragEvent={(id) => id === "mine"}
         move={noop}
-      />
+      />,
     );
     expect(draggables(container)).toBe(1);
     // Resize handles exist only on the editable chip (two per chip).

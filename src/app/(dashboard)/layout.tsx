@@ -39,11 +39,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: { default: name, template: `%s · ${name}` } };
 }
 
-export default async function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // Request-cached: the sidebar and timer queries reuse this read.
   const staff = await getStaffAuth();
   if (staff.status === "no_access") redirect("/no-access");
@@ -62,9 +58,7 @@ export default async function DashboardLayout({
     const h = await headers();
     const nextPath = h.get("x-pathname") ?? "";
     const loginUrl =
-      nextPath && nextPath !== "/"
-        ? `/login?next=${encodeURIComponent(nextPath)}`
-        : "/login";
+      nextPath && nextPath !== "/" ? `/login?next=${encodeURIComponent(nextPath)}` : "/login";
     redirect(loginUrl);
   }
   // Client components format instants and fill datetime-local inputs in

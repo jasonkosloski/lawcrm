@@ -30,12 +30,12 @@ export function assertTimeEntryScope(scope: TimeEntryScope): {
   const leadId = scope.leadId || null;
   if (matterId && leadId) {
     throw new Error(
-      "TimeEntry scope invariant: matterId and leadId are both set — a time entry belongs to exactly one of a matter or a lead."
+      "TimeEntry scope invariant: matterId and leadId are both set — a time entry belongs to exactly one of a matter or a lead.",
     );
   }
   if (!matterId && !leadId) {
     throw new Error(
-      "TimeEntry scope invariant: neither matterId nor leadId is set — a time entry must belong to a matter or a lead."
+      "TimeEntry scope invariant: neither matterId nor leadId is set — a time entry must belong to a matter or a lead.",
     );
   }
   return { matterId, leadId };

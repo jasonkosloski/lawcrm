@@ -120,9 +120,7 @@ describe("LeadOverviewPage conflict card", () => {
   test("an open lead runs the live matcher and offers run/override", async () => {
     const { card } = await renderPage("qualifying");
     expect(mockedMatcher).toHaveBeenCalledTimes(1);
-    expect(mockedMatcher).toHaveBeenCalledWith(
-      expect.objectContaining({ ownContactId: "c1" })
-    );
+    expect(mockedMatcher).toHaveBeenCalledWith(expect.objectContaining({ ownContactId: "c1" }));
     expect(card.props).toMatchObject({
       canRun: true,
       canOverride: true,
@@ -142,7 +140,7 @@ describe("LeadOverviewPage conflict card", () => {
         matches: [],
         status: "warn",
       });
-    }
+    },
   );
 });
 
@@ -164,7 +162,7 @@ describe("LeadOverviewPage access card (ADR-049)", () => {
 
   test("a restricted lead lists its team read-only for viewers without the key", async () => {
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key: string) => key !== "intake.restrict"
+      async (key: string) => key !== "intake.restrict",
     );
     const card = await accessCard({
       restricted: true,
@@ -183,7 +181,7 @@ describe("LeadOverviewPage access card (ADR-049)", () => {
 
   test("an open lead shows no card to viewers without the key", async () => {
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key: string) => key !== "intake.restrict"
+      async (key: string) => key !== "intake.restrict",
     );
     expect(await accessCard({})).toBeUndefined();
     vi.mocked(currentUserHasPermission).mockImplementation(async () => true);

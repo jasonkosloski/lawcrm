@@ -16,14 +16,7 @@
 
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import type { MatterCreateType } from "@/lib/matter-create-types";
 
 export type CreatePanel = {
@@ -61,8 +54,7 @@ type StackContextValue = {
 const Ctx = createContext<StackContextValue | null>(null);
 
 let idCounter = 0;
-const nextId = (): string =>
-  `panel-${++idCounter}-${Date.now().toString(36)}`;
+const nextId = (): string => `panel-${++idCounter}-${Date.now().toString(36)}`;
 
 export function CreateStackProvider({
   context = null,
@@ -76,10 +68,7 @@ export function CreateStackProvider({
 
   const open = useCallback((type: MatterCreateType) => {
     const id = nextId();
-    setPanels((prev) => [
-      ...prev,
-      { id, type, expanded: false },
-    ]);
+    setPanels((prev) => [...prev, { id, type, expanded: false }]);
     setFocusedId(id);
   }, []);
 
@@ -90,8 +79,7 @@ export function CreateStackProvider({
       // If the user closes the focused panel *while it's expanded*, the
       // next focused panel inherits the expansion — they're in focus
       // mode and shouldn't be kicked back to the docked rail.
-      const inheritExpanded =
-        closingFocused && (closingPanel?.expanded ?? false);
+      const inheritExpanded = closingFocused && (closingPanel?.expanded ?? false);
 
       const remaining = panels.filter((p) => p.id !== id);
       const nextFocusId = closingFocused
@@ -102,14 +90,12 @@ export function CreateStackProvider({
 
       setPanels(
         remaining.map((p) =>
-          inheritExpanded && p.id === nextFocusId
-            ? { ...p, expanded: true }
-            : p
-        )
+          inheritExpanded && p.id === nextFocusId ? { ...p, expanded: true } : p,
+        ),
       );
       setFocusedId(nextFocusId);
     },
-    [panels, focusedId]
+    [panels, focusedId],
   );
 
   const focus = useCallback(
@@ -118,8 +104,7 @@ export function CreateStackProvider({
       // panel is expanded, hand the expansion to the newly-focused
       // panel so the user stays in modal focus mode across switches.
       setPanels((prev) => {
-        const currentlyExpanded =
-          prev.find((p) => p.id === focusedId)?.expanded ?? false;
+        const currentlyExpanded = prev.find((p) => p.id === focusedId)?.expanded ?? false;
         return prev.map((p) => ({
           ...p,
           expanded: p.id === id ? currentlyExpanded : false,
@@ -127,13 +112,11 @@ export function CreateStackProvider({
       });
       setFocusedId(id);
     },
-    [focusedId]
+    [focusedId],
   );
 
   const setExpanded = useCallback((id: string, expanded: boolean) => {
-    setPanels((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, expanded } : p))
-    );
+    setPanels((prev) => prev.map((p) => (p.id === id ? { ...p, expanded } : p)));
     if (expanded) setFocusedId(id);
   }, []);
 
@@ -147,15 +130,7 @@ export function CreateStackProvider({
       focus,
       setExpanded,
     }),
-    [
-      context,
-      panels,
-      focusedId,
-      open,
-      close,
-      focus,
-      setExpanded,
-    ]
+    [context, panels, focusedId, open, close, focus, setExpanded],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

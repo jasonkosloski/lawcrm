@@ -81,12 +81,7 @@ describe("PartyEditForm - submit payload", () => {
   test("posts the loaded contact values and phone list for the server diff", async () => {
     const user = userEvent.setup();
     render(
-      <PartyEditForm
-        party={party}
-        category="opposing"
-        contacts={contacts}
-        onDone={() => {}}
-      />
+      <PartyEditForm party={party} category="opposing" contacts={contacts} onDone={() => {}} />,
     );
     await user.type(screen.getByLabelText("Notes"), "hello");
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -105,12 +100,7 @@ describe("PartyEditForm - submit payload", () => {
   test("orig* fields stay at the first-render values when the party prop is refreshed mid-edit", async () => {
     const user = userEvent.setup();
     const { rerender } = render(
-      <PartyEditForm
-        party={party}
-        category="opposing"
-        contacts={contacts}
-        onDone={() => {}}
-      />
+      <PartyEditForm party={party} category="opposing" contacts={contacts} onDone={() => {}} />,
     );
     // A revalidation delivers someone else's concurrent edit.
     rerender(
@@ -124,7 +114,7 @@ describe("PartyEditForm - submit payload", () => {
         category="opposing"
         contacts={contacts}
         onDone={() => {}}
-      />
+      />,
     );
     await user.type(screen.getByLabelText("Notes"), "x");
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -139,12 +129,7 @@ describe("PartyEditForm - submit payload", () => {
   test("editing a phone changes `phones` but not the loaded `origPhones`", async () => {
     const user = userEvent.setup();
     render(
-      <PartyEditForm
-        party={party}
-        category="opposing"
-        contacts={contacts}
-        onDone={() => {}}
-      />
+      <PartyEditForm party={party} category="opposing" contacts={contacts} onDone={() => {}} />,
     );
     const numbers = screen.getAllByLabelText("Phone number");
     await user.clear(numbers[1]);
@@ -153,22 +138,13 @@ describe("PartyEditForm - submit payload", () => {
 
     await waitFor(() => expect(mockedAction).toHaveBeenCalled());
     const fd = lastPosted();
-    expect(JSON.parse(String(fd.get("phones")))[1].number).toBe(
-      "(303) 555-9999"
-    );
-    expect(JSON.parse(String(fd.get("origPhones")))[1].number).toBe(
-      "(303) 555-0101"
-    );
+    expect(JSON.parse(String(fd.get("phones")))[1].number).toBe("(303) 555-9999");
+    expect(JSON.parse(String(fd.get("origPhones")))[1].number).toBe("(303) 555-0101");
   });
 
   test("phone label and number inputs carry the server length limits", () => {
     render(
-      <PartyEditForm
-        party={party}
-        category="opposing"
-        contacts={contacts}
-        onDone={() => {}}
-      />
+      <PartyEditForm party={party} category="opposing" contacts={contacts} onDone={() => {}} />,
     );
     for (const el of screen.getAllByLabelText("Phone label")) {
       expect(el).toHaveAttribute("maxlength", "40");
@@ -183,14 +159,7 @@ describe("PartyEditForm - result handling", () => {
   test("success calls onDone", async () => {
     const onDone = vi.fn();
     const user = userEvent.setup();
-    render(
-      <PartyEditForm
-        party={party}
-        category="opposing"
-        contacts={contacts}
-        onDone={onDone}
-      />
-    );
+    render(<PartyEditForm party={party} category="opposing" contacts={contacts} onDone={onDone} />);
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
   });
@@ -202,20 +171,11 @@ describe("PartyEditForm - result handling", () => {
     });
     const onDone = vi.fn();
     const user = userEvent.setup();
-    render(
-      <PartyEditForm
-        party={party}
-        category="opposing"
-        contacts={contacts}
-        onDone={onDone}
-      />
-    );
+    render(<PartyEditForm party={party} category="opposing" contacts={contacts} onDone={onDone} />);
     await user.type(screen.getByLabelText("Notes"), "keep me");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      /party was removed/i
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(/party was removed/i);
     // Not reset by the failed action (the React 19 form-reset trap).
     expect(screen.getByLabelText("Notes")).toHaveValue("keep me");
     expect(onDone).not.toHaveBeenCalled();
@@ -228,12 +188,7 @@ describe("PartyEditForm - result handling", () => {
     });
     const user = userEvent.setup();
     render(
-      <PartyEditForm
-        party={party}
-        category="opposing"
-        contacts={contacts}
-        onDone={() => {}}
-      />
+      <PartyEditForm party={party} category="opposing" contacts={contacts} onDone={() => {}} />,
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText(/limited to 40/i)).toBeInTheDocument();
@@ -249,12 +204,7 @@ describe("PartyEditForm - representation typeahead keyboard", () => {
   test("Enter in the attorney field does not submit and creates nothing", async () => {
     const user = userEvent.setup();
     render(
-      <PartyEditForm
-        party={party}
-        category="opposing"
-        contacts={contacts}
-        onDone={() => {}}
-      />
+      <PartyEditForm party={party} category="opposing" contacts={contacts} onDone={() => {}} />,
     );
     const input = await openRepInput(user);
     await user.type(input, "Son{Enter}");
@@ -264,12 +214,7 @@ describe("PartyEditForm - representation typeahead keyboard", () => {
   test("ArrowDown + Enter picks the highlighted match; Escape closes the list", async () => {
     const user = userEvent.setup();
     const { container } = render(
-      <PartyEditForm
-        party={party}
-        category="opposing"
-        contacts={contacts}
-        onDone={() => {}}
-      />
+      <PartyEditForm party={party} category="opposing" contacts={contacts} onDone={() => {}} />,
     );
     const input = await openRepInput(user);
     await user.type(input, "so");
@@ -283,9 +228,7 @@ describe("PartyEditForm - representation typeahead keyboard", () => {
     await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
     expect(mockedAction).not.toHaveBeenCalled();
     expect(
-      container.querySelector<HTMLInputElement>(
-        'input[name="representationContactId"]'
-      )?.value
+      container.querySelector<HTMLInputElement>('input[name="representationContactId"]')?.value,
     ).toBe("atty2");
   });
 
@@ -302,38 +245,23 @@ describe("PartyEditForm - representation typeahead keyboard", () => {
         category="opposing"
         contacts={contacts}
         onDone={() => {}}
-      />
+      />,
     );
-    await user.click(
-      screen.getByRole("button", { name: /unlink representing contact/i })
-    );
-    expect(
-      screen.getByRole("combobox", { name: /attorney name/i })
-    ).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: /unlink representing contact/i }));
+    expect(screen.getByRole("combobox", { name: /attorney name/i })).toHaveFocus();
   });
 
   test("the Represented toggle exposes the pressed option", async () => {
     const user = userEvent.setup();
     render(
-      <PartyEditForm
-        party={party}
-        category="opposing"
-        contacts={contacts}
-        onDone={() => {}}
-      />
+      <PartyEditForm party={party} category="opposing" contacts={contacts} onDone={() => {}} />,
     );
-    expect(screen.getByRole("button", { name: "Unknown" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.getByRole("button", { name: "Unknown" })).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByRole("button", { name: "Pro se" }));
-    expect(screen.getByRole("button", { name: "Pro se" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.getByRole("button", { name: "Pro se" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Unknown" })).toHaveAttribute(
       "aria-pressed",
-      "false"
+      "false",
     );
   });
 });

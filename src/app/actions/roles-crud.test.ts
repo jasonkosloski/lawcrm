@@ -82,7 +82,7 @@ describe("createRoleAction", () => {
       expect(res.status).toBe("error");
       expect(res.errors?.name?.[0]).toMatch(/Reserved/);
       expect(await prisma.role.count({ where: { firmId } })).toBe(3);
-    }
+    },
   );
 
   test("refuses a duplicate name with a field error", async () => {
@@ -103,11 +103,7 @@ describe("createRoleAction", () => {
 
 describe("updateRoleAction", () => {
   test("refuses to rename a system role", async () => {
-    const res = await updateRoleAction(
-      adminRoleId,
-      roleInitialState,
-      form("Superuser")
-    );
+    const res = await updateRoleAction(adminRoleId, roleInitialState, form("Superuser"));
     expect(res.status).toBe("error");
     expect(res.errors?.name?.[0]).toMatch(/System roles/);
     const row = await prisma.role.findUniqueOrThrow({ where: { id: adminRoleId } });
@@ -118,17 +114,9 @@ describe("updateRoleAction", () => {
     await prisma.role.create({
       data: { firmId, name: "Billing", isSystem: false },
     });
-    const reserved = await updateRoleAction(
-      customRoleId,
-      roleInitialState,
-      form("Admin")
-    );
+    const reserved = await updateRoleAction(customRoleId, roleInitialState, form("Admin"));
     expect(reserved.errors?.name?.[0]).toMatch(/Reserved/);
-    const dup = await updateRoleAction(
-      customRoleId,
-      roleInitialState,
-      form("Billing")
-    );
+    const dup = await updateRoleAction(customRoleId, roleInitialState, form("Billing"));
     expect(dup.errors?.name?.[0]).toMatch(/already exists/);
     const row = await prisma.role.findUniqueOrThrow({ where: { id: customRoleId } });
     expect(row.name).toBe("Paralegal");
@@ -140,11 +128,7 @@ describe("updateRoleAction", () => {
       data: { firmId: other.firmId, name: "Foreign", isSystem: false },
       select: { id: true },
     });
-    const res = await updateRoleAction(
-      foreign.id,
-      roleInitialState,
-      form("Renamed")
-    );
+    const res = await updateRoleAction(foreign.id, roleInitialState, form("Renamed"));
     expect(res.status).toBe("error");
     expect(res.errors?.name?.[0]).toMatch(/not found/i);
     const row = await prisma.role.findUniqueOrThrow({ where: { id: foreign.id } });

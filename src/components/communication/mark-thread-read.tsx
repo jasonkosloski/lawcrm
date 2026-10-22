@@ -15,10 +15,7 @@
 "use client";
 
 import { useEffect } from "react";
-import {
-  markEmailThreadRead,
-  markMessengerThreadRead,
-} from "@/app/actions/thread-read";
+import { markEmailThreadRead, markMessengerThreadRead } from "@/app/actions/thread-read";
 
 export function MarkThreadRead({
   threadId,
@@ -28,8 +25,7 @@ export function MarkThreadRead({
   channel: "email" | "messenger";
 }) {
   useEffect(() => {
-    const action =
-      channel === "email" ? markEmailThreadRead : markMessengerThreadRead;
+    const action = channel === "email" ? markEmailThreadRead : markMessengerThreadRead;
     // Fire-and-forget — a transient failure just means the badge
     // clears on the next open. Never block or error the reader.
     void action(threadId).catch(() => {});

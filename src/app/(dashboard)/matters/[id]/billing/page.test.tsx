@@ -90,13 +90,7 @@ vi.mock("@/components/matters/settlement/settlement-composer", () => ({
   SettlementComposer: () => <div data-testid="settlement-composer" />,
 }));
 vi.mock("@/components/matters/settlement/settlement-lien-list", () => ({
-  SettlementLienList: ({
-    liens,
-    canManage,
-  }: {
-    liens: unknown[];
-    canManage: boolean;
-  }) => (
+  SettlementLienList: ({ liens, canManage }: { liens: unknown[]; canManage: boolean }) => (
     <div
       data-testid="settlement-lien-list"
       data-count={liens.length}
@@ -110,19 +104,12 @@ vi.mock("@/components/matters/settlement/settlement-lien-form", () => ({
 
 import { getMatterBilling } from "@/lib/queries/billing";
 import { getMatterSettlement } from "@/lib/queries/settlements";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
 import { getInvoiceById } from "@/lib/queries/billing";
 import { getUnbilledExpenseSummary } from "@/lib/queries/billing-expenses";
-import type {
-  InvoiceDetail,
-  InvoiceRow,
-  MatterBilling,
-} from "@/lib/queries/billing";
+import type { InvoiceDetail, InvoiceRow, MatterBilling } from "@/lib/queries/billing";
 import type { MatterSettlement } from "@/lib/queries/settlements";
 import MatterBillingPage from "./page";
 
@@ -160,9 +147,7 @@ const settlement: MatterSettlement = {
 
 /** Grant exactly these permission keys; everything else denies. */
 const grant = (...keys: string[]) =>
-  vi
-    .mocked(currentUserHasPermission)
-    .mockImplementation(async (key) => keys.includes(key));
+  vi.mocked(currentUserHasPermission).mockImplementation(async (key) => keys.includes(key));
 
 const renderPage = async (opts?: {
   settlement?: MatterSettlement | null;
@@ -171,19 +156,15 @@ const renderPage = async (opts?: {
   invoiceDetail?: Partial<InvoiceDetail> | null;
 }) => {
   vi.mocked(getMatterBilling).mockResolvedValue(opts?.billing ?? emptyBilling);
-  vi.mocked(getMatterSettlement).mockResolvedValue(
-    opts?.settlement ?? null
-  );
+  vi.mocked(getMatterSettlement).mockResolvedValue(opts?.settlement ?? null);
   if (opts?.invoiceDetail !== undefined) {
-    vi.mocked(getInvoiceById).mockResolvedValue(
-      opts.invoiceDetail as InvoiceDetail | null
-    );
+    vi.mocked(getInvoiceById).mockResolvedValue(opts.invoiceDetail as InvoiceDetail | null);
   }
   render(
     await MatterBillingPage({
       params: Promise.resolve({ id: "m1" }),
       searchParams: Promise.resolve(opts?.invoice ? { invoice: opts.invoice } : {}),
-    } as Parameters<typeof MatterBillingPage>[0])
+    } as Parameters<typeof MatterBillingPage>[0]),
   );
 };
 
@@ -225,7 +206,7 @@ describe("MatterBillingPage — matters.settlement.view gate", () => {
     grant(
       "matters.settlement.edit",
       "matters.settlement.manage_liens",
-      "matters.settlement.approve"
+      "matters.settlement.approve",
     );
     await renderPage({ settlement });
     expect(screen.queryByText("Gross settlement")).toBeNull();
@@ -276,9 +257,7 @@ describe("MatterBillingPage — matters.settlement.view gate", () => {
         ],
       },
     });
-    expect(
-      screen.getByTestId("settlement-lien-list").getAttribute("data-can-manage")
-    ).toBe("true");
+    expect(screen.getByTestId("settlement-lien-list").getAttribute("data-can-manage")).toBe("true");
   });
 
   test("view + edit with no settlement yet — empty-state composer shows", async () => {
@@ -297,14 +276,12 @@ describe("MatterBillingPage — matters.settlement.view gate", () => {
 
 describe("MatterBillingPage — session guard", () => {
   test("without billing.view the page redirects before any query runs", async () => {
-    vi.mocked(requirePermission).mockRejectedValueOnce(
-      new Error("NEXT_REDIRECT")
-    );
+    vi.mocked(requirePermission).mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
     await expect(
       MatterBillingPage({
         params: Promise.resolve({ id: "m1" }),
         searchParams: Promise.resolve({ invoice: "inv_1" }),
-      } as Parameters<typeof MatterBillingPage>[0])
+      } as Parameters<typeof MatterBillingPage>[0]),
     ).rejects.toThrow("NEXT_REDIRECT");
     expect(getMatterBilling).not.toHaveBeenCalled();
     expect(getInvoiceById).not.toHaveBeenCalled();
@@ -357,7 +334,14 @@ describe("MatterBillingPage — mutation controls follow the viewer's keys (F163
     grant();
     await renderPage({
       billing: billingWith({
-        wip: { hoursTotal: 1, amountTotal: 300, entryCount: 1, expenseCount: 0, expenseTotal: 0, recent: [] },
+        wip: {
+          hoursTotal: 1,
+          amountTotal: 300,
+          entryCount: 1,
+          expenseCount: 0,
+          expenseTotal: 0,
+          recent: [],
+        },
       }),
     });
     expect(screen.queryByTestId("generate-form")).toBeNull();
@@ -370,7 +354,14 @@ describe("MatterBillingPage — mutation controls follow the viewer's keys (F163
     grant("billing.generate_invoice", "trust.record_transaction");
     await renderPage({
       billing: billingWith({
-        wip: { hoursTotal: 1, amountTotal: 300, entryCount: 1, expenseCount: 0, expenseTotal: 0, recent: [] },
+        wip: {
+          hoursTotal: 1,
+          amountTotal: 300,
+          entryCount: 1,
+          expenseCount: 0,
+          expenseTotal: 0,
+          recent: [],
+        },
       }),
     });
     expect(screen.getByTestId("generate-form")).toBeTruthy();
@@ -399,11 +390,7 @@ describe("MatterBillingPage — mutation controls follow the viewer's keys (F163
   });
 
   test("the action bar flags map to their own keys", async () => {
-    grant(
-      "billing.approve_invoice",
-      "billing.record_payment",
-      "billing.apply_trust"
-    );
+    grant("billing.approve_invoice", "billing.record_payment", "billing.apply_trust");
     await renderPage(withInvoice());
     expect(stubProps.actionBar.at(-1)).toMatchObject({
       canApproveInvoice: true,
@@ -462,7 +449,14 @@ describe("MatterBillingPage — WIP includes billable expenses (F165)", () => {
     });
     await renderPage({
       billing: billingWith({
-        wip: { hoursTotal: 2, amountTotal: 600, entryCount: 3, expenseCount: 0, expenseTotal: 0, recent: [] },
+        wip: {
+          hoursTotal: 2,
+          amountTotal: 600,
+          entryCount: 3,
+          expenseCount: 0,
+          expenseTotal: 0,
+          recent: [],
+        },
       }),
     });
     expect(screen.getByText("$1,002.50")).toBeTruthy();
@@ -526,14 +520,11 @@ describe("MatterBillingPage — voided invoices (F466)", () => {
 });
 
 describe("MatterBillingPage — lien form on a locked settlement (F881)", () => {
-  test.each(["disbursed", "closed"])(
-    "no lien form once the settlement is %s",
-    async (status) => {
-      grant("matters.settlement.view", "matters.settlement.manage_liens");
-      await renderPage({ settlement: { ...settlement, status } });
-      expect(screen.queryByTestId("settlement-lien-form")).toBeNull();
-    }
-  );
+  test.each(["disbursed", "closed"])("no lien form once the settlement is %s", async (status) => {
+    grant("matters.settlement.view", "matters.settlement.manage_liens");
+    await renderPage({ settlement: { ...settlement, status } });
+    expect(screen.queryByTestId("settlement-lien-form")).toBeNull();
+  });
 
   test("an open settlement still offers it to a lien manager", async () => {
     grant("matters.settlement.view", "matters.settlement.manage_liens");

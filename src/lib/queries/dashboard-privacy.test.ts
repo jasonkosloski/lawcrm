@@ -226,9 +226,7 @@ describe("getTodayAgenda - calendar visibility resolver", () => {
       title: "Team hearing",
       startTime: start,
     });
-    expect((await getTodayAgenda(DENVER)).map((a) => a.title)).toEqual([
-      "Team hearing",
-    ]);
+    expect((await getTodayAgenda(DENVER)).map((a) => a.title)).toEqual(["Team hearing"]);
   });
 });
 

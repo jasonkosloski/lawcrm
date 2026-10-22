@@ -69,7 +69,7 @@ describe("devSignInAs", () => {
     });
     expect(clerk.createDevSignInToken).toHaveBeenCalledWith("user_new");
     expect(logAuthEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: "u1", kind: "dev_sign_in" })
+      expect.objectContaining({ userId: "u1", kind: "dev_sign_in" }),
     );
   });
 
@@ -92,7 +92,7 @@ describe("devSignInAs", () => {
       error: "No active user with that id.",
     });
     expect(prismaMock.user.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "nope", isActive: true } })
+      expect.objectContaining({ where: { id: "nope", isActive: true } }),
     );
     expect(clerk.createDevSignInToken).not.toHaveBeenCalled();
   });

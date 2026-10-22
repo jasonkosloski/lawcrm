@@ -38,7 +38,13 @@ vi.mock("@/lib/queries/messenger", async (importOriginal) => ({
   getMessengerUnreadCount: vi.fn(async () => 0),
   getMessengerMailboxCounts: vi.fn(async () => ({ all: 0, unread: 0 })),
   getMessengerThread: vi.fn(),
-  listMessengerThreads: vi.fn(async () => ({ rows: [], page: 1, pageCount: 1, total: 0, pageSize: 100 })),
+  listMessengerThreads: vi.fn(async () => ({
+    rows: [],
+    page: 1,
+    pageCount: 1,
+    total: 0,
+    pageSize: 100,
+  })),
 }));
 vi.mock("@/lib/queries/contacts", () => ({
   listContactPickerOptions: vi.fn(async () => []),
@@ -50,9 +56,7 @@ vi.mock("@/components/communication/communication-tabs", () => ({
 }));
 vi.mock("@/components/communication/mailbox-drawer", () => ({
   MailboxDrawer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  MailboxDrawerProvider: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
+  MailboxDrawerProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock("@/components/communication/sync-now-button", () => ({
   SyncNowButton: () => null,
@@ -95,18 +99,13 @@ vi.mock("@/components/communication/messenger-thread-reader", () => ({
 }));
 
 import { getThreadById, listThreads } from "@/lib/queries/communication";
-import {
-  getMessengerThread,
-  listMessengerThreads,
-} from "@/lib/queries/messenger";
+import { getMessengerThread, listMessengerThreads } from "@/lib/queries/messenger";
 import { listPortalThreadsForViewer } from "@/lib/queries/portal-messages";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import CommunicationPage from "./page";
 
 const props = (sp: Record<string, string>) =>
-  ({ searchParams: Promise.resolve(sp) }) as Parameters<
-    typeof CommunicationPage
-  >[0];
+  ({ searchParams: Promise.resolve(sp) }) as Parameters<typeof CommunicationPage>[0];
 
 beforeEach(() => {
   vi.mocked(getThreadById).mockReset();
@@ -132,9 +131,7 @@ describe("stale ?thread= id", () => {
 
   test("messages view: unresolved thread -> no selection anywhere", async () => {
     vi.mocked(getMessengerThread).mockResolvedValue(null);
-    render(
-      await CommunicationPage(props({ view: "messages", thread: "gone" }))
-    );
+    render(await CommunicationPage(props({ view: "messages", thread: "gone" })));
     expect(screen.getByTestId("msg-list").dataset.selected).toBe("");
     expect(screen.getByTestId("msg-rail").dataset.selected).toBe("");
   });
@@ -173,7 +170,7 @@ describe("?view=portal", () => {
   test("without the key: falls back to email and never queries", async () => {
     vi.mocked(listPortalThreadsForViewer).mockClear();
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k !== "portal.view_messages"
+      async (k: string) => k !== "portal.view_messages",
     );
     vi.mocked(getThreadById).mockResolvedValue(null);
     try {

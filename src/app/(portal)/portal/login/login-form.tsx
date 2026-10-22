@@ -2,10 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { MailCheck } from "lucide-react";
-import {
-  requestPortalLink,
-  type PortalLinkState,
-} from "@/app/actions/portal-session";
+import { requestPortalLink, type PortalLinkState } from "@/app/actions/portal-session";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,56 +13,35 @@ import { Label } from "@/components/ui/label";
  * visitor typed, since that reveals nothing they don't already know.
  * "Use a different email" remounts the form for a fresh action state.
  */
-export function LoginForm({
-  submitLabel = "Email me a link",
-}: {
-  submitLabel?: string;
-}) {
+export function LoginForm({ submitLabel = "Email me a link" }: { submitLabel?: string }) {
   const [attempt, setAttempt] = useState(0);
   return (
-    <LinkRequest
-      key={attempt}
-      submitLabel={submitLabel}
-      onReset={() => setAttempt((n) => n + 1)}
-    />
+    <LinkRequest key={attempt} submitLabel={submitLabel} onReset={() => setAttempt((n) => n + 1)} />
   );
 }
 
-function LinkRequest({
-  submitLabel,
-  onReset,
-}: {
-  submitLabel: string;
-  onReset: () => void;
-}) {
+function LinkRequest({ submitLabel, onReset }: { submitLabel: string; onReset: () => void }) {
   const [email, setEmail] = useState("");
   const [state, formAction, pending] = useActionState<PortalLinkState, FormData>(
     requestPortalLink,
-    { status: "idle" }
+    { status: "idle" },
   );
 
   if (state.status === "sent") {
     return (
       <div role="status" className="flex flex-col gap-4">
         <div className="flex items-start gap-3 rounded-lg border border-brand-100 bg-brand-tint p-4">
-          <MailCheck
-            className="mt-0.5 size-5 shrink-0 text-brand-500"
-            aria-hidden="true"
-          />
+          <MailCheck className="mt-0.5 size-5 shrink-0 text-brand-500" aria-hidden="true" />
           <div className="flex min-w-0 flex-col gap-1 text-sm">
             <p className="font-medium text-ink">Check your email</p>
-            <p className="text-ink-2">
-              If that email has portal access, a link is on its way.
-            </p>
+            <p className="text-ink-2">If that email has portal access, a link is on its way.</p>
             {email ? (
               <p className="truncate text-ink-3">
-                You entered{" "}
-                <span className="font-medium text-ink-2">{email}</span>
+                You entered <span className="font-medium text-ink-2">{email}</span>
               </p>
             ) : null}
             <p className="text-ink-3">
-              The link works for 15 minutes. Check your spam folder if it
-              doesn&rsquo;t arrive.
+              The link works for 15 minutes. Check your spam folder if it doesn&rsquo;t arrive.
             </p>
           </div>
         </div>

@@ -21,28 +21,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  useActionState,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-} from "react";
+import { useActionState, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { Sparkles, UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createMatter } from "@/app/actions/matters";
 import { formatStatutePeriod, type SolPeriod } from "@/lib/sol";
-import {
-  BILLING_TYPE_OPTIONS,
-  isBillingType,
-  type BillingType,
-} from "@/lib/billing-type";
-import {
-  effectiveTemplate,
-  renderMatterName,
-} from "@/lib/matter-name-template";
+import { BILLING_TYPE_OPTIONS, isBillingType, type BillingType } from "@/lib/billing-type";
+import { effectiveTemplate, renderMatterName } from "@/lib/matter-name-template";
 import {
   missingRequired,
   requiredFieldError,
@@ -52,15 +37,8 @@ import {
 } from "@/lib/matter-required-fields";
 import type { VenueOption } from "@/lib/queries/venues";
 import { VenueCombobox } from "./venue-combobox";
-import {
-  focusFirstInvalid,
-  useRequiredHints,
-  VenueField,
-} from "./required-field-ui";
-import {
-  Row,
-  Section,
-} from "./form-primitives";
+import { focusFirstInvalid, useRequiredHints, VenueField } from "./required-field-ui";
+import { Row, Section } from "./form-primitives";
 import {
   createMatterInitialState,
   NEW_CLIENT_SENTINEL,
@@ -182,10 +160,10 @@ export function NewMatterForm({
   draft?: NewMatterDraft | null;
   engagement?: NewMatterEngagement;
 }) {
-  const [state, formAction, isPending] = useActionState<
-    CreateMatterState,
-    FormData
-  >(createMatter, createMatterInitialState);
+  const [state, formAction, isPending] = useActionState<CreateMatterState, FormData>(
+    createMatter,
+    createMatterInitialState,
+  );
   // Submit via onSubmit + startTransition rather than
   // `<form action={formAction}>`: React 19 auto-resets the form after a
   // function action, reverting any <select> not held in state
@@ -207,7 +185,7 @@ export function NewMatterForm({
         required: engagement.required,
         label: engagementLabel,
         today: engagement.todayKey,
-      }
+      },
     );
     if (missing.length > 0 || Object.keys(gate).length > 0) {
       const next: Record<string, string[]> = {};
@@ -222,9 +200,7 @@ export function NewMatterForm({
       return;
     }
     setClientErrs({});
-    const submitter = (e.nativeEvent as SubmitEvent).submitter as
-      | HTMLElement
-      | null;
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLElement | null;
     const fd = new FormData(e.currentTarget, submitter);
     const submit = () => {
       // An auto-save that landed since the last render moved the
@@ -256,8 +232,7 @@ export function NewMatterForm({
     getValues: () => (formRef.current ? serializeForm(formRef.current) : {}),
     paused: isPending,
   });
-  const openDraft = (id: string) =>
-    router.replace(`/matters/new?draft=${encodeURIComponent(id)}`);
+  const openDraft = (id: string) => router.replace(`/matters/new?draft=${encodeURIComponent(id)}`);
   const saveDraft = async () => {
     const wasNew = !autosave.draftId;
     const id = await autosave.saveNow();
@@ -273,18 +248,16 @@ export function NewMatterForm({
 
   // ── Engagement (originating document) ────────────────────────────────
   const [agreementStatus, setAgreementStatus] = useState<string>(
-    vals.agreementStatus ?? "not_sent"
+    vals.agreementStatus ?? "not_sent",
   );
   const [agreementSignedDate, setAgreementSignedDate] = useState<string>(
-    vals.agreementSignedDate ?? ""
+    vals.agreementSignedDate ?? "",
   );
   const [originatingFileId, setOriginatingFileId] = useState<string>(
-    draft?.files.find((f) => f.isOriginating)?.id ?? ""
+    draft?.files.find((f) => f.isOriginating)?.id ?? "",
   );
   const [removedFileIds, setRemovedFileIds] = useState<string[]>([]);
-  const draftFiles = (draft?.files ?? []).filter(
-    (f) => !removedFileIds.includes(f.id)
-  );
+  const draftFiles = (draft?.files ?? []).filter((f) => !removedFileIds.includes(f.id));
   const hasOriginatingFile = draftFiles.some((f) => f.id === originatingFileId);
   const onEngagementChange = (c: EngagementChange) => {
     if (c.status !== undefined) setAgreementStatus(c.status);
@@ -299,18 +272,13 @@ export function NewMatterForm({
 
   // ── Client picker state ──────────────────────────────────────────────
   const initialSelectedId =
-    vals.clientId && vals.clientId !== NEW_CLIENT_SENTINEL
-      ? vals.clientId
-      : null;
+    vals.clientId && vals.clientId !== NEW_CLIENT_SENTINEL ? vals.clientId : null;
   const initialClientName = initialSelectedId
-    ? (options.clients.find((c) => c.id === initialSelectedId)?.name ??
-      "")
+    ? (options.clients.find((c) => c.id === initialSelectedId)?.name ?? "")
     : (vals.newClientName ?? "");
 
   const [clientName, setClientName] = useState<string>(initialClientName);
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(
-    initialSelectedId
-  );
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(initialSelectedId);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   // Highlighted suggestion for keyboard selection (-1 = none).
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -326,36 +294,26 @@ export function NewMatterForm({
   // lost across a validation-error round trip.
   const [caseNumber, setCaseNumber] = useState<string>(vals.caseNumber ?? "");
   const [venue, setVenue] = useState<VenueOption | null>(
-    options.venues.find((v) => v.id === vals.venueId) ?? null
+    options.venues.find((v) => v.id === vals.venueId) ?? null,
   );
-  const [opposingParty, setOpposingParty] = useState<string>(
-    vals.opposingParty ?? ""
-  );
+  const [opposingParty, setOpposingParty] = useState<string>(vals.opposingParty ?? "");
 
   // ── Matter name state + dirty tracking ───────────────────────────────
   // If the server action re-rendered us after a validation error,
   // treat the previously-submitted name as user-edited so we don't
   // blow it away on the next dependency change.
   const [matterName, setMatterName] = useState<string>(vals.name ?? "");
-  const [isNameDirty, setIsNameDirty] = useState<boolean>(
-    Boolean(vals.name)
-  );
+  const [isNameDirty, setIsNameDirty] = useState<boolean>(Boolean(vals.name));
 
   // ── Practice area + stage (cascading) ────────────────────────────────
   // Seed from the previously-submitted values on validation error,
   // otherwise default to the first area + its first stage.
   const firstArea = options.areas[0];
-  const initialAreaId =
-    vals.practiceAreaId ?? firstArea?.id ?? "";
+  const initialAreaId = vals.practiceAreaId ?? firstArea?.id ?? "";
   const initialArea = options.areas.find((a) => a.id === initialAreaId);
-  const initialStageId =
-    vals.stageId ??
-    initialArea?.stages[0]?.id ??
-    "";
+  const initialStageId = vals.stageId ?? initialArea?.stages[0]?.id ?? "";
 
-  const [leadUserId, setLeadUserId] = useState<string>(
-    vals.leadUserId ?? options.currentUserId
-  );
+  const [leadUserId, setLeadUserId] = useState<string>(vals.leadUserId ?? options.currentUserId);
 
   const [practiceAreaId, setPracticeAreaId] = useState<string>(initialAreaId);
   const [stageId, setStageId] = useState<string>(initialStageId);
@@ -373,15 +331,11 @@ export function NewMatterForm({
   const selectedArea = options.areas.find((a) => a.id === practiceAreaId);
   // Area change retitles the section; files and the mark stay (they
   // belong to the draft, not the area).
-  const engagementLabel =
-    engagement.labelsByArea[practiceAreaId] ?? engagement.defaultLabel;
+  const engagementLabel = engagement.labelsByArea[practiceAreaId] ?? engagement.defaultLabel;
   const stageOptions = selectedArea?.stages ?? [];
 
   const requiredKeys = requiredKeysFor(selectedArea ?? null);
-  const { isRequired, requiredHint, reqHint } = useRequiredHints(
-    selectedArea?.name,
-    requiredKeys
-  );
+  const { isRequired, requiredHint, reqHint } = useRequiredHints(selectedArea?.name, requiredKeys);
 
   function checkRequired(fd: FormData): RequiredMatterField[] {
     const get = (n: string) => String(fd.get(n) ?? "");
@@ -423,20 +377,14 @@ export function NewMatterForm({
   // The auto name is pure derived state. Until the user takes ownership
   // of the field the input shows it directly — no effect, no stale
   // first render.
-  const template = effectiveTemplate(
-    selectedArea ?? null,
-    options.firmTemplate
-  );
+  const template = effectiveTemplate(selectedArea ?? null, options.firmTemplate);
   const autoName = renderMatterName(template, {
     clientName,
     // A picked contact whose organization is its own name is an
     // organization — never invert it into "Fund, Colorado Freedom".
-    isOrganization:
-      !!selectedClient && selectedClient.organization === selectedClient.name,
+    isOrganization: !!selectedClient && selectedClient.organization === selectedClient.name,
     caseNumber,
-    venue: venue
-      ? { name: venue.name, county: venue.county, state: venue.state }
-      : null,
+    venue: venue ? { name: venue.name, county: venue.county, state: venue.state } : null,
     opposingParty,
     practiceAreaName: selectedArea?.name ?? "",
     now: new Date(),
@@ -461,10 +409,7 @@ export function NewMatterForm({
     if (!suggestionsOpen) return;
     const handler = (e: MouseEvent) => {
       const el = e.target as Node;
-      if (
-        clientInputRef.current?.contains(el) ||
-        suggestionsRef.current?.contains(el)
-      ) {
+      if (clientInputRef.current?.contains(el) || suggestionsRef.current?.contains(el)) {
         return;
       }
       setSuggestionsOpen(false);
@@ -496,9 +441,7 @@ export function NewMatterForm({
   };
 
   const activeOption =
-    suggestionsOpen && suggestions.length > 0
-      ? Math.min(activeIndex, suggestions.length - 1)
-      : -1;
+    suggestionsOpen && suggestions.length > 0 ? Math.min(activeIndex, suggestions.length - 1) : -1;
   const optionId = (i: number) => `${listboxId}-opt-${i}`;
 
   // Combobox keyboard support. Enter never falls through to form
@@ -530,7 +473,7 @@ export function NewMatterForm({
           ? delta === 1
             ? 0
             : suggestions.length - 1
-          : (from + delta + suggestions.length) % suggestions.length
+          : (from + delta + suggestions.length) % suggestions.length,
       );
       return;
     }
@@ -568,10 +511,7 @@ export function NewMatterForm({
               Matter name
               <span className="text-warn">*</span>
               {!isNameDirty && displayedName && (
-                <Badge
-                  className="font-mono"
-                  title="Auto-generated from the matter name template"
-                >
+                <Badge className="font-mono" title="Auto-generated from the matter name template">
                   <Sparkles size={10} />
                   auto
                 </Badge>
@@ -604,8 +544,7 @@ export function NewMatterForm({
             <div className="text-2xs text-warn">{errs.name[0]}</div>
           ) : (
             <div className="text-2xs text-ink-4">
-              Pattern:{" "}
-              <span className="font-mono text-ink-3">{template}</span>
+              Pattern: <span className="font-mono text-ink-3">{template}</span>
             </div>
           )}
         </div>
@@ -709,7 +648,7 @@ export function NewMatterForm({
             aria-invalid={!!errs.billingType || undefined}
           >
             {BILLING_TYPE_OPTIONS.filter((o) =>
-              selectedArea?.allowedBillingTypes.includes(o.value)
+              selectedArea?.allowedBillingTypes.includes(o.value),
             ).map((o) => (
               <NativeSelectOption key={o.value} value={o.value}>
                 {o.label}
@@ -726,14 +665,9 @@ export function NewMatterForm({
         <Row>
           {/* Client — typeahead */}
           <div className="flex flex-col gap-1 relative">
-            <label
-              htmlFor="newClientName"
-              className="text-xs font-medium text-ink-2"
-            >
+            <label htmlFor="newClientName" className="text-xs font-medium text-ink-2">
               Client
-              {isRequired("client") && (
-                <span className="text-warn ml-0.5">*</span>
-              )}
+              {isRequired("client") && <span className="text-warn ml-0.5">*</span>}
             </label>
 
             {selectedClient ? (
@@ -742,9 +676,7 @@ export function NewMatterForm({
                 aria-live="polite"
               >
                 <UserCheck size={13} className="text-brand-700 shrink-0" />
-                <span className="font-medium truncate flex-1">
-                  {selectedClient.name}
-                </span>
+                <span className="font-medium truncate flex-1">{selectedClient.name}</span>
                 {selectedClient.organization && (
                   <span className="text-2xs font-mono text-ink-4 truncate">
                     {selectedClient.organization}
@@ -772,9 +704,7 @@ export function NewMatterForm({
                   aria-expanded={suggestionsOpen && suggestions.length > 0}
                   aria-controls={listboxId}
                   aria-autocomplete="list"
-                  aria-activedescendant={
-                    activeOption >= 0 ? optionId(activeOption) : undefined
-                  }
+                  aria-activedescendant={activeOption >= 0 ? optionId(activeOption) : undefined}
                   value={clientName}
                   onChange={(e) => {
                     setClientName(e.target.value);
@@ -785,9 +715,7 @@ export function NewMatterForm({
                   onFocus={() => {
                     if (clientName.trim().length > 0) setSuggestionsOpen(true);
                   }}
-                  className={inputClass(
-                    !!errs.newClientName || !!errs.clientId
-                  )}
+                  className={inputClass(!!errs.newClientName || !!errs.clientId)}
                   placeholder="Client name (First Last — type to search or create)"
                 />
                 {suggestionsOpen && suggestions.length > 0 && (
@@ -810,13 +738,10 @@ export function NewMatterForm({
                         onClick={() => pickExisting(c)}
                         className={cn(
                           "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left cursor-pointer hover:bg-brand-tint",
-                          i === activeOption && "bg-brand-tint"
+                          i === activeOption && "bg-brand-tint",
                         )}
                       >
-                        <UserCheck
-                          size={12}
-                          className="text-ink-4 shrink-0"
-                        />
+                        <UserCheck size={12} className="text-ink-4 shrink-0" />
                         <span className="font-medium text-ink">{c.name}</span>
                         {c.organization && (
                           <span className="text-2xs font-mono text-ink-4 truncate">
@@ -854,18 +779,13 @@ export function NewMatterForm({
             )}
             {!selectedClient && !errs.newClientName?.length && !errs.clientId?.length && (
               <div className="text-2xs text-ink-4">
-                {isRequired("client") && `${requiredHint}. `}Start typing — we&apos;ll suggest existing clients, or
-                create a new one on save.
+                {isRequired("client") && `${requiredHint}. `}Start typing — we&apos;ll suggest
+                existing clients, or create a new one on save.
               </div>
             )}
           </div>
 
-          <Field
-            label="Lead attorney"
-            htmlFor="leadUserId"
-            required
-            error={errs.leadUserId}
-          >
+          <Field label="Lead attorney" htmlFor="leadUserId" required error={errs.leadUserId}>
             <NativeSelect
               className="w-full"
               id="leadUserId"
@@ -912,11 +832,7 @@ export function NewMatterForm({
                   placeholder="maria.alvarez@example.com"
                 />
               </Field>
-              <Field
-                label="Client phone"
-                htmlFor="newClientPhone"
-                error={errs.newClientPhone}
-              >
+              <Field label="Client phone" htmlFor="newClientPhone" error={errs.newClientPhone}>
                 <input
                   id="newClientPhone"
                   name="newClientPhone"
@@ -1046,10 +962,7 @@ export function NewMatterForm({
             name="description"
             defaultValue={vals.description ?? ""}
             rows={4}
-            className={cn(
-              inputClass(!!errs.description),
-              "py-2 resize-y min-h-20 font-sans"
-            )}
+            className={cn(inputClass(!!errs.description), "py-2 resize-y min-h-20 font-sans")}
             placeholder="Brief case summary — what the claim is, what's at stake."
           />
         </Field>
@@ -1098,7 +1011,7 @@ export function NewMatterForm({
                 "incidentDate",
                 selectedArea.statutePeriod
                   ? `Period: ${formatStatutePeriod(selectedArea.statutePeriod)}${selectedArea.statuteSourceCitation ? ` · ${selectedArea.statuteSourceCitation}` : ""}. Leave Deadline blank to auto-compute.`
-                  : "When known, drives the SOL deadline once the firm configures a statute period for this area."
+                  : "When known, drives the SOL deadline once the firm configures a statute period for this area.",
               )}
             >
               <input
@@ -1178,11 +1091,7 @@ export function NewMatterForm({
         >
           Save draft
         </Button>
-        <Button
-          size="sm"
-          type="submit"
-          disabled={isPending}
-        >
+        <Button size="sm" type="submit" disabled={isPending}>
           {isPending ? "Creating…" : "Create matter"}
         </Button>
       </div>
@@ -1203,11 +1112,7 @@ function DraftStatus({
     return (
       <span role="status" className="mr-auto text-2xs text-warn">
         Someone else saved this draft. Reload to see their changes.{" "}
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="underline"
-        >
+        <button type="button" onClick={() => window.location.reload()} className="underline">
           Reload
         </button>
       </span>

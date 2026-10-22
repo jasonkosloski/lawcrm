@@ -17,10 +17,7 @@ vi.mock("@/app/actions/settlements", () => ({
   deleteSettlementLien: vi.fn(),
 }));
 
-import {
-  deleteSettlementLien,
-  updateSettlementLien,
-} from "@/app/actions/settlements";
+import { deleteSettlementLien, updateSettlementLien } from "@/app/actions/settlements";
 import { confirmAction } from "@/lib/feedback";
 import { SettlementLienList, type SettlementLienListRow } from "./settlement-lien-list";
 
@@ -65,9 +62,7 @@ afterEach(() => {
 
 describe("SettlementLienList — display", () => {
   test("renders nothing when there are no liens", () => {
-    const { container } = render(
-      <SettlementLienList liens={[]} canManage locked={false} />
-    );
+    const { container } = render(<SettlementLienList liens={[]} canManage locked={false} />);
     expect(container.firstChild).toBeNull();
   });
 
@@ -101,9 +96,7 @@ describe("SettlementLienList — edit", () => {
 
     const amount = screen.getByLabelText(/negotiated amount/i) as HTMLInputElement;
     expect(amount.value).toBe("2500.00");
-    expect((screen.getByLabelText(/^status/i) as HTMLSelectElement).value).toBe(
-      "negotiating"
-    );
+    expect((screen.getByLabelText(/^status/i) as HTMLSelectElement).value).toBe("negotiating");
 
     await user.clear(amount);
     await user.type(amount, "1800");
@@ -118,9 +111,7 @@ describe("SettlementLienList — edit", () => {
     expect(vi.mocked(updateSettlementLien).mock.calls[0]![0]).toBe("l1");
 
     // Closes on success.
-    await waitFor(() =>
-      expect(screen.queryByLabelText(/negotiated amount/i)).toBeNull()
-    );
+    await waitFor(() => expect(screen.queryByLabelText(/negotiated amount/i)).toBeNull());
   });
 
   test("a lien with no negotiated amount opens blank (saving does not set 0)", async () => {
@@ -145,9 +136,7 @@ describe("SettlementLienList — edit", () => {
     await user.type(screen.getByLabelText(/negotiated amount/i), "12.345");
     await user.click(screen.getByRole("button", { name: /save lien/i }));
     expect(await screen.findByText("Enter a valid amount")).toBeInTheDocument();
-    expect((screen.getByLabelText(/negotiated amount/i) as HTMLInputElement).value).toBe(
-      "12.345"
-    );
+    expect((screen.getByLabelText(/negotiated amount/i) as HTMLInputElement).value).toBe("12.345");
   });
 
   test("cancel discards the draft; reopening starts from server values", async () => {
@@ -159,9 +148,7 @@ describe("SettlementLienList — edit", () => {
     await user.click(screen.getByRole("button", { name: /^cancel$/i }));
     expect(screen.queryByLabelText(/negotiated amount/i)).toBeNull();
     await user.click(screen.getByRole("button", { name: "Edit lien Denver Health" }));
-    expect((screen.getByLabelText(/negotiated amount/i) as HTMLInputElement).value).toBe(
-      "2500.00"
-    );
+    expect((screen.getByLabelText(/negotiated amount/i) as HTMLInputElement).value).toBe("2500.00");
   });
 });
 

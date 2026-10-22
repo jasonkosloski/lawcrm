@@ -60,12 +60,15 @@ export function EventShareSection({
             <span className="rounded-full border border-line bg-paper-2 px-2 py-0.5 text-2xs font-medium text-ink-2">
               Shared
             </span>
-            <span className="min-w-0 break-words text-xs text-ink-2">
-              {share.clientTitle}
-            </span>
+            <span className="min-w-0 break-words text-xs text-ink-2">{share.clientTitle}</span>
             {canShare && (
               <span className="ml-auto flex gap-1">
-                <Button size="sm" variant="outline" disabled={pending} onClick={() => setOpen(true)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => setOpen(true)}
+                >
                   Edit share
                 </Button>
                 <Button size="sm" variant="outline" disabled={pending} onClick={stop}>
@@ -137,8 +140,7 @@ function ShareDialog({
         <DialogHeader>
           <DialogTitle>{share ? "Edit share" : "Share with client"}</DialogTitle>
           <DialogDescription>
-            The client sees this title and note in the portal, not the
-            event&apos;s own details.
+            The client sees this title and note in the portal, not the event&apos;s own details.
           </DialogDescription>
         </DialogHeader>
         <form

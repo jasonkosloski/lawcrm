@@ -35,11 +35,10 @@ export const DEFAULT_TIME_VIEW: TimeView = "week";
 export function parseTimeParams(
   sp: Record<string, string | string[] | undefined>,
   tz: string,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): { view: TimeView; focal: Date } {
   const rawView = Array.isArray(sp.view) ? sp.view[0] : sp.view;
-  const view: TimeView =
-    rawView === "week" || rawView === "day" ? rawView : DEFAULT_TIME_VIEW;
+  const view: TimeView = rawView === "week" || rawView === "day" ? rawView : DEFAULT_TIME_VIEW;
 
   const todayFocal = () => parseISO(dateKeyInTz(now, tz));
 
@@ -64,7 +63,7 @@ export const toTimeDateParam = (d: Date): string => format(d, "yyyy-MM-dd");
 export function buildTimeHref(
   view: TimeView,
   focal: Date,
-  override: { view?: TimeView; focal?: Date } = {}
+  override: { view?: TimeView; focal?: Date } = {},
 ): string {
   const v = override.view ?? view;
   const d = override.focal ?? focal;
@@ -82,5 +81,4 @@ export function buildTimeHref(
  */
 export const dayKeyFromNoonUtc = (d: Date): string => dateOnlyKey(d);
 
-export const timeSourceLabel = (source: string): string =>
-  timeEntrySourceLabel(source);
+export const timeSourceLabel = (source: string): string => timeEntrySourceLabel(source);

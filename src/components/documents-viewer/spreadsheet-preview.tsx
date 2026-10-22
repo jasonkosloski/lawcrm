@@ -88,17 +88,19 @@ export function SpreadsheetPreview({
           )}
           {(s.hiddenRows > 0 || s.hiddenCols > 0) && (
             <div className="text-2xs text-ink-4">
-              Showing the first {SPREADSHEET_MAX_ROWS.toLocaleString()} rows and {SPREADSHEET_MAX_COLS} columns
+              Showing the first {SPREADSHEET_MAX_ROWS.toLocaleString()} rows and{" "}
+              {SPREADSHEET_MAX_COLS} columns
               {s.hiddenRows > 0 && ` (${s.hiddenRows.toLocaleString()} more rows)`}
-              {s.hiddenCols > 0 && ` (${s.hiddenCols} more columns)`} — download the file for the rest.
+              {s.hiddenCols > 0 && ` (${s.hiddenCols} more columns)`} — download the file for the
+              rest.
             </div>
           )}
         </section>
       ))}
       {hiddenSheets > 0 && (
         <div className="text-2xs text-ink-4">
-          {hiddenSheets} more {hiddenSheets === 1 ? "sheet isn't" : "sheets aren't"} shown — download the file to see{" "}
-          {hiddenSheets === 1 ? "it" : "them"}.
+          {hiddenSheets} more {hiddenSheets === 1 ? "sheet isn't" : "sheets aren't"} shown —
+          download the file to see {hiddenSheets === 1 ? "it" : "them"}.
         </div>
       )}
       <div className="text-2xs text-ink-4">

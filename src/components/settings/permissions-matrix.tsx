@@ -67,18 +67,15 @@ export function PermissionsMatrix({
   // Optimistic local state — `Map<roleId, Set<permission>>`. Cell
   // toggles flip the box immediately; the action call rolls it
   // back if the server rejects.
-  const [grantsState, setGrantsState] = useState<Record<string, Set<string>>>(
-    () => {
-      const next: Record<string, Set<string>> = {};
-      for (const [roleId, list] of Object.entries(grants)) {
-        next[roleId] = new Set(list);
-      }
-      return next;
+  const [grantsState, setGrantsState] = useState<Record<string, Set<string>>>(() => {
+    const next: Record<string, Set<string>> = {};
+    for (const [roleId, list] of Object.entries(grants)) {
+      next[roleId] = new Set(list);
     }
-  );
+    return next;
+  });
 
-  const isAdminRole = (r: RoleColumn) =>
-    r.isSystem && r.name === ADMIN_ROLE_NAME;
+  const isAdminRole = (r: RoleColumn) => r.isSystem && r.name === ADMIN_ROLE_NAME;
 
   const isGranted = (roleId: string, key: string, role: RoleColumn): boolean => {
     if (isAdminRole(role)) return true;
@@ -150,16 +147,12 @@ export function PermissionsMatrix({
                   key={r.id}
                   className="px-2 py-2 text-2xs font-medium text-ink min-w-[7rem] text-center"
                   title={
-                    isAdminRole(r)
-                      ? "Admin grants every permission by definition."
-                      : undefined
+                    isAdminRole(r) ? "Admin grants every permission by definition." : undefined
                   }
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span className="truncate">{r.name}</span>
-                    {isAdminRole(r) && (
-                      <Lock size={10} className="text-ink-4 shrink-0" />
-                    )}
+                    {isAdminRole(r) && <Lock size={10} className="text-ink-4 shrink-0" />}
                   </div>
                 </th>
               ))}
@@ -189,7 +182,7 @@ export function PermissionsMatrix({
                       key={p.key}
                       className={cn(
                         "border-b border-line/60 hover:bg-paper-2/40",
-                        isLast && "border-b-0"
+                        isLast && "border-b-0",
                       )}
                     >
                       <td className="sticky left-0 bg-paper px-3 py-2 align-top">
@@ -213,16 +206,14 @@ export function PermissionsMatrix({
                         // Non-admin editors see the meta-key cells
                         // locked — same affordance as the always-
                         // locked Admin column, plus a tooltip.
-                        const metaLocked =
-                          !viewerIsAdmin && ADMIN_ONLY_PERMISSIONS.has(p.key);
-                        const locked =
-                          isAdminRole(r) || !canEdit || metaLocked;
+                        const metaLocked = !viewerIsAdmin && ADMIN_ONLY_PERMISSIONS.has(p.key);
+                        const locked = isAdminRole(r) || !canEdit || metaLocked;
                         return (
                           <td
                             key={r.id}
                             className={cn(
                               "px-2 py-2 text-center align-middle",
-                              !locked && "cursor-pointer"
+                              !locked && "cursor-pointer",
                             )}
                             // Explain the lock only where it's the
                             // reason — the Admin column and read-only
@@ -244,10 +235,7 @@ export function PermissionsMatrix({
                               // the input directly.
                               onClick={(e) => e.stopPropagation()}
                               onChange={() => toggle(r.id, r, p.key)}
-                              className={cn(
-                                "h-4 w-4",
-                                locked && "cursor-not-allowed opacity-70"
-                              )}
+                              className={cn("h-4 w-4", locked && "cursor-not-allowed opacity-70")}
                               aria-label={`${p.label} for ${r.name}`}
                             />
                           </td>

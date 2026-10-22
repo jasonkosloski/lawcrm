@@ -63,8 +63,7 @@ export function MemberRow({
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
   const privileged = new Set(privilegedRoleIds);
-  const targetIsPrivileged =
-    member.isAdmin || member.roles.some((r) => privileged.has(r.id));
+  const targetIsPrivileged = member.isAdmin || member.roles.some((r) => privileged.has(r.id));
   // Delegated managers can't touch Admin-class accounts at all.
   const canEditMember = viewerIsAdmin || !member.isAdmin;
   const canTakeOverMember = viewerIsAdmin || !targetIsPrivileged;
@@ -83,8 +82,7 @@ export function MemberRow({
     if (
       !(await confirmAction({
         title: `Sign ${member.name} out everywhere?`,
-        description:
-          "Every active session ends immediately. They can sign back in with Google.",
+        description: "Every active session ends immediately. They can sign back in with Google.",
         confirmLabel: "Sign out everywhere",
         destructive: true,
       }))
@@ -94,7 +92,7 @@ export function MemberRow({
     startTransition(async () => {
       report(
         await signOutFirmMemberEverywhere(member.id),
-        `${member.name} was signed out everywhere.`
+        `${member.name} was signed out everywhere.`,
       );
     });
   };
@@ -114,17 +112,14 @@ export function MemberRow({
     startTransition(async () => {
       report(
         await resetFirmMemberSignInLink(member.id),
-        `${member.name}'s sign-in link was reset.`
+        `${member.name}'s sign-in link was reset.`,
       );
     });
   };
 
   const onResendInvite = () => {
     startTransition(async () => {
-      report(
-        await resendFirmMemberInvite(member.id),
-        `Invitation re-sent to ${member.email}.`
-      );
+      report(await resendFirmMemberInvite(member.id), `Invitation re-sent to ${member.email}.`);
     });
   };
 
@@ -153,14 +148,8 @@ export function MemberRow({
           </span>
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-ink truncate">
-                {member.name}
-              </span>
-              {member.isSelf && (
-                <Badge>
-                  you
-                </Badge>
-              )}
+              <span className="text-xs font-medium text-ink truncate">{member.name}</span>
+              {member.isSelf && <Badge>you</Badge>}
             </div>
             <span className="text-2xs text-ink-4 truncate">{member.email}</span>
           </div>
@@ -254,7 +243,7 @@ function RoleChips({ roles }: { roles: RoleChip[] }) {
               "inline-flex items-center gap-1 text-2xs font-medium px-1.5 py-0.5 rounded-full border",
               isAdmin
                 ? "bg-brand-soft text-brand-700 border-brand-200"
-                : "bg-paper-2 text-ink-3 border-line"
+                : "bg-paper-2 text-ink-3 border-line",
             )}
             title={r.isSystem ? "System role" : undefined}
           >

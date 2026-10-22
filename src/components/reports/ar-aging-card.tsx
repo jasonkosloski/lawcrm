@@ -46,19 +46,16 @@ export function ArAgingCard({ report }: { report: ArAgingReport }) {
                 const overdue = b.key === "90+" && b.total > 0;
                 return (
                   <div key={b.key} className="flex items-center gap-2">
-                    <span className="w-20 shrink-0 text-2xs text-ink-3">
-                      {b.label}
-                    </span>
+                    <span className="w-20 shrink-0 text-2xs text-ink-3">{b.label}</span>
                     <div className="flex-1 h-1.5 bg-paper-2 rounded-full overflow-hidden">
                       <div
-                        className={cn(
-                          "h-full rounded-full",
-                          overdue ? "bg-warn" : "bg-brand-700"
-                        )}
+                        className={cn("h-full rounded-full", overdue ? "bg-warn" : "bg-brand-700")}
                         style={{ width: `${(b.total / scale) * 100}%` }}
                       />
                     </div>
-                    <span className={`w-28 shrink-0 text-right text-2xs font-mono ${b.total === 0 ? "text-ink-4" : "text-ink"}`}>
+                    <span
+                      className={`w-28 shrink-0 text-right text-2xs font-mono ${b.total === 0 ? "text-ink-4" : "text-ink"}`}
+                    >
                       {formatMoney(b.total)}
                       <span className="text-ink-4"> · {b.count}</span>
                     </span>
@@ -68,9 +65,7 @@ export function ArAgingCard({ report }: { report: ArAgingReport }) {
             </div>
 
             <div className="flex flex-col gap-1">
-              <div className="text-2xs font-medium text-ink-3">
-                Oldest outstanding
-              </div>
+              <div className="text-2xs font-medium text-ink-3">Oldest outstanding</div>
               {report.worstOffenders.map((inv) => (
                 <div
                   key={inv.invoiceId}

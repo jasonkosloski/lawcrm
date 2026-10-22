@@ -84,9 +84,7 @@ describe("searchAttendees", () => {
       email: "alex@example.com",
       jobTitle: "Paralegal",
     });
-    expect(
-      (await searchAttendees("ALEX@EXAMPLE.COM"))[0]?.name
-    ).toBe("Alex Doe");
+    expect((await searchAttendees("ALEX@EXAMPLE.COM"))[0]?.name).toBe("Alex Doe");
     expect((await searchAttendees("paralegal"))[0]?.name).toBe("Alex Doe");
   });
 
@@ -115,9 +113,7 @@ describe("searchAttendees", () => {
     const byName = await searchAttendees("acme");
     expect(byName.find((r) => r.name === "Acme Corp")?.kind).toBe("contact");
     const byEmail = await searchAttendees("evidence");
-    expect(byEmail.find((r) => r.name === "Mary Witness")?.kind).toBe(
-      "contact"
-    );
+    expect(byEmail.find((r) => r.name === "Mary Witness")?.kind).toBe("contact");
     const byOrg = await searchAttendees("Holdings");
     expect(byOrg.find((r) => r.name === "Acme Corp")?.kind).toBe("contact");
   });
@@ -210,11 +206,7 @@ describe("searchAttendees", () => {
     await seedUser({ firmId, name: "Alpha Sortme", email: "a@k.com" });
     await seedUser({ firmId, name: "Bravo Sortme", email: "b@k.com" });
     const out = await searchAttendees("Sortme");
-    expect(out.map((r) => r.name)).toEqual([
-      "Alpha Sortme",
-      "Bravo Sortme",
-      "Charlie Sortme",
-    ]);
+    expect(out.map((r) => r.name)).toEqual(["Alpha Sortme", "Bravo Sortme", "Charlie Sortme"]);
   });
 
   test("per-bucket cap is 6 results each", async () => {

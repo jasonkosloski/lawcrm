@@ -23,10 +23,7 @@ import {
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { createDeadlineRule, updateDeadlineRule } from "@/app/actions/automations";
-import {
-  automationInitialState,
-  type AutomationFormState,
-} from "@/lib/automation-form";
+import { automationInitialState, type AutomationFormState } from "@/lib/automation-form";
 import {
   DEADLINE_RULE_ANCHORS,
   DEADLINE_RULE_ANCHOR_LABEL,
@@ -57,7 +54,7 @@ export function DeadlineRuleDialog({
   const [state, formAction, isPending] = useDialogActionState<AutomationFormState, FormData>(
     action,
     automationInitialState,
-    open
+    open,
   );
 
   const [title, setTitle] = useState("");
@@ -100,7 +97,7 @@ export function DeadlineRuleDialog({
   // (the server accepts archived anchors); otherwise the required
   // select would go blank and force the admin to re-point the rule.
   const candidates = allRules.filter(
-    (r) => r.id !== rule?.id && (r.isActive || r.id === rule?.anchorRuleId)
+    (r) => r.id !== rule?.id && (r.isActive || r.id === rule?.anchorRuleId),
   );
   const n = Number.parseInt(amount, 10);
   const preview =
@@ -120,28 +117,49 @@ export function DeadlineRuleDialog({
         <DialogHeader>
           <DialogTitle>{rule ? "Edit deadline rule" : "New deadline rule"}</DialogTitle>
           <DialogDescription>
-            Changes affect future applications only. Deadlines already on
-            matters keep their dates. Due dates are plain calendar days: no
-            weekend, holiday or court-day adjustment.
+            Changes affect future applications only. Deadlines already on matters keep their dates.
+            Due dates are plain calendar days: no weekend, holiday or court-day adjustment.
           </DialogDescription>
         </DialogHeader>
 
         <form action={formAction} className="flex flex-col gap-3">
           <Field label="Deadline title" error={errs.title?.[0]}>
-            <input name="title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} placeholder='e.g. "CGIA notice due"' className={inputClass()} />
+            <input
+              name="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              maxLength={200}
+              placeholder='e.g. "CGIA notice due"'
+              className={inputClass()}
+            />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Kind">
-              <NativeSelect name="kind" value={kind} onChange={(e) => setKind(e.target.value)} className="w-full">
+              <NativeSelect
+                name="kind"
+                value={kind}
+                onChange={(e) => setKind(e.target.value)}
+                className="w-full"
+              >
                 <NativeSelectOption value="critical">Critical</NativeSelectOption>
                 <NativeSelectOption value="standard">Standard</NativeSelectOption>
               </NativeSelect>
             </Field>
             <Field label="Counts from" error={errs.anchor?.[0]}>
-              <NativeSelect name="anchor" value={anchor} onChange={(e) => setAnchor(e.target.value as DeadlineRuleAnchor)} className="w-full">
+              <NativeSelect
+                name="anchor"
+                value={anchor}
+                onChange={(e) => setAnchor(e.target.value as DeadlineRuleAnchor)}
+                className="w-full"
+              >
                 {DEADLINE_RULE_ANCHORS.map((a) => (
-                  <NativeSelectOption key={a} value={a} disabled={a === "rule" && candidates.length === 0 && anchor !== "rule"}>
+                  <NativeSelectOption
+                    key={a}
+                    value={a}
+                    disabled={a === "rule" && candidates.length === 0 && anchor !== "rule"}
+                  >
                     {DEADLINE_RULE_ANCHOR_LABEL[a]}
                   </NativeSelectOption>
                 ))}
@@ -151,35 +169,79 @@ export function DeadlineRuleDialog({
 
           {anchor === "incident_date" && (
             <p className="text-3xs text-ink-4 -mt-1.5">
-              Only resolves on matters in practice areas that track a statute
-              of limitations (that&apos;s where the incident date is recorded).
-              Otherwise the rule asks for a date, or becomes a &ldquo;Set
-              date&rdquo; task when applied automatically.
+              Only resolves on matters in practice areas that track a statute of limitations
+              (that&apos;s where the incident date is recorded). Otherwise the rule asks for a date,
+              or becomes a &ldquo;Set date&rdquo; task when applied automatically.
             </p>
           )}
           {anchor === "rule" && (
             <Field label="Which rule's deadline" error={errs.anchorRuleId?.[0]}>
-              <NativeSelect name="anchorRuleId" value={anchorRuleId} onChange={(e) => setAnchorRuleId(e.target.value)} required className="w-full">
+              <NativeSelect
+                name="anchorRuleId"
+                value={anchorRuleId}
+                onChange={(e) => setAnchorRuleId(e.target.value)}
+                required
+                className="w-full"
+              >
                 <NativeSelectOption value="">Choose a rule…</NativeSelectOption>
                 {candidates.map((r) => (
-                  <NativeSelectOption key={r.id} value={r.id}>{r.isActive ? r.title : `${r.title} (archived)`}</NativeSelectOption>
+                  <NativeSelectOption key={r.id} value={r.id}>
+                    {r.isActive ? r.title : `${r.title} (archived)`}
+                  </NativeSelectOption>
                 ))}
               </NativeSelect>
             </Field>
           )}
           {anchor === "prompt" && (
-            <Field label="What date to ask for" error={errs.anchorLabel?.[0]} hint="Shown when someone applies the rule, e.g. “Date of service”.">
-              <input name="anchorLabel" value={anchorLabel} onChange={(e) => setAnchorLabel(e.target.value)} maxLength={80} placeholder="Date of service" className={inputClass()} />
+            <Field
+              label="What date to ask for"
+              error={errs.anchorLabel?.[0]}
+              hint="Shown when someone applies the rule, e.g. “Date of service”."
+            >
+              <input
+                name="anchorLabel"
+                value={anchorLabel}
+                onChange={(e) => setAnchorLabel(e.target.value)}
+                maxLength={80}
+                placeholder="Date of service"
+                className={inputClass()}
+              />
             </Field>
           )}
 
           <Field label="Offset" error={errs.amount?.[0]}>
             <div className="grid grid-cols-[90px_1fr_1fr] gap-2">
-              <input name="amount" type="number" min={0} max={36500} value={amount} onChange={(e) => setAmount(e.target.value)} required className={inputClass()} aria-label="Amount" />
-              <NativeSelect name="unit" value={unit} onChange={(e) => setUnit(e.target.value as OffsetUnit)} className="w-full" aria-label="Unit">
-                {OFFSET_UNITS.map((u) => <NativeSelectOption key={u} value={u}>{u}</NativeSelectOption>)}
+              <input
+                name="amount"
+                type="number"
+                min={0}
+                max={36500}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+                className={inputClass()}
+                aria-label="Amount"
+              />
+              <NativeSelect
+                name="unit"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value as OffsetUnit)}
+                className="w-full"
+                aria-label="Unit"
+              >
+                {OFFSET_UNITS.map((u) => (
+                  <NativeSelectOption key={u} value={u}>
+                    {u}
+                  </NativeSelectOption>
+                ))}
               </NativeSelect>
-              <NativeSelect name="direction" value={direction} onChange={(e) => setDirection(e.target.value as "after" | "before")} className="w-full" aria-label="Direction">
+              <NativeSelect
+                name="direction"
+                value={direction}
+                onChange={(e) => setDirection(e.target.value as "after" | "before")}
+                className="w-full"
+                aria-label="Direction"
+              >
                 <NativeSelectOption value="after">after</NativeSelectOption>
                 <NativeSelectOption value="before">before</NativeSelectOption>
               </NativeSelect>
@@ -190,17 +252,32 @@ export function DeadlineRuleDialog({
               Due: <span className="font-medium text-ink">{preview}</span>
               {unit !== "days" && (
                 <span className="block text-ink-4 mt-0.5">
-                  Months count as 30 days and years as 365 (same as the statute-of-limitations setting).
+                  Months count as 30 days and years as 365 (same as the statute-of-limitations
+                  setting).
                 </span>
               )}
             </div>
           )}
 
           <Field label="Citation (optional)">
-            <input name="sourceRef" value={sourceRef} onChange={(e) => setSourceRef(e.target.value)} maxLength={200} placeholder="C.R.S. § 24-10-109" className={inputClass()} />
+            <input
+              name="sourceRef"
+              value={sourceRef}
+              onChange={(e) => setSourceRef(e.target.value)}
+              maxLength={200}
+              placeholder="C.R.S. § 24-10-109"
+              className={inputClass()}
+            />
           </Field>
           <Field label="Notes (optional)" hint="Copied onto each generated deadline.">
-            <textarea name="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={4000} className={textareaClass()} />
+            <textarea
+              name="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              maxLength={4000}
+              className={textareaClass()}
+            />
           </Field>
 
           {errs._form?.[0] && (
@@ -210,7 +287,9 @@ export function DeadlineRuleDialog({
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
             <Button type="submit" disabled={isPending}>
               {isPending ? "Saving…" : rule ? "Save rule" : "Create rule"}
             </Button>
@@ -220,4 +299,3 @@ export function DeadlineRuleDialog({
     </Dialog>
   );
 }
-

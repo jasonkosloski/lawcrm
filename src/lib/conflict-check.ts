@@ -87,16 +87,14 @@ export function normalize(s: string | null | undefined): string {
 /** Roll up a list of matches into the overall severity label.
  *  Pure — kept exported so the matcher's decision can be unit-
  *  tested without the surrounding DB infrastructure. */
-export function summarizeMatchSeverity(
-  matches: ConflictMatch[]
-): ConflictCheckResult["severity"] {
+export function summarizeMatchSeverity(matches: ConflictMatch[]): ConflictCheckResult["severity"] {
   if (matches.some((m) => m.severity === "conflict")) return "conflict";
   if (matches.length > 0) return "warn";
   return "clear";
 }
 
 export async function runConflictMatcher(
-  candidate: ConflictCandidate
+  candidate: ConflictCandidate,
 ): Promise<ConflictCheckResult> {
   const nameKey = normalize(candidate.name);
   const emailKey = normalize(candidate.email);
@@ -161,16 +159,13 @@ export async function runConflictMatcher(
           ]);
     const useCounts = new Map<string, number>();
     for (const g of asParty) {
-      useCounts.set(
-        g.contactId,
-        (useCounts.get(g.contactId) ?? 0) + g._count._all
-      );
+      useCounts.set(g.contactId, (useCounts.get(g.contactId) ?? 0) + g._count._all);
     }
     for (const g of asCounsel) {
       if (!g.representationContactId) continue;
       useCounts.set(
         g.representationContactId,
-        (useCounts.get(g.representationContactId) ?? 0) + g._count._all
+        (useCounts.get(g.representationContactId) ?? 0) + g._count._all,
       );
     }
     for (const c of emailHits) {
@@ -322,14 +317,10 @@ export async function runConflictMatcher(
       },
     });
     for (const mc of counselCandidates) {
-      if (
-        mc.representationContact &&
-        reportedBeforeCounsel.has(mc.representationContact.id)
-      ) {
+      if (mc.representationContact && reportedBeforeCounsel.has(mc.representationContact.id)) {
         continue;
       }
-      const counselName =
-        mc.representationContact?.name ?? mc.representationName ?? nameKey;
+      const counselName = mc.representationContact?.name ?? mc.representationName ?? nameKey;
       matches.push({
         kind: "matter_opposing_party",
         severity: "conflict",
@@ -403,9 +394,7 @@ export async function runConflictMatcher(
   const identity = [
     ...(emailKey ? [{ email: { equals: emailKey, mode: "insensitive" as const } }] : []),
     ...(nameKey ? [{ name: { equals: nameKey, mode: "insensitive" as const } }] : []),
-    ...(orgKey
-      ? [{ organization: { equals: orgKey, mode: "insensitive" as const } }]
-      : []),
+    ...(orgKey ? [{ organization: { equals: orgKey, mode: "insensitive" as const } }] : []),
   ];
   const flagged = await prisma.contact.findMany({
     where: { mergedIntoId: null, conflictStatus: "flagged", OR: identity },
@@ -477,7 +466,7 @@ export function adverseNameKeys(values: Array<string | null | undefined>): strin
  */
 export async function runAdverseConflictMatcher(
   adverseNames: Array<string | null | undefined>,
-  ownClientIds: string[] = []
+  ownClientIds: string[] = [],
 ): Promise<ConflictCheckResult> {
   const keys = adverseNameKeys(adverseNames);
   if (keys.length === 0) return { severity: "clear", matches: [] };

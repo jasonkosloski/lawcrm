@@ -95,10 +95,15 @@ export function SegmentEditor({
   return (
     <div className="flex flex-col gap-1.5">
       {theirs && (
-        <div role="alert" className="rounded-md border border-warn-border bg-warn-soft p-2 text-xs text-warn">
+        <div
+          role="alert"
+          className="rounded-md border border-warn-border bg-warn-soft p-2 text-xs text-warn"
+        >
           <p className="font-medium">Someone else changed this paragraph.</p>
           <p className="mt-1 text-2xs font-semibold uppercase tracking-wide">Their version</p>
-          <p className="mt-0.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">{theirs.text}</p>
+          <p className="mt-0.5 whitespace-pre-wrap text-sm leading-relaxed text-ink">
+            {theirs.text}
+          </p>
         </div>
       )}
       <textarea
@@ -131,32 +136,16 @@ export function SegmentEditor({
             >
               Use theirs
             </Button>
-            <Button
-              size="xs"
-              type="button"
-              onClick={keepMine}
-              disabled={pending}
-            >
+            <Button size="xs" type="button" onClick={keepMine} disabled={pending}>
               Keep mine and save
             </Button>
           </>
         ) : (
-          <Button
-            size="xs"
-            type="button"
-            onClick={save}
-            disabled={pending}
-          >
+          <Button size="xs" type="button" onClick={save} disabled={pending}>
             Save
           </Button>
         )}
-        <Button
-          variant="ghost"
-          size="xs"
-          type="button"
-          onClick={onClose}
-          disabled={pending}
-        >
+        <Button variant="ghost" size="xs" type="button" onClick={onClose} disabled={pending}>
           Cancel
         </Button>
       </div>

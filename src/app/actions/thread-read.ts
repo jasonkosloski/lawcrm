@@ -44,9 +44,7 @@ import { assertOptionalMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { writebackGmailMessages } from "@/lib/google/gmail-writeback";
 
-export async function markEmailThreadRead(
-  threadId: string
-): Promise<{ ok: boolean }> {
+export async function markEmailThreadRead(threadId: string): Promise<{ ok: boolean }> {
   const userId = await getCurrentUserId();
 
   // Scoped + conditioned update: `account: { userId }` means another
@@ -87,9 +85,7 @@ export async function markEmailThreadRead(
   return { ok: true };
 }
 
-export async function markMessengerThreadRead(
-  threadId: string
-): Promise<{ ok: boolean }> {
+export async function markMessengerThreadRead(threadId: string): Promise<{ ok: boolean }> {
   // Messenger inbox is firm-wide (see module header) — session
   // check only, no per-account scoping to mirror.
   await getCurrentUserId();

@@ -19,7 +19,7 @@ const dims = (ifd: IFD): [number, number] => [ifd.t256?.[0] ?? 0, ifd.t257?.[0] 
 export function decodeTiffPages(
   buffer: ArrayBuffer,
   opts: { maxPages: number; maxPixels: number },
-  emit: (msg: TiffMessage) => void
+  emit: (msg: TiffMessage) => void,
 ): void {
   let ifds: IFD[];
   try {

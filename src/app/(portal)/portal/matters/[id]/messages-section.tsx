@@ -51,17 +51,13 @@ export function MessagesSection({
                     {formatDate(m.createdAt, "time", PORTAL_TIME_ZONE)}
                   </span>
                 </div>
-                <p className="mt-1 text-sm whitespace-pre-line break-words text-ink">
-                  {m.body}
-                </p>
+                <p className="mt-1 text-sm whitespace-pre-line break-words text-ink">{m.body}</p>
               </li>
             ))}
           </ul>
         </>
       ) : (
-        <p className="text-sm text-ink-3">
-          No messages yet. Ask your legal team a question here.
-        </p>
+        <p className="text-sm text-ink-3">No messages yet. Ask your legal team a question here.</p>
       )}
       {closed ? (
         <p className="text-sm text-ink-3">{closedCopy(firmPhone, firmEmail)}</p>

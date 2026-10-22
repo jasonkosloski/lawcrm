@@ -18,11 +18,7 @@
 
 import { StaffClerkProvider } from "@/components/auth/staff-clerk-provider";
 
-export default function PrintLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function PrintLayout({ children }: { children: React.ReactNode }) {
   return (
     <StaffClerkProvider>
       <div className="min-h-full bg-white text-ink">{children}</div>

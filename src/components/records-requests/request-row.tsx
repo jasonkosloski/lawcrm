@@ -11,13 +11,7 @@ import { isRecordsRequestOpen } from "@/lib/records-requests/status";
 import type { RecordsRequestRow } from "@/lib/queries/records-requests";
 import { cn } from "@/lib/utils";
 
-export function RequestRow({
-  row,
-  scope,
-}: {
-  row: RecordsRequestRow;
-  scope: RecordScope;
-}) {
+export function RequestRow({ row, scope }: { row: RecordsRequestRow; scope: RecordScope }) {
   const badge = dueBadge(row);
   return (
     <li>
@@ -35,9 +29,7 @@ export function RequestRow({
           </div>
         </div>
         {row.feeAmount && (
-          <span className="text-2xs font-mono text-ink-3 shrink-0">
-            ${row.feeAmount}
-          </span>
+          <span className="text-2xs font-mono text-ink-3 shrink-0">${row.feeAmount}</span>
         )}
         <span
           className="flex items-center gap-2 text-2xs font-mono text-ink-4 shrink-0"
@@ -58,7 +50,7 @@ export function RequestRow({
               "inline-block text-2xs font-medium px-2 py-0.5 rounded-full shrink-0",
               badge.overdue
                 ? "bg-warn-soft text-warn border-warn-border"
-                : "bg-paper-2 text-ink-3 border-line"
+                : "bg-paper-2 text-ink-3 border-line",
             )}
           >
             {badge.text}

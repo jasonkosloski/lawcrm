@@ -29,7 +29,5 @@ export const MATTER_TEAM_ROLE_LABEL: Record<MatterTeamRole, string> = {
 /** Same labels but already keyed for an arbitrary string, so callers
  *  reading legacy rows don't crash on an unexpected role string. */
 export function matterTeamRoleLabel(role: string): string {
-  return (
-    (MATTER_TEAM_ROLE_LABEL as Record<string, string>)[role] ?? role
-  );
+  return (MATTER_TEAM_ROLE_LABEL as Record<string, string>)[role] ?? role;
 }

@@ -63,7 +63,7 @@ const STATUS_LOG_TITLE: Record<string, string> = {
 
 export async function setDeadlineStatus(
   deadlineId: string,
-  status: DeadlineStatus
+  status: DeadlineStatus,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("deadlines.edit");
   await assertChildMatterAccess("deadline", deadlineId);
@@ -84,11 +84,7 @@ export async function setDeadlineStatus(
     where: { id: deadlineId },
     data: {
       status,
-      completedAt: isComplete
-        ? wasComplete
-          ? undefined
-          : new Date()
-        : null,
+      completedAt: isComplete ? (wasComplete ? undefined : new Date()) : null,
     },
   });
 
@@ -108,9 +104,7 @@ export async function setDeadlineStatus(
 
 // ── Delete ──────────────────────────────────────────────────────────────
 
-export async function deleteDeadline(
-  deadlineId: string
-): Promise<{ ok: boolean; error?: string }> {
+export async function deleteDeadline(deadlineId: string): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("deadlines.delete");
   await assertChildMatterAccess("deadline", deadlineId);
   const deadline = await prisma.deadline.findUnique({
@@ -161,7 +155,7 @@ const updateDeadlineSchema = z.object({
 export async function updateDeadline(
   deadlineId: string,
   _prev: UpdateDeadlineFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<UpdateDeadlineFormState> {
   const userId = await requirePermission("deadlines.edit");
   await assertChildMatterAccess("deadline", deadlineId);
@@ -200,9 +194,7 @@ export async function updateDeadline(
   // was seeded with. Checked here for a clear message and re-checked
   // in the write's WHERE so a race between this read and the write
   // can't slip through.
-  const expected = parsed.data.expectedUpdatedAt
-    ? new Date(parsed.data.expectedUpdatedAt)
-    : null;
+  const expected = parsed.data.expectedUpdatedAt ? new Date(parsed.data.expectedUpdatedAt) : null;
   if (expected && Number.isNaN(expected.getTime())) {
     revalidateDeadlineSurfaces(deadline.matterId);
     return { status: "error", errors: { _form: [STALE_MESSAGE] } };
@@ -211,9 +203,7 @@ export async function updateDeadline(
     revalidateDeadlineSurfaces(deadline.matterId);
     return { status: "error", errors: { _form: [STALE_MESSAGE] } };
   }
-  const where = expected
-    ? { id: deadlineId, updatedAt: expected }
-    : { id: deadlineId };
+  const where = expected ? { id: deadlineId, updatedAt: expected } : { id: deadlineId };
 
   const newStatus = parsed.data.status;
   const isComplete = newStatus === "completed";
@@ -293,9 +283,7 @@ export async function updateDeadline(
         completedAt,
         // A rule-generated deadline moved by hand keeps its new date
         // when its own anchor later moves (listed unticked).
-        ...(dateChanged && deadline.deadlineRuleId
-          ? { dueDateSetManually: true }
-          : {}),
+        ...(dateChanged && deadline.deadlineRuleId ? { dueDateSetManually: true } : {}),
       },
     });
     if (write.count === 0) return false;
@@ -324,9 +312,7 @@ export async function updateDeadline(
     changes.push(`status ${deadline.status} → ${newStatus}`);
   }
   if ((parsed.data.sourceRef || null) !== deadline.sourceRef) {
-    changes.push(
-      `source "${deadline.sourceRef ?? ""}" → "${parsed.data.sourceRef ?? ""}"`
-    );
+    changes.push(`source "${deadline.sourceRef ?? ""}" → "${parsed.data.sourceRef ?? ""}"`);
   }
   if ((parsed.data.description || null) !== deadline.description) {
     changes.push("description edited");

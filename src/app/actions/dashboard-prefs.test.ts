@@ -4,15 +4,7 @@
  * decodes stored blobs (including legacy v2).
  */
 
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
@@ -20,9 +12,7 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
-import {
-  saveDashboardLayout,
-} from "@/app/actions/dashboard-prefs";
+import { saveDashboardLayout } from "@/app/actions/dashboard-prefs";
 import { getDashboardLayout } from "@/lib/queries/dashboard-prefs";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 

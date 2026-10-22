@@ -72,9 +72,7 @@ export function AudioPlayer({
           }}
         />
         <div className="flex items-center gap-1">
-          <span className="mr-1 text-2xs font-medium text-ink-3">
-            Speed
-          </span>
+          <span className="mr-1 text-2xs font-medium text-ink-3">Speed</span>
           {RATES.map((r) => (
             <button
               key={r}

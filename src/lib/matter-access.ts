@@ -52,45 +52,41 @@ export type MatterAccessScope = {
   firmMode: boolean;
 };
 
-const resolveScope = cache(
-  async (userId: string): Promise<MatterAccessScope> => {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        isActive: true,
-        firm: { select: { matterVisibility: true } },
-        userRoles: {
-          select: {
-            role: {
-              select: {
-                name: true,
-                permissions: {
-                  where: { permission: MATTERS_VIEW_ALL },
-                  select: { permission: true },
-                },
+const resolveScope = cache(async (userId: string): Promise<MatterAccessScope> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      isActive: true,
+      firm: { select: { matterVisibility: true } },
+      userRoles: {
+        select: {
+          role: {
+            select: {
+              name: true,
+              permissions: {
+                where: { permission: MATTERS_VIEW_ALL },
+                select: { permission: true },
               },
             },
           },
         },
       },
-    });
-    if (!user || !user.isActive) {
-      return { all: false, active: false, firmMode: false };
-    }
-    const viewAll = user.userRoles.some(
-      (ur) => ur.role.name === ADMIN_ROLE_NAME || ur.role.permissions.length > 0
-    );
-    return {
-      all: viewAll,
-      active: true,
-      firmMode: user.firm?.matterVisibility !== "TEAM",
-    };
+    },
+  });
+  if (!user || !user.isActive) {
+    return { all: false, active: false, firmMode: false };
   }
-);
+  const viewAll = user.userRoles.some(
+    (ur) => ur.role.name === ADMIN_ROLE_NAME || ur.role.permissions.length > 0,
+  );
+  return {
+    all: viewAll,
+    active: true,
+    firmMode: user.firm?.matterVisibility !== "TEAM",
+  };
+});
 
-export async function getMatterAccessScope(
-  userId: string
-): Promise<MatterAccessScope> {
+export async function getMatterAccessScope(userId: string): Promise<MatterAccessScope> {
   return resolveScope(userId);
 }
 
@@ -113,9 +109,7 @@ const NO_MATTERS: Prisma.MatterWhereInput = { id: { in: [] } };
  * everyone else sees unrestricted matters plus their own team's.
  * Spread/AND it into every matter list, count and aggregate.
  */
-export async function matterAccessWhere(
-  userId: string
-): Promise<Prisma.MatterWhereInput> {
+export async function matterAccessWhere(userId: string): Promise<Prisma.MatterWhereInput> {
   const scope = await resolveScope(userId);
   if (!scope.active) return NO_MATTERS;
   if (scope.all) return {};
@@ -140,7 +134,7 @@ export async function matterAccessWhere(
  * `{}` when unrestricted.
  */
 export async function matterRelationAccessWhere(
-  userId: string
+  userId: string,
 ): Promise<{ matter?: Prisma.MatterWhereInput }> {
   const where = await matterAccessWhere(userId);
   return Object.keys(where).length === 0 ? {} : { matter: where };
@@ -154,7 +148,7 @@ export async function matterRelationAccessWhere(
  * (`{}` when unrestricted).
  */
 export async function optionalMatterAccessWhere(
-  userId: string
+  userId: string,
 ): Promise<{ OR?: Array<Record<string, unknown>> }> {
   const where = await matterAccessWhere(userId);
   if (Object.keys(where).length === 0) return {};
@@ -164,7 +158,7 @@ export async function optionalMatterAccessWhere(
 /** Wrap `optionalMatterAccessWhere` as a standalone clause so it can
  *  be placed in an `AND: [...]` without clobbering an existing `OR`. */
 export async function optionalMatterAccessClause(
-  userId: string
+  userId: string,
 ): Promise<Array<Record<string, unknown>>> {
   const frag = await optionalMatterAccessWhere(userId);
   return Object.keys(frag).length === 0 ? [] : [frag];
@@ -180,12 +174,9 @@ export async function optionalMatterAccessClause(
  * when the viewer is unrestricted on both sides.
  */
 export async function optionalRecordAccessClause(
-  userId: string
+  userId: string,
 ): Promise<Array<Record<string, unknown>>> {
-  const [mWhere, lWhere] = await Promise.all([
-    matterAccessWhere(userId),
-    leadAccessWhere(userId),
-  ]);
+  const [mWhere, lWhere] = await Promise.all([matterAccessWhere(userId), leadAccessWhere(userId)]);
   const clauses: Array<Record<string, unknown>> = [];
   if (Object.keys(mWhere).length > 0) {
     clauses.push({ OR: [{ matterId: null }, { matter: mWhere }] });
@@ -197,10 +188,7 @@ export async function optionalRecordAccessClause(
 }
 
 /** True when `userId` may see `matterId`. Unknown matter → false. */
-export async function canAccessMatter(
-  userId: string,
-  matterId: string
-): Promise<boolean> {
+export async function canAccessMatter(userId: string, matterId: string): Promise<boolean> {
   const scope = await resolveScope(userId);
   if (!scope.active) return false;
   const where = await matterAccessWhere(userId);
@@ -225,7 +213,7 @@ export async function assertMatterAccess(matterId: string): Promise<string> {
 /** Same as `assertMatterAccess` but tolerates a null matter id (for
  *  records that may be firm-wide, e.g. tasks or events). */
 export async function assertOptionalMatterAccess(
-  matterId: string | null | undefined
+  matterId: string | null | undefined,
 ): Promise<string> {
   if (!matterId) return getCurrentUserId();
   return assertMatterAccess(matterId);
@@ -249,31 +237,29 @@ export async function assertRecordAccess(row: {
 
 const CHILD_RESOLVERS = {
   note: (id: string) =>
-    prisma.note.findUnique({ where: { id }, select: { matterId: true , leadId: true } }),
+    prisma.note.findUnique({ where: { id }, select: { matterId: true, leadId: true } }),
   document: (id: string) =>
-    prisma.document.findUnique({ where: { id }, select: { matterId: true , leadId: true } }),
+    prisma.document.findUnique({ where: { id }, select: { matterId: true, leadId: true } }),
   documentFolder: (id: string) =>
     prisma.documentFolder.findUnique({
       where: { id },
-      select: { matterId: true , leadId: true },
+      select: { matterId: true, leadId: true },
     }),
   evidence: (id: string) =>
     prisma.evidence.findUnique({ where: { id }, select: { matterId: true } }),
   deadline: (id: string) =>
     prisma.deadline.findUnique({ where: { id }, select: { matterId: true } }),
   task: (id: string) =>
-    prisma.task.findUnique({ where: { id }, select: { matterId: true , leadId: true } }),
+    prisma.task.findUnique({ where: { id }, select: { matterId: true, leadId: true } }),
   calendarEvent: (id: string) =>
     prisma.calendarEvent.findUnique({
       where: { id },
-      select: { matterId: true , leadId: true },
+      select: { matterId: true, leadId: true },
     }),
   timeEntry: (id: string) =>
-    prisma.timeEntry.findUnique({ where: { id }, select: { matterId: true , leadId: true } }),
-  expense: (id: string) =>
-    prisma.expense.findUnique({ where: { id }, select: { matterId: true } }),
-  invoice: (id: string) =>
-    prisma.invoice.findUnique({ where: { id }, select: { matterId: true } }),
+    prisma.timeEntry.findUnique({ where: { id }, select: { matterId: true, leadId: true } }),
+  expense: (id: string) => prisma.expense.findUnique({ where: { id }, select: { matterId: true } }),
+  invoice: (id: string) => prisma.invoice.findUnique({ where: { id }, select: { matterId: true } }),
   invoicePayment: (id: string) =>
     prisma.invoicePayment
       .findUnique({ where: { id }, select: { invoice: { select: { matterId: true } } } })
@@ -322,7 +308,7 @@ const CHILD_RESOLVERS = {
               matterId: r.document?.matterId ?? r.evidence?.matterId ?? null,
               leadId: r.document?.leadId ?? null,
             }
-          : null
+          : null,
       ),
 } as const;
 
@@ -335,18 +321,13 @@ export type MatterChildKind = keyof typeof CHILD_RESOLVERS;
  */
 type ChildScopeRow = { matterId: string | null; leadId?: string | null };
 
-function resolveChild(
-  kind: MatterChildKind,
-  id: string
-): Promise<ChildScopeRow | null> {
-  return (CHILD_RESOLVERS[kind] as (id: string) => Promise<ChildScopeRow | null>)(
-    id
-  );
+function resolveChild(kind: MatterChildKind, id: string): Promise<ChildScopeRow | null> {
+  return (CHILD_RESOLVERS[kind] as (id: string) => Promise<ChildScopeRow | null>)(id);
 }
 
 export async function matterIdOfChild(
   kind: MatterChildKind,
-  id: string
+  id: string,
 ): Promise<string | null | undefined> {
   const row = await resolveChild(kind, id);
   if (!row) return undefined;
@@ -357,7 +338,7 @@ export async function matterIdOfChild(
  *  record, `null` = not lead-scoped. */
 export async function leadIdOfChild(
   kind: MatterChildKind,
-  id: string
+  id: string,
 ): Promise<string | null | undefined> {
   const row = await resolveChild(kind, id);
   if (!row) return undefined;
@@ -373,7 +354,7 @@ export async function leadIdOfChild(
  */
 export async function assertChildMatterAccess(
   kind: MatterChildKind,
-  id: string
+  id: string,
 ): Promise<string | null> {
   const row = await resolveChild(kind, id);
   if (!row) return null;
@@ -389,7 +370,7 @@ export async function assertChildMatterAccess(
  */
 export async function filterAccessibleMatterIds(
   userId: string,
-  matterIds: readonly string[]
+  matterIds: readonly string[],
 ): Promise<Set<string>> {
   const unique = [...new Set(matterIds)];
   if (unique.length === 0) return new Set();

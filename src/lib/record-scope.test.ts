@@ -1,11 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  optionalScopeOf,
-  scopeBasePath,
-  scopeOf,
-  scopePaths,
-  scopeWhere,
-} from "./record-scope";
+import { optionalScopeOf, scopeBasePath, scopeOf, scopePaths, scopeWhere } from "./record-scope";
 
 describe("optionalScopeOf", () => {
   test("matter, lead, and neither (firm-wide / personal)", () => {
@@ -21,9 +15,7 @@ describe("optionalScopeOf", () => {
   });
 
   test("both set throws", () => {
-    expect(() => optionalScopeOf({ matterId: "m1", leadId: "l1" })).toThrow(
-      /both set/
-    );
+    expect(() => optionalScopeOf({ matterId: "m1", leadId: "l1" })).toThrow(/both set/);
   });
 });
 

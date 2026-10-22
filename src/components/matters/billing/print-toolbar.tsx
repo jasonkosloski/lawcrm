@@ -51,11 +51,7 @@ export function PrintToolbar({ autoprint }: { autoprint: boolean }) {
   return (
     <div className="print:hidden sticky top-0 z-10 bg-white border-b border-line">
       <div className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-2">
-        <Button
-          size="sm"
-          type="button"
-          onClick={() => window.print()}
-        >
+        <Button size="sm" type="button" onClick={() => window.print()}>
           <Printer size={13} />
           Print or save as PDF
         </Button>

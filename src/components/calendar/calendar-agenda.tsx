@@ -34,11 +34,7 @@ import { deadlineRank, itemDayKeys } from "./bucket-items";
 
 export const AGENDA_DAYS = 14;
 
-function dayHeading(
-  dayKey: DayKey,
-  todayKey: DayKey,
-  tomorrowKey: DayKey
-): string {
+function dayHeading(dayKey: DayKey, todayKey: DayKey, tomorrowKey: DayKey): string {
   if (dayKey === todayKey) return "Today";
   if (dayKey === tomorrowKey) return "Tomorrow";
   const date = parseDateOnly(dayKey);
@@ -48,18 +44,13 @@ function dayHeading(
 /** The instant bounds `getCalendarItems` is queried with: the start
  *  of the viewer's today through the end of day `AGENDA_DAYS` later,
  *  in the viewer's zone. Exported for tests. */
-export function agendaRange(
-  todayKey: DayKey,
-  tz: string
-): { start: Date; end: Date } {
-  const [ty, tm, td] = todayKey.split("-").map(Number) as [
+export function agendaRange(todayKey: DayKey, tz: string): { start: Date; end: Date } {
+  const [ty, tm, td] = todayKey.split("-").map(Number) as [number, number, number];
+  const [ey, em, ed] = addDaysToKey(todayKey, AGENDA_DAYS).split("-").map(Number) as [
     number,
     number,
     number,
   ];
-  const [ey, em, ed] = addDaysToKey(todayKey, AGENDA_DAYS)
-    .split("-")
-    .map(Number) as [number, number, number];
   return {
     start: instantInTz(ty, tm, td, 0, 0, tz),
     end: instantInTz(ey, em, ed, 23, 59, tz),
@@ -91,7 +82,7 @@ function compareWithinDay(a: CalendarItem, b: CalendarItem): number {
 export function buildAgendaGroups(
   items: readonly CalendarItem[],
   userTz: string,
-  todayKey: DayKey
+  todayKey: DayKey,
 ): Array<{ dayKey: DayKey; items: CalendarItem[] }> {
   const lastKey = addDaysToKey(todayKey, AGENDA_DAYS);
   const byDay = new Map<DayKey, CalendarItem[]>();
@@ -103,12 +94,10 @@ export function buildAgendaGroups(
       else byDay.set(key, [item]);
     }
   }
-  return [...byDay.keys()]
-    .sort()
-    .map((dayKey) => ({
-      dayKey,
-      items: byDay.get(dayKey)!.sort(compareWithinDay),
-    }));
+  return [...byDay.keys()].sort().map((dayKey) => ({
+    dayKey,
+    items: byDay.get(dayKey)!.sort(compareWithinDay),
+  }));
 }
 
 export async function CalendarAgenda({ userTz }: { userTz: string }) {
@@ -123,9 +112,7 @@ export async function CalendarAgenda({ userTz }: { userTz: string }) {
   return (
     <aside className="hidden lg:flex w-72 shrink-0 border-l border-line bg-paper-2/30 flex-col min-h-0">
       <header className="px-4 py-3 border-b border-line shrink-0 bg-white">
-        <div className="text-2xs font-medium text-ink-3">
-          Agenda
-        </div>
+        <div className="text-2xs font-medium text-ink-3">Agenda</div>
         <h2 className="text-sm font-display font-medium text-ink">
           Upcoming · next {AGENDA_DAYS} days
         </h2>
@@ -139,16 +126,11 @@ export async function CalendarAgenda({ userTz }: { userTz: string }) {
         ) : (
           <ul className="flex flex-col">
             {groups.map((group) => (
-              <li
-                key={group.dayKey}
-                className="border-b border-line last:border-b-0"
-              >
+              <li key={group.dayKey} className="border-b border-line last:border-b-0">
                 <div
                   className={cn(
                     "sticky top-0 z-10 bg-paper-2/80 backdrop-blur-sm px-4 py-1.5 text-2xs font-mono",
-                    group.dayKey === todayKey
-                      ? "text-brand-700 font-semibold"
-                      : "text-ink-4"
+                    group.dayKey === todayKey ? "text-brand-700 font-semibold" : "text-ink-4",
                   )}
                 >
                   {dayHeading(group.dayKey, todayKey, tomorrowKey)}
@@ -159,7 +141,7 @@ export async function CalendarAgenda({ userTz }: { userTz: string }) {
                       <AgendaEvent key={item.id} event={item} userTz={userTz} />
                     ) : (
                       <AgendaDeadline key={item.id} deadline={item} />
-                    )
+                    ),
                   )}
                 </ul>
               </li>
@@ -185,44 +167,28 @@ export async function CalendarAgenda({ userTz }: { userTz: string }) {
  *
  * Exported for tests.
  */
-export function agendaTimeLabel(
-  startTime: Date,
-  isAllDay: boolean,
-  userTz: string
-): string {
+export function agendaTimeLabel(startTime: Date, isAllDay: boolean, userTz: string): string {
   if (isAllDay) return "All day";
   // `formatDate` returns "3:30 PM" (Intl may use a narrow no-break
   // space before the dayperiod — `\s` matches it).
   return formatDate(startTime, "time", userTz).toLowerCase().replace(/\s+/g, "");
 }
 
-function AgendaEvent({
-  event,
-  userTz,
-}: {
-  event: CalendarEventRow;
-  userTz: string;
-}) {
+function AgendaEvent({ event, userTz }: { event: CalendarEventRow; userTz: string }) {
   const timeLabel = agendaTimeLabel(event.startTime, event.isAllDay, userTz);
   return (
     <li>
       <EventLink eventId={event.id} className="block">
         <div className="flex items-start gap-2 px-4 py-2 hover:bg-brand-tint transition-colors cursor-pointer">
-          <span className="text-2xs font-mono text-ink-4 w-12 pt-0.5 shrink-0">
-            {timeLabel}
-          </span>
+          <span className="text-2xs font-mono text-ink-4 w-12 pt-0.5 shrink-0">{timeLabel}</span>
           <span
             className="w-1 self-stretch rounded-full mt-0.5 shrink-0"
             style={{ background: event.color }}
           />
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium text-ink truncate">
-              {event.title}
-            </div>
+            <div className="text-xs font-medium text-ink truncate">{event.title}</div>
             {event.matterName && (
-              <div className="text-2xs font-mono text-ink-4 truncate">
-                {event.matterName}
-              </div>
+              <div className="text-2xs font-mono text-ink-4 truncate">{event.matterName}</div>
             )}
           </div>
         </div>
@@ -232,10 +198,7 @@ function AgendaEvent({
 }
 
 function AgendaDeadline({ deadline }: { deadline: CalendarDeadlineRow }) {
-  const pillCls =
-    deadline.deadlineKind === "critical"
-      ? "text-danger"
-      : "text-ink-2";
+  const pillCls = deadline.deadlineKind === "critical" ? "text-danger" : "text-ink-2";
   return (
     <li>
       <Link
@@ -245,18 +208,14 @@ function AgendaDeadline({ deadline }: { deadline: CalendarDeadlineRow }) {
         <span
           className={cn(
             "text-2xs w-12 pt-0.5 shrink-0 inline-flex items-center gap-0.5",
-            deadline.deadlineKind === "critical" ? "text-danger" : "text-warn"
+            deadline.deadlineKind === "critical" ? "text-danger" : "text-warn",
           )}
         >
           <CalendarClock size={11} strokeWidth={2} aria-hidden /> Due
         </span>
         <div className="flex-1 min-w-0">
-          <div className={cn("text-xs font-medium truncate", pillCls)}>
-            {deadline.title}
-          </div>
-          <div className="text-2xs font-mono text-ink-4 truncate">
-            {deadline.matterName}
-          </div>
+          <div className={cn("text-xs font-medium truncate", pillCls)}>{deadline.title}</div>
+          <div className="text-2xs font-mono text-ink-4 truncate">{deadline.matterName}</div>
         </div>
       </Link>
     </li>

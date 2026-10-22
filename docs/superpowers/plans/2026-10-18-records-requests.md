@@ -72,11 +72,13 @@ Everything carries to the matter on conversion.
 ### Task 1: Schema, migration with seeded types, permissions
 
 **Files:**
+
 - Modify: `prisma/schema.prisma` (new `RecordsRequestType`, `RecordsRequest`, `RecordsRequestFollowUp`, enum `RecordsPeriodUnit`; new nullable FKs `Document.recordsRequestId` + `Document.recordsRequestRole String?`, `Task.recordsRequestId`; inverse relations on Matter, Lead, Contact, User, Expense, DocumentTemplate)
 - Create: `prisma/migrations/20261018190000_records_requests/migration.sql`
 - Modify: `src/lib/permissions.ts`, `src/lib/permissions.test.ts`, `docs/SCHEMA_NOTES.md`, `docs/PERMISSIONS.md`
 
 **Interfaces:**
+
 - Produces:
   - **Prisma models** with the spec's field table verbatim.
   - **FKs:**
@@ -102,9 +104,11 @@ Everything carries to the matter on conversion.
 ### Task 2: Pure rules (due date, status, overdue, folder name)
 
 **Files:**
+
 - Create: `src/lib/records-requests/due-date.ts`, `status.ts`, `folder-name.ts`, and a `*.test.ts` beside each
 
 **Interfaces:**
+
 - Produces:
   - `computeResponseDue(sentAt: Date, amount: number, unit: "CALENDAR_DAYS" | "BUSINESS_DAYS"): Date`. Input and output are UTC-midnight date-only.
   - `addCalendarDays(date: Date, days: number): Date`, date-only.
@@ -130,10 +134,12 @@ Everything carries to the matter on conversion.
 ### Task 3: Request CRUD, status changes, follow-up task helper
 
 **Files:**
+
 - Create: `src/lib/records-requests/follow-up.ts`, `src/lib/records-requests/form.ts` (form-state type + initial state; not "use server"), `src/app/actions/records-requests.ts`, `src/app/actions/records-requests.test.ts`
 - Modify: `src/lib/activity-log.ts` (add `"records"` to `ActivityType`) and the dashboard `ACTIVITY_ICONS` map (find it with `grep -rn ACTIVITY_ICONS src`)
 
 **Interfaces:**
+
 - Consumes: Task 2; `RecordScope`, `scopeOf`, `scopeWhere`, `scopePaths` (`src/lib/record-scope.ts`); `assertScopeAccess`, `assertScopeWritable` (`src/lib/scope-access.ts`); `isAssignableUser` (`src/lib/task-assignment.ts`).
 - Produces (`follow-up.ts`, all taking a Prisma `Tx`):
   - `openFollowUpTask(tx, requestId: string): Promise<void>`: creates the follow-up task if none is open.
@@ -165,9 +171,11 @@ Everything carries to the matter on conversion.
 ### Task 4: Mark sent, log follow-up, task-completion hook
 
 **Files:**
+
 - Modify: `src/app/actions/records-requests.ts`, `src/app/actions/tasks.ts` (`setTaskStatus`, `updateTask`), `src/app/actions/records-requests.test.ts`, `src/app/actions/tasks.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 3's `follow-up.ts`; Task 2's `computeResponseDue`.
 - Produces:
   - `markRecordsRequestSent(id: string, _prev: RecordsRequestFormState, fd: FormData): Promise<RecordsRequestFormState>`. Fields: `sentAt` (default today in the actor's zone), `responseDueDate` (ad hoc / override). Gate: `records.edit`. Allowed from `draft` only.
@@ -192,9 +200,11 @@ Everything carries to the matter on conversion.
 ### Task 5: Fee → Expense
 
 **Files:**
+
 - Modify: `src/app/actions/records-requests.ts`, `src/app/actions/records-requests.test.ts`
 
 **Interfaces:**
+
 - Produces: `saveRecordsFee(id: string, _prev: RecordsRequestFormState, fd: FormData /* feeEstimate, feeAmount, feePaidAt */): Promise<RecordsRequestFormState>`. Gate: `records.edit`.
   - **Matter scope with amount + paid date:**
     - With no `expenseId`: requires `matters.expense.create`, then creates the Expense (Global Constraints values) and sets `expenseId`.
@@ -217,6 +227,7 @@ Everything carries to the matter on conversion.
 ### Task 6: Letters, uploads, linking
 
 **Files:**
+
 - Create: `src/lib/records-requests/folder.ts`
 - Modify:
   - `src/lib/template-merge.ts`: `MergeContext` gains `request` and `custodian` (both nullable), plus catalog entries.
@@ -226,6 +237,7 @@ Everything carries to the matter on conversion.
   - Tests beside each.
 
 **Interfaces:**
+
 - Produces:
   - `resolveRecordsFolder(tx: Tx, request: { id: string; matterId: string | null; leadId: string | null; custodianName: string; typeName: string }): Promise<string>`. Returns the folder id. Finds or creates root `Records`, then the child `recordsFolderName(...)`, collision-suffixed with `nextAvailableFolderName` (`src/lib/folder-tree.ts`).
   - Merge fields (exact keys):
@@ -259,10 +271,12 @@ Everything carries to the matter on conversion.
 ### Task 7: Request types settings page
 
 **Files:**
+
 - Create: `src/app/actions/records-request-types.ts` + test, `src/app/(dashboard)/settings/records-types/page.tsx` + `page.test.tsx`, `src/components/records-requests/request-type-editor.tsx`
 - Modify: `src/components/settings/settings-nav.tsx` (Firm section, after "Document templates": `{ href: "/settings/records-types", label: "Records request types" }`, shown only with `records.types.manage`; follow how the neighbouring gated entries are filtered), `src/lib/queries/records-requests.ts` (create it with `listRecordsRequestTypes`)
 
 **Interfaces:**
+
 - Produces:
   - `createRecordsRequestType(_prev, fd)` / `updateRecordsRequestType(id, _prev, fd)`. Fields: `name` (1–80, unique among active, case-insensitive), `responseAmount` ("" = none, else 1–365), `responseUnit` (required with an amount), `followUpDays` (1–90), `defaultTemplateId` ("" = none; must be an active template).
   - `setRecordsRequestTypeActive(id, active: boolean)` and `moveRecordsRequestType(id, direction: "up" | "down")`.
@@ -282,6 +296,7 @@ Everything carries to the matter on conversion.
 ### Task 8: Records tab, composer and detail panel (both scopes)
 
 **Files:**
+
 - Modify: `src/lib/queries/records-requests.ts`
 - Create:
   - `src/components/records-requests/records-tab.tsx` (server)
@@ -293,6 +308,7 @@ Everything carries to the matter on conversion.
 - Modify: `src/components/matters/matter-tabs.tsx` (add `{ slug: "records", label: "Records" }` after Documents; hide it without `records.view` via a `canViewRecords` prop, as `canViewBilling` does) and its layout caller; `src/components/intake/intake-tabs.tsx` (after Documents, same gating)
 
 **Interfaces:**
+
 - Produces:
   - `getRecordsRequests(scope: RecordScope, tz: string): Promise<RecordsRequestRow[]>`. Row fields: `id`, `status`, `subject`, `custodianName`, `typeName` (type name or ad hoc), `sentAt`, `responseDueDate`, `nextFollowUpDate`, `daysUntilDue: number | null` (`daysUntilDateOnly`), `isOverdue`, `feeAmount: string | null`, `letterCount`, `recordsCount`, `ownerInitials`.
   - `getRecordsRequestDetail(scope: RecordScope, id: string): Promise<RecordsRequestDetail | null>`: null when the id isn't in the scope. Adds `description`, date range, `typeId`, owner, fee fields, `expenseLocked: boolean`, `followUps` (newest first), linked documents (id, name, role, href via `scopeBasePath`), `updatedAt`.
@@ -319,6 +335,7 @@ Everything carries to the matter on conversion.
 ### Task 9: Conversion, contact merge, dashboard card, search
 
 **Files:**
+
 - Modify:
   - `src/app/actions/leads.ts` (`convertLeadToMatter`) + test
   - `src/app/actions/contacts.ts` (`mergeContacts`) + test
@@ -326,12 +343,14 @@ Everything carries to the matter on conversion.
   - `src/lib/queries/search.ts` + test, and the search result UI's group-label map (`grep -rn "\"time\":" src/components/search`)
 
 **Interfaces:**
+
 - Produces:
   - **Conversion** (inside the transaction, after the existing task/document re-homes):
     1. `recordsRequest.updateMany({ where: { leadId }, data: { matterId, leadId: null } })`.
     2. For carried requests with `feeAmount` and `feePaidAt` set and no `expenseId`, create the Expense (Task 5 values, `loggedBy` = converter) and set `expenseId`.
 
     Post-commit logs: "N intake records requests carried forward" and "N records fees added as expenses" (singular forms when 1).
+
   - **Contact merge:** `tx.recordsRequest.updateMany({ where: { custodianContactId: loserId }, data: { custodianContactId: survivorId } })` before the loser is removed.
   - `getMyRecordsToChase(tz: string): Promise<RecordsChaseItem[]>`. The viewer's (`ownerId`) open requests where `isOverdue` or `nextFollowUpDate` ≤ today + 7. Matter rows go through the optional matter-access clause. Ordered: overdue first, then the earliest of the due/follow-up dates. Item fields: `id`, `subject`, `custodianName`, `href` (`${scopeBasePath(scope)}/records?request=${id}`), `label` ("2d overdue" | "Follow up today" | "Follow up in 3d"), `context` (matter name or "Intake · {lead}").
   - The card renders only with `records.view` and the card visible.
@@ -348,9 +367,11 @@ Everything carries to the matter on conversion.
 ### Task 10: Docs + full verification
 
 **Files:**
+
 - Modify: `docs/DECISIONS.md` (ADR-047), `docs/FEATURES.md`, `docs/ARCHITECTURE.md` (new action files, `src/lib/records-requests/`, `src/components/records-requests/`), `docs/UI_PATTERNS.md` (URL-driven request detail panel)
 
 ADR-047 content:
+
 - a dedicated model over task metadata or a generic engine
 - the rolling single follow-up task and why the hook rolls it
 - the panel's history = follow-up log + dates (no per-request ActivityLog FK)

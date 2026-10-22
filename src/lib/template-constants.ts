@@ -36,9 +36,7 @@ export function isTemplateCategory(v: string): v is TemplateCategory {
 /** Display label, tolerant of categories outside the curated list
  *  (schema is a free string — never crash on a row we didn't mint). */
 export function templateCategoryLabel(category: string): string {
-  return isTemplateCategory(category)
-    ? TEMPLATE_CATEGORY_LABEL[category]
-    : category;
+  return isTemplateCategory(category) ? TEMPLATE_CATEGORY_LABEL[category] : category;
 }
 
 /**
@@ -57,9 +55,7 @@ const TEMPLATE_TO_DOCUMENT_CATEGORY: Record<TemplateCategory, string> = {
 };
 
 export function documentCategoryForTemplate(category: string): string {
-  return isTemplateCategory(category)
-    ? TEMPLATE_TO_DOCUMENT_CATEGORY[category]
-    : "other";
+  return isTemplateCategory(category) ? TEMPLATE_TO_DOCUMENT_CATEGORY[category] : "other";
 }
 
 // Field limits — enforced by the action-layer zod schema and used

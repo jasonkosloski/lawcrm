@@ -31,11 +31,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -68,9 +64,7 @@ const mockedSetType = vi.mocked(bulkSetContactType);
 const mockedDeactivate = vi.mocked(bulkDeactivateContacts);
 const mockedExport = vi.mocked(exportContactsCsv);
 
-function row(
-  overrides: Partial<ContactListRow> & { id: string; name: string }
-): ContactListRow {
+function row(overrides: Partial<ContactListRow> & { id: string; name: string }): ContactListRow {
   return {
     type: "client",
     organization: null,
@@ -85,9 +79,7 @@ function row(
 const rows = [row({ id: "c1", name: "Alpha" }), row({ id: "c2", name: "Beta" })];
 
 function renderTable(props?: Partial<Parameters<typeof ContactsTable>[0]>) {
-  return render(
-    <ContactsTable rows={rows} canEdit canDelete canExport {...props} />
-  );
+  return render(<ContactsTable rows={rows} canEdit canDelete canExport {...props} />);
 }
 
 beforeEach(() => {
@@ -124,9 +116,7 @@ describe("ContactsTable — selection", () => {
     const user = userEvent.setup();
     renderTable();
 
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all contacts" })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Select all contacts" }));
     expect(screen.getByText("2 selected")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Clear" }));
@@ -139,15 +129,11 @@ describe("ContactsTable — set type", () => {
     const user = userEvent.setup();
     renderTable();
 
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all contacts" })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Select all contacts" }));
     await user.selectOptions(screen.getByLabelText("Set type"), "witness");
 
     expect(mockedSetType).toHaveBeenCalledWith(["c1", "c2"], "witness");
-    await waitFor(() =>
-      expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByText(/selected/)).not.toBeInTheDocument());
     expect(refresh).toHaveBeenCalled();
   });
 
@@ -156,13 +142,11 @@ describe("ContactsTable — set type", () => {
     const user = userEvent.setup();
     renderTable();
 
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all contacts" })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Select all contacts" }));
     await user.selectOptions(screen.getByLabelText("Set type"), "witness");
 
     expect(confirmAction).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Set type to "Witness" on 2 contacts?' })
+      expect.objectContaining({ title: 'Set type to "Witness" on 2 contacts?' }),
     );
     expect(mockedSetType).not.toHaveBeenCalled();
     expect(screen.getByText("2 selected")).toBeInTheDocument();
@@ -187,18 +171,14 @@ describe("ContactsTable — deactivate", () => {
     const user = userEvent.setup();
     renderTable();
 
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all contacts" })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Select all contacts" }));
     await user.click(screen.getByRole("button", { name: /Deactivate/ }));
 
     expect(confirmAction).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Deactivate 2 contacts?" })
+      expect.objectContaining({ title: "Deactivate 2 contacts?" }),
     );
     expect(mockedDeactivate).toHaveBeenCalledWith(["c1", "c2"]);
-    await waitFor(() =>
-      expect(screen.queryByText(/selected/)).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByText(/selected/)).not.toBeInTheDocument());
   });
 
   test("cancelling the confirm never calls the action", async () => {
@@ -249,9 +229,7 @@ describe("ContactsTable — export", () => {
     const bytes = new Uint8Array(await blob!.arrayBuffer());
     expect(Array.from(bytes.slice(0, 3))).toEqual([0xef, 0xbb, 0xbf]);
     // The CSV itself follows the BOM, unchanged.
-    expect(new TextDecoder().decode(bytes.slice(3))).toBe(
-      "Name\r\nJosé Martínez\r\n"
-    );
+    expect(new TextDecoder().decode(bytes.slice(3))).toBe("Name\r\nJosé Martínez\r\n");
   });
 });
 
@@ -261,13 +239,9 @@ describe("ContactsTable — permissions + cap", () => {
     renderTable({ canEdit: false, canDelete: false });
 
     await user.click(screen.getByRole("checkbox", { name: "Select Alpha" }));
-    expect(
-      screen.getByRole("button", { name: /Export CSV/ })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Export CSV/ })).toBeInTheDocument();
     expect(screen.queryByLabelText("Set type")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /Deactivate/ })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Deactivate/ })).not.toBeInTheDocument();
   });
 
   test("canExport=false hides Export CSV", async () => {
@@ -275,28 +249,20 @@ describe("ContactsTable — permissions + cap", () => {
     renderTable({ canExport: false });
 
     await user.click(screen.getByRole("checkbox", { name: "Select Alpha" }));
-    expect(
-      screen.queryByRole("button", { name: /Export CSV/ })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Export CSV/ })).not.toBeInTheDocument();
   });
 
   test("over the batch cap: actions swap for a trim note", async () => {
     const many = Array.from({ length: BULK_CONTACT_LIMIT + 1 }, (_, i) =>
-      row({ id: `c${i}`, name: `Contact ${i}` })
+      row({ id: `c${i}`, name: `Contact ${i}` }),
     );
     const user = userEvent.setup();
     render(<ContactsTable rows={many} canEdit canDelete canExport />);
 
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all contacts" })
-    );
-    expect(
-      screen.getByText(`${BULK_CONTACT_LIMIT + 1} selected`)
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Select all contacts" }));
+    expect(screen.getByText(`${BULK_CONTACT_LIMIT + 1} selected`)).toBeInTheDocument();
     expect(screen.getByText(/trim the selection/i)).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /Export CSV/ })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Export CSV/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Set type")).not.toBeInTheDocument();
   });
 });

@@ -2,12 +2,7 @@
  *  trust (IOLTA) ledger. */
 
 import Link from "next/link";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -19,17 +14,10 @@ import {
 
 import { TrustTransactionForm } from "@/components/matters/billing/trust-transaction-form";
 import { type MatterBilling } from "@/lib/queries/billing";
-import {
-  INVOICE_PAYMENT_SOURCE_LABEL,
-  type InvoicePaymentSource,
-} from "@/lib/billing-form";
+import { INVOICE_PAYMENT_SOURCE_LABEL, type InvoicePaymentSource } from "@/lib/billing-form";
 import { formatMoney } from "@/lib/format-money";
 
-import {
-  formatDay,
-  TRUST_TYPE_LABEL,
-  type BillingPermissions,
-} from "./shared";
+import { formatDay, TRUST_TYPE_LABEL, type BillingPermissions } from "./shared";
 
 export function ReceivedPaymentsCard({
   billing,
@@ -52,8 +40,7 @@ export function ReceivedPaymentsCard({
         {billing.receivedPayments.rows.length === 0 ? (
           <div className="text-2xs text-ink-4 italic">
             No payments received on this matter yet. Use{" "}
-            <span className="font-medium">Record payment</span> from an
-            open invoice to log one.
+            <span className="font-medium">Record payment</span> from an open invoice to log one.
           </div>
         ) : (
           <div className="border border-line rounded-md overflow-hidden">
@@ -74,9 +61,7 @@ export function ReceivedPaymentsCard({
                       {formatDay(p.date)}
                     </TableCell>
                     <TableCell className="text-2xs text-ink-3">
-                      {INVOICE_PAYMENT_SOURCE_LABEL[
-                        p.source as InvoicePaymentSource
-                      ] ?? p.source}
+                      {INVOICE_PAYMENT_SOURCE_LABEL[p.source as InvoicePaymentSource] ?? p.source}
                       {p.description && (
                         <div className="text-2xs text-ink-4 mt-0.5 truncate max-w-xs">
                           {p.description}
@@ -134,15 +119,10 @@ export function TrustLedgerCard({
       </CardHeader>
       <CardContent className="px-4 pb-4 flex flex-col gap-3">
         {permissions.recordTrustTransaction && (
-          <TrustTransactionForm
-            matterId={matterId}
-            portalBillingEnabled={portalBillingEnabled}
-          />
+          <TrustTransactionForm matterId={matterId} portalBillingEnabled={portalBillingEnabled} />
         )}
         {billing.trust.transactions.length === 0 ? (
-          <div className="text-2xs text-ink-4 italic">
-            No trust activity yet on this matter.
-          </div>
+          <div className="text-2xs text-ink-4 italic">No trust activity yet on this matter.</div>
         ) : (
           <div className="border border-line rounded-md overflow-hidden">
             <Table>

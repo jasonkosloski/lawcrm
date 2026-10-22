@@ -13,17 +13,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addDays, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { WEEK_STARTS_ON } from "@/lib/calendar-utils";
-import {
-  addDaysToKey,
-  dateKeyInTz,
-  formatDateOnly,
-  parseDateOnly,
-} from "@/lib/format-date";
-import {
-  buildTimeHref,
-  toTimeDateParam,
-  type TimeView,
-} from "./time-view-utils";
+import { addDaysToKey, dateKeyInTz, formatDateOnly, parseDateOnly } from "@/lib/format-date";
+import { buildTimeHref, toTimeDateParam, type TimeView } from "./time-view-utils";
 
 /** Range label for the focal day. The focal Date is a navigation
  *  cursor (server-local midnight of a calendar day); the labels are
@@ -103,9 +94,7 @@ export function TimeToolbar({
               href={buildTimeHref(view, focal, { view: v })}
               className={cn(
                 "h-6 px-2.5 rounded-[5px] text-xs font-medium capitalize transition-colors",
-                active
-                  ? "bg-white text-ink shadow-sm"
-                  : "text-ink-3 hover:text-ink"
+                active ? "bg-white text-ink shadow-sm" : "text-ink-3 hover:text-ink",
               )}
             >
               {v}

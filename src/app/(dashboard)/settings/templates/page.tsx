@@ -16,10 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserPermissions } from "@/lib/permission-check";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { formatDate } from "@/lib/format-date";
-import {
-  TemplateLibrary,
-  type TemplateListItem,
-} from "@/components/templates/template-library";
+import { TemplateLibrary, type TemplateListItem } from "@/components/templates/template-library";
 import { requireUser } from "@/lib/current-user";
 
 export default async function TemplatesSettingsPage() {
@@ -67,9 +64,9 @@ export default async function TemplatesSettingsPage() {
           <code className="font-mono text-2xs bg-paper-2 px-1 py-0.5 rounded">
             {"{{merge.fields}}"}
           </code>{" "}
-          that fill in from the matter, client, and firm at generation
-          time. Generate from any matter&apos;s Documents tab. Archive a
-          template to hide it from generation pickers without losing it.
+          that fill in from the matter, client, and firm at generation time. Generate from any
+          matter&apos;s Documents tab. Archive a template to hide it from generation pickers without
+          losing it.
         </p>
       </div>
 

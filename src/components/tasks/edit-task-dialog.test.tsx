@@ -94,12 +94,7 @@ describe("EditTaskDialog — close on success", () => {
     const user = setupUser();
     const onOpenChange = vi.fn();
     render(
-      <EditTaskDialog
-        open
-        onOpenChange={onOpenChange}
-        task={baseTask}
-        assignees={assignees}
-      />
+      <EditTaskDialog open onOpenChange={onOpenChange} task={baseTask} assignees={assignees} />,
     );
 
     await user.click(screen.getByRole("button", { name: /save/i }));
@@ -123,9 +118,7 @@ describe("EditTaskDialog — close on success", () => {
     await user.click(screen.getByRole("button", { name: /save/i }));
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: /save/i })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument(),
     );
 
     // Round two: reopen and save again. With the effect keyed on
@@ -149,12 +142,7 @@ describe("EditTaskDialog — validation errors", () => {
     const user = setupUser();
     const onOpenChange = vi.fn();
     render(
-      <EditTaskDialog
-        open
-        onOpenChange={onOpenChange}
-        task={baseTask}
-        assignees={assignees}
-      />
+      <EditTaskDialog open onOpenChange={onOpenChange} task={baseTask} assignees={assignees} />,
     );
 
     await user.click(screen.getByRole("button", { name: /save/i }));
@@ -182,9 +170,7 @@ describe("EditTaskDialog — validation errors", () => {
     await user.click(screen.getByRole("button", { name: /cancel/i }));
     await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
 
-    expect(
-      await screen.findByRole("button", { name: /save/i })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /save/i })).toBeInTheDocument();
     expect(screen.queryByText("Title is required")).not.toBeInTheDocument();
   });
 });
@@ -197,27 +183,22 @@ describe("EditTaskDialog — assignee picker", () => {
         onOpenChange={vi.fn()}
         task={{ ...baseTask, ownerId: "u2" }}
         assignees={assignees}
-      />
+      />,
     );
     const select = screen.getByRole("combobox", {
       name: /assignee/i,
     }) as HTMLSelectElement;
     expect(select.value).toBe("u2");
-    expect(
-      [...select.options].map((o) => o.textContent)
-    ).toEqual(["Unassigned", "Ada Lovelace", "Grace Hopper"]);
+    expect([...select.options].map((o) => o.textContent)).toEqual([
+      "Unassigned",
+      "Ada Lovelace",
+      "Grace Hopper",
+    ]);
   });
 
   test("unassigned task defaults to the Unassigned option and posts ownerId", async () => {
     const user = setupUser();
-    render(
-      <EditTaskDialog
-        open
-        onOpenChange={vi.fn()}
-        task={baseTask}
-        assignees={assignees}
-      />
-    );
+    render(<EditTaskDialog open onOpenChange={vi.fn()} task={baseTask} assignees={assignees} />);
     const select = screen.getByRole("combobox", {
       name: /assignee/i,
     }) as HTMLSelectElement;
@@ -245,7 +226,7 @@ describe("EditTaskDialog - date-only due date (ADR-012)", () => {
         onOpenChange={vi.fn()}
         task={{ ...baseTask, dueDateKey: "2026-10-16" }}
         assignees={assignees}
-      />
+      />,
     );
     const input = screen.getByLabelText("Due date") as HTMLInputElement;
     expect(input.value).toBe("2026-10-16");
@@ -258,14 +239,7 @@ describe("EditTaskDialog - date-only due date (ADR-012)", () => {
 
   test("a task with no due date posts an empty dueDate", async () => {
     const user = setupUser();
-    render(
-      <EditTaskDialog
-        open
-        onOpenChange={vi.fn()}
-        task={baseTask}
-        assignees={assignees}
-      />
-    );
+    render(<EditTaskDialog open onOpenChange={vi.fn()} task={baseTask} assignees={assignees} />);
     await user.click(screen.getByRole("button", { name: /save/i }));
     await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
     expect((mockedAction.mock.calls[0][2] as FormData).get("dueDate")).toBe("");
@@ -283,26 +257,17 @@ describe("EditTaskDialog - owner who has since been deactivated", () => {
   test("keeps the owner selected and re-posts their id (does not silently unassign)", async () => {
     const user = setupUser();
     render(
-      <EditTaskDialog
-        open
-        onOpenChange={vi.fn()}
-        task={inactiveOwnerTask}
-        assignees={assignees}
-      />
+      <EditTaskDialog open onOpenChange={vi.fn()} task={inactiveOwnerTask} assignees={assignees} />,
     );
     const select = screen.getByRole("combobox", {
       name: /assignee/i,
     }) as HTMLSelectElement;
     expect(select.value).toBe("gone");
-    expect(
-      [...select.options].map((o) => o.textContent)
-    ).toContain("Pat Paralegal (inactive)");
+    expect([...select.options].map((o) => o.textContent)).toContain("Pat Paralegal (inactive)");
 
     await user.click(screen.getByRole("button", { name: /save/i }));
     await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
-    expect((mockedAction.mock.calls[0][2] as FormData).get("ownerId")).toBe(
-      "gone"
-    );
+    expect((mockedAction.mock.calls[0][2] as FormData).get("ownerId")).toBe("gone");
   });
 
   test("an active owner is not duplicated as inactive", () => {
@@ -312,7 +277,7 @@ describe("EditTaskDialog - owner who has since been deactivated", () => {
         onOpenChange={vi.fn()}
         task={{ ...baseTask, ownerId: "u1", ownerName: "Ada Lovelace", ownerInitials: "AL" }}
         assignees={assignees}
-      />
+      />,
     );
     const select = screen.getByRole("combobox", {
       name: /assignee/i,
@@ -328,19 +293,12 @@ describe("EditTaskDialog - owner who has since been deactivated", () => {
 describe("EditTaskDialog - keeps what the user typed", () => {
   test("posts the row version it was seeded from", async () => {
     const user = setupUser();
-    render(
-      <EditTaskDialog
-        open
-        onOpenChange={vi.fn()}
-        task={baseTask}
-        assignees={assignees}
-      />
-    );
+    render(<EditTaskDialog open onOpenChange={vi.fn()} task={baseTask} assignees={assignees} />);
     await user.click(screen.getByRole("button", { name: /save/i }));
     await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
-    expect(
-      (mockedAction.mock.calls[0][2] as FormData).get("expectedUpdatedAt")
-    ).toBe(baseTask.updatedAt);
+    expect((mockedAction.mock.calls[0][2] as FormData).get("expectedUpdatedAt")).toBe(
+      baseTask.updatedAt,
+    );
   });
 
   test("a validation error does not wipe the fields", async () => {
@@ -349,50 +307,33 @@ describe("EditTaskDialog - keeps what the user typed", () => {
       errors: { dueDate: ["Invalid due date"] },
     }));
     const user = setupUser();
-    render(
-      <EditTaskDialog
-        open
-        onOpenChange={vi.fn()}
-        task={baseTask}
-        assignees={assignees}
-      />
-    );
+    render(<EditTaskDialog open onOpenChange={vi.fn()} task={baseTask} assignees={assignees} />);
     const title = screen.getByPlaceholderText("Task title");
     await user.clear(title);
     await user.type(title, "Edited title");
     await user.click(screen.getByRole("button", { name: /save/i }));
 
     expect(await screen.findByText("Invalid due date")).toBeInTheDocument();
-    expect(
-      (screen.getByPlaceholderText("Task title") as HTMLInputElement).value
-    ).toBe("Edited title");
+    expect((screen.getByPlaceholderText("Task title") as HTMLInputElement).value).toBe(
+      "Edited title",
+    );
   });
 
   test("a prop refresh while open does not reseed the form", async () => {
     const user = setupUser();
     const { rerender } = render(
-      <EditTaskDialog
-        open
-        onOpenChange={vi.fn()}
-        task={baseTask}
-        assignees={assignees}
-      />
+      <EditTaskDialog open onOpenChange={vi.fn()} task={baseTask} assignees={assignees} />,
     );
     const title = screen.getByPlaceholderText("Task title");
     await user.clear(title);
     await user.type(title, "Half-typed");
 
     rerender(
-      <EditTaskDialog
-        open
-        onOpenChange={vi.fn()}
-        task={{ ...baseTask }}
-        assignees={assignees}
-      />
+      <EditTaskDialog open onOpenChange={vi.fn()} task={{ ...baseTask }} assignees={assignees} />,
     );
-    expect(
-      (screen.getByPlaceholderText("Task title") as HTMLInputElement).value
-    ).toBe("Half-typed");
+    expect((screen.getByPlaceholderText("Task title") as HTMLInputElement).value).toBe(
+      "Half-typed",
+    );
   });
 
   test("shows a stale-version error from the server", async () => {
@@ -401,17 +342,8 @@ describe("EditTaskDialog - keeps what the user typed", () => {
       errors: { _form: ["This task was changed by someone else."] },
     }));
     const user = setupUser();
-    render(
-      <EditTaskDialog
-        open
-        onOpenChange={vi.fn()}
-        task={baseTask}
-        assignees={assignees}
-      />
-    );
+    render(<EditTaskDialog open onOpenChange={vi.fn()} task={baseTask} assignees={assignees} />);
     await user.click(screen.getByRole("button", { name: /save/i }));
-    expect(
-      await screen.findByText(/changed by someone else/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/changed by someone else/i)).toBeInTheDocument();
   });
 });

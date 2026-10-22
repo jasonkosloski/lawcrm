@@ -8,16 +8,9 @@ import { logPortalEvent } from "@/lib/portal/audit";
 import { PORTAL_COOKIE, portalCookieOptions } from "@/lib/portal/cookie";
 import { portalLinkUrl } from "@/lib/portal/link-url";
 import { loginEmail } from "@/lib/portal/emails";
-import {
-  requestAllowsDevPortalSignIn,
-  requestIsOnPortalHost,
-} from "@/lib/portal/host";
+import { requestAllowsDevPortalSignIn, requestIsOnPortalHost } from "@/lib/portal/host";
 import { hashSecret, hmacSecret } from "@/lib/portal/secrets";
-import {
-  createSession,
-  deleteSession,
-  sessionCookieMaxAge,
-} from "@/lib/portal/sessions";
+import { createSession, deleteSession, sessionCookieMaxAge } from "@/lib/portal/sessions";
 import { consumeToken, issueToken } from "@/lib/portal/tokens";
 
 export type PortalLinkState = { status: "idle" | "sent" };
@@ -41,12 +34,14 @@ const IP_LIMIT = 20;
  */
 export async function requestPortalLink(
   _prev: PortalLinkState,
-  fd: FormData
+  fd: FormData,
 ): Promise<PortalLinkState> {
   const uniform: PortalLinkState = { status: "sent" };
   if (!(await requestIsOnPortalHost())) return uniform;
 
-  const email = String(fd.get("email") ?? "").trim().toLowerCase();
+  const email = String(fd.get("email") ?? "")
+    .trim()
+    .toLowerCase();
   if (!email || email.length > 254 || !email.includes("@")) return uniform;
 
   const forwarded = (await headers()).get("x-forwarded-for") ?? "";
@@ -102,7 +97,7 @@ export async function requestPortalLink(
 /** Exchange a sign-in link token for a session. */
 export async function verifyPortalLink(
   _prev: PortalVerifyState,
-  fd: FormData
+  fd: FormData,
 ): Promise<PortalVerifyState> {
   if (!(await requestIsOnPortalHost())) return { status: "invalid" };
 
@@ -145,7 +140,7 @@ export async function verifyPortalLink(
  */
 export async function devPortalSignIn(
   _prev: PortalVerifyState,
-  fd: FormData
+  fd: FormData,
 ): Promise<PortalVerifyState> {
   if (!(await requestAllowsDevPortalSignIn())) return { status: "invalid" };
 

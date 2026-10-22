@@ -35,7 +35,13 @@ import type { TranscriptView } from "@/lib/queries/transcript";
 import { TranscriptPane } from "./transcript-pane";
 
 type Seg = TranscriptView["segments"][number];
-function seg(i: number, speaker: string, start: number, text: string, extra: Partial<Seg> = {}): Seg {
+function seg(
+  i: number,
+  speaker: string,
+  start: number,
+  text: string,
+  extra: Partial<Seg> = {},
+): Seg {
   const words = text.split(" ").map((w, k) => ({ w, s: start + k, e: start + k + 1 }));
   return {
     id: `seg${i}`,
@@ -126,7 +132,9 @@ describe("paragraph editor", () => {
         revision: 4,
       }),
     );
-    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Paragraph text" })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "Paragraph text" })).toBeNull(),
+    );
   });
 
   async function conflictOnce() {
@@ -147,7 +155,9 @@ describe("paragraph editor", () => {
     expect(refresh).toHaveBeenCalled();
     expect(screen.getByText("Their version")).toBeTruthy();
     expect(screen.getByText("the officer arrived late")).toBeTruthy();
-    expect((screen.getByRole("textbox", { name: "Paragraph text" }) as HTMLTextAreaElement).value).toBe("changed");
+    expect(
+      (screen.getByRole("textbox", { name: "Paragraph text" }) as HTMLTextAreaElement).value,
+    ).toBe("changed");
     // Plain Save is not available until a choice is made.
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(updateTranscriptSegment).toHaveBeenCalledTimes(1);
@@ -181,13 +191,20 @@ describe("paragraph editor", () => {
         revision: 7,
       }),
     );
-    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Paragraph text" })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole("textbox", { name: "Paragraph text" })).toBeNull(),
+    );
   });
 
   test("another error shows inline and keeps the editor open", async () => {
-    vi.mocked(updateTranscriptSegment).mockResolvedValue({ ok: false, error: "A paragraph can't be empty." });
+    vi.mocked(updateTranscriptSegment).mockResolvedValue({
+      ok: false,
+      error: "A paragraph can't be empty.",
+    });
     await openEditor();
-    fireEvent.change(screen.getByRole("textbox", { name: "Paragraph text" }), { target: { value: " " } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Paragraph text" }), {
+      target: { value: " " },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByText("A paragraph can't be empty.");
   });
@@ -241,7 +258,9 @@ describe("speaker chip", () => {
     const user = userEvent.setup();
     pane();
     await openChip(user, "Speaker B");
-    await user.click(await screen.findByRole("menuitem", { name: "Change speaker for this paragraph" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Change speaker for this paragraph" }),
+    );
     fireEvent.click(await screen.findByRole("menuitem", { name: "New speaker" }));
     await waitFor(() => expect(setSegmentSpeaker).toHaveBeenCalledWith("seg1", "C", 4));
   });

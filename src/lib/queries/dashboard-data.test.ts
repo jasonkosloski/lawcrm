@@ -84,18 +84,14 @@ describe("loadDashboardData", () => {
   });
 
   it("records needs records.view", async () => {
-    m.currentUserHasPermission.mockImplementation(
-      async (k: string) => k !== "records.view",
-    );
+    m.currentUserHasPermission.mockImplementation(async (k: string) => k !== "records.view");
     const d = await loadDashboardData(layout(), "UTC");
     expect(m.getMyRecordsToChase).not.toHaveBeenCalled();
     expect(d.canViewRecords).toBe(false);
   });
 
   it("activity link needs firm.view_activity", async () => {
-    m.currentUserHasPermission.mockImplementation(
-      async (k: string) => k !== "firm.view_activity",
-    );
+    m.currentUserHasPermission.mockImplementation(async (k: string) => k !== "firm.view_activity");
     const d = await loadDashboardData(layout(), "UTC");
     expect(d.canViewActivityLog).toBe(false);
     expect(d.canViewRecords).toBe(true);

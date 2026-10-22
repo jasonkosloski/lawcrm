@@ -60,9 +60,7 @@ afterAll(() => {
 });
 
 function establishedInput(container: HTMLElement): HTMLInputElement {
-  const input = container.querySelector<HTMLInputElement>(
-    'input[name="establishedAt"]'
-  );
+  const input = container.querySelector<HTMLInputElement>('input[name="establishedAt"]');
   if (!input) throw new Error("establishedAt input not rendered");
   return input;
 }
@@ -79,7 +77,7 @@ describe("FirmEditForm — establishedAt date input", () => {
           establishedAt: new Date("1998-07-04T00:00:00.000Z"),
         }}
         goals={BASE_GOALS}
-      />
+      />,
     );
     expect(establishedInput(container).defaultValue).toBe("1998-07-04");
   });
@@ -92,15 +90,13 @@ describe("FirmEditForm — establishedAt date input", () => {
           establishedAt: new Date("2003-01-05T00:00:00.000Z"),
         }}
         goals={BASE_GOALS}
-      />
+      />,
     );
     expect(establishedInput(container).defaultValue).toBe("2003-01-05");
   });
 
   test("renders empty when establishedAt is null", () => {
-    const { container } = render(
-      <FirmEditForm firm={BASE_FIRM} goals={BASE_GOALS} />
-    );
+    const { container } = render(<FirmEditForm firm={BASE_FIRM} goals={BASE_GOALS} />);
     expect(establishedInput(container).defaultValue).toBe("");
   });
 });
@@ -108,17 +104,10 @@ describe("FirmEditForm — establishedAt date input", () => {
 describe("FirmEditForm — goal inputs", () => {
   test("renders both goals as editable number inputs with the firm values", () => {
     const { container } = render(
-      <FirmEditForm
-        firm={BASE_FIRM}
-        goals={{ dailyHoursGoal: 7.5, monthlyBillableGoal: 180 }}
-      />
+      <FirmEditForm firm={BASE_FIRM} goals={{ dailyHoursGoal: 7.5, monthlyBillableGoal: 180 }} />,
     );
-    const daily = container.querySelector<HTMLInputElement>(
-      'input[name="dailyHoursGoal"]'
-    );
-    const monthly = container.querySelector<HTMLInputElement>(
-      'input[name="monthlyBillableGoal"]'
-    );
+    const daily = container.querySelector<HTMLInputElement>('input[name="dailyHoursGoal"]');
+    const monthly = container.querySelector<HTMLInputElement>('input[name="monthlyBillableGoal"]');
     expect(daily?.type).toBe("number");
     expect(daily?.defaultValue).toBe("7.5");
     expect(daily?.max).toBe("24");
@@ -137,7 +126,7 @@ describe("FirmReadView — established date", () => {
           establishedAt: new Date("2015-03-09T00:00:00.000Z"),
         }}
         goals={BASE_GOALS}
-      />
+      />,
     );
     expect(screen.getByText("March 9, 2015")).toBeTruthy();
   });
@@ -155,11 +144,10 @@ describe("FirmEditForm — matter name template", () => {
       <FirmEditForm
         firm={{ ...BASE_FIRM, matterNameTemplate: "{client_full} - {year}" }}
         goals={BASE_GOALS}
-      />
+      />,
     );
     expect(
-      container.querySelector<HTMLInputElement>('input[name="matterNameTemplate"]')!
-        .value
+      container.querySelector<HTMLInputElement>('input[name="matterNameTemplate"]')!.value,
     ).toBe("{client_full} - {year}");
   });
 });

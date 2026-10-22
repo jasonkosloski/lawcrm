@@ -26,7 +26,7 @@ export type { RecalcChange, RecalcTrigger } from "./recalc-plan";
 
 async function loadInputs(
   tx: Tx,
-  matterId: string
+  matterId: string,
 ): Promise<{ deadlines: RecalcDeadline[]; rules: RecalcRule[] }> {
   const [rows, rules] = await Promise.all([
     tx.deadline.findMany({
@@ -70,7 +70,7 @@ async function loadInputs(
 export async function previewRecalc(
   tx: Tx,
   matterId: string,
-  trigger: RecalcTrigger
+  trigger: RecalcTrigger,
 ): Promise<RecalcChange[]> {
   const { deadlines, rules } = await loadInputs(tx, matterId);
   return planRecalc(deadlines, rules, trigger);
@@ -83,7 +83,7 @@ export async function applyRecalc(
   tx: Tx,
   matterId: string,
   trigger: RecalcTrigger,
-  selectedIds: readonly string[]
+  selectedIds: readonly string[],
 ): Promise<RecalcChange[]> {
   if (selectedIds.length === 0) return [];
   const { deadlines, rules } = await loadInputs(tx, matterId);

@@ -17,10 +17,7 @@ vi.mock("@/app/actions/thread-read", () => ({
   markMessengerThreadRead: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
-import {
-  markEmailThreadRead,
-  markMessengerThreadRead,
-} from "@/app/actions/thread-read";
+import { markEmailThreadRead, markMessengerThreadRead } from "@/app/actions/thread-read";
 
 const mockedEmail = vi.mocked(markEmailThreadRead);
 const mockedMessenger = vi.mocked(markMessengerThreadRead);
@@ -45,17 +42,13 @@ describe("MarkThreadRead", () => {
   });
 
   test("re-render with the SAME threadId does not re-fire", () => {
-    const { rerender } = render(
-      <MarkThreadRead channel="email" threadId="t-1" />
-    );
+    const { rerender } = render(<MarkThreadRead channel="email" threadId="t-1" />);
     rerender(<MarkThreadRead channel="email" threadId="t-1" />);
     expect(mockedEmail).toHaveBeenCalledTimes(1);
   });
 
   test("switching to a different threadId fires again for the new thread", () => {
-    const { rerender } = render(
-      <MarkThreadRead channel="email" threadId="t-1" />
-    );
+    const { rerender } = render(<MarkThreadRead channel="email" threadId="t-1" />);
     rerender(<MarkThreadRead channel="email" threadId="t-2" />);
     expect(mockedEmail).toHaveBeenCalledTimes(2);
     expect(mockedEmail).toHaveBeenLastCalledWith("t-2");
@@ -72,9 +65,7 @@ describe("MarkThreadRead", () => {
   });
 
   test("renders nothing", () => {
-    const { container } = render(
-      <MarkThreadRead channel="email" threadId="t-1" />
-    );
+    const { container } = render(<MarkThreadRead channel="email" threadId="t-1" />);
     expect(container.innerHTML).toBe("");
   });
 });

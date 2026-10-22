@@ -44,7 +44,7 @@ export function EditNoteDialog({
   const [state, formAction, isPending] = useDialogActionState<NoteFormState, FormData>(
     updateNote.bind(null, note.id),
     noteInitialState,
-    open
+    open,
   );
   const initialType: NoteType = (NOTE_TYPES as readonly string[]).includes(note.type)
     ? (note.type as NoteType)
@@ -75,9 +75,7 @@ export function EditNoteDialog({
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit note</DialogTitle>
-          <DialogDescription>
-            The edit is recorded on the matter&apos;s timeline.
-          </DialogDescription>
+          <DialogDescription>The edit is recorded on the matter&apos;s timeline.</DialogDescription>
         </DialogHeader>
         <form action={formAction} className="flex flex-col gap-3">
           <input type="hidden" name="content" value={html} />
@@ -97,7 +95,7 @@ export function EditNoteDialog({
                 aria-pressed={type === t}
                 className={cn(
                   "text-2xs font-medium px-2 py-0.5 rounded transition-colors",
-                  type === t ? "bg-paper-2 text-ink" : "text-ink-3 hover:text-brand-700"
+                  type === t ? "bg-paper-2 text-ink" : "text-ink-3 hover:text-brand-700",
                 )}
               >
                 {NOTE_TYPE_LABEL[t]}

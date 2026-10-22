@@ -37,25 +37,11 @@ import {
   TextField,
   TextareaField,
 } from "@/components/matters/captures/primary-fields";
-import {
-  TASK_STATUSES,
-  TASK_STATUS_LABEL,
-  type TaskStatus,
-} from "@/lib/constants/task-status";
-import {
-  TASK_PRIORITIES,
-  TASK_PRIORITY_LABEL,
-  type TaskPriority,
-} from "@/lib/constants/priority";
+import { TASK_STATUSES, TASK_STATUS_LABEL, type TaskStatus } from "@/lib/constants/task-status";
+import { TASK_PRIORITIES, TASK_PRIORITY_LABEL, type TaskPriority } from "@/lib/constants/priority";
 import { updateTask } from "@/app/actions/tasks";
-import {
-  updateTaskInitialState,
-  type UpdateTaskFormState,
-} from "@/lib/task-form";
-import {
-  AssigneeSelect,
-  type AssigneeOption,
-} from "@/components/tasks/assignee-select";
+import { updateTaskInitialState, type UpdateTaskFormState } from "@/lib/task-form";
+import { AssigneeSelect, type AssigneeOption } from "@/components/tasks/assignee-select";
 
 export type EditableTask = {
   id: string;
@@ -97,10 +83,11 @@ export function EditTaskDialog({
   // Wrapped useActionState: masks state left over from a previous
   // open, so a failed attempt's field errors don't reappear when the
   // dialog is reopened. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    UpdateTaskFormState,
-    FormData
-  >(action, updateTaskInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<UpdateTaskFormState, FormData>(
+    action,
+    updateTaskInitialState,
+    open,
+  );
 
   // Auto-close on successful save. Deps must be the state OBJECT, not
   // `state.status`: useActionState keeps its state across submissions,
@@ -119,9 +106,7 @@ export function EditTaskDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Edit task</DialogTitle>
-          <DialogDescription>
-            Update the title, due date, priority, or status.
-          </DialogDescription>
+          <DialogDescription>Update the title, due date, priority, or status.</DialogDescription>
         </DialogHeader>
 
         <EditTaskForm

@@ -62,9 +62,7 @@ describe("PERMISSION_KEYS — catalog shape", () => {
   });
 
   test("PERMISSION_KEYS_SET is the flat set of catalog keys", () => {
-    const flat = PERMISSION_CATEGORIES.flatMap((c) =>
-      c.permissions.map((p) => p.key)
-    );
+    const flat = PERMISSION_CATEGORIES.flatMap((c) => c.permissions.map((p) => p.key));
     expect(new Set(flat)).toEqual(PERMISSION_KEYS_SET);
   });
 });
@@ -101,9 +99,7 @@ describe("venue keys", () => {
 
 describe("permissionLabel", () => {
   test("known keys return their human label", () => {
-    expect(permissionLabel("matters.manage_team")).toBe(
-      "Manage team members"
-    );
+    expect(permissionLabel("matters.manage_team")).toBe("Manage team members");
   });
 
   test("unknown keys fall through to the raw key", () => {

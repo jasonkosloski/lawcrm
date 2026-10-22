@@ -5,16 +5,11 @@
  */
 
 import { describe, expect, test } from "vitest";
-import {
-  ACTIVITY_FILTER_BUCKETS,
-  ACTIVITY_PILL_ORDER,
-} from "@/lib/constants/activity-filters";
+import { ACTIVITY_FILTER_BUCKETS, ACTIVITY_PILL_ORDER } from "@/lib/constants/activity-filters";
 
 describe("activity filter buckets", () => {
   test("every pill has a bucket and every bucket has a pill", () => {
-    expect([...ACTIVITY_PILL_ORDER].sort()).toEqual(
-      Object.keys(ACTIVITY_FILTER_BUCKETS).sort()
-    );
+    expect([...ACTIVITY_PILL_ORDER].sort()).toEqual(Object.keys(ACTIVITY_FILTER_BUCKETS).sort());
   });
 
   test("logged calls, documents and evidence have a pill", () => {

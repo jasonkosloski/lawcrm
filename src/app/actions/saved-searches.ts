@@ -35,13 +35,9 @@ import {
   type SearchHitType,
 } from "@/lib/constants/search";
 
-export type SavedSearchCreateResult =
-  | { ok: true; id: string }
-  | { ok: false; error: string };
+export type SavedSearchCreateResult = { ok: true; id: string } | { ok: false; error: string };
 
-export type SavedSearchMutateResult =
-  | { ok: true }
-  | { ok: false; error: string };
+export type SavedSearchMutateResult = { ok: true } | { ok: false; error: string };
 
 /** Shared name gate for create + rename. Returns the trimmed name
  *  or a user-facing error. */
@@ -61,7 +57,7 @@ function cleanName(raw: string): { name: string } | { error: string } {
 export async function createSavedSearch(
   name: string,
   q: string,
-  type?: string | null
+  type?: string | null,
 ): Promise<SavedSearchCreateResult> {
   const userId = await getCurrentUserId();
 
@@ -127,7 +123,7 @@ export async function createSavedSearch(
 
 export async function renameSavedSearch(
   id: string,
-  name: string
+  name: string,
 ): Promise<SavedSearchMutateResult> {
   const userId = await getCurrentUserId();
 
@@ -148,9 +144,7 @@ export async function renameSavedSearch(
   return { ok: true };
 }
 
-export async function deleteSavedSearch(
-  id: string
-): Promise<SavedSearchMutateResult> {
+export async function deleteSavedSearch(id: string): Promise<SavedSearchMutateResult> {
   const userId = await getCurrentUserId();
 
   // Same scoping as rename — cross-user ids read as "not found".

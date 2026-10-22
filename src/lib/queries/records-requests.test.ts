@@ -52,8 +52,7 @@ beforeEach(async () => {
   ).matterId;
   M = { kind: "matter", matterId };
   vi.mocked(getCurrentUserId).mockResolvedValue(userId);
-  custodianId = (await seedContact({ name: "St. Mary's", type: "medical_provider" }))
-    .contactId;
+  custodianId = (await seedContact({ name: "St. Mary's", type: "medical_provider" })).contactId;
 });
 
 async function req(over: Record<string, unknown> = {}) {
@@ -145,7 +144,11 @@ describe("getRecordsRequestDetail", () => {
   });
 
   test("fee fields are nulled unless includeFees", async () => {
-    const r = await req({ feeAmount: "5.00", feeEstimate: "9.00", feePaidAt: new Date("2026-10-01T00:00:00Z") });
+    const r = await req({
+      feeAmount: "5.00",
+      feeEstimate: "9.00",
+      feePaidAt: new Date("2026-10-01T00:00:00Z"),
+    });
     const hidden = await getRecordsRequestDetail(M, r.id);
     expect([hidden?.feeAmount, hidden?.feeEstimate, hidden?.feePaidAt]).toEqual([null, null, null]);
     const shown = await getRecordsRequestDetail(M, r.id, { includeFees: true });

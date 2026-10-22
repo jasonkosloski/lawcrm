@@ -5,14 +5,15 @@ How LawCRM decides who can do what, plus the "I'm wiring a new gate, what do I d
 ## TL;DR
 
 A user's effective permissions =
-  - `*` (all) if they hold the **Admin** role, OR
-  - the **set union** of every `RolePermission` row on every role they hold.
+
+- `*` (all) if they hold the **Admin** role, OR
+- the **set union** of every `RolePermission` row on every role they hold.
 
 The catalog of permission keys is **app-defined** (`src/lib/permissions.ts`). The grants are **firm-defined** (admins toggle them in the matrix on `/settings/roles`). Inactive users get nothing.
 
 Every server action and page guard funnels through `src/lib/permission-check.ts`: `requirePermission(key)` (redirects on fail), `requirePermissionResult(key)` (returns the denial as a value), `requirePermissions(keys)` (multi-key), `currentUserHasPermission(key)` / `currentUserHasAnyPermission(keys)` (booleans), `getCurrentUserPermissions()` (bulk: `{ isAdmin, granted }`).
 
-**Permissions are capability keys, not data scopes.** A key says what a user may *do*, not which matters they may see. See [Matter access](#matter-access-ethical-walls).
+**Permissions are capability keys, not data scopes.** A key says what a user may _do_, not which matters they may see. See [Matter access](#matter-access-ethical-walls).
 
 ---
 
@@ -42,16 +43,16 @@ Hidden == missing: pages call `notFound()` (404) and routes return 404, never 40
 
 Helpers (`src/lib/matter-access.ts`, ADR-039):
 
-| Need | Use |
-|---|---|
-| list / count / aggregate matters | `matterAccessWhere(userId)` spread into the `Matter` where |
-| child list with required matter | `matterRelationAccessWhere(userId)` |
-| child list with nullable matter | `optionalMatterAccessWhere` / `optionalMatterAccessClause` |
+| Need                                     | Use                                                                                                                                        |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| list / count / aggregate matters         | `matterAccessWhere(userId)` spread into the `Matter` where                                                                                 |
+| child list with required matter          | `matterRelationAccessWhere(userId)`                                                                                                        |
+| child list with nullable matter          | `optionalMatterAccessWhere` / `optionalMatterAccessClause`                                                                                 |
 | child list with nullable matter AND lead | `optionalRecordAccessClause` (Note, Task, CalendarEvent, TimeEntry, Document, RecordsRequest, ActivityLog; a row with both ids needs both) |
-| already-loaded row with matterId/leadId | `assertRecordAccess(row)` |
-| page or action with a matterId | `assertMatterAccess(matterId)` (`assertOptionalMatterAccess` if nullable) |
-| action with a child id | `assertChildMatterAccess(kind, id)` (routes lead children to the lead wall) |
-| boolean checks | `canAccessMatter(userId, matterId)`, `filterAccessibleMatterIds` |
+| already-loaded row with matterId/leadId  | `assertRecordAccess(row)`                                                                                                                  |
+| page or action with a matterId           | `assertMatterAccess(matterId)` (`assertOptionalMatterAccess` if nullable)                                                                  |
+| action with a child id                   | `assertChildMatterAccess(kind, id)` (routes lead children to the lead wall)                                                                |
+| boolean checks                           | `canAccessMatter(userId, matterId)`, `filterAccessibleMatterIds`                                                                           |
 
 Enforcement tests: `src/app/page-guards.test.ts` (every `matters/[id]` page and layout asserts), `src/app/actions/matter-access-guards.test.ts` (every action taking a matter/child id asserts; commented allowlist), plus two-user integration tests.
 
@@ -83,11 +84,11 @@ Enforcement tests: `page-guards.test.ts` (every `intake/[id]` page and layout ca
 
 ## The mental model
 
-| Concept | Owner | Lives in | Example |
-|---|---|---|---|
-| Permission | App | `src/lib/permissions.ts` (static catalog) | `"matters.manage_team"` |
-| Role | Firm | `Role` table, scoped by `firmId` | `"Admin"`, `"default"`, `"Billing manager"` |
-| Grant | Firm | `RolePermission` join, set in the matrix UI | `Billing manager -> billing.send_invoice` |
+| Concept    | Owner | Lives in                                    | Example                                     |
+| ---------- | ----- | ------------------------------------------- | ------------------------------------------- |
+| Permission | App   | `src/lib/permissions.ts` (static catalog)   | `"matters.manage_team"`                     |
+| Role       | Firm  | `Role` table, scoped by `firmId`            | `"Admin"`, `"default"`, `"Billing manager"` |
+| Grant      | Firm  | `RolePermission` join, set in the matrix UI | `Billing manager -> billing.send_invoice`   |
 
 Adding a permission is a code change; you can't create one in the UI. Roles are firm-scoped (names don't collide across firms); two are seeded system roles (Admin, default) and locked. A user holds any number of roles via `UserRole` (composite PK `[userId, roleId]`, `assignedById` null for the seed path); effective permissions are the union of grants across them.
 
@@ -174,13 +175,13 @@ Write path: `await requirePermission("foo.delete")` first in the action. Throws 
 
 A note or primary capture (task / event / deadline / time entry) can carry "sibling" captures that create further records. **Siblings do not inherit the primary's gate** (ADR-025): every kind must clear its own create key.
 
-| Kind created | Key |
-|---|---|
-| task | `tasks.create` |
-| event | `events.create` |
-| deadline | `deadlines.create` |
-| time entry | `time_entries.create` |
-| note (sibling or primary) | `notes.create` |
+| Kind created                      | Key                                         |
+| --------------------------------- | ------------------------------------------- |
+| task                              | `tasks.create`                              |
+| event                             | `events.create`                             |
+| deadline                          | `deadlines.create`                          |
+| time entry                        | `time_entries.create`                       |
+| note (sibling or primary)         | `notes.create`                              |
 | pinned note / pinned sibling note | `notes.pin` (in addition to `notes.create`) |
 
 The set is computed by `requiredCapturePermissions` (`src/lib/capture-permissions.ts`, pure, unit-tested) and enforced with `requirePermissions` before any write in `createNote` (`notes.ts`), the primary composers (`captures.ts`) and the bulk-attach action (`note-attachments.ts`, which ignores `note_sibling`). Pinning at create needs `notes.pin` exactly like toggling later; the Pin toggle in `NoteComposer` is hidden without it (`canPin`).
@@ -206,9 +207,9 @@ Admin-as-concept helpers in `src/lib/firm.ts`. Use them only when the gate is co
 
 ## System roles
 
-| Role | Behavior |
-|---|---|
-| `Admin` | Wildcard; matrix column locked + always checked. |
+| Role      | Behavior                                                              |
+| --------- | --------------------------------------------------------------------- |
+| `Admin`   | Wildcard; matrix column locked + always checked.                      |
 | `default` | Auto-assigned to every active member; starts with **no** permissions. |
 
 `default` is a backward-compat handle, not an "everyone can do this" bucket; granting it `firm.manage_roles` would let every member create roles. Admin-ness is membership in the Admin role (`userRoles: { some: { role: { name: "Admin" } } }`); there is no `User.isAdmin`.
@@ -273,18 +274,18 @@ Example: an expense feature gets `matters.expense.view/create/edit/delete` plus 
 
 ## File index
 
-| File | Role |
-|---|---|
-| `src/lib/permissions.ts` | Static catalog + helpers, `ADMIN_ONLY_PERMISSIONS` |
-| `src/lib/permission-check.ts` | Runtime helpers |
-| `src/lib/matter-access.ts` | Matter-access helpers |
-| `src/lib/email-visibility.ts` | `visibleEmailThreadWhere` / `visibleEmailMessageWhere` |
-| `src/lib/note-access.ts` | `getNoteAccess` |
-| `src/lib/capture-permissions.ts` | `requiredCapturePermissions` |
-| `src/lib/current-user.ts` | `getCurrentUserId` / `requireUser` |
-| `src/lib/firm.ts` | `requireAdmin` / `isCurrentUserAdmin` |
-| `src/lib/role-constants.ts` | `ADMIN_ROLE_NAME` / `DEFAULT_ROLE_NAME` |
-| `src/app/actions/roles.ts` | Role CRUD + `setRolePermissionAction` |
-| `src/app/actions/team.ts` | Team edits, escalation + last-admin invariants |
-| `src/lib/queries/team.ts` | `listFirmRoles`, `listRolePermissionGrants`, `getPrivilegedRoleIds` |
-| `src/app/(dashboard)/settings/roles/page.tsx`, `src/components/settings/permissions-matrix.tsx`, `role-row.tsx` | Matrix page, UI, role row |
+| File                                                                                                            | Role                                                                |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `src/lib/permissions.ts`                                                                                        | Static catalog + helpers, `ADMIN_ONLY_PERMISSIONS`                  |
+| `src/lib/permission-check.ts`                                                                                   | Runtime helpers                                                     |
+| `src/lib/matter-access.ts`                                                                                      | Matter-access helpers                                               |
+| `src/lib/email-visibility.ts`                                                                                   | `visibleEmailThreadWhere` / `visibleEmailMessageWhere`              |
+| `src/lib/note-access.ts`                                                                                        | `getNoteAccess`                                                     |
+| `src/lib/capture-permissions.ts`                                                                                | `requiredCapturePermissions`                                        |
+| `src/lib/current-user.ts`                                                                                       | `getCurrentUserId` / `requireUser`                                  |
+| `src/lib/firm.ts`                                                                                               | `requireAdmin` / `isCurrentUserAdmin`                               |
+| `src/lib/role-constants.ts`                                                                                     | `ADMIN_ROLE_NAME` / `DEFAULT_ROLE_NAME`                             |
+| `src/app/actions/roles.ts`                                                                                      | Role CRUD + `setRolePermissionAction`                               |
+| `src/app/actions/team.ts`                                                                                       | Team edits, escalation + last-admin invariants                      |
+| `src/lib/queries/team.ts`                                                                                       | `listFirmRoles`, `listRolePermissionGrants`, `getPrivilegedRoleIds` |
+| `src/app/(dashboard)/settings/roles/page.tsx`, `src/components/settings/permissions-matrix.tsx`, `role-row.tsx` | Matrix page, UI, role row                                           |

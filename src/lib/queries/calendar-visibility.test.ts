@@ -30,10 +30,7 @@ vi.mock("@/lib/current-user-tz", () => ({
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { dateOnlyKey, instantInTz } from "@/lib/format-date";
-import {
-  getCalendarEventById,
-  getCalendarItems,
-} from "@/lib/queries/calendar";
+import { getCalendarEventById, getCalendarItems } from "@/lib/queries/calendar";
 import {
   getMatterDeadlines,
   getMatterEvents,
@@ -138,9 +135,7 @@ afterEach(() => {
 describe("getCalendarItems — visibility stripping", () => {
   test("stranger sees a 'Busy' block, not the personal event details", async () => {
     const items = await getCalendarItems(RANGE_START, RANGE_END);
-    const personal = items.find(
-      (i) => i.kind === "event" && i.id === nonMatterEventId
-    );
+    const personal = items.find((i) => i.kind === "event" && i.id === nonMatterEventId);
     expect(personal?.kind).toBe("event");
     if (personal?.kind !== "event") return; // narrow
 
@@ -164,9 +159,7 @@ describe("getCalendarItems — visibility stripping", () => {
   test("creator sees full details on their own personal event", async () => {
     mockedGetUser.mockResolvedValue(creatorId);
     const items = await getCalendarItems(RANGE_START, RANGE_END);
-    const personal = items.find(
-      (i) => i.kind === "event" && i.id === nonMatterEventId
-    );
+    const personal = items.find((i) => i.kind === "event" && i.id === nonMatterEventId);
     if (personal?.kind !== "event") throw new Error("event missing");
     expect(personal.viewerCanSeeDetails).toBe(true);
     expect(personal.title).toBe("Therapy");
@@ -183,9 +176,7 @@ describe("getCalendarItems — visibility stripping", () => {
       },
     });
     const items = await getCalendarItems(RANGE_START, RANGE_END);
-    const personal = items.find(
-      (i) => i.kind === "event" && i.id === nonMatterEventId
-    );
+    const personal = items.find((i) => i.kind === "event" && i.id === nonMatterEventId);
     if (personal?.kind !== "event") throw new Error("event missing");
     expect(personal.viewerCanSeeDetails).toBe(true);
     expect(personal.title).toBe("Therapy");
@@ -197,9 +188,7 @@ describe("getCalendarItems — visibility stripping", () => {
       data: { matterId, userId: viewerId, role: "co_counsel" },
     });
     const items = await getCalendarItems(RANGE_START, RANGE_END);
-    const evt = items.find(
-      (i) => i.kind === "event" && i.id === matterEventId
-    );
+    const evt = items.find((i) => i.kind === "event" && i.id === matterEventId);
     if (evt?.kind !== "event") throw new Error("event missing");
     expect(evt.viewerCanSeeDetails).toBe(true);
     expect(evt.title).toBe("Strategy session");
@@ -210,9 +199,7 @@ describe("getCalendarItems — visibility stripping", () => {
     // Viewer is firm-mate but NOT on the matter team. Default-deny
     // applies — even matter events stay private to the case team.
     const items = await getCalendarItems(RANGE_START, RANGE_END);
-    const evt = items.find(
-      (i) => i.kind === "event" && i.id === matterEventId
-    );
+    const evt = items.find((i) => i.kind === "event" && i.id === matterEventId);
     if (evt?.kind !== "event") throw new Error("event missing");
     expect(evt.viewerCanSeeDetails).toBe(false);
     expect(evt.title).toBe("Busy");
@@ -227,9 +214,7 @@ describe("getCalendarItems — visibility stripping", () => {
       data: { visibility: "show_details" },
     });
     const items = await getCalendarItems(RANGE_START, RANGE_END);
-    const personal = items.find(
-      (i) => i.kind === "event" && i.id === nonMatterEventId
-    );
+    const personal = items.find((i) => i.kind === "event" && i.id === nonMatterEventId);
     if (personal?.kind !== "event") throw new Error("event missing");
     expect(personal.viewerCanSeeDetails).toBe(true);
     expect(personal.title).toBe("Therapy");
@@ -241,9 +226,7 @@ describe("getCalendarItems — visibility stripping", () => {
       data: { defaultEventVisibility: "show_details" },
     });
     const items = await getCalendarItems(RANGE_START, RANGE_END);
-    const personal = items.find(
-      (i) => i.kind === "event" && i.id === nonMatterEventId
-    );
+    const personal = items.find((i) => i.kind === "event" && i.id === nonMatterEventId);
     if (personal?.kind !== "event") throw new Error("event missing");
     expect(personal.viewerCanSeeDetails).toBe(true);
     expect(personal.title).toBe("Therapy");
@@ -252,9 +235,7 @@ describe("getCalendarItems — visibility stripping", () => {
   test("third-party (no relationship at all) is denied — sanity check", async () => {
     mockedGetUser.mockResolvedValue(outsideUserId);
     const items = await getCalendarItems(RANGE_START, RANGE_END);
-    const personal = items.find(
-      (i) => i.kind === "event" && i.id === nonMatterEventId
-    );
+    const personal = items.find((i) => i.kind === "event" && i.id === nonMatterEventId);
     if (personal?.kind !== "event") throw new Error("event missing");
     expect(personal.viewerCanSeeDetails).toBe(false);
     expect(personal.title).toBe("Busy");
@@ -400,7 +381,7 @@ describe("getMatterEvents — matter Events tab visibility stripping", () => {
     expect(r.notes).toEqual([]);
     expect(r.timeEntries).toEqual([]);
     expect(JSON.stringify(r)).not.toMatch(
-      /Strategy session|Conference room|Secret strategy|Privileged narrative|zoom\.example/
+      /Strategy session|Conference room|Secret strategy|Privileged narrative|zoom\.example/,
     );
   });
 
@@ -414,9 +395,7 @@ describe("getMatterEvents — matter Events tab visibility stripping", () => {
     expect(r.location).toBe("Conference room");
     expect(r.zoomUrl).toBe("https://zoom.example/secret");
     expect(r.notes.map((n) => n.content)).toEqual(["Secret strategy note"]);
-    expect(r.timeEntries.map((t) => t.narrative)).toEqual([
-      "Privileged narrative",
-    ]);
+    expect(r.timeEntries.map((t) => t.narrative)).toEqual(["Privileged narrative"]);
   });
 
   test("a removed team member is back to Busy", async () => {
@@ -540,9 +519,7 @@ describe("getCalendarItems — date-only values and overlap", () => {
     const deadline = items.find((i) => i.kind === "deadline");
     // The row hands back the stored date-only value untouched; the
     // views key it with dateOnlyKey().
-    expect(
-      deadline?.kind === "deadline" && dateOnlyKey(deadline.dueDate)
-    ).toBe("2026-04-13");
+    expect(deadline?.kind === "deadline" && dateOnlyKey(deadline.dueDate)).toBe("2026-04-13");
   });
 
   test("week view: Sunday through Saturday inclusive, nothing outside", async () => {
@@ -559,18 +536,14 @@ describe("getCalendarItems — date-only values and overlap", () => {
   test("legacy rows stored at a Denver laptop's local midnight still land on their day", async () => {
     await mkDeadline("legacy Apr 13", "2026-04-13T06:00:00Z");
     const { start, end } = dayRange(2026, 4, 13);
-    expect(titles(await getCalendarItems(start, end, DENVER))).toEqual([
-      "legacy Apr 13",
-    ]);
+    expect(titles(await getCalendarItems(start, end, DENVER))).toEqual(["legacy Apr 13"]);
   });
 
   test("the viewer's zone decides which day the range covers (Tokyo)", async () => {
     await mkDeadline("due Apr 13", "2026-04-13T00:00:00Z");
     await mkDeadline("due Apr 14", "2026-04-14T00:00:00Z");
     const { start, end } = dayRange(2026, 4, 13, "Asia/Tokyo");
-    expect(titles(await getCalendarItems(start, end, "Asia/Tokyo"))).toEqual([
-      "due Apr 13",
-    ]);
+    expect(titles(await getCalendarItems(start, end, "Asia/Tokyo"))).toEqual(["due Apr 13"]);
   });
 
   test("zone defaults to the session user's profile zone when omitted", async () => {
@@ -605,17 +578,11 @@ describe("getCalendarItems — date-only values and overlap", () => {
       },
     });
     const sameDay = dayRange(2026, 4, 13);
-    expect(
-      titles(await getCalendarItems(sameDay.start, sameDay.end, DENVER))
-    ).toEqual(["Busy"]);
+    expect(titles(await getCalendarItems(sameDay.start, sameDay.end, DENVER))).toEqual(["Busy"]);
     const dayBefore = dayRange(2026, 4, 12);
-    expect(
-      await getCalendarItems(dayBefore.start, dayBefore.end, DENVER)
-    ).toHaveLength(0);
+    expect(await getCalendarItems(dayBefore.start, dayBefore.end, DENVER)).toHaveLength(0);
     const dayAfter = dayRange(2026, 4, 14);
-    expect(
-      await getCalendarItems(dayAfter.start, dayAfter.end, DENVER)
-    ).toHaveLength(0);
+    expect(await getCalendarItems(dayAfter.start, dayAfter.end, DENVER)).toHaveLength(0);
   });
 
   test("a multi-day all-day event appears in every day and week it covers", async () => {
@@ -637,18 +604,14 @@ describe("getCalendarItems — date-only values and overlap", () => {
       [2026, 7, 14, 0],
     ] as const) {
       const r = dayRange(y, m, d);
-      expect(
-        (await getCalendarItems(r.start, r.end, DENVER)).length
-      ).toBe(expected);
+      expect((await getCalendarItems(r.start, r.end, DENVER)).length).toBe(expected);
     }
     // The following week (Sun Jul 12 - Sat Jul 18) still shows it.
     const week = {
       start: dayRange(2026, 7, 12).start,
       end: dayRange(2026, 7, 18).end,
     };
-    expect(
-      (await getCalendarItems(week.start, week.end, DENVER)).length
-    ).toBe(1);
+    expect((await getCalendarItems(week.start, week.end, DENVER)).length).toBe(1);
   });
 
   test("a timed event that started before the range and runs into it is included", async () => {

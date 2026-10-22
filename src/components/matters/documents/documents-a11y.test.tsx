@@ -20,11 +20,7 @@ import { FolderTree } from "./folder-tree";
 import { MoveToFolderDialog } from "./move-to-folder-dialog";
 import { NewFolderButton } from "./new-folder-button";
 
-const node = (
-  id: string,
-  name: string,
-  children: FolderNode[] = []
-): FolderNode =>
+const node = (id: string, name: string, children: FolderNode[] = []): FolderNode =>
   ({ id, name, parentId: null, children }) as unknown as FolderNode;
 
 describe("FolderTree", () => {
@@ -37,14 +33,15 @@ describe("FolderTree", () => {
         counts={{}}
         rootCount={0}
         selectedId={null}
-      />
+      />,
     );
     const chevron = screen.getByRole("button", { name: /expand discovery/i });
     expect(chevron).toHaveAttribute("aria-expanded", "false");
     await user.click(chevron);
-    expect(
-      screen.getByRole("button", { name: /collapse discovery/i })
-    ).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /collapse discovery/i })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
   });
 });
 
@@ -63,7 +60,7 @@ describe("MoveToFolderDialog", () => {
         ]}
         currentFolderId={null}
         onMove={async () => ({ ok: true })}
-      />
+      />,
     );
     const discovery = screen.getByRole("button", { name: /discovery/i });
     expect(discovery).toHaveAttribute("aria-pressed", "false");
@@ -71,7 +68,7 @@ describe("MoveToFolderDialog", () => {
     expect(discovery).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /pleadings/i })).toHaveAttribute(
       "aria-pressed",
-      "false"
+      "false",
     );
   });
 });
@@ -79,7 +76,13 @@ describe("MoveToFolderDialog", () => {
 describe("NewFolderButton", () => {
   test("the name input has an accessible name", async () => {
     const user = userEvent.setup();
-    render(<NewFolderButton scope={{ kind: "matter", matterId: "m1" }} parentId={null} parentName={null} />);
+    render(
+      <NewFolderButton
+        scope={{ kind: "matter", matterId: "m1" }}
+        parentId={null}
+        parentName={null}
+      />,
+    );
     await user.click(screen.getByRole("button", { name: /new folder/i }));
     expect(screen.getByRole("textbox", { name: "Folder name" })).toBeVisible();
   });

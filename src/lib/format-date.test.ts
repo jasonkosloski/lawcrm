@@ -71,9 +71,7 @@ describe("formatDate", () => {
 
   test("iso variant produces YYYY-MM-DD ignoring timezone", () => {
     // Use a date with non-zero UTC offset to confirm we're in UTC.
-    expect(formatDate(new Date("2026-04-15T23:30:00Z"), "iso")).toBe(
-      "2026-04-15"
-    );
+    expect(formatDate(new Date("2026-04-15T23:30:00Z"), "iso")).toBe("2026-04-15");
   });
 
   test("time variant renders hour + minute, no date", () => {
@@ -83,11 +81,7 @@ describe("formatDate", () => {
   });
 
   test("datetime combines month + day + time", () => {
-    const out = formatDate(
-      new Date("2026-04-15T14:30:00Z"),
-      "datetime",
-      "UTC"
-    );
+    const out = formatDate(new Date("2026-04-15T14:30:00Z"), "datetime", "UTC");
     expect(out).toMatch(/Apr/);
     expect(out).toMatch(/2:30/);
   });
@@ -103,11 +97,7 @@ describe("formatDate", () => {
 
   // 2026-04-15 is a Wednesday — the weekday variants below hang off it.
   test("short_weekday adds the weekday, omits the year", () => {
-    const out = formatDate(
-      new Date("2026-04-15T12:00:00Z"),
-      "short_weekday",
-      "UTC"
-    );
+    const out = formatDate(new Date("2026-04-15T12:00:00Z"), "short_weekday", "UTC");
     expect(out).toMatch(/Wed/);
     expect(out).toMatch(/Apr/);
     expect(out).toMatch(/15/);
@@ -115,11 +105,7 @@ describe("formatDate", () => {
   });
 
   test("full_short: short weekday + short month + year", () => {
-    const out = formatDate(
-      new Date("2026-04-15T12:00:00Z"),
-      "full_short",
-      "UTC"
-    );
+    const out = formatDate(new Date("2026-04-15T12:00:00Z"), "full_short", "UTC");
     expect(out).toMatch(/Wed/);
     expect(out).toMatch(/Apr/);
     expect(out).not.toMatch(/April/);
@@ -127,22 +113,14 @@ describe("formatDate", () => {
   });
 
   test("full_long: long weekday + long month + year", () => {
-    const out = formatDate(
-      new Date("2026-04-15T12:00:00Z"),
-      "full_long",
-      "UTC"
-    );
+    const out = formatDate(new Date("2026-04-15T12:00:00Z"), "full_long", "UTC");
     expect(out).toMatch(/Wednesday/);
     expect(out).toMatch(/April/);
     expect(out).toMatch(/2026/);
   });
 
   test("datetime_medium adds the year to datetime", () => {
-    const out = formatDate(
-      new Date("2026-04-15T14:30:00Z"),
-      "datetime_medium",
-      "UTC"
-    );
+    const out = formatDate(new Date("2026-04-15T14:30:00Z"), "datetime_medium", "UTC");
     expect(out).toMatch(/Apr/);
     expect(out).toMatch(/2026/);
     expect(out).toMatch(/2:30/);
@@ -230,9 +208,7 @@ describe("formatDayBucket", () => {
       // 2026-04-27T04:00:00Z = Sunday April 26, 10:00pm MDT — same
       // UTC calendar day as `now`, but the prior day in Denver.
       const lateSunday = new Date("2026-04-27T04:00:00Z");
-      expect(
-        formatDayBucket(lateSunday, { now, tz: "America/Denver" })
-      ).toBe("Yesterday");
+      expect(formatDayBucket(lateSunday, { now, tz: "America/Denver" })).toBe("Yesterday");
       expect(formatDayBucket(lateSunday, { now, tz: "UTC" })).toBe("Today");
     });
 
@@ -240,9 +216,7 @@ describe("formatDayBucket", () => {
       // `now` is April 28 00:00 in Tokyo (UTC+9); April 27 14:00 UTC
       // is 11:00pm April 27 Tokyo — the previous Tokyo day.
       const entry = new Date("2026-04-27T14:00:00Z");
-      expect(formatDayBucket(entry, { now, tz: "Asia/Tokyo" })).toBe(
-        "Yesterday"
-      );
+      expect(formatDayBucket(entry, { now, tz: "Asia/Tokyo" })).toBe("Yesterday");
       expect(formatDayBucket(entry, { now, tz: "UTC" })).toBe("Today");
     });
 
@@ -251,9 +225,7 @@ describe("formatDayBucket", () => {
       // sees 3 days back → within-week branch, and the label must
       // say Friday (the Denver weekday), not Saturday (the UTC one).
       const entry = new Date("2026-04-25T05:00:00Z");
-      expect(formatDayBucket(entry, { now, tz: "America/Denver" })).toBe(
-        "Friday"
-      );
+      expect(formatDayBucket(entry, { now, tz: "America/Denver" })).toBe("Friday");
     });
   });
 });
@@ -282,9 +254,7 @@ describe("dateKeyInTz", () => {
   });
 
   test("UTC TZ is identity-ish — instant's UTC date is the key", () => {
-    expect(dateKeyInTz(new Date("2026-04-26T12:00:00.000Z"), "UTC")).toBe(
-      "2026-04-26"
-    );
+    expect(dateKeyInTz(new Date("2026-04-26T12:00:00.000Z"), "UTC")).toBe("2026-04-26");
   });
 });
 
@@ -356,10 +326,7 @@ describe("calendarWeekInTz", () => {
 
   test("range covers Sunday 00:00 → Saturday 23:59 in user TZ", () => {
     const focal = focalFor("2026-04-28");
-    const { rangeStart, rangeEnd } = calendarWeekInTz(
-      focal,
-      "America/Denver"
-    );
+    const { rangeStart, rangeEnd } = calendarWeekInTz(focal, "America/Denver");
     // Sunday April 26 midnight MDT = 06:00 UTC.
     expect(rangeStart.toISOString()).toBe("2026-04-26T06:00:00.000Z");
     // Saturday May 2 23:59 MDT = May 3 05:59 UTC.
@@ -402,10 +369,7 @@ describe("calendarMonthGridInTz", () => {
 
   test("range bounds respect user TZ", () => {
     const focal = focalFor("2026-04-15");
-    const { rangeStart, rangeEnd } = calendarMonthGridInTz(
-      focal,
-      "America/Denver"
-    );
+    const { rangeStart, rangeEnd } = calendarMonthGridInTz(focal, "America/Denver");
     // Sunday March 29 midnight MDT = 06:00 UTC.
     expect(rangeStart.toISOString()).toBe("2026-03-29T06:00:00.000Z");
     // Saturday May 9 23:59 MDT = May 10 05:59 UTC.
@@ -434,15 +398,11 @@ describe("calendarMonthGridInTz", () => {
 
 describe("parseDateOnly", () => {
   test("stores the calendar date at UTC midnight", () => {
-    expect(parseDateOnly("2026-04-15")?.toISOString()).toBe(
-      "2026-04-15T00:00:00.000Z"
-    );
+    expect(parseDateOnly("2026-04-15")?.toISOString()).toBe("2026-04-15T00:00:00.000Z");
   });
 
   test("accepts leap days only in leap years", () => {
-    expect(parseDateOnly("2028-02-29")?.toISOString()).toBe(
-      "2028-02-29T00:00:00.000Z"
-    );
+    expect(parseDateOnly("2028-02-29")?.toISOString()).toBe("2028-02-29T00:00:00.000Z");
     expect(parseDateOnly("2026-02-29")).toBeNull();
   });
 
@@ -498,12 +458,12 @@ describe("todayKey / daysUntilDateOnly", () => {
   test("an item due today is 0 days away, not overdue, all evening", () => {
     const dueToday = parseDateOnly("2026-04-27")!;
     expect(daysUntilDateOnly(dueToday, "America/Denver", eveningInDenver)).toBe(0);
-    expect(
-      daysUntilDateOnly(parseDateOnly("2026-04-28")!, "America/Denver", eveningInDenver)
-    ).toBe(1);
-    expect(
-      daysUntilDateOnly(parseDateOnly("2026-04-26")!, "America/Denver", eveningInDenver)
-    ).toBe(-1);
+    expect(daysUntilDateOnly(parseDateOnly("2026-04-28")!, "America/Denver", eveningInDenver)).toBe(
+      1,
+    );
+    expect(daysUntilDateOnly(parseDateOnly("2026-04-26")!, "America/Denver", eveningInDenver)).toBe(
+      -1,
+    );
   });
 
   test("legacy rows count the same as new ones", () => {
@@ -538,41 +498,41 @@ describe("day-key arithmetic", () => {
 describe("parseWallClock / toWallClockInput", () => {
   test("reads datetime-local values in the given zone, not the process zone", () => {
     expect(parseWallClock("2026-04-15T09:30", "America/Denver")?.toISOString()).toBe(
-      "2026-04-15T15:30:00.000Z"
+      "2026-04-15T15:30:00.000Z",
     ); // MDT, UTC-6
     expect(parseWallClock("2026-01-15T09:30", "America/Denver")?.toISOString()).toBe(
-      "2026-01-15T16:30:00.000Z"
+      "2026-01-15T16:30:00.000Z",
     ); // MST, UTC-7
     expect(parseWallClock("2026-04-15T09:30", "UTC")?.toISOString()).toBe(
-      "2026-04-15T09:30:00.000Z"
+      "2026-04-15T09:30:00.000Z",
     );
-    expect(
-      parseWallClock("2026-04-15T09:30:45", "America/Denver")?.toISOString()
-    ).toBe("2026-04-15T15:30:45.000Z");
+    expect(parseWallClock("2026-04-15T09:30:45", "America/Denver")?.toISOString()).toBe(
+      "2026-04-15T15:30:45.000Z",
+    );
   });
 
   test("takes values with an explicit zone as-is", () => {
     expect(parseWallClock("2026-04-15T09:30:00Z", "America/Denver")?.toISOString()).toBe(
-      "2026-04-15T09:30:00.000Z"
+      "2026-04-15T09:30:00.000Z",
     );
-    expect(
-      parseWallClock("2026-04-15T09:30:00-06:00", "Asia/Tokyo")?.toISOString()
-    ).toBe("2026-04-15T15:30:00.000Z");
+    expect(parseWallClock("2026-04-15T09:30:00-06:00", "Asia/Tokyo")?.toISOString()).toBe(
+      "2026-04-15T15:30:00.000Z",
+    );
   });
 
   test.each(["2026-04-15", "2026-02-31T10:00", "2026-04-15T24:00", "2026-04-15T09:60", "soon", ""])(
     "rejects %j",
     (value) => {
       expect(parseWallClock(value, "America/Denver")).toBeNull();
-    }
+    },
   );
 
   test("prefill formats the instant in the given zone with a 00-23 hour", () => {
     expect(toWallClockInput(new Date("2026-04-15T15:30:00Z"), "America/Denver")).toBe(
-      "2026-04-15T09:30"
+      "2026-04-15T09:30",
     );
     expect(toWallClockInput(new Date("2026-04-15T06:00:00Z"), "America/Denver")).toBe(
-      "2026-04-15T00:00"
+      "2026-04-15T00:00",
     );
   });
 

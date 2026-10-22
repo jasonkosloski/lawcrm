@@ -60,7 +60,7 @@ export function CustodianPicker({
           id: r.id,
           name: r.name,
           sub: r.kind === "contact" ? (r.organization ?? r.type) : null,
-        }))
+        })),
     );
   };
 
@@ -86,9 +86,7 @@ export function CustodianPicker({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-2xs font-medium text-ink-3">
-        Custodian
-      </span>
+      <span className="text-2xs font-medium text-ink-3">Custodian</span>
       <input type="hidden" name="custodianContactId" value={value?.id ?? ""} />
       {value ? (
         <div className="inline-flex items-center gap-2 h-8 px-2 rounded-md border border-line bg-paper-2/40 text-xs text-ink w-fit">
@@ -105,10 +103,7 @@ export function CustodianPicker({
       ) : (
         <>
           <div className="relative">
-            <Search
-              size={12}
-              className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4"
-            />
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4" />
             <input
               type="text"
               aria-label="Search custodians"
@@ -128,9 +123,7 @@ export function CustodianPicker({
                     className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-brand-tint"
                   >
                     <span className="font-medium text-ink">{h.name}</span>
-                    {h.sub && (
-                      <span className="ml-2 text-2xs text-ink-4">{h.sub}</span>
-                    )}
+                    {h.sub && <span className="ml-2 text-2xs text-ink-4">{h.sub}</span>}
                   </button>
                 </li>
               ))}
@@ -179,11 +172,7 @@ export function CustodianPicker({
               >
                 Cancel
               </button>
-              {createError && (
-                <span className="basis-full text-2xs text-warn">
-                  {createError}
-                </span>
-              )}
+              {createError && <span className="basis-full text-2xs text-warn">{createError}</span>}
             </div>
           )}
         </>

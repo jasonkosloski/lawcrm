@@ -41,10 +41,7 @@ vi.mock("@/lib/current-user-tz", () => ({
 }));
 
 import { redirect } from "next/navigation";
-import {
-  requirePermission,
-  requirePermissionResult,
-} from "@/lib/permission-check";
+import { requirePermission, requirePermissionResult } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
   bulkDeactivateContacts,
@@ -117,9 +114,7 @@ beforeEach(async () => {
 describe("permission gates", () => {
   test("each action asks for its granular contacts.* key", async () => {
     await createContact(contactFormInitialState, contactForm());
-    expect(mockedRequirePermission).toHaveBeenLastCalledWith(
-      "contacts.create"
-    );
+    expect(mockedRequirePermission).toHaveBeenLastCalledWith("contacts.create");
 
     const { contactId } = await seedContact();
     await updateContact(contactId, contactFormInitialState, contactForm());
@@ -132,22 +127,16 @@ describe("permission gates", () => {
     expect(mockedRequirePermission).toHaveBeenLastCalledWith("contacts.edit");
 
     await mergeContacts(contactId, contactId); // self-merge errors AFTER the gate
-    expect(mockedRequirePermission).toHaveBeenLastCalledWith(
-      "contacts.merge"
-    );
+    expect(mockedRequirePermission).toHaveBeenLastCalledWith("contacts.merge");
 
     await deleteContact(contactId);
-    expect(mockedRequirePermission).toHaveBeenLastCalledWith(
-      "contacts.delete"
-    );
+    expect(mockedRequirePermission).toHaveBeenLastCalledWith("contacts.delete");
 
     await bulkSetContactType([contactId], "witness");
     expect(mockedRequirePermission).toHaveBeenLastCalledWith("contacts.edit");
 
     await bulkDeactivateContacts([contactId]);
-    expect(mockedRequirePermission).toHaveBeenLastCalledWith(
-      "contacts.delete"
-    );
+    expect(mockedRequirePermission).toHaveBeenLastCalledWith("contacts.delete");
   });
 
   test("exportContactsCsv needs contacts.export", async () => {
@@ -175,9 +164,7 @@ describe("permission gates", () => {
 
   test("createContact bails before writing when the gate throws", async () => {
     mockedRequirePermission.mockRejectedValue(bounce);
-    await expect(
-      createContact(contactFormInitialState, contactForm())
-    ).rejects.toThrow(bounce);
+    await expect(createContact(contactFormInitialState, contactForm())).rejects.toThrow(bounce);
     expect(await prisma.contact.count()).toBe(0);
   });
 
@@ -208,10 +195,7 @@ describe("permission gates", () => {
 
 describe("createContact", () => {
   test("creates the contact plus a primary phone row and redirects", async () => {
-    await createContact(
-      contactFormInitialState,
-      contactForm({ phone: "(303) 555-0101" })
-    );
+    await createContact(contactFormInitialState, contactForm({ phone: "(303) 555-0101" }));
 
     const c = await prisma.contact.findFirstOrThrow({
       include: { phones: true },
@@ -234,10 +218,7 @@ describe("createContact", () => {
   });
 
   test("returns field errors instead of writing on invalid input", async () => {
-    const res = await createContact(
-      contactFormInitialState,
-      contactForm({ name: "" })
-    );
+    const res = await createContact(contactFormInitialState, contactForm({ name: "" }));
     expect(res.status).toBe("error");
     expect(res.errors?.name).toBeTruthy();
     expect(await prisma.contact.count()).toBe(0);
@@ -261,7 +242,7 @@ describe("updateContact phone sync", () => {
     const res = await updateContact(
       contactId,
       contactFormInitialState,
-      contactForm({ phone: "222" })
+      contactForm({ phone: "222" }),
     );
     expect(res.status).toBe("ok");
 
@@ -284,7 +265,7 @@ describe("updateContact phone sync", () => {
     const res = await updateContact(
       contactId,
       contactFormInitialState,
-      contactForm({ phone: "333" })
+      contactForm({ phone: "333" }),
     );
     expect(res.status).toBe("ok");
 
@@ -312,11 +293,7 @@ describe("updateContact phone sync", () => {
       ],
     });
 
-    const res = await updateContact(
-      contactId,
-      contactFormInitialState,
-      contactForm({ phone: "" })
-    );
+    const res = await updateContact(contactId, contactFormInitialState, contactForm({ phone: "" }));
     expect(res.status).toBe("ok");
 
     const phones = await prisma.contactPhone.findMany({
@@ -345,11 +322,7 @@ describe("updateContact phone sync", () => {
       data: { contactId, number: "111", isPrimary: true, order: 0 },
     });
 
-    const res = await updateContact(
-      contactId,
-      contactFormInitialState,
-      contactForm({ phone: "" })
-    );
+    const res = await updateContact(contactId, contactFormInitialState, contactForm({ phone: "" }));
     expect(res.status).toBe("ok");
 
     expect(await prisma.contactPhone.count({ where: { contactId } })).toBe(0);
@@ -369,7 +342,7 @@ describe("updateContact phone sync", () => {
     const res = await updateContact(
       contactId,
       contactFormInitialState,
-      contactForm({ name: "Renamed" })
+      contactForm({ name: "Renamed" }),
     );
     expect(res.status).toBe("ok");
 
@@ -380,11 +353,7 @@ describe("updateContact phone sync", () => {
   });
 
   test("errors when the contact no longer exists", async () => {
-    const res = await updateContact(
-      "gone",
-      contactFormInitialState,
-      contactForm()
-    );
+    const res = await updateContact("gone", contactFormInitialState, contactForm());
     expect(res.status).toBe("error");
     expect(res.errors?._form?.[0]).toMatch(/no longer exists/i);
   });
@@ -489,7 +458,7 @@ describe("setContactConflictStatus", () => {
     const res = await setContactConflictStatus(
       contactId,
       "flagged",
-      "Adverse party on Smith v. Jones"
+      "Adverse party on Smith v. Jones",
     );
     expect(res).toEqual({ ok: true });
 
@@ -551,7 +520,7 @@ describe("mergeContacts", () => {
     });
     expect(await mergeContacts(loserId, survivorId)).toEqual({ ok: true });
     expect(
-      (await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } })).custodianContactId
+      (await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } })).custodianContactId,
     ).toBe(survivorId);
   });
 
@@ -593,9 +562,7 @@ describe("mergeContacts", () => {
     const res = await mergeContacts(loserId, survivorId);
     expect(res).toEqual({ ok: true });
 
-    expect(
-      await prisma.matterContact.count({ where: { contactId: loserId } })
-    ).toBe(0);
+    expect(await prisma.matterContact.count({ where: { contactId: loserId } })).toBe(0);
     const m1Rows = await prisma.matterContact.findMany({
       where: { matterId: m1.matterId },
     });
@@ -683,39 +650,36 @@ describe("mergeContacts", () => {
     const res = await mergeContacts(loserId, survivorId);
     expect(res).toEqual({ ok: true });
 
-    expect(
-      (await prisma.matter.findUniqueOrThrow({ where: { id: m.matterId } }))
-        .clientId
-    ).toBe(survivorId);
+    expect((await prisma.matter.findUniqueOrThrow({ where: { id: m.matterId } })).clientId).toBe(
+      survivorId,
+    );
     expect(
       (
         await prisma.matterContact.findUniqueOrThrow({
           where: { id: repRow.id },
         })
-      ).representationContactId
+      ).representationContactId,
     ).toBe(survivorId);
-    expect(
-      (await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } }))
-        .contactId
-    ).toBe(survivorId);
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).contactId).toBe(
+      survivorId,
+    );
     expect(
       (
         await prisma.messengerThread.findUniqueOrThrow({
           where: { id: thread.id },
         })
-      ).contactId
+      ).contactId,
     ).toBe(survivorId);
     expect(
       (
         await prisma.calendarAttendee.findUniqueOrThrow({
           where: { id: attendee.id },
         })
-      ).contactId
+      ).contactId,
     ).toBe(survivorId);
-    expect(
-      (await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } }))
-        .clientId
-    ).toBe(survivorId);
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).clientId).toBe(
+      survivorId,
+    );
   });
 
   test("moves phones, dedupes formatting-insensitively, keeps the survivor's primary", async () => {
@@ -757,9 +721,7 @@ describe("mergeContacts", () => {
     const res = await mergeContacts(loserId, survivorId);
     expect(res).toEqual({ ok: true });
 
-    expect(
-      await prisma.contactPhone.count({ where: { contactId: loserId } })
-    ).toBe(0);
+    expect(await prisma.contactPhone.count({ where: { contactId: loserId } })).toBe(0);
     const phones = await prisma.contactPhone.findMany({
       where: { contactId: survivorId },
       orderBy: { order: "asc" },
@@ -891,9 +853,7 @@ describe("mergeContacts", () => {
     const res = await mergeContacts(loserId, survivorId);
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/too long/i);
-    expect(
-      await prisma.matterContact.count({ where: { contactId: loserId } })
-    ).toBe(1);
+    expect(await prisma.matterContact.count({ where: { contactId: loserId } })).toBe(1);
     const loser = await prisma.contact.findUniqueOrThrow({
       where: { id: loserId },
     });
@@ -957,10 +917,9 @@ describe("bulkSetContactType", () => {
       where: { id: { in: [a, b] } },
     });
     expect(rows.map((c) => c.type)).toEqual(["expert", "expert"]);
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: untouched } }))
-        .type
-    ).not.toBe("expert");
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: untouched } })).type).not.toBe(
+      "expert",
+    );
 
     const entries = await prisma.activityLog.findMany({
       where: { type: "bulk" },
@@ -983,10 +942,9 @@ describe("bulkSetContactType", () => {
     const res = await bulkSetContactType([contactId], "alien");
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/unknown/i);
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
-        .type
-    ).toBe("client");
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: contactId } })).type).toBe(
+      "client",
+    );
   });
 
   test("all-or-nothing: one missing id rejects the whole batch", async () => {
@@ -994,10 +952,9 @@ describe("bulkSetContactType", () => {
     const res = await bulkSetContactType([contactId, "gone"], "witness");
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/no longer exist/i);
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
-        .type
-    ).toBe("client");
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: contactId } })).type).toBe(
+      "client",
+    );
     expect(await prisma.activityLog.count()).toBe(0);
   });
 
@@ -1015,9 +972,7 @@ describe("bulkSetContactType", () => {
     const res = await bulkSetContactType([active, retired], "witness");
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/inactive or merged/i);
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: active } })).type
-    ).toBe("client");
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: active } })).type).toBe("client");
   });
 
   test("rejects empty and over-the-cap batches with clear errors", async () => {
@@ -1027,7 +982,7 @@ describe("bulkSetContactType", () => {
 
     const tooMany = await bulkSetContactType(
       Array.from({ length: BULK_CONTACT_LIMIT + 1 }, (_, i) => `id-${i}`),
-      "client"
+      "client",
     );
     expect(tooMany.ok).toBe(false);
     expect(tooMany.error).toMatch(new RegExp(`${BULK_CONTACT_LIMIT}`));
@@ -1037,10 +992,9 @@ describe("bulkSetContactType", () => {
     const { contactId } = await seedContact({ type: "client" });
     mockedRequirePermission.mockRejectedValue(new Error("NEXT_REDIRECT:/"));
     await expect(bulkSetContactType([contactId], "witness")).rejects.toThrow();
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
-        .type
-    ).toBe("client");
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: contactId } })).type).toBe(
+      "client",
+    );
   });
 });
 
@@ -1059,10 +1013,9 @@ describe("bulkDeactivateContacts", () => {
     expect(rows.map((c) => c.isActive)).toEqual([false, false]);
     // Soft delete only — the rows survive, nothing else is touched.
     expect(rows.map((c) => c.mergedIntoId)).toEqual([null, null]);
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: survivor } }))
-        .isActive
-    ).toBe(true);
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: survivor } })).isActive).toBe(
+      true,
+    );
 
     const entries = await prisma.activityLog.findMany({
       where: { type: "bulk" },
@@ -1077,20 +1030,18 @@ describe("bulkDeactivateContacts", () => {
     const res = await bulkDeactivateContacts(["gone", contactId]);
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/no longer exist/i);
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
-        .isActive
-    ).toBe(true);
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: contactId } })).isActive).toBe(
+      true,
+    );
   });
 
   test("bails before writing when the gate throws", async () => {
     const { contactId } = await seedContact();
     mockedRequirePermission.mockRejectedValue(new Error("NEXT_REDIRECT:/"));
     await expect(bulkDeactivateContacts([contactId])).rejects.toThrow();
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
-        .isActive
-    ).toBe(true);
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: contactId } })).isActive).toBe(
+      true,
+    );
   });
 });
 
@@ -1117,12 +1068,10 @@ describe("exportContactsCsv", () => {
     if (!res.ok) throw new Error(res.error);
 
     const lines = res.csv.trimEnd().split("\r\n");
-    expect(lines[0]).toBe(
-      "Name,Type,Organization,Email,Primary phone,Address,Active"
-    );
+    expect(lines[0]).toBe("Name,Type,Organization,Email,Primary phone,Address,Active");
     // Comma-bearing name and address are quote-wrapped.
     expect(lines[1]).toBe(
-      '"Whitfield, Dana",Opposing counsel,Acme LLC,dana@example.com,(303) 555-0101,"1 Main St, Denver, CO 80202",yes'
+      '"Whitfield, Dana",Opposing counsel,Acme LLC,dana@example.com,(303) 555-0101,"1 Main St, Denver, CO 80202",yes',
     );
     expect(res.filename).toMatch(/^contacts-export-\d{4}-\d{2}-\d{2}\.csv$/);
   });
@@ -1210,15 +1159,13 @@ describe("mergeContacts keeps the retired contact's flag, notes and party detail
       data: { name: "C", type: "other", conflictStatus: "clear" },
     });
     await mergeContacts(c.id, a.id); // override survives a clear loser
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: a.id } }))
-        .conflictStatus
-    ).toBe("override");
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: a.id } })).conflictStatus).toBe(
+      "override",
+    );
     await mergeContacts(a.id, b.id); // flagged survivor stays flagged
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: b.id } }))
-        .conflictStatus
-    ).toBe("flagged");
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: b.id } })).conflictStatus).toBe(
+      "flagged",
+    );
   });
 
   test("refuses (rather than truncating) when combined notes exceed the limit", async () => {
@@ -1232,10 +1179,9 @@ describe("mergeContacts keeps the retired contact's flag, notes and party detail
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/notes are too long/i);
     // Nothing was merged.
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: loser.id } }))
-        .isActive
-    ).toBe(true);
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: loser.id } })).isActive).toBe(
+      true,
+    );
   });
 
   test("duplicate party row: the loser's representation + notes fold into the survivor's row", async () => {
@@ -1290,23 +1236,20 @@ describe("mergeContacts keeps the retired contact's flag, notes and party detail
 
 describe("single-contact audit entries", () => {
   test("create, update, phone edit and delete each write an activity row", async () => {
-    await createContact(
-      contactFormInitialState,
-      contactForm({ name: "Audit Me" })
-    );
+    await createContact(contactFormInitialState, contactForm({ name: "Audit Me" }));
     const c = await prisma.contact.findFirstOrThrow({
       where: { name: "Audit Me" },
     });
     expect(
       await prisma.activityLog.count({
         where: { type: "contact", title: "Contact created — Audit Me" },
-      })
+      }),
     ).toBe(1);
 
     await updateContact(
       c.id,
       contactFormInitialState,
-      contactForm({ name: "Audit Me", email: "new@example.com" })
+      contactForm({ name: "Audit Me", email: "new@example.com" }),
     );
     const upd = await prisma.activityLog.findFirstOrThrow({
       where: { title: "Contact updated — Audit Me" },
@@ -1315,20 +1258,18 @@ describe("single-contact audit entries", () => {
     expect(upd.detail).toBe("Changed: email");
     expect(upd.userId).toBe(userId);
 
-    await updateContactPhones(c.id, [
-      { label: "", number: "(303) 555-0111", isPrimary: true },
-    ]);
+    await updateContactPhones(c.id, [{ label: "", number: "(303) 555-0111", isPrimary: true }]);
     expect(
       await prisma.activityLog.count({
         where: { title: "Phone numbers updated — Audit Me" },
-      })
+      }),
     ).toBe(1);
 
     await deleteContact(c.id);
     expect(
       await prisma.activityLog.count({
         where: { title: "Contact deactivated — Audit Me" },
-      })
+      }),
     ).toBe(1);
   });
 
@@ -1339,9 +1280,7 @@ describe("single-contact audit entries", () => {
       type: "client",
     });
     await updateContact(contactId, contactFormInitialState, contactForm());
-    expect(
-      await prisma.activityLog.count({ where: { type: "contact" } })
-    ).toBe(0);
+    expect(await prisma.activityLog.count({ where: { type: "contact" } })).toBe(0);
   });
 });
 
@@ -1361,7 +1300,7 @@ describe("createContact firmId + email validation", () => {
   test("rejects a malformed email with a field error and writes nothing", async () => {
     const res = await createContact(
       contactFormInitialState,
-      contactForm({ email: "dana at example" })
+      contactForm({ email: "dana at example" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.email).toEqual(["Enter a valid email address"]);
@@ -1378,7 +1317,7 @@ describe("createContact firmId + email validation", () => {
     const ok = await updateContact(
       contactId,
       contactFormInitialState,
-      contactForm({ email: "legacy-address", organization: "Acme" })
+      contactForm({ email: "legacy-address", organization: "Acme" }),
     );
     expect(ok.status).toBe("ok");
 
@@ -1386,14 +1325,13 @@ describe("createContact firmId + email validation", () => {
     const bad = await updateContact(
       contactId,
       contactFormInitialState,
-      contactForm({ email: "still bad@" })
+      contactForm({ email: "still bad@" }),
     );
     expect(bad.status).toBe("error");
     expect(bad.errors?.email).toBeTruthy();
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
-        .email
-    ).toBe("legacy-address");
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: contactId } })).email).toBe(
+      "legacy-address",
+    );
   });
 });
 
@@ -1427,8 +1365,7 @@ describe("mergeContacts opposite-sides guard", () => {
     expect(res.error).toMatch(/opposite sides of 1 matter/);
 
     expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: clientDupe } }))
-        .mergedIntoId
+      (await prisma.contact.findUniqueOrThrow({ where: { id: clientDupe } })).mergedIntoId,
     ).toBeNull();
     expect(await prisma.activityLog.count({ where: { type: "merge" } })).toBe(0);
   });
@@ -1446,8 +1383,7 @@ describe("mergeContacts opposite-sides guard", () => {
     });
     expect(res).toEqual({ ok: true });
     expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: clientDupe } }))
-        .mergedIntoId
+      (await prisma.contact.findUniqueOrThrow({ where: { id: clientDupe } })).mergedIntoId,
     ).toBe(defendant);
   });
 
@@ -1552,10 +1488,9 @@ describe("deleteContact / bulkDeactivateContacts guard", () => {
     const res = await deleteContact(contactId);
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/Paul Zimmerman.*client of 1 open matter/);
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
-        .isActive
-    ).toBe(true);
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: contactId } })).isActive).toBe(
+      true,
+    );
     expect(await prisma.activityLog.count()).toBe(0);
   });
 
@@ -1602,9 +1537,9 @@ describe("deleteContact / bulkDeactivateContacts guard", () => {
     const res = await deleteContact(contactId);
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/Olive Opposing.*a party on 1 open matter.*Parties tab/);
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } })).isActive
-    ).toBe(true);
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: contactId } })).isActive).toBe(
+      true,
+    );
   });
 
   test("counsel on an open matter blocks too", async () => {
@@ -1647,14 +1582,13 @@ describe("reactivateContact", () => {
     const res = await reactivateContact(contactId);
     expect(res).toEqual({ ok: true });
     expect(mockedRequirePermission).toHaveBeenLastCalledWith("contacts.delete");
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
-        .isActive
-    ).toBe(true);
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: contactId } })).isActive).toBe(
+      true,
+    );
     expect(
       await prisma.activityLog.count({
         where: { title: "Contact reactivated — Back Again", userId },
-      })
+      }),
     ).toBe(1);
   });
 
@@ -1666,10 +1600,7 @@ describe("reactivateContact", () => {
     const res = await reactivateContact(loser);
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/merged/i);
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: loser } }))
-        .isActive
-    ).toBe(false);
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: loser } })).isActive).toBe(false);
   });
 
   test("reports a missing contact; already-active is a quiet no-op", async () => {
@@ -1686,18 +1617,27 @@ describe("reactivateContact", () => {
     const { contactId } = await seedContact({ isActive: false });
     mockedRequirePermission.mockRejectedValue(new Error("NEXT_REDIRECT:/"));
     await expect(reactivateContact(contactId)).rejects.toThrow();
-    expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } }))
-        .isActive
-    ).toBe(false);
+    expect((await prisma.contact.findUniqueOrThrow({ where: { id: contactId } })).isActive).toBe(
+      false,
+    );
   });
 });
 
 describe("mergeContacts carries the portal identity", () => {
   async function twoMatters() {
     const { areaId, stageId } = await seedPracticeArea();
-    const m1 = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name: "Portal One" });
-    const m2 = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name: "Portal Two" });
+    const m1 = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+      name: "Portal One",
+    });
+    const m2 = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+      name: "Portal Two",
+    });
     return { m1: m1.matterId, m2: m2.matterId };
   }
 
@@ -1733,7 +1673,13 @@ describe("mergeContacts carries the portal identity", () => {
     });
     // m1: survivor revoked, loser live -> ends live. m2: loser only -> moves.
     await prisma.portalMatterAccess.create({
-      data: { identityId: sIdent.id, matterId: m1, invitedById: userId, revokedAt, revokedById: userId },
+      data: {
+        identityId: sIdent.id,
+        matterId: m1,
+        invitedById: userId,
+        revokedAt,
+        revokedById: userId,
+      },
     });
     await prisma.portalMatterAccess.create({
       data: { identityId: lIdent.id, matterId: m1, invitedById: userId },
@@ -1742,10 +1688,19 @@ describe("mergeContacts carries the portal identity", () => {
       data: { identityId: lIdent.id, matterId: m2, invitedById: userId },
     });
     await prisma.portalSession.create({
-      data: { identityId: lIdent.id, tokenHash: "sess-hash", expiresAt: new Date(Date.now() + 1e6) },
+      data: {
+        identityId: lIdent.id,
+        tokenHash: "sess-hash",
+        expiresAt: new Date(Date.now() + 1e6),
+      },
     });
     await prisma.portalLoginToken.create({
-      data: { identityId: lIdent.id, tokenHash: "tok-hash", purpose: "login", expiresAt: new Date(Date.now() + 1e6) },
+      data: {
+        identityId: lIdent.id,
+        tokenHash: "tok-hash",
+        purpose: "login",
+        expiresAt: new Date(Date.now() + 1e6),
+      },
     });
 
     expect(await mergeContacts(loserId, survivorId)).toEqual({ ok: true });
@@ -1853,7 +1808,12 @@ describe("mergeContacts carries the portal identity", () => {
       data: { matterId: m1, lastMessageAt: new Date(), lastFromClient: true },
     });
     const msg = await prisma.portalMessage.create({
-      data: { threadId: thread.id, body: "hello", authorKind: "client", authorIdentityId: lIdent.id },
+      data: {
+        threadId: thread.id,
+        body: "hello",
+        authorKind: "client",
+        authorIdentityId: lIdent.id,
+      },
     });
 
     expect(await mergeContacts(loserId, survivorId)).toEqual({ ok: true });
@@ -1913,7 +1873,7 @@ describe("mergeContacts portal fold: walls and audit", () => {
     });
     expect(await prisma.portalIdentity.findUnique({ where: { id: lIdent.id } })).not.toBeNull();
     expect(
-      (await prisma.contact.findUniqueOrThrow({ where: { id: loserId } })).mergedIntoId
+      (await prisma.contact.findUniqueOrThrow({ where: { id: loserId } })).mergedIntoId,
     ).toBeNull();
   });
 
@@ -1930,7 +1890,11 @@ describe("deactivating a contact ends its portal access", () => {
     const { contactId } = await seedContact({ name });
     const ident = await prisma.portalIdentity.create({ data: { contactId, email } });
     await prisma.portalSession.create({
-      data: { identityId: ident.id, tokenHash: `h-${email}`, expiresAt: new Date(Date.now() + 1e7) },
+      data: {
+        identityId: ident.id,
+        tokenHash: `h-${email}`,
+        expiresAt: new Date(Date.now() + 1e7),
+      },
     });
     return { contactId, identityId: ident.id };
   }
@@ -1957,7 +1921,8 @@ describe("deactivating a contact ends its portal access", () => {
     }
     expect(await prisma.portalSession.count()).toBe(1);
     expect(
-      (await prisma.portalIdentity.findUniqueOrThrow({ where: { id: keep.identityId } })).disabledAt
+      (await prisma.portalIdentity.findUniqueOrThrow({ where: { id: keep.identityId } }))
+        .disabledAt,
     ).toBeNull();
   });
 
@@ -1967,7 +1932,7 @@ describe("deactivating a contact ends its portal access", () => {
     await prisma.portalIdentity.update({ where: { id: a.identityId }, data: { disabledAt: when } });
     await deleteContact(a.contactId);
     expect(
-      (await prisma.portalIdentity.findUniqueOrThrow({ where: { id: a.identityId } })).disabledAt
+      (await prisma.portalIdentity.findUniqueOrThrow({ where: { id: a.identityId } })).disabledAt,
     ).toEqual(when);
   });
 });

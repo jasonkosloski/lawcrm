@@ -32,7 +32,9 @@ describe("matter required fields", () => {
   });
 
   it("missingRequired treats whitespace as empty", () => {
-    expect(missingRequired(["caseNumber", "venue"], { caseNumber: "  ", venue: "v1" })).toEqual(["caseNumber"]);
+    expect(missingRequired(["caseNumber", "venue"], { caseNumber: "  ", venue: "v1" })).toEqual([
+      "caseNumber",
+    ]);
   });
 
   it("missingRequired ignores unknown keys and flags absent values", () => {
@@ -58,9 +60,9 @@ describe("requiredKeysFor", () => {
   });
 
   it("tolerates a null or undefined list", () => {
-    expect(
-      requiredKeysFor({ requiredMatterFields: null, hasStatuteOfLimitations: true }),
-    ).toEqual([]);
+    expect(requiredKeysFor({ requiredMatterFields: null, hasStatuteOfLimitations: true })).toEqual(
+      [],
+    );
     expect(
       requiredKeysFor({ requiredMatterFields: undefined, hasStatuteOfLimitations: true }),
     ).toEqual([]);

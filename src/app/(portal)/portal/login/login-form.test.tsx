@@ -16,8 +16,8 @@ describe("portal login form", () => {
     fireEvent.click(screen.getByRole("button", { name: "Email me a link" }));
     await waitFor(() =>
       expect(
-        screen.getByText("If that email has portal access, a link is on its way.")
-      ).toBeTruthy()
+        screen.getByText("If that email has portal access, a link is on its way."),
+      ).toBeTruthy(),
     );
   });
 });

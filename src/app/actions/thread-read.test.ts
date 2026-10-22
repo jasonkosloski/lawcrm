@@ -31,10 +31,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
 import { writebackGmailMessages } from "@/lib/google/gmail-writeback";
 import { prisma } from "@/lib/prisma";
-import {
-  markEmailThreadRead,
-  markMessengerThreadRead,
-} from "@/app/actions/thread-read";
+import { markEmailThreadRead, markMessengerThreadRead } from "@/app/actions/thread-read";
 import {
   resetDb,
   seedFirm,
@@ -176,13 +173,8 @@ describe("markEmailThreadRead", () => {
     expect(thread.isRead).toBe(true);
 
     expect(mockedRevalidate).toHaveBeenCalledWith("/communication");
-    expect(mockedRevalidate).toHaveBeenCalledWith(
-      `/matters/${matterId}/communication`
-    );
-    expect(mockedRevalidate).toHaveBeenCalledWith(
-      "/intake/[id]/communication",
-      "page"
-    );
+    expect(mockedRevalidate).toHaveBeenCalledWith(`/matters/${matterId}/communication`);
+    expect(mockedRevalidate).toHaveBeenCalledWith("/intake/[id]/communication", "page");
   });
 
   test("already-read thread no-ops without revalidating", async () => {
@@ -254,9 +246,7 @@ describe("markEmailThreadRead", () => {
 
   test("throws (login redirect) before writing when there is no session", async () => {
     mockedGetUser.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
-    await expect(markEmailThreadRead(emailThreadId)).rejects.toThrow(
-      "NEXT_REDIRECT"
-    );
+    await expect(markEmailThreadRead(emailThreadId)).rejects.toThrow("NEXT_REDIRECT");
 
     const thread = await prisma.emailThread.findUniqueOrThrow({
       where: { id: emailThreadId },
@@ -292,13 +282,8 @@ describe("markMessengerThreadRead", () => {
     expect(thread.unreadCount).toBe(0);
 
     expect(mockedRevalidate).toHaveBeenCalledWith("/communication");
-    expect(mockedRevalidate).toHaveBeenCalledWith(
-      `/matters/${matterId}/communication`
-    );
-    expect(mockedRevalidate).toHaveBeenCalledWith(
-      "/intake/[id]/communication",
-      "page"
-    );
+    expect(mockedRevalidate).toHaveBeenCalledWith(`/matters/${matterId}/communication`);
+    expect(mockedRevalidate).toHaveBeenCalledWith("/intake/[id]/communication", "page");
   });
 
   test("already-read thread no-ops without revalidating", async () => {
@@ -336,9 +321,7 @@ describe("markMessengerThreadRead", () => {
   test("throws (login redirect) before writing when there is no session", async () => {
     const itemId = await seedItem();
     mockedGetUser.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
-    await expect(
-      markMessengerThreadRead(messengerThreadId)
-    ).rejects.toThrow("NEXT_REDIRECT");
+    await expect(markMessengerThreadRead(messengerThreadId)).rejects.toThrow("NEXT_REDIRECT");
 
     const item = await prisma.messengerItem.findUniqueOrThrow({
       where: { id: itemId },

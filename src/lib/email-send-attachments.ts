@@ -13,10 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { readStoredBytes } from "@/lib/email-attachments";
 import { contentTypeForFilename } from "@/app/api/documents/upload/upload-config";
-import {
-  MAX_SEND_ATTACHMENTS,
-  MAX_SEND_ATTACHMENT_BYTES,
-} from "@/lib/email-send-status";
+import { MAX_SEND_ATTACHMENTS, MAX_SEND_ATTACHMENT_BYTES } from "@/lib/email-send-status";
 import type { MimeAttachment } from "@/lib/google/mime";
 
 export type SendAttachment = MimeAttachment & {
@@ -28,15 +25,13 @@ export type SendAttachment = MimeAttachment & {
 };
 
 const TOO_LARGE_ERROR = `Attachments are too large to send (max ${Math.round(
-  MAX_SEND_ATTACHMENT_BYTES / (1024 * 1024)
+  MAX_SEND_ATTACHMENT_BYTES / (1024 * 1024),
 )} MB in total).`;
 
 export async function loadSendAttachments(
   scope: RecordScope,
-  documentIds: string[] | undefined
-): Promise<
-  { ok: true; attachments: SendAttachment[] } | { ok: false; error: string }
-> {
+  documentIds: string[] | undefined,
+): Promise<{ ok: true; attachments: SendAttachment[] } | { ok: false; error: string }> {
   const ids = [...new Set(documentIds ?? [])];
   if (ids.length === 0) return { ok: true, attachments: [] };
   if (ids.length > MAX_SEND_ATTACHMENTS) {

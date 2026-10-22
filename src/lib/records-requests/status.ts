@@ -43,13 +43,12 @@ function isTerminal(status: RecordsRequestStatus): boolean {
 
 /** True for any non-terminal status. Unknown values are not open. */
 export function isRecordsRequestOpen(status: string): boolean {
-  return (RECORDS_REQUEST_STATUSES as readonly string[]).includes(status) &&
-    !TERMINAL.includes(status);
+  return (
+    (RECORDS_REQUEST_STATUSES as readonly string[]).includes(status) && !TERMINAL.includes(status)
+  );
 }
 
-export type RecordsTransitionResult =
-  | { ok: true; reopen: boolean }
-  | { ok: false };
+export type RecordsTransitionResult = { ok: true; reopen: boolean } | { ok: false };
 
 export function checkRecordsTransition(
   from: RecordsRequestStatus,

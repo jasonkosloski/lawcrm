@@ -31,12 +31,7 @@ const mounts = vi.hoisted(() => ({ composerCloses: 0 }));
 
 // Anchor stand-in; preventDefault keeps the test document in place.
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    onClick,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, onClick, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a
       href={href}
       {...rest}
@@ -56,13 +51,7 @@ vi.mock("@/components/matters/notes/note-panel-body", () => ({
   ),
 }));
 vi.mock("@/components/calendar/new-event-composer", () => ({
-  NewEventComposer: ({
-    panelId,
-    onClose,
-  }: {
-    panelId: string;
-    onClose?: () => void;
-  }) => {
+  NewEventComposer: ({ panelId, onClose }: { panelId: string; onClose?: () => void }) => {
     // Mirrors the real composer: "saved" => close via the effect, which
     // depends on onClose.
     useEffect(() => {
@@ -80,9 +69,7 @@ import { CreateStackProvider, useCreateStack } from "./create-stack-provider";
 
 function Harness({ matterId }: { matterId: string | null }) {
   return (
-    <CreateStackProvider
-      context={{ matterId, color: "#000", label: "Matter", sublabel: null }}
-    >
+    <CreateStackProvider context={{ matterId, color: "#000", label: "Matter", sublabel: null }}>
       <Openers />
       <CreateDock />
     </CreateStackProvider>
@@ -100,14 +87,11 @@ function Openers() {
   );
 }
 
-const textareas = () =>
-  screen.queryAllByTestId("note") as HTMLTextAreaElement[];
+const textareas = () => screen.queryAllByTestId("note") as HTMLTextAreaElement[];
 const notVisible = (t: HTMLElement) => t.closest(".hidden") !== null;
 /** The visible (focused) body's textarea — waits for the lazy body. */
 const visibleNote = async (): Promise<HTMLTextAreaElement> => {
-  await waitFor(() =>
-    expect(textareas().some((t) => !notVisible(t))).toBe(true)
-  );
+  await waitFor(() => expect(textareas().some((t) => !notVisible(t))).toBe(true));
   return textareas().find((t) => !notVisible(t)) as HTMLTextAreaElement;
 };
 const panelCount = () => Number(screen.getByTestId("panel-count").textContent);
@@ -122,9 +106,7 @@ describe("CreateDock drafts", () => {
     await user.click(screen.getByRole("button", { name: /expand to modal/i }));
     expect((await visibleNote()).value).toBe("long note in progress");
 
-    await user.click(
-      screen.getAllByRole("button", { name: /collapse to sidebar/i })[0]
-    );
+    await user.click(screen.getAllByRole("button", { name: /collapse to sidebar/i })[0]);
     expect((await visibleNote()).value).toBe("long note in progress");
   });
 
@@ -139,7 +121,11 @@ describe("CreateDock drafts", () => {
     // is intact in the hidden one.
     await waitFor(() => expect(textareas()).toHaveLength(2));
     expect((await visibleNote()).value).toBe("");
-    expect(textareas().map((t) => t.value).sort()).toEqual(["", "note A"]);
+    expect(
+      textareas()
+        .map((t) => t.value)
+        .sort(),
+    ).toEqual(["", "note A"]);
   });
 
   test("switching to another panel type and back keeps the note draft", async () => {
@@ -161,12 +147,10 @@ describe("CreateDock drafts", () => {
       return <button onClick={() => open("event")}>open-event</button>;
     }
     render(
-      <CreateStackProvider
-        context={{ matterId: null, color: "#000", label: "", sublabel: null }}
-      >
+      <CreateStackProvider context={{ matterId: null, color: "#000", label: "", sublabel: null }}>
         <EventOpeners />
         <CreateDock />
-      </CreateStackProvider>
+      </CreateStackProvider>,
     );
     // The stub fires its close-on-ok effect on mount, like a saved
     // composer. Each open/close changes the stack (new `close`

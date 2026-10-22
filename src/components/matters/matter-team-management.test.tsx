@@ -18,10 +18,7 @@ vi.mock("@/app/actions/matters", () => ({
   removeMatterTeamMember: vi.fn(),
 }));
 
-import {
-  addMatterTeamMember,
-  removeMatterTeamMember,
-} from "@/app/actions/matters";
+import { addMatterTeamMember, removeMatterTeamMember } from "@/app/actions/matters";
 import { confirmAction } from "@/lib/feedback";
 import {
   MatterTeamManagement,
@@ -74,13 +71,7 @@ beforeEach(() => {
 });
 
 const renderCard = () =>
-  render(
-    <MatterTeamManagement
-      matterId="m1"
-      members={members}
-      userOptions={userOptions}
-    />
-  );
+  render(<MatterTeamManagement matterId="m1" members={members} userOptions={userOptions} />);
 
 describe("MatterTeamManagement", () => {
   test("the selects have accessible names (label click target)", () => {
@@ -118,13 +109,9 @@ describe("MatterTeamManagement", () => {
     renderCard();
     await user.selectOptions(screen.getByLabelText("Add member"), "u-new");
     await user.click(screen.getByRole("button", { name: /^add$/i }));
-    expect(
-      await screen.findByText(/couldn.t update the team/i)
-    ).toBeTruthy();
+    expect(await screen.findByText(/couldn.t update the team/i)).toBeTruthy();
     // The button is usable again for a retry.
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /^add$/i })).toBeEnabled()
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /^add$/i })).toBeEnabled());
   });
 
   test("removes a member after confirmation", async () => {
@@ -132,9 +119,7 @@ describe("MatterTeamManagement", () => {
     const user = userEvent.setup();
     renderCard();
     await user.click(screen.getByRole("button", { name: "Remove Pat Paralegal" }));
-    await waitFor(() =>
-      expect(mockedRemove).toHaveBeenCalledWith("m1", "mem-para")
-    );
+    await waitFor(() => expect(mockedRemove).toHaveBeenCalledWith("m1", "mem-para"));
   });
 
   test("a thrown remove error becomes a banner", async () => {
@@ -142,9 +127,7 @@ describe("MatterTeamManagement", () => {
     const user = userEvent.setup();
     renderCard();
     await user.click(screen.getByRole("button", { name: "Remove Pat Paralegal" }));
-    expect(
-      await screen.findByText(/couldn.t update the team/i)
-    ).toBeTruthy();
+    expect(await screen.findByText(/couldn.t update the team/i)).toBeTruthy();
   });
 
   test("the lead's Remove button is disabled (the server always refuses it)", () => {
@@ -152,9 +135,7 @@ describe("MatterTeamManagement", () => {
     const lead = screen.getByRole("button", { name: "Remove Dana Lead" });
     expect(lead).toBeDisabled();
     expect(lead).toHaveAttribute("title", "Promote another member to lead first");
-    expect(
-      screen.getByRole("button", { name: "Remove Pat Paralegal" })
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Remove Pat Paralegal" })).toBeEnabled();
   });
 
   test("the Add button only reads 'Adding…' during an add, not a removal", async () => {
@@ -162,7 +143,7 @@ describe("MatterTeamManagement", () => {
     mockedRemove.mockReturnValue(
       new Promise((resolve) => {
         finish = resolve;
-      })
+      }),
     );
     const user = userEvent.setup();
     renderCard();

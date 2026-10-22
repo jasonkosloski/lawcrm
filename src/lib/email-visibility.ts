@@ -25,15 +25,11 @@ import type { Prisma } from "@/generated/prisma/client";
 
 /** `where` fragment matching only threads in `userId`'s own mailbox.
  *  Spread it into (or AND it with) any EmailThread where clause. */
-export function visibleEmailThreadWhere(
-  userId: string
-): Prisma.EmailThreadWhereInput {
+export function visibleEmailThreadWhere(userId: string): Prisma.EmailThreadWhereInput {
   return { account: { userId } };
 }
 
 /** Same scope for queries that start from an EmailMessage. */
-export function visibleEmailMessageWhere(
-  userId: string
-): Prisma.EmailMessageWhereInput {
+export function visibleEmailMessageWhere(userId: string): Prisma.EmailMessageWhereInput {
   return { thread: visibleEmailThreadWhere(userId) };
 }

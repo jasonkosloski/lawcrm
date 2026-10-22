@@ -62,7 +62,7 @@ export function SortableHeader({
         "inline-flex items-center gap-1 text-xs font-medium transition-colors",
         align === "right" && "justify-end w-full",
         isActive ? "text-brand-700" : "text-ink-2 hover:text-brand-700",
-        pending && "opacity-70"
+        pending && "opacity-70",
       )}
     >
       {children}

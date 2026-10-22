@@ -236,7 +236,13 @@ describe("getRecentActivity — security audit rows stay off the dashboard", () 
     await prisma.activityLog.createMany({
       data: [
         { userId, type: "auth", title: "Signed in", timestamp: new Date(NOW.getTime() - 1000) },
-        { userId, matterId, type: "note", title: "Added a note", timestamp: new Date(NOW.getTime() - 2000) },
+        {
+          userId,
+          matterId,
+          type: "note",
+          title: "Added a note",
+          timestamp: new Date(NOW.getTime() - 2000),
+        },
       ],
     });
     const items = await getRecentActivity(DENVER);
@@ -246,8 +252,19 @@ describe("getRecentActivity — security audit rows stay off the dashboard", () 
   test("firm-settings audit rows (e.g. reorder clicks) are excluded too", async () => {
     await prisma.activityLog.createMany({
       data: [
-        { userId, type: "settings", title: "Moved stage up", timestamp: new Date(NOW.getTime() - 1000) },
-        { userId, matterId, type: "note", title: "Added a note", timestamp: new Date(NOW.getTime() - 2000) },
+        {
+          userId,
+          type: "settings",
+          title: "Moved stage up",
+          timestamp: new Date(NOW.getTime() - 1000),
+        },
+        {
+          userId,
+          matterId,
+          type: "note",
+          title: "Added a note",
+          timestamp: new Date(NOW.getTime() - 2000),
+        },
       ],
     });
     const items = await getRecentActivity(DENVER);
@@ -419,9 +436,7 @@ describe("getTodayAgenda - privacy and all-day events", () => {
       endTime: day("2026-06-16"),
     });
     const agenda = await getTodayAgenda(DENVER);
-    expect(agenda.map((a) => [a.title, a.time])).toEqual([
-      ["Trial day 1", "All day"],
-    ]);
+    expect(agenda.map((a) => [a.title, a.time])).toEqual([["Trial day 1", "All day"]]);
   });
 
   test("all-day events for the viewer's date (Tokyo), multi-day spans, listed first", async () => {

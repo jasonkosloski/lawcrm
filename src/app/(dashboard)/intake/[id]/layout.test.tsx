@@ -116,9 +116,10 @@ describe("LeadDetailLayout action buttons", () => {
   });
 
   test("both permissions show both buttons", async () => {
-    expect(
-      await renderLayout({ grants: ["intake.decline", "matters.create"] })
-    ).toEqual({ decline: 1, convert: 1 });
+    expect(await renderLayout({ grants: ["intake.decline", "matters.create"] })).toEqual({
+      decline: 1,
+      convert: 1,
+    });
   });
 
   test("a resolved lead shows neither, whatever the role", async () => {
@@ -126,7 +127,7 @@ describe("LeadDetailLayout action buttons", () => {
       await renderLayout({
         grants: ["intake.decline", "matters.create"],
         stage: "declined",
-      })
+      }),
     ).toEqual({ decline: 0, convert: 0 });
   });
 });

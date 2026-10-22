@@ -52,11 +52,7 @@ import {
 } from "@/lib/constants/flag-category";
 import { FLAG_NOT_FOUND } from "@/lib/flag-anchor";
 import { formatMediaTime } from "@/lib/media-time";
-import {
-  MAX_QUOTE_CHARS,
-  flagAnchorKind,
-  type FlagAnchorKind,
-} from "@/lib/flag-anchor";
+import { MAX_QUOTE_CHARS, flagAnchorKind, type FlagAnchorKind } from "@/lib/flag-anchor";
 import { buildFlagAnchor, type FlagAnchorText } from "./build-flag-anchor";
 import { Button } from "@/components/ui/button";
 
@@ -168,9 +164,7 @@ export function FlagComposer({
     ? flagAnchorKind(editing)
     : (createAnchor?.kind ?? "document");
 
-  const [fields, setFields] = useState<FlagAnchorText>(() =>
-    seedAnchorText(editing, createAnchor),
-  );
+  const [fields, setFields] = useState<FlagAnchorText>(() => seedAnchorText(editing, createAnchor));
   const [category, setCategory] = useState<FlagCategory>(
     editing && (FLAG_CATEGORIES as readonly string[]).includes(editing.category)
       ? (editing.category as FlagCategory)
@@ -223,9 +217,7 @@ export function FlagComposer({
       } catch (err) {
         unstable_rethrow(err); // redirects / not-found are not failures
         console.error("Flag save failed", err);
-        setError(
-          "Couldn't save the flag — check your connection and try again.",
-        );
+        setError("Couldn't save the flag — check your connection and try again.");
         return;
       }
       if (!res.ok) {
@@ -239,18 +231,11 @@ export function FlagComposer({
     });
   };
 
-  const timeField = (
-    key: "timeText" | "endText",
-    label: string,
-    placeholder: string,
-  ) => {
+  const timeField = (key: "timeText" | "endText", label: string, placeholder: string) => {
     const id = `${uid}-${key}`;
     return (
       <div className="flex flex-col gap-1">
-        <label
-          htmlFor={id}
-          className="text-2xs font-medium text-ink-3"
-        >
+        <label htmlFor={id} className="text-2xs font-medium text-ink-3">
           {label}
         </label>
         <div className="flex items-center gap-1">
@@ -271,9 +256,7 @@ export function FlagComposer({
               className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-line bg-white text-ink-3 transition-colors hover:border-brand-300 hover:text-brand-700"
             >
               <Clock className="h-3.5 w-3.5" aria-hidden />
-              <span className="sr-only">
-                Set {label.toLowerCase()} to current player time
-              </span>
+              <span className="sr-only">Set {label.toLowerCase()} to current player time</span>
             </button>
           )}
         </div>
@@ -310,10 +293,7 @@ export function FlagComposer({
 
       {showQuote && (
         <div className="mb-2 flex flex-col gap-1">
-          <label
-            htmlFor={`${uid}-quote`}
-            className="text-2xs font-medium text-ink-3"
-          >
+          <label htmlFor={`${uid}-quote`} className="text-2xs font-medium text-ink-3">
             Quoted text
           </label>
           <textarea
@@ -341,10 +321,7 @@ export function FlagComposer({
         )}
         {kind === "page" && (
           <div className="flex flex-col gap-1">
-            <label
-              htmlFor={`${uid}-page`}
-              className="text-2xs font-medium text-ink-3"
-            >
+            <label htmlFor={`${uid}-page`} className="text-2xs font-medium text-ink-3">
               {editing ? "Page" : "Page (blank = whole document)"}
             </label>
             <input
@@ -360,10 +337,7 @@ export function FlagComposer({
         )}
         {kind === "page" && (
           <div className="flex flex-col gap-1">
-            <label
-              htmlFor={`${uid}-end-page`}
-              className="text-2xs font-medium text-ink-3"
-            >
+            <label htmlFor={`${uid}-end-page`} className="text-2xs font-medium text-ink-3">
               To page (optional)
             </label>
             <input
@@ -378,10 +352,7 @@ export function FlagComposer({
           </div>
         )}
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor={`${uid}-category`}
-            className="text-2xs font-medium text-ink-3"
-          >
+          <label htmlFor={`${uid}-category`} className="text-2xs font-medium text-ink-3">
             Category
           </label>
           <NativeSelect
@@ -406,9 +377,7 @@ export function FlagComposer({
         rows={2}
         aria-label="Note"
         placeholder={
-          kind === "document"
-            ? "Why does this document matter?"
-            : "What happens at this moment?"
+          kind === "document" ? "Why does this document matter?" : "What happens at this moment?"
         }
         className="mt-2 w-full resize-y rounded-md border border-line bg-white p-2 text-xs text-ink placeholder:text-ink-4 focus:border-brand-300 focus:outline-none"
       />
@@ -418,21 +387,10 @@ export function FlagComposer({
         </div>
       )}
       <div className="mt-2 flex items-center gap-2">
-        <Button
-          size="xs"
-          type="button"
-          onClick={submit}
-          disabled={pending}
-        >
+        <Button size="xs" type="button" onClick={submit} disabled={pending}>
           {pending ? "Saving…" : editing ? "Save changes" : "Add flag"}
         </Button>
-        <Button
-          variant="outline"
-          size="xs"
-          type="button"
-          onClick={onClose}
-          disabled={pending}
-        >
+        <Button variant="outline" size="xs" type="button" onClick={onClose} disabled={pending}>
           Cancel
         </Button>
       </div>

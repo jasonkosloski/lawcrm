@@ -24,9 +24,7 @@ export type MatterNameToken = (typeof MATTER_NAME_TOKENS)[number];
 export const DEFAULT_MATTER_NAME_TEMPLATE =
   "{client_last}, {client_first} - {case_number} - {location}";
 
-export type Segment =
-  | { kind: "literal"; text: string }
-  | { kind: "token"; token: MatterNameToken };
+export type Segment = { kind: "literal"; text: string } | { kind: "token"; token: MatterNameToken };
 
 export type MatterNameInput = {
   clientName: string;
@@ -43,7 +41,7 @@ const TOKEN_SET = new Set<string>(MATTER_NAME_TOKENS);
 
 /** Split a template into alternating literal/token segments. */
 export function parseTemplate(
-  t: string
+  t: string,
 ): { ok: true; segments: Segment[] } | { ok: false; error: string } {
   const segments: Segment[] = [];
   let literal = "";
@@ -51,7 +49,7 @@ export function parseTemplate(
   for (let i = 0; i < t.length; i++) {
     const ch = t[i];
     if (ch === "}") {
-      return { ok: false, error: "Unbalanced braces: unexpected \"}\"." };
+      return { ok: false, error: 'Unbalanced braces: unexpected "}".' };
     }
     if (ch !== "{") {
       literal += ch;
@@ -59,11 +57,11 @@ export function parseTemplate(
     }
     const end = t.indexOf("}", i + 1);
     if (end === -1) {
-      return { ok: false, error: "Unbalanced braces: missing closing \"}\"." };
+      return { ok: false, error: 'Unbalanced braces: missing closing "}".' };
     }
     const name = t.slice(i + 1, end);
     if (name.includes("{")) {
-      return { ok: false, error: "Unbalanced braces: missing closing \"}\"." };
+      return { ok: false, error: 'Unbalanced braces: missing closing "}".' };
     }
     if (!TOKEN_SET.has(name)) {
       return { ok: false, error: `Unknown token "${name}".` };
@@ -140,7 +138,7 @@ export function renderMatterName(template: string, input: MatterNameInput): stri
 /** The practice area's own template when set, else the firm default. */
 export function effectiveTemplate(
   area: { matterNameTemplate: string | null } | null,
-  firmTemplate: string
+  firmTemplate: string,
 ): string {
   return area?.matterNameTemplate || firmTemplate;
 }

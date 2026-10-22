@@ -109,16 +109,17 @@ export function RecordPaymentDialog({
   // Wrapped useActionState: masks state left over from a previous
   // open, so a failed attempt's error banner doesn't reappear when
   // the dialog is reopened. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    BillingFormState,
-    FormData
-  >(action, billingInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<BillingFormState, FormData>(
+    action,
+    billingInitialState,
+    open,
+  );
 
   // Default to "pay in full" — matches the "Mark paid" muscle
   // memory while still letting the user step down for a partial.
   const defaultAmount = useMemo(
     () => (invoiceBalance > 0 ? invoiceBalance.toFixed(2) : "0.00"),
-    [invoiceBalance]
+    [invoiceBalance],
   );
 
   // Close on success. Deps must be the state OBJECT, not
@@ -143,9 +144,8 @@ export function RecordPaymentDialog({
         <DialogHeader>
           <DialogTitle>Record payment for {invoiceNumber}</DialogTitle>
           <DialogDescription>
-            Logs a payment received against this invoice. Recording the
-            full balance flips the status to paid; partial payments leave
-            it open with a reduced balance.
+            Logs a payment received against this invoice. Recording the full balance flips the
+            status to paid; partial payments leave it open with a reduced balance.
           </DialogDescription>
         </DialogHeader>
 
@@ -224,12 +224,9 @@ function RecordPaymentForm({
   const amountUnparseable = amount.trim() !== "" && parsedAmount === null;
   const validAmount = parsedAmount !== null && parsedAmount > 0;
   const overBalance = parsedAmount !== null && parsedAmount > invoiceBalance;
-  const overTrust =
-    source === "trust" && parsedAmount !== null && parsedAmount > trustBalance;
+  const overTrust = source === "trust" && parsedAmount !== null && parsedAmount > trustBalance;
   const balanceAfter =
-    parsedAmount !== null
-      ? Math.max(0, invoiceBalance - parsedAmount)
-      : invoiceBalance;
+    parsedAmount !== null ? Math.max(0, invoiceBalance - parsedAmount) : invoiceBalance;
   const willMarkPaid = validAmount && balanceAfter === 0;
 
   return (
@@ -237,23 +234,12 @@ function RecordPaymentForm({
       {/* Context strip — just the invoice side. No trust here. */}
       <div className="grid grid-cols-2 gap-2 text-2xs">
         <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
-          <div className="text-2xs font-medium text-ink-3">
-            Open balance
-          </div>
-          <div className="text-ink font-mono mt-0.5">
-            {formatMoney(invoiceBalance)}
-          </div>
+          <div className="text-2xs font-medium text-ink-3">Open balance</div>
+          <div className="text-ink font-mono mt-0.5">{formatMoney(invoiceBalance)}</div>
         </div>
         <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
-          <div className="text-2xs font-medium text-ink-3">
-            After this payment
-          </div>
-          <div
-            className={cn(
-              "text-ink font-mono mt-0.5",
-              willMarkPaid && "text-ok"
-            )}
-          >
+          <div className="text-2xs font-medium text-ink-3">After this payment</div>
+          <div className={cn("text-ink font-mono mt-0.5", willMarkPaid && "text-ok")}>
             {formatMoney(balanceAfter)}
             {willMarkPaid && " · paid"}
           </div>
@@ -261,10 +247,7 @@ function RecordPaymentForm({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label
-          htmlFor={`${ids}-amount`}
-          className="text-2xs font-medium text-ink-3"
-        >
+        <label htmlFor={`${ids}-amount`} className="text-2xs font-medium text-ink-3">
           Amount <span className="text-warn">*</span>
         </label>
         <input
@@ -275,11 +258,12 @@ function RecordPaymentForm({
           required
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          className={cn(inputClass(!!(errs.amount || amountUnparseable || overBalance || overTrust), "md"), "text-sm font-mono")}
+          className={cn(
+            inputClass(!!(errs.amount || amountUnparseable || overBalance || overTrust), "md"),
+            "text-sm font-mono",
+          )}
         />
-        {errs.amount && (
-          <span className="text-2xs text-warn">{errs.amount[0]}</span>
-        )}
+        {errs.amount && <span className="text-2xs text-warn">{errs.amount[0]}</span>}
         {!errs.amount && amountUnparseable && (
           <span className="text-2xs text-warn">Enter a valid amount.</span>
         )}
@@ -290,18 +274,14 @@ function RecordPaymentForm({
         )}
         {!errs.amount && !overBalance && overTrust && (
           <span className="text-2xs text-warn">
-            Exceeds the trust balance — drop the amount or pick a
-            different method.
+            Exceeds the trust balance — drop the amount or pick a different method.
           </span>
         )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor={`${ids}-source`}
-            className="text-2xs font-medium text-ink-3"
-          >
+          <label htmlFor={`${ids}-source`} className="text-2xs font-medium text-ink-3">
             Method <span className="text-warn">*</span>
           </label>
           <NativeSelect
@@ -321,10 +301,7 @@ function RecordPaymentForm({
           </NativeSelect>
         </div>
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor={`${ids}-date`}
-            className="text-2xs font-medium text-ink-3"
-          >
+          <label htmlFor={`${ids}-date`} className="text-2xs font-medium text-ink-3">
             Date
           </label>
           <input
@@ -339,10 +316,7 @@ function RecordPaymentForm({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label
-          htmlFor={`${ids}-reference`}
-          className="text-2xs font-medium text-ink-3"
-        >
+        <label htmlFor={`${ids}-reference`} className="text-2xs font-medium text-ink-3">
           Reference
         </label>
         <input
@@ -358,10 +332,7 @@ function RecordPaymentForm({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label
-          htmlFor={`${ids}-description`}
-          className="text-2xs font-medium text-ink-3"
-        >
+        <label htmlFor={`${ids}-description`} className="text-2xs font-medium text-ink-3">
           Memo
         </label>
         <textarea
@@ -385,7 +356,7 @@ function RecordPaymentForm({
             "flex items-start gap-2 px-3 py-2 rounded-md border text-xs",
             clientEmail
               ? "cursor-pointer border-line bg-paper-2/40 hover:bg-paper-2/60"
-              : "border-line bg-paper-2/30 cursor-not-allowed opacity-70"
+              : "border-line bg-paper-2/30 cursor-not-allowed opacity-70",
           )}
         >
           <input
@@ -401,9 +372,7 @@ function RecordPaymentForm({
             value={notifyClient && clientEmail ? "true" : ""}
           />
           <div>
-            <div className="text-ink font-medium">
-              Client needs an updated invoice
-            </div>
+            <div className="text-ink font-medium">Client needs an updated invoice</div>
             <div className="text-2xs text-ink-4 mt-0.5">
               {clientEmail
                 ? `Emails the refreshed invoice PDF to ${clientEmail}.`
@@ -419,10 +388,7 @@ function RecordPaymentForm({
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
-        <Button
-          type="submit"
-          disabled={isPending || !validAmount || overBalance || overTrust}
-        >
+        <Button type="submit" disabled={isPending || !validAmount || overBalance || overTrust}>
           {isPending
             ? "Recording…"
             : willMarkPaid

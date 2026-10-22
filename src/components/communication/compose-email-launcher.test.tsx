@@ -30,10 +30,7 @@ vi.mock("./compose-email", () => ({ ComposeEmailButton: () => null }));
 
 import { prisma } from "@/lib/prisma";
 import { currentUserHasPermission } from "@/lib/permission-check";
-import {
-  getFilingLeadOptions,
-  getFilingMatterOptions,
-} from "@/lib/queries/communication";
+import { getFilingLeadOptions, getFilingMatterOptions } from "@/lib/queries/communication";
 import { SENDABLE_EMAIL_STATUSES } from "@/lib/email-send-status";
 import { ComposeEmailButton } from "./compose-email";
 import { ComposeEmailLauncher } from "./compose-email-launcher";
@@ -80,7 +77,7 @@ describe("ComposeEmailLauncher", () => {
           provider: "gmail",
           syncStatus: { in: [...SENDABLE_EMAIL_STATUSES] },
         },
-      })
+      }),
     );
   });
 });

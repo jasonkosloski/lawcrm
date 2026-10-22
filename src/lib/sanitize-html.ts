@@ -71,7 +71,7 @@ const ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {
 /** Keep an integer list-numbering attribute, drop anything else. */
 function cleanListNumber(
   attribs: Record<string, string>,
-  name: "start" | "value"
+  name: "start" | "value",
 ): Record<string, string> {
   const next = { ...attribs };
   if (!(name in next)) return next;
@@ -180,15 +180,14 @@ const DOCUMENT_ALLOWED_TAGS = [
   "img",
 ];
 
-const DOCUMENT_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] =
-  {
-    ...ALLOWED_ATTRIBUTES,
-    td: ["colspan", "rowspan"],
-    th: ["colspan", "rowspan"],
-    col: ["span"],
-    colgroup: ["span"],
-    img: ["src", "alt"],
-  };
+const DOCUMENT_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {
+  ...ALLOWED_ATTRIBUTES,
+  td: ["colspan", "rowspan"],
+  th: ["colspan", "rowspan"],
+  col: ["span"],
+  colgroup: ["span"],
+  img: ["src", "alt"],
+};
 
 const DOCUMENT_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: DOCUMENT_ALLOWED_TAGS,
@@ -268,11 +267,7 @@ const EMAIL_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = {
 const EMAIL_ALLOWED_STYLES: sanitizeHtml.IOptions["allowedStyles"] = {
   "*": {
     color: [/^[a-zA-Z]+$/, /^#[0-9a-fA-F]{3,8}$/, /^rgba?\([\d\s,.%]+\)$/],
-    "background-color": [
-      /^[a-zA-Z]+$/,
-      /^#[0-9a-fA-F]{3,8}$/,
-      /^rgba?\([\d\s,.%]+\)$/,
-    ],
+    "background-color": [/^[a-zA-Z]+$/, /^#[0-9a-fA-F]{3,8}$/, /^rgba?\([\d\s,.%]+\)$/],
     "font-size": [/^\d+(\.\d+)?(px|pt|em|rem|%)$/],
     "font-family": [/^[\w\s'",-]+$/],
     "font-weight": [/^(bold|bolder|lighter|normal|\d{3})$/],

@@ -19,28 +19,16 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import {
-  Hourglass,
-  RefreshCw,
-  ShieldAlert,
-  ShieldCheck,
-  ShieldX,
-  } from "lucide-react";
+import { Hourglass, RefreshCw, ShieldAlert, ShieldCheck, ShieldX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import {
-  overrideLeadConflictCheck,
-  runLeadConflictCheck,
-} from "@/app/actions/conflict-check";
+import { overrideLeadConflictCheck, runLeadConflictCheck } from "@/app/actions/conflict-check";
 import type { ConflictMatch } from "@/lib/conflict-check";
 import { textareaClass, FormErrorBanner } from "@/components/ui/field";
 
 type Status = "pending" | "clear" | "warn" | "conflict" | "override";
 
-const STATUS_META: Record<
-  Status,
-  { label: string; tone: string; iconKey: string }
-> = {
+const STATUS_META: Record<Status, { label: string; tone: string; iconKey: string }> = {
   pending: {
     label: "Not run yet",
     tone: "bg-paper-2 text-ink-3 border-line",
@@ -159,7 +147,7 @@ export function ConflictCheckCard({
         <div
           className={cn(
             "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-medium",
-            meta.tone
+            meta.tone,
           )}
         >
           <Icon size={12} />
@@ -176,22 +164,13 @@ export function ConflictCheckCard({
       {(canRun || showOverrideButton) && (
         <div className="flex flex-wrap items-center gap-2">
           {canRun && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleRun}
-              disabled={pending}
-            >
+            <Button type="button" variant="outline" onClick={handleRun} disabled={pending}>
               <RefreshCw size={12} className={pending ? "animate-spin" : ""} />
               {pending ? "Running…" : checkedAt ? "Re-run" : "Run conflict check"}
             </Button>
           )}
           {showOverrideButton && !overrideOpen && (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setOverrideOpen(true)}
-            >
+            <Button type="button" variant="ghost" onClick={() => setOverrideOpen(true)}>
               Override…
             </Button>
           )}
@@ -203,14 +182,11 @@ export function ConflictCheckCard({
       {/* Override composer */}
       {overrideOpen && showOverrideButton && (
         <div className="flex flex-col gap-2 p-3 rounded-md border border-warn-border bg-warn-soft/30">
-          <div className="text-xs font-medium text-ink">
-            Override conflict flag
-          </div>
+          <div className="text-xs font-medium text-ink">Override conflict flag</div>
           <div className="text-2xs text-ink-3 leading-relaxed">
-            Required for ethics-audit defensibility. Capture the
-            justification — informed-consent waiver, former client
-            with no substantial relationship, etc. Logged with your
-            user id and timestamp.
+            Required for ethics-audit defensibility. Capture the justification — informed-consent
+            waiver, former client with no substantial relationship, etc. Logged with your user id
+            and timestamp.
           </div>
           <textarea
             value={overrideNotes}
@@ -254,9 +230,7 @@ export function ConflictCheckCard({
       {/* Matches list */}
       {matches.length > 0 ? (
         <div className="flex flex-col gap-1.5">
-          <div className="text-2xs font-medium text-ink-3">
-            Matches ({matches.length})
-          </div>
+          <div className="text-2xs font-medium text-ink-3">Matches ({matches.length})</div>
           <ul className="border border-line rounded-md overflow-hidden divide-y divide-line">
             {matches.map((m, idx) => (
               <li
@@ -270,18 +244,14 @@ export function ConflictCheckCard({
                         "inline-block text-2xs font-medium px-1.5 py-0.5 rounded-full",
                         m.severity === "conflict"
                           ? "bg-warn-soft text-warn border-warn-border"
-                          : "bg-paper-2 text-ink-3 border-line"
+                          : "bg-paper-2 text-ink-3 border-line",
                       )}
                     >
                       {m.severity === "conflict" ? "Conflict" : "Warn"}
                     </span>
-                    <span className="text-2xs text-ink-4 font-mono">
-                      via {m.matchedField}
-                    </span>
+                    <span className="text-2xs text-ink-4 font-mono">via {m.matchedField}</span>
                   </div>
-                  <div className="text-xs text-ink mt-0.5 leading-snug">
-                    {m.description}
-                  </div>
+                  <div className="text-xs text-ink mt-0.5 leading-snug">{m.description}</div>
                 </div>
                 <div className="flex flex-col items-end gap-0.5 shrink-0 text-2xs">
                   {m.contactId && (
@@ -307,8 +277,8 @@ export function ConflictCheckCard({
         </div>
       ) : matchesNotLive ? (
         <div className="text-2xs text-ink-4">
-          This lead is closed, so live matching is not re-run. The status above
-          is the result recorded when the check was last run
+          This lead is closed, so live matching is not re-run. The status above is the result
+          recorded when the check was last run
           {status === "override" ? " or overridden" : ""}.
         </div>
       ) : (

@@ -21,10 +21,7 @@ import {
   seedPracticeArea,
   seedUser,
 } from "@/test/integration-helpers";
-import {
-  getPortalConversation,
-  listPortalThreadsForViewer,
-} from "./portal-messages";
+import { getPortalConversation, listPortalThreadsForViewer } from "./portal-messages";
 
 const as = (id: string) => vi.mocked(getCurrentUserId).mockResolvedValue(id);
 
@@ -61,9 +58,7 @@ beforeEach(async () => {
   noKeyUser = (await seedUser({ firmId, name: "NoKey" })).userId;
   ({ areaId, stageId } = await seedPracticeArea());
   const { contactId } = await seedContact({ name: "Jane Client", email: "j@x.com" });
-  identityId = (
-    await prisma.portalIdentity.create({ data: { contactId, email: "j@x.com" } })
-  ).id;
+  identityId = (await prisma.portalIdentity.create({ data: { contactId, email: "j@x.com" } })).id;
 });
 
 const mkMatter = async (name: string, restricted = false) => {
@@ -83,7 +78,7 @@ const mkMatter = async (name: string, restricted = false) => {
 async function seedThread(
   matterId: string,
   msgs: { from: "client" | "staff"; body: string }[],
-  base = new Date("2026-10-01T12:00:00Z")
+  base = new Date("2026-10-01T12:00:00Z"),
 ) {
   const t = await prisma.portalThread.create({
     data: {
@@ -117,7 +112,9 @@ async function seedThread(
 describe("getPortalConversation", () => {
   test("null without portal.view_messages", async () => {
     const m = await mkMatter("M");
-    await prisma.matterTeamMember.create({ data: { matterId: m, userId: noKeyUser, role: "member" } });
+    await prisma.matterTeamMember.create({
+      data: { matterId: m, userId: noKeyUser, role: "member" },
+    });
     as(noKeyUser);
     expect(await getPortalConversation(m)).toBeNull();
   });
@@ -214,7 +211,14 @@ describe("listPortalThreadsForViewer", () => {
     const a = await mkMatter("Answered");
     const b = await mkMatter("Awaiting old");
     const c = await mkMatter("Awaiting new");
-    await seedThread(a, [{ from: "client", body: "q" }, { from: "staff", body: "a" }], new Date("2026-10-05T00:00:00Z"));
+    await seedThread(
+      a,
+      [
+        { from: "client", body: "q" },
+        { from: "staff", body: "a" },
+      ],
+      new Date("2026-10-05T00:00:00Z"),
+    );
     await seedThread(b, [{ from: "client", body: "q" }], new Date("2026-10-02T00:00:00Z"));
     await seedThread(c, [{ from: "client", body: "q" }], new Date("2026-10-03T00:00:00Z"));
     as(viewerA);

@@ -52,16 +52,10 @@ import {
   getUpcomingDeadlines,
 } from "@/lib/queries/dashboard";
 import { getContactById, listContacts } from "@/lib/queries/contacts";
-import {
-  getCalendarEventById,
-  getCalendarItems,
-} from "@/lib/queries/calendar";
+import { getCalendarEventById, getCalendarItems } from "@/lib/queries/calendar";
 import { getEditableEventIds } from "@/lib/queries/calendar-edit-flags";
 import { getMyDayTime, getMyWeekTime } from "@/lib/queries/time";
-import {
-  getCurrentTimerSession,
-  getTimerMatterOptions,
-} from "@/lib/queries/timer";
+import { getCurrentTimerSession, getTimerMatterOptions } from "@/lib/queries/timer";
 import { getArAgingReport, getPipelineReport } from "@/lib/queries/reports";
 import { redactConflictResultForViewer } from "@/lib/conflict-check-redact";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
@@ -135,10 +129,7 @@ describe("dashboard", () => {
     });
     const t = await getMyOpenTasks(TZ);
     expect(t.total).toBe(2);
-    expect(t.noDueDate.map((x) => x.title).sort()).toEqual([
-      "firm-wide",
-      "mine",
-    ]);
+    expect(t.noDueDate.map((x) => x.title).sort()).toEqual(["firm-wide", "mine"]);
   });
 
   test("deadlines card shows only accessible matters", async () => {
@@ -147,9 +138,7 @@ describe("dashboard", () => {
     });
     expect((await getUpcomingDeadlines(TZ)).items).toHaveLength(0);
     as(alice);
-    expect((await getUpcomingDeadlines(TZ)).items.map((d) => d.title)).toEqual([
-      "A due",
-    ]);
+    expect((await getUpcomingDeadlines(TZ)).items.map((d) => d.title)).toEqual(["A due"]);
   });
 
   test("recent activity hides rows on a hidden matter", async () => {
@@ -159,9 +148,7 @@ describe("dashboard", () => {
     await prisma.activityLog.create({
       data: { matterId: matterB, type: "note", title: "B note" },
     });
-    expect((await getRecentActivity(TZ)).map((a) => a.title)).toEqual([
-      "B note",
-    ]);
+    expect((await getRecentActivity(TZ)).map((a) => a.title)).toEqual(["B note"]);
   });
 
   test("agenda: an event on a hidden matter is a Busy block, even for an invitee", async () => {
@@ -206,9 +193,7 @@ describe("dashboard", () => {
         lastMessageAt: new Date(),
       },
     });
-    expect((await getFollowUpsDueToday(TZ)).map((f) => f.label)).toEqual([
-      "unfiled",
-    ]);
+    expect((await getFollowUpsDueToday(TZ)).map((f) => f.label)).toEqual(["unfiled"]);
   });
 });
 
@@ -230,17 +215,13 @@ describe("contacts", () => {
     expect(bobList.find((c) => c.id === contactId)!.matterCount).toBe(1);
     const bobDetail = (await getContactById(contactId))!;
     expect(bobDetail.asClientMatters).toHaveLength(0);
-    expect(bobDetail.asPartyMatters.map((p) => p.matterName)).toEqual([
-      "Matter B",
-    ]);
+    expect(bobDetail.asPartyMatters.map((p) => p.matterName)).toEqual(["Matter B"]);
     expect(bobDetail.matterCount).toBe(1);
 
     // alice: only A
     as(alice);
     const aliceDetail = (await getContactById(contactId))!;
-    expect(aliceDetail.asClientMatters.map((m) => m.name)).toEqual([
-      "Secret Matter A",
-    ]);
+    expect(aliceDetail.asClientMatters.map((m) => m.name)).toEqual(["Secret Matter A"]);
     expect(aliceDetail.asPartyMatters).toHaveLength(0);
   });
 
@@ -355,17 +336,11 @@ describe("calendar", () => {
       matterTeamUserIds: ["v"],
     };
     expect(canViewEventDetails({ ...base, matterAccessible: true })).toBe(true);
-    expect(canViewEventDetails({ ...base, matterAccessible: false })).toBe(
-      false
-    );
+    expect(canViewEventDetails({ ...base, matterAccessible: false })).toBe(false);
     // creator exemption (documented choice)
-    expect(
-      canViewEventDetails({ ...base, createdById: "v", matterAccessible: false })
-    ).toBe(true);
+    expect(canViewEventDetails({ ...base, createdById: "v", matterAccessible: false })).toBe(true);
     // no matter -> flag irrelevant
-    expect(
-      canViewEventDetails({ ...base, matterId: null, matterAccessible: false })
-    ).toBe(true);
+    expect(canViewEventDetails({ ...base, matterId: null, matterAccessible: false })).toBe(true);
   });
 });
 
@@ -386,9 +361,7 @@ describe("time", () => {
     expect(day.logged.map((e) => e.matterName)).toEqual(["Matter B"]);
     expect(day.totalHours).toBe(1);
     const week = await getMyWeekTime([today]);
-    expect(week.days[0]!.segments.map((s) => s.matterName)).toEqual([
-      "Matter B",
-    ]);
+    expect(week.days[0]!.segments.map((s) => s.matterName)).toEqual(["Matter B"]);
   });
 
   test("a running timer on a hidden matter identifies nothing; pickers list accessible matters only", async () => {
@@ -399,9 +372,7 @@ describe("time", () => {
     expect(t).not.toBeNull();
     expect(t!.matterId).toBeNull();
     expect(t!.matterName).toBeNull();
-    expect((await getTimerMatterOptions()).map((m) => m.name)).toEqual([
-      "Matter B",
-    ]);
+    expect((await getTimerMatterOptions()).map((m) => m.name)).toEqual(["Matter B"]);
   });
 });
 
@@ -448,7 +419,7 @@ describe("download routes answer 404 (not 403) for a hidden matter", () => {
       vi.mocked(getSession).mockResolvedValue({ user: { id: uid } } as never);
       return downloadDocument(
         new Request(`http://localhost/api/documents/${documentId}/download`) as never,
-        { params: Promise.resolve({ id: documentId }) }
+        { params: Promise.resolve({ id: documentId }) },
       );
     };
     expect((await call(bob)).status).toBe(404);
@@ -498,7 +469,7 @@ describe("download routes answer 404 (not 403) for a hidden matter", () => {
     const call = (id: string) =>
       downloadAttachment(
         new Request(`http://localhost/api/email-attachments/${id}/download`) as never,
-        { params: Promise.resolve({ id }) }
+        { params: Promise.resolve({ id }) },
       );
     expect((await call(hidden)).status).toBe(404);
     // accessible / unfiled get past the wall (mocked storage fails -> 502)

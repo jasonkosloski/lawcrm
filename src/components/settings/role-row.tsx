@@ -8,13 +8,7 @@
 "use client";
 
 import { useActionState, useEffect, useState, useTransition } from "react";
-import {
-  Lock,
-  MoreHorizontal,
-  Pencil,
-  Trash2,
-  Users,
-} from "lucide-react";
+import { Lock, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { confirmAction, notifyError } from "@/lib/feedback";
 import { formatDate } from "@/lib/format-date";
@@ -27,25 +21,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  deleteRoleAction,
-  updateRoleAction,
-} from "@/app/actions/roles";
-import {
-  roleInitialState,
-  type RoleFormState,
-} from "@/lib/role-form";
+import { deleteRoleAction, updateRoleAction } from "@/app/actions/roles";
+import { roleInitialState, type RoleFormState } from "@/lib/role-form";
 import type { FirmRoleRow } from "@/lib/queries/team";
-import { Field, FormErrorBanner, formErrorMessage, inputClass, textareaClass } from "@/components/ui/field";
+import {
+  Field,
+  FormErrorBanner,
+  formErrorMessage,
+  inputClass,
+  textareaClass,
+} from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 
-export function RoleRow({
-  role,
-  isAdmin,
-}: {
-  role: FirmRoleRow;
-  isAdmin: boolean;
-}) {
+export function RoleRow({ role, isAdmin }: { role: FirmRoleRow; isAdmin: boolean }) {
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
   // createdAt is an instant: format in the viewer's profile zone so
@@ -99,9 +87,7 @@ export function RoleRow({
           )}
         </div>
         {role.description && (
-          <div className="text-2xs text-ink-3 mt-0.5 max-w-xl">
-            {role.description}
-          </div>
+          <div className="text-2xs text-ink-3 mt-0.5 max-w-xl">{role.description}</div>
         )}
       </TableCell>
       <TableCell>
@@ -129,19 +115,12 @@ export function RoleRow({
               }
             />
             <DropdownMenuContent align="end" className="min-w-44">
-              <DropdownMenuItem
-                onClick={() => setEditing(true)}
-                disabled={role.isSystem}
-              >
+              <DropdownMenuItem onClick={() => setEditing(true)} disabled={role.isSystem}>
                 <Pencil />
                 Edit
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={onDelete}
-                disabled={role.isSystem}
-              >
+              <DropdownMenuItem variant="destructive" onClick={onDelete} disabled={role.isSystem}>
                 <Trash2 />
                 Delete
               </DropdownMenuItem>
@@ -153,18 +132,12 @@ export function RoleRow({
   );
 }
 
-function RoleEditForm({
-  role,
-  onDone,
-}: {
-  role: FirmRoleRow;
-  onDone: () => void;
-}) {
+function RoleEditForm({ role, onDone }: { role: FirmRoleRow; onDone: () => void }) {
   const action = updateRoleAction.bind(null, role.id);
-  const [state, formAction, isPending] = useActionState<
-    RoleFormState,
-    FormData
-  >(action, roleInitialState);
+  const [state, formAction, isPending] = useActionState<RoleFormState, FormData>(
+    action,
+    roleInitialState,
+  );
   const [, startTransition] = useTransition();
 
   useEffect(() => {
@@ -212,10 +185,7 @@ function RoleEditForm({
       </Field>
 
       <FormErrorBanner
-        message={formErrorMessage(
-          state,
-          "Couldn’t save — check the highlighted fields."
-        )}
+        message={formErrorMessage(state, "Couldn’t save — check the highlighted fields.")}
       />
 
       <div className="flex items-center justify-end gap-2">
@@ -226,11 +196,7 @@ function RoleEditForm({
         >
           Cancel
         </button>
-        <Button
-          size="sm"
-          type="submit"
-          disabled={isPending}
-        >
+        <Button size="sm" type="submit" disabled={isPending}>
           {isPending ? "Saving…" : "Save"}
         </Button>
       </div>

@@ -20,9 +20,7 @@ import { getStaffAuth } from "@/lib/staff-auth";
 import { LoginScreen } from "./login-screen";
 import { firstParam } from "@/lib/search-params";
 
-export default async function LoginPage({
-  searchParams,
-}: PageProps<"/login">) {
+export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const sp = await searchParams;
   const next = safeRedirectPath(firstParam(sp.next));
 

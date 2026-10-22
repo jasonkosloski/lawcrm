@@ -73,9 +73,7 @@ describe("intake queue", () => {
 
   test("Cmd+K lists only visible leads", async () => {
     const leadIds = async () =>
-      (await getPaletteData()).items
-        .filter((i) => i.kind === "lead")
-        .map((i) => i.id);
+      (await getPaletteData()).items.filter((i) => i.kind === "lead").map((i) => i.id);
     expect(await leadIds()).toEqual([open]);
     as(alice);
     expect((await leadIds()).sort()).toEqual([open, walled].sort());
@@ -92,9 +90,7 @@ describe("global search", () => {
       data: { leadId: walled, name: "Zephyr intake.pdf", category: "intake" },
     });
     const hits = async () =>
-      (await globalSearch("Zephyr")).groups.flatMap((g) =>
-        g.hits.map((h) => `${g.type}:${h.id}`)
-      );
+      (await globalSearch("Zephyr")).groups.flatMap((g) => g.hits.map((h) => `${g.type}:${h.id}`));
     const bobHits = await hits();
     expect(bobHits).toContain(`lead:${open}`);
     expect(bobHits).not.toContain(`lead:${walled}`);
@@ -138,17 +134,13 @@ describe("dashboard, calendar, activity", () => {
     const dayStart = new Date(start);
     dayStart.setUTCHours(0, 0, 0, 0);
     const dayEnd = new Date(dayStart.getTime() + 86400_000);
-    const item = (await getCalendarItems(dayStart, dayEnd, "UTC")).find(
-      (i) => i.id === event.id
-    );
+    const item = (await getCalendarItems(dayStart, dayEnd, "UTC")).find((i) => i.id === event.id);
     expect(item?.title).toBe("Busy");
     expect(JSON.stringify(item)).not.toContain("Zephyr");
     const agenda = JSON.stringify(await getTodayAgenda("UTC"));
     expect(agenda).not.toContain("Zephyr");
     as(alice);
-    const mine = (await getCalendarItems(dayStart, dayEnd, "UTC")).find(
-      (i) => i.id === event.id
-    );
+    const mine = (await getCalendarItems(dayStart, dayEnd, "UTC")).find((i) => i.id === event.id);
     expect(mine?.title).toBe("Zephyr consult");
   });
 
@@ -219,7 +211,9 @@ describe("email threads filed to a restricted lead", () => {
     expect(kpi.flaggedEmail).toBe(0);
     expect(JSON.stringify(await getFollowUpsDueToday("UTC"))).not.toContain("Zephyr");
     expect((await getSidebarData()).unreadEmailCount).toBe(0);
-    const bobHits = JSON.stringify((await globalSearch("Zephyr")).groups.filter((g) => g.type === "email"));
+    const bobHits = JSON.stringify(
+      (await globalSearch("Zephyr")).groups.filter((g) => g.type === "email"),
+    );
     expect(bobHits).not.toContain("walled thread");
 
     as(alice);
@@ -228,7 +222,9 @@ describe("email threads filed to a restricted lead", () => {
     expect(kpiA.flaggedEmail).toBe(1);
     expect(JSON.stringify(await getFollowUpsDueToday("UTC"))).toContain("Zephyr walled thread");
     expect((await getSidebarData()).unreadEmailCount).toBe(1);
-    const aliceHits = JSON.stringify((await globalSearch("Zephyr")).groups.filter((g) => g.type === "email"));
+    const aliceHits = JSON.stringify(
+      (await globalSearch("Zephyr")).groups.filter((g) => g.type === "email"),
+    );
     expect(aliceHits).toContain("walled thread");
   });
 });

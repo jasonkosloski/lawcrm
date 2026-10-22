@@ -19,10 +19,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { UserCheck, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type {
-  ContactOption,
-  RepresentationChoice,
-} from "@/lib/party-constants";
+import type { ContactOption, RepresentationChoice } from "@/lib/party-constants";
 import { inputClass } from "@/components/ui/field";
 
 const MAX_SUGGESTIONS = 6;
@@ -33,7 +30,7 @@ const MAX_SUGGESTIONS = 6;
 export function matchContacts(
   contacts: ContactOption[],
   query: string,
-  variant: "party" | "attorney"
+  variant: "party" | "attorney",
 ): ContactOption[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
@@ -41,11 +38,10 @@ export function matchContacts(
     (c) =>
       c.name.toLowerCase().includes(q) ||
       (c.organization?.toLowerCase().includes(q) ?? false) ||
-      (c.email?.toLowerCase().includes(q) ?? false)
+      (c.email?.toLowerCase().includes(q) ?? false),
   );
   if (variant === "attorney") {
-    const attorneyish = (c: ContactOption) =>
-      c.type === "opposing_counsel" || c.type === "other";
+    const attorneyish = (c: ContactOption) => c.type === "opposing_counsel" || c.type === "other";
     matches.sort((a, b) => Number(attorneyish(b)) - Number(attorneyish(a)));
   }
   return matches.slice(0, MAX_SUGGESTIONS);
@@ -83,7 +79,7 @@ export function ContactTypeahead({
 
   const suggestions = useMemo(
     () => matchContacts(contacts, query, variant),
-    [contacts, query, variant]
+    [contacts, query, variant],
   );
   const listVisible = open && suggestions.length > 0;
   const optionId = (i: number) => `${listId}-opt-${i}`;
@@ -151,9 +147,7 @@ export function ContactTypeahead({
         aria-expanded={listVisible}
         aria-controls={listVisible ? listId : undefined}
         aria-autocomplete="list"
-        aria-activedescendant={
-          listVisible && active >= 0 ? optionId(active) : undefined
-        }
+        aria-activedescendant={listVisible && active >= 0 ? optionId(active) : undefined}
         aria-invalid={invalid || undefined}
         autoComplete="off"
         autoFocus={autoFocus}
@@ -173,9 +167,7 @@ export function ContactTypeahead({
       />
       {listVisible && (
         <div className="rounded-md border border-line bg-white shadow-sm py-1">
-          <div className="px-2.5 py-1 text-2xs font-medium text-ink-3">
-            Matching contacts
-          </div>
+          <div className="px-2.5 py-1 text-2xs font-medium text-ink-3">Matching contacts</div>
           <div role="listbox" id={listId} aria-label="Matching contacts">
             {suggestions.map((c, i) => (
               <div
@@ -190,20 +182,16 @@ export function ContactTypeahead({
                 onClick={() => pick(c)}
                 className={cn(
                   "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left cursor-pointer",
-                  i === active ? "bg-brand-tint" : "hover:bg-brand-tint"
+                  i === active ? "bg-brand-tint" : "hover:bg-brand-tint",
                 )}
               >
                 <UserCheck size={12} className="text-ink-4 shrink-0" />
                 <span className="font-medium text-ink">{c.name}</span>
                 {c.organization && (
-                  <span className="text-2xs font-mono text-ink-4 truncate">
-                    · {c.organization}
-                  </span>
+                  <span className="text-2xs font-mono text-ink-4 truncate">· {c.organization}</span>
                 )}
                 {variant === "party" && c.city && (
-                  <span className="text-2xs font-mono text-ink-4 ml-auto shrink-0">
-                    {c.city}
-                  </span>
+                  <span className="text-2xs font-mono text-ink-4 ml-auto shrink-0">{c.city}</span>
                 )}
                 {variant === "attorney" && (
                   <span className="text-2xs font-mono text-ink-4 ml-auto shrink-0 capitalize">
@@ -245,9 +233,7 @@ export function SelectedContactChip({
       <UserCheck size={13} className="text-brand-700 shrink-0" />
       <span className="font-medium truncate flex-1">{contact.name}</span>
       {contact.organization && (
-        <span className="text-2xs font-mono text-ink-4 truncate">
-          {contact.organization}
-        </span>
+        <span className="text-2xs font-mono text-ink-4 truncate">{contact.organization}</span>
       )}
       <button
         type="button"
@@ -271,9 +257,7 @@ export function RepresentationToggle({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-2xs font-medium text-ink-3">
-        Represented
-      </span>
+      <span className="text-2xs font-medium text-ink-3">Represented</span>
       <div
         role="group"
         aria-label="Represented"
@@ -287,9 +271,7 @@ export function RepresentationToggle({
             onClick={() => onChange(v)}
             className={cn(
               "text-2xs font-medium px-2 py-0.5 rounded transition-colors",
-              value === v
-                ? "bg-paper-2 text-ink"
-                : "text-ink-3 hover:text-brand-700"
+              value === v ? "bg-paper-2 text-ink" : "text-ink-3 hover:text-brand-700",
             )}
           >
             {v === "unknown" ? "Unknown" : v === "yes" ? "Yes" : "Pro se"}
@@ -304,7 +286,7 @@ export function RepresentationToggle({
  *  their input, so a rejected submit never looks like it did nothing. */
 export function collectOtherErrors(
   errors: Record<string, string[]> | undefined,
-  inlineKeys: string[]
+  inlineKeys: string[],
 ): string[] {
   if (!errors) return [];
   return Object.entries(errors)

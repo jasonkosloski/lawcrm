@@ -17,7 +17,9 @@ const ALL: WorkspacePerms = {
   share: true,
   writable: true,
 };
-const NONE: WorkspacePerms = Object.fromEntries(Object.keys(ALL).map((k) => [k, false])) as WorkspacePerms;
+const NONE: WorkspacePerms = Object.fromEntries(
+  Object.keys(ALL).map((k) => [k, false]),
+) as WorkspacePerms;
 
 const doc = (over: Partial<DocTarget> = {}): DocTarget => ({
   kind: "doc",
@@ -68,7 +70,11 @@ describe("one document", () => {
   });
 
   test("view-only: open and download", () => {
-    expect(ids(entryActions([doc({ canDelete: false })], NONE))).toEqual(["open", "open-new-tab", "download"]);
+    expect(ids(entryActions([doc({ canDelete: false })], NONE))).toEqual([
+      "open",
+      "open-new-tab",
+      "download",
+    ]);
   });
 
   test("no download without a stored file", () => {
@@ -125,9 +131,9 @@ describe("one folder", () => {
   });
 
   test("a shared folder offers Stop sharing folder", () => {
-    expect(entryActions([folder({ clientShared: true })], ALL).find((a) => a.id === "unshare")?.label).toBe(
-      "Stop sharing folder"
-    );
+    expect(
+      entryActions([folder({ clientShared: true })], ALL).find((a) => a.id === "unshare")?.label,
+    ).toBe("Stop sharing folder");
   });
 });
 
@@ -148,17 +154,25 @@ describe("several rows", () => {
   });
 
   test("an attachment or protected folder in the selection blocks move", () => {
-    expect(ids(entryActions([doc(), doc({ id: "a", isAttachment: true })], ALL))).not.toContain("move");
+    expect(ids(entryActions([doc(), doc({ id: "a", isAttachment: true })], ALL))).not.toContain(
+      "move",
+    );
     expect(ids(entryActions([doc(), folder({ isProtected: true })], ALL))).not.toContain("move");
   });
 
   test("delete needs every row deletable", () => {
-    expect(ids(entryActions([doc(), doc({ id: "d2", canDelete: false })], ALL))).not.toContain("delete");
-    expect(ids(entryActions([doc(), folder()], { ...ALL, folderDelete: false }))).not.toContain("delete");
+    expect(ids(entryActions([doc(), doc({ id: "d2", canDelete: false })], ALL))).not.toContain(
+      "delete",
+    );
+    expect(ids(entryActions([doc(), folder()], { ...ALL, folderDelete: false }))).not.toContain(
+      "delete",
+    );
   });
 
   test("all shared → Stop sharing", () => {
-    expect(ids(entryActions([doc({ isShared: true }), folder({ clientShared: true })], ALL))).toContain("unshare");
+    expect(
+      ids(entryActions([doc({ isShared: true }), folder({ clientShared: true })], ALL)),
+    ).toContain("unshare");
   });
 });
 
@@ -172,7 +186,11 @@ describe("background", () => {
   });
 
   test("gated and capped", () => {
-    expect(ids(backgroundActions(ALL, { atDepthCap: true, hasEntries: false }))).toEqual(["upload"]);
-    expect(backgroundActions({ ...ALL, writable: false }, { atDepthCap: false, hasEntries: false })).toEqual([]);
+    expect(ids(backgroundActions(ALL, { atDepthCap: true, hasEntries: false }))).toEqual([
+      "upload",
+    ]);
+    expect(
+      backgroundActions({ ...ALL, writable: false }, { atDepthCap: false, hasEntries: false }),
+    ).toEqual([]);
   });
 });

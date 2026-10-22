@@ -41,9 +41,7 @@ const mockedStart = vi.mocked(startTimer);
 const mockedUpdate = vi.mocked(updateTimer);
 const mockedDiscard = vi.mocked(discardTimer);
 
-const running = (
-  over: Partial<ActiveTimerSession> = {}
-): ActiveTimerSession => ({
+const running = (over: Partial<ActiveTimerSession> = {}): ActiveTimerSession => ({
   id: "t1",
   matterId: null,
   matterName: null,
@@ -111,9 +109,7 @@ describe("TimerWidget — action failures never escape to an error boundary", ()
 
     await userEvent.click(screen.getByRole("button", { name: /timer/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      TIMER_NETWORK_ERROR
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(TIMER_NETWORK_ERROR);
     expect(screen.getByTitle("Start a timer")).toBeInTheDocument();
     expect(refresh).toHaveBeenCalled();
   });
@@ -125,9 +121,7 @@ describe("TimerWidget — action failures never escape to an error boundary", ()
     await userEvent.click(screen.getByLabelText("Discard timer"));
     await userEvent.click(screen.getByLabelText("Confirm discard"));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      TIMER_NETWORK_ERROR
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(TIMER_NETWORK_ERROR);
     // The clock is still running: the discard did not happen.
     expect(screen.getByLabelText("Stop timer")).toBeInTheDocument();
   });
@@ -135,17 +129,12 @@ describe("TimerWidget — action failures never escape to an error boundary", ()
   test("a failed matter re-point ({ ok: false }) rolls the picker back", async () => {
     mockedUpdate.mockResolvedValue({ ok: false, error: "Matter not found" });
     render(
-      <TimerWidget
-        session={running()}
-        matterOptions={[{ id: "m1", name: "Smith v. Jones" }]}
-      />
+      <TimerWidget session={running()} matterOptions={[{ id: "m1", name: "Smith v. Jones" }]} />,
     );
     await userEvent.click(screen.getByTitle("Edit timer matter / activity"));
     await userEvent.selectOptions(screen.getByLabelText("Timer matter"), "m1");
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Matter not found"
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("Matter not found");
     expect(screen.getByLabelText("Timer matter")).toHaveValue("");
     expect(refresh).toHaveBeenCalled();
   });
@@ -153,17 +142,12 @@ describe("TimerWidget — action failures never escape to an error boundary", ()
   test("a successful matter re-point calls updateTimer and shows no error", async () => {
     mockedUpdate.mockResolvedValue({ ok: true });
     render(
-      <TimerWidget
-        session={running()}
-        matterOptions={[{ id: "m1", name: "Smith v. Jones" }]}
-      />
+      <TimerWidget session={running()} matterOptions={[{ id: "m1", name: "Smith v. Jones" }]} />,
     );
     await userEvent.click(screen.getByTitle("Edit timer matter / activity"));
     await userEvent.selectOptions(screen.getByLabelText("Timer matter"), "m1");
 
-    await waitFor(() =>
-      expect(mockedUpdate).toHaveBeenCalledWith({ matterId: "m1" })
-    );
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledWith({ matterId: "m1" }));
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByLabelText("Timer matter")).toHaveValue("m1");
   });
@@ -174,9 +158,7 @@ describe("TimerWidget — activity draft", () => {
     mockedUpdate.mockResolvedValue({ ok: true });
     const opts = [{ id: "m1", name: "Smith v. Jones" }];
     const base = running();
-    const { rerender } = render(
-      <TimerWidget session={base} matterOptions={opts} />
-    );
+    const { rerender } = render(<TimerWidget session={base} matterOptions={opts} />);
     await userEvent.click(screen.getByTitle("Edit timer matter / activity"));
     await userEvent.type(screen.getByLabelText("Timer activity"), "Draft mo");
 
@@ -186,29 +168,22 @@ describe("TimerWidget — activity draft", () => {
       <TimerWidget
         session={{ ...base, matterId: "m1", matterName: "Smith v. Jones" }}
         matterOptions={opts}
-      />
+      />,
     );
     expect(screen.getByLabelText("Timer activity")).toHaveValue("Draft mo");
 
     await userEvent.type(screen.getByLabelText("Timer activity"), "tion");
-    expect(screen.getByLabelText("Timer activity")).toHaveValue(
-      "Draft motion"
-    );
+    expect(screen.getByLabelText("Timer activity")).toHaveValue("Draft motion");
   });
 
   test("blur persists the trimmed activity once", async () => {
     mockedUpdate.mockResolvedValue({ ok: true });
     render(<TimerWidget session={running()} matterOptions={[]} />);
     await userEvent.click(screen.getByTitle("Edit timer matter / activity"));
-    await userEvent.type(
-      screen.getByLabelText("Timer activity"),
-      "  Research "
-    );
+    await userEvent.type(screen.getByLabelText("Timer activity"), "  Research ");
     await userEvent.tab();
 
-    await waitFor(() =>
-      expect(mockedUpdate).toHaveBeenCalledWith({ activity: "Research" })
-    );
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledWith({ activity: "Research" }));
     expect(mockedUpdate).toHaveBeenCalledTimes(1);
   });
 
@@ -216,9 +191,7 @@ describe("TimerWidget — activity draft", () => {
     mockedUpdate.mockResolvedValue({ ok: true });
     const base = running();
     const opts = [{ id: "m1", name: "Smith v. Jones" }];
-    const { rerender } = render(
-      <TimerWidget session={base} matterOptions={opts} />
-    );
+    const { rerender } = render(<TimerWidget session={base} matterOptions={opts} />);
     await userEvent.click(screen.getByTitle("Edit timer matter / activity"));
     await userEvent.selectOptions(screen.getByLabelText("Timer matter"), "m1");
 
@@ -234,10 +207,7 @@ describe("TimerWidget — running clock, discard confirm, stop gate", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-15T12:00:00Z"));
     render(
-      <TimerWidget
-        session={running({ startedAt: "2026-04-15T11:59:00Z" })}
-        matterOptions={[]}
-      />
+      <TimerWidget session={running({ startedAt: "2026-04-15T11:59:00Z" })} matterOptions={[]} />,
     );
     expect(screen.getByText("0:01:00")).toBeInTheDocument();
     await act(async () => {
@@ -275,19 +245,10 @@ describe("TimerWidget — running clock, discard confirm, stop gate", () => {
   });
 
   test("Stop is disabled (with a reason) without time_entries.create; Discard still works", () => {
-    render(
-      <TimerWidget
-        session={running()}
-        matterOptions={[]}
-        canLogTime={false}
-      />
-    );
+    render(<TimerWidget session={running()} matterOptions={[]} canLogTime={false} />);
     const stop = screen.getByLabelText("Stop timer");
     expect(stop).toBeDisabled();
-    expect(stop).toHaveAttribute(
-      "title",
-      "You do not have permission to log time"
-    );
+    expect(stop).toHaveAttribute("title", "You do not have permission to log time");
     expect(screen.getByLabelText("Discard timer")).toBeEnabled();
   });
 });

@@ -8,7 +8,13 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/prisma";
-import { resetDb, seedFirm, seedMatter, seedPracticeArea, seedUser } from "@/test/integration-helpers";
+import {
+  resetDb,
+  seedFirm,
+  seedMatter,
+  seedPracticeArea,
+  seedUser,
+} from "@/test/integration-helpers";
 
 const migrationsDir = path.join(process.cwd(), "prisma", "migrations");
 const dir = readdirSync(migrationsDir).find((d) => d.endsWith("_document_invoice_id"));
@@ -54,7 +60,9 @@ describe("document invoiceId backfill", () => {
     const m2 = await matter();
     const inv = await invoice(m1, "2026-101");
     await invoice(m1, "2026-1010");
-    const inv1010 = await prisma.invoice.findUniqueOrThrow({ where: { invoiceNumber: "2026-1010" } });
+    const inv1010 = await prisma.invoice.findUniqueOrThrow({
+      where: { invoiceNumber: "2026-1010" },
+    });
     const f1 = await folder(m1, "invoices");
     const fPlain = await folder(m1, null);
     const f2 = await folder(m2, "invoices");

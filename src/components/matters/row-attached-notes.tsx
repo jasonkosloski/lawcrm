@@ -47,7 +47,7 @@ export function RowAttachedNotes({
         aria-expanded={expanded}
         className={cn(
           "self-start inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded-md border border-line bg-paper-2/60 text-ink-3",
-          "hover:border-brand-300 hover:bg-brand-soft hover:text-brand-700 transition-colors"
+          "hover:border-brand-300 hover:bg-brand-soft hover:text-brand-700 transition-colors",
         )}
       >
         {expanded ? (
@@ -72,13 +72,7 @@ export function RowAttachedNotes({
   );
 }
 
-function NoteItem({
-  note,
-  matterId,
-}: {
-  note: AttachedNotePreview;
-  matterId: string;
-}) {
+function NoteItem({ note, matterId }: { note: AttachedNotePreview; matterId: string }) {
   const tz = useUserTimeZone();
   const typeLabel = NOTE_TYPE_LABEL[note.type as NoteType] ?? note.type;
   return (
@@ -91,9 +85,7 @@ function NoteItem({
           {note.authorInitials}
         </span>
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <span className="text-2xs font-medium text-ink-2 truncate">
-            {note.authorName}
-          </span>
+          <span className="text-2xs font-medium text-ink-2 truncate">{note.authorName}</span>
           <span className="text-3xs font-mono text-ink-4">
             {formatDate(note.createdAt, "datetime", tz)}
           </span>
@@ -119,7 +111,7 @@ function NoteItem({
           "[&_h3]:text-2xs [&_h3]:font-semibold [&_h3]:mt-1 [&_h3]:mb-0",
           "[&_ul]:my-1 [&_ol]:my-1 [&_li]:text-2xs [&_ul]:pl-4 [&_ol]:pl-4 [&_ul]:list-disc [&_ol]:list-decimal",
           "[&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-2 [&_blockquote]:text-ink-3 [&_blockquote]:italic",
-          "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-3xs [&_code]:font-mono"
+          "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-3xs [&_code]:font-mono",
         )}
         // sanitizeUserHtml ran on insert; safe to render.
         dangerouslySetInnerHTML={{ __html: note.content }}

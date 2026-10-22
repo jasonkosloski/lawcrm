@@ -41,7 +41,7 @@ async function makeDraft(ageDays: number, keys: string[]) {
   });
   // updatedAt is @updatedAt; force it with raw SQL.
   await prisma.$executeRaw`UPDATE matter_drafts SET "updatedAt" = ${new Date(
-    Date.now() - ageDays * DAY
+    Date.now() - ageDays * DAY,
   )} WHERE id = ${draft.id}`;
   return draft;
 }

@@ -46,9 +46,7 @@ export function EmbeddedThreadList({
       <Card>
         <div className="p-8 text-center flex flex-col items-center gap-2">
           <div className="text-sm font-semibold text-ink">{emptyLabel}</div>
-          {emptyHint && (
-            <div className="text-xs text-ink-3 max-w-md">{emptyHint}</div>
-          )}
+          {emptyHint && <div className="text-xs text-ink-3 max-w-md">{emptyHint}</div>}
         </div>
       </Card>
     );
@@ -70,22 +68,20 @@ export function EmbeddedThreadList({
                   "block px-4 py-3 transition-colors border-l-2",
                   isSelected
                     ? "bg-paper-2 border-l-ink"
-                    : "hover:bg-paper-2/60 border-l-transparent"
+                    : "hover:bg-paper-2/60 border-l-transparent",
                 )}
               >
                 <div className="flex items-center gap-2 mb-1">
                   <span
                     className={cn(
                       "text-sm truncate flex-1 min-w-0",
-                      t.isRead ? "font-normal text-ink-2" : "font-semibold text-ink"
+                      t.isRead ? "font-normal text-ink-2" : "font-semibold text-ink",
                     )}
                   >
                     {t.fromDisplay}
                   </span>
                   {t.messageCount > 1 && (
-                    <span className="text-2xs font-mono text-ink-4 shrink-0">
-                      {t.messageCount}
-                    </span>
+                    <span className="text-2xs font-mono text-ink-4 shrink-0">{t.messageCount}</span>
                   )}
                   <span className="text-2xs font-mono text-ink-4 shrink-0">
                     {formatRelative(t.lastMessageAt, tz)}
@@ -94,16 +90,12 @@ export function EmbeddedThreadList({
                 <div
                   className={cn(
                     "text-xs leading-tight truncate mb-0.5",
-                    t.isRead ? "text-ink" : "text-ink font-medium"
+                    t.isRead ? "text-ink" : "text-ink font-medium",
                   )}
                 >
                   {t.subject}
                 </div>
-                {t.snippet && (
-                  <div className="text-2xs text-ink-4 truncate">
-                    {t.snippet}
-                  </div>
-                )}
+                {t.snippet && <div className="text-2xs text-ink-4 truncate">{t.snippet}</div>}
                 <div className="flex items-center gap-2 mt-1.5">
                   {showMatterChip && t.matter && (
                     <span className="inline-flex items-center gap-1 text-2xs text-ink-3">
@@ -116,37 +108,22 @@ export function EmbeddedThreadList({
                   )}
                   {showMatterChip && t.lead && !t.matter && (
                     <span className="inline-flex items-center gap-1 text-2xs text-ink-3">
-                      <span className="px-1 rounded border border-line text-ink-4">
-                        Lead
-                      </span>
+                      <span className="px-1 rounded border border-line text-ink-4">Lead</span>
                       {t.lead.name}
                     </span>
                   )}
                   {showMatterChip && !t.matter && !t.lead && (
-                    <span className="text-2xs font-medium text-warn">
-                      Unfiled
-                    </span>
+                    <span className="text-2xs font-medium text-warn">Unfiled</span>
                   )}
                   <span className="ml-auto flex items-center gap-1.5">
-                    {t.hasAttachments && (
-                      <Paperclip size={11} className="text-ink-4 shrink-0" />
-                    )}
+                    {t.hasAttachments && <Paperclip size={11} className="text-ink-4 shrink-0" />}
                     {/* Display-only star; the toggle lives in the
                         hover cluster. */}
-                    {t.isStarred && (
-                      <Star
-                        size={11}
-                        className="text-warn fill-warn shrink-0"
-                      />
-                    )}
+                    {t.isStarred && <Star size={11} className="text-warn fill-warn shrink-0" />}
                   </span>
                 </div>
               </Link>
-              <ThreadRowActions
-                threadId={t.id}
-                isStarred={t.isStarred}
-                isArchived={t.isArchived}
-              />
+              <ThreadRowActions threadId={t.id} isStarred={t.isStarred} isArchived={t.isArchived} />
             </li>
           );
         })}

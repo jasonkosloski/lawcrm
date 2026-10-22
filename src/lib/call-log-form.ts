@@ -100,14 +100,7 @@ export function parseCallOccurredAt(value: string, tz: string): Date | null {
   if (wall) return wall;
   const day = parseDateOnly(value);
   if (!day) return null;
-  return instantInTz(
-    day.getUTCFullYear(),
-    day.getUTCMonth() + 1,
-    day.getUTCDate(),
-    0,
-    0,
-    tz
-  );
+  return instantInTz(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), 0, 0, tz);
 }
 
 /** Stored seconds → the composer's whole-minutes input value. Empty
@@ -160,13 +153,6 @@ export const MISSED_CALL_STATUSES: ReadonlySet<string> = new Set([
 /** True when an item (or thread preview) represents a missed call:
  *  an inbound call whose status is in MISSED_CALL_STATUSES. Pure —
  *  safe to use from client components. */
-export function isMissedCall(
-  direction: string | null,
-  callStatus: string | null
-): boolean {
-  return (
-    direction === "inbound" &&
-    callStatus !== null &&
-    MISSED_CALL_STATUSES.has(callStatus)
-  );
+export function isMissedCall(direction: string | null, callStatus: string | null): boolean {
+  return direction === "inbound" && callStatus !== null && MISSED_CALL_STATUSES.has(callStatus);
 }

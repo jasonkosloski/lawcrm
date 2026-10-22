@@ -119,13 +119,10 @@ describe("page auth guards", () => {
     expect(pages.map(rel)).toContain("(dashboard)/intake/page.tsx");
   });
 
-  test.each(pages.map((f) => [rel(f), f] as const))(
-    "%s authenticates itself",
-    (name, file) => {
-      if (PAGE_ALLOWLIST.has(name)) return;
-      expect(checkGuarded(file), name).toBeNull();
-    }
-  );
+  test.each(pages.map((f) => [rel(f), f] as const))("%s authenticates itself", (name, file) => {
+    if (PAGE_ALLOWLIST.has(name)) return;
+    expect(checkGuarded(file), name).toBeNull();
+  });
 
   test("the allowlist only names pages that exist", () => {
     const names = new Set(pages.map(rel));
@@ -136,7 +133,7 @@ describe("page auth guards", () => {
     const body = stripNoise(
       `import { requireUser } from "@/lib/current-user";\n` +
         `// requireUser() mentioned only in a comment\n` +
-        `export default async function P() { return prisma.lead.findMany(); }`
+        `export default async function P() { return prisma.lead.findMany(); }`,
     );
     expect(GUARD_CALL.test(body)).toBe(false);
   });
@@ -145,14 +142,14 @@ describe("page auth guards", () => {
     expect(
       checkSource(
         `export default async function P() {\n` +
-          `  await requireUser();\n  const l = await getLeadById("x");\n}`
-      )
+          `  await requireUser();\n  const l = await getLeadById("x");\n}`,
+      ),
     ).toBeNull();
     expect(
       checkSource(
         `export default async function P() {\n` +
-          `  await requirePermission("leads.view");\n  await prisma.lead.findMany();\n}`
-      )
+          `  await requirePermission("leads.view");\n  await prisma.lead.findMany();\n}`,
+      ),
     ).toBeNull();
   });
 
@@ -160,8 +157,8 @@ describe("page auth guards", () => {
     expect(
       checkSource(
         `export default async function P() {\n` +
-          `  const lead = await getLeadById("x");\n  await requireUser();\n}`
-      )
+          `  const lead = await getLeadById("x");\n  await requireUser();\n}`,
+      ),
     ).toBe("first await is not a session guard");
   });
 
@@ -169,8 +166,8 @@ describe("page auth guards", () => {
     expect(
       checkSource(
         `export default async function P() {\n` +
-          `  const [uid, leads] = await Promise.all([getCurrentUserId(), listLeads()]);\n}`
-      )
+          `  const [uid, leads] = await Promise.all([getCurrentUserId(), listLeads()]);\n}`,
+      ),
     ).toBe("first await is not a session guard");
   });
 
@@ -178,26 +175,23 @@ describe("page auth guards", () => {
     expect(
       checkSource(
         `export default async function P({ params }) {\n` +
-          `  const { id } = await params;\n  await requireUser();\n}`
-      )
+          `  const { id } = await params;\n  await requireUser();\n}`,
+      ),
     ).toBe("first await is not a session guard");
   });
 
   test("checkSource rejects a page with no guard call at all", () => {
-    expect(
-      checkSource(`export default async function P() { await listLeads(); }`)
-    ).toBe("no session guard call");
+    expect(checkSource(`export default async function P() { await listLeads(); }`)).toBe(
+      "no session guard call",
+    );
   });
 });
 
 describe("layout auth guards", () => {
-  test.each(layouts.map((f) => [rel(f), f] as const))(
-    "%s authenticates itself",
-    (name, file) => {
-      if (LAYOUT_ALLOWLIST.has(name)) return;
-      expect(checkGuarded(file), name).toBeNull();
-    }
-  );
+  test.each(layouts.map((f) => [rel(f), f] as const))("%s authenticates itself", (name, file) => {
+    if (LAYOUT_ALLOWLIST.has(name)) return;
+    expect(checkGuarded(file), name).toBeNull();
+  });
 });
 
 // ── Matter-access guard (ethical walls) ────────────────────────────────
@@ -225,7 +219,7 @@ function checkMatterAccessSource(src: string): string | null {
 }
 
 const matterDetailFiles = [...pages, ...layouts].filter((f) =>
-  rel(f).startsWith(MATTER_DETAIL_PREFIX)
+  rel(f).startsWith(MATTER_DETAIL_PREFIX),
 );
 
 describe("matter detail access guards", () => {
@@ -242,7 +236,7 @@ describe("matter detail access guards", () => {
     "%s asserts matter access",
     (name, file) => {
       expect(checkMatterAccessSource(readFileSync(file, "utf8")), name).toBeNull();
-    }
+    },
   );
 
   test("accepts a page that asserts after the session guard (self-check)", () => {
@@ -250,8 +244,8 @@ describe("matter detail access guards", () => {
       checkMatterAccessSource(
         `export default async function P({ params }) {\n` +
           `  await requireUser();\n  const { id } = await params;\n` +
-          `  await assertMatterAccess(id);\n}`
-      )
+          `  await assertMatterAccess(id);\n}`,
+      ),
     ).toBeNull();
   });
 
@@ -259,8 +253,8 @@ describe("matter detail access guards", () => {
     expect(
       checkMatterAccessSource(
         `export default async function P({ params }) {\n` +
-          `  await requireUser();\n  const { id } = await params;\n  await getMatterById(id);\n}`
-      )
+          `  await requireUser();\n  const { id } = await params;\n  await getMatterById(id);\n}`,
+      ),
     ).toBe("no assertMatterAccess call");
   });
 
@@ -268,8 +262,8 @@ describe("matter detail access guards", () => {
     expect(
       checkMatterAccessSource(
         `export default async function P() {\n` +
-          `  // await assertMatterAccess(id);\n  await requireUser();\n}`
-      )
+          `  // await assertMatterAccess(id);\n  await requireUser();\n}`,
+      ),
     ).toBe("no assertMatterAccess call");
   });
 
@@ -277,8 +271,8 @@ describe("matter detail access guards", () => {
     expect(
       checkMatterAccessSource(
         `export default async function P({ params }) {\n` +
-          `  await assertMatterAccess(id);\n  await requireUser();\n}`
-      )
+          `  await assertMatterAccess(id);\n  await requireUser();\n}`,
+      ),
     ).toBe("assertMatterAccess runs before the session guard");
   });
 });
@@ -310,9 +304,7 @@ function checkLeadAccessSource(src: string): string | null {
   return null;
 }
 
-const leadDetailFiles = [...pages, ...layouts].filter((f) =>
-  rel(f).startsWith(LEAD_DETAIL_PREFIX)
-);
+const leadDetailFiles = [...pages, ...layouts].filter((f) => rel(f).startsWith(LEAD_DETAIL_PREFIX));
 
 describe("lead detail access guards", () => {
   test("the scan finds the lead detail pages and layout", () => {
@@ -328,7 +320,7 @@ describe("lead detail access guards", () => {
     "%s asserts lead access",
     (name, file) => {
       expect(checkLeadAccessSource(readFileSync(file, "utf8")), name).toBeNull();
-    }
+    },
   );
 
   test("accepts an assert after the guard, before prisma (self-check)", () => {
@@ -336,8 +328,8 @@ describe("lead detail access guards", () => {
       checkLeadAccessSource(
         `export default async function P({ params }) {\n` +
           `  await requireUser();\n  const { id } = await params;\n` +
-          `  await assertLeadAccess(id);\n  await prisma.lead.findUnique({});\n}`
-      )
+          `  await assertLeadAccess(id);\n  await prisma.lead.findUnique({});\n}`,
+      ),
     ).toBeNull();
   });
 
@@ -346,16 +338,14 @@ describe("lead detail access guards", () => {
       checkLeadAccessSource(
         `export default async function P({ params }) {\n` +
           `  await requireUser();\n  await prisma.lead.findUnique({});\n` +
-          `  await assertLeadAccess(id);\n}`
-      )
+          `  await assertLeadAccess(id);\n}`,
+      ),
     ).toBe("reads prisma before assertLeadAccess");
   });
 
   test("rejects a page with no lead assertion (self-check)", () => {
     expect(
-      checkLeadAccessSource(
-        `export default async function P() {\n  await requireUser();\n}`
-      )
+      checkLeadAccessSource(`export default async function P() {\n  await requireUser();\n}`),
     ).toBe("no assertLeadAccess call");
   });
 });

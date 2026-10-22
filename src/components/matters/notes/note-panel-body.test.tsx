@@ -12,19 +12,15 @@ import userEvent from "@testing-library/user-event";
 
 import type { NoteFormState } from "@/lib/note-constants";
 
-const createNote = vi.fn<
-  (matterId: string, prev: NoteFormState, fd: FormData) => Promise<NoteFormState>
->();
+const createNote =
+  vi.fn<(matterId: string, prev: NoteFormState, fd: FormData) => Promise<NoteFormState>>();
 vi.mock("@/app/actions/notes", () => ({
   createNote: (matterId: string, prev: NoteFormState, fd: FormData) =>
     createNote(matterId, prev, fd),
 }));
 vi.mock("./note-editor", () => ({
   NoteEditor: ({ onChange }: { onChange: (html: string) => void }) => (
-    <textarea
-      data-testid="editor"
-      onChange={(e) => onChange(e.target.value)}
-    />
+    <textarea data-testid="editor" onChange={(e) => onChange(e.target.value)} />
   ),
 }));
 vi.mock("@/components/matters/captures/capture-stack", () => ({
@@ -50,22 +46,13 @@ describe("NotePanelBody", () => {
     await user.type(screen.getByTestId("editor"), "draft");
     await user.click(screen.getByRole("button", { name: "Strategy" }));
     await user.click(screen.getByRole("button", { name: /^pin$/i }));
-    expect(screen.getByRole("button", { name: /^pin$/i })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.getByRole("button", { name: /^pin$/i })).toHaveAttribute("aria-pressed", "true");
 
     await user.click(screen.getByRole("button", { name: /^clear$/i }));
 
     expect((screen.getByTestId("editor") as HTMLTextAreaElement).value).toBe("");
-    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
-    expect(screen.getByRole("button", { name: /^pin$/i })).toHaveAttribute(
-      "aria-pressed",
-      "false"
-    );
+    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^pin$/i })).toHaveAttribute("aria-pressed", "false");
   });
 
   test("the Pin toggle can be withheld", () => {
@@ -90,12 +77,8 @@ describe("NotePanelBody", () => {
     render(<NotePanelBody panelId="p1" matterId="m1" />);
     await user.type(screen.getByTestId("editor"), "keep me");
     await user.click(screen.getByRole("button", { name: /save note/i }));
-    expect(
-      await screen.findByText("You don't have permission to pin notes.")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("You don't have permission to pin notes.")).toBeInTheDocument();
     expect(close).not.toHaveBeenCalled();
-    expect((screen.getByTestId("editor") as HTMLTextAreaElement).value).toBe(
-      "keep me"
-    );
+    expect((screen.getByTestId("editor") as HTMLTextAreaElement).value).toBe("keep me");
   });
 });

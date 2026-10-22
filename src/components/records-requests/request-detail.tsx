@@ -48,15 +48,9 @@ import {
   checkRecordsTransition,
   isRecordsRequestOpen,
 } from "@/lib/records-requests/status";
-import {
-  RECORDS_ROLE_INFO,
-  type RecordsDocRole,
-} from "@/lib/records-requests/roles";
+import { RECORDS_ROLE_INFO, type RecordsDocRole } from "@/lib/records-requests/roles";
 import { dueBadge } from "@/lib/records-requests/due-badge";
-import {
-  dueCountdownLabel,
-  sentAgoLabel,
-} from "@/lib/records-requests/date-labels";
+import { dueCountdownLabel, sentAgoLabel } from "@/lib/records-requests/date-labels";
 import type { RecordsRequestDetail } from "@/lib/queries/records-requests";
 import { cn } from "@/lib/utils";
 import type { TypeOption, UserOption } from "./new-request-composer";
@@ -85,11 +79,9 @@ const key = (d: Date | null) => (d ? dateOnlyKey(d) : "");
  *  hold its result. */
 function useFormRun(
   run: (fd: FormData) => Promise<RecordsRequestFormState>,
-  opts: { resetOnOk?: boolean } = {}
+  opts: { resetOnOk?: boolean } = {},
 ) {
-  const [state, setState] = useState<RecordsRequestFormState>(
-    recordsRequestInitialState
-  );
+  const [state, setState] = useState<RecordsRequestFormState>(recordsRequestInitialState);
   const [pending, start] = useTransition();
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -107,34 +99,19 @@ function useFormRun(
 function FormMessage({ state }: { state: RecordsRequestFormState }) {
   const msg = state.errors?._form?.[0];
   if (msg) return <div className="text-2xs text-warn">{msg}</div>;
-  if (state.status === "ok")
-    return <div className="text-2xs text-ok">Saved.</div>;
+  if (state.status === "ok") return <div className="text-2xs text-ok">Saved.</div>;
   return null;
 }
 
-function FieldError({
-  state,
-  name,
-}: {
-  state: RecordsRequestFormState;
-  name: string;
-}) {
+function FieldError({ state, name }: { state: RecordsRequestFormState; name: string }) {
   const m = state.errors?.[name]?.[0];
   return m ? <span className="text-2xs text-warn">{m}</span> : null;
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-2 border-t border-line pt-3">
-      <h3 className="text-2xs font-medium text-ink-3">
-        {title}
-      </h3>
+      <h3 className="text-2xs font-medium text-ink-3">{title}</h3>
       {children}
     </section>
   );
@@ -199,18 +176,14 @@ export function RequestDetail({
   };
 
   const sent = useFormRun((fd) =>
-    markRecordsRequestSent(detail.id, recordsRequestInitialState, fd)
+    markRecordsRequestSent(detail.id, recordsRequestInitialState, fd),
   );
-  const edit = useFormRun((fd) =>
-    updateRecordsRequest(detail.id, recordsRequestInitialState, fd)
-  );
+  const edit = useFormRun((fd) => updateRecordsRequest(detail.id, recordsRequestInitialState, fd));
   const followUp = useFormRun(
     (fd) => logRecordsFollowUp(detail.id, recordsRequestInitialState, fd),
-    { resetOnOk: true }
+    { resetOnOk: true },
   );
-  const fee = useFormRun((fd) =>
-    saveRecordsFee(detail.id, recordsRequestInitialState, fd)
-  );
+  const fee = useFormRun((fd) => saveRecordsFee(detail.id, recordsRequestInitialState, fd));
 
   const [typeChoice, setTypeChoice] = useState(detail.typeId ?? ADHOC);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -280,10 +253,7 @@ export function RequestDetail({
         {rows.map((d) => (
           <li key={d.id} className="flex items-center gap-2 text-xs">
             <FileText size={12} className="text-ink-4 shrink-0" />
-            <a
-              href={d.href}
-              className="text-ink hover:text-brand-700 hover:underline truncate"
-            >
+            <a href={d.href} className="text-ink hover:text-brand-700 hover:underline truncate">
               {d.name}
             </a>
             {canEdit && (
@@ -306,14 +276,10 @@ export function RequestDetail({
     const sel = picked[role];
     return (
       <>
-        {err && linkableDocuments.length === 0 && (
-          <div className="text-2xs text-warn">{err}</div>
-        )}
+        {err && linkableDocuments.length === 0 && <div className="text-2xs text-warn">{err}</div>}
         {canEdit && linkableDocuments.length > 0 && (
           <details className="rounded-md border border-line px-2.5 py-1.5">
-            <summary className="text-xs text-ink-3 cursor-pointer">
-              Link existing documents
-            </summary>
+            <summary className="text-xs text-ink-3 cursor-pointer">Link existing documents</summary>
             <ul className="mt-2 flex flex-col gap-1 max-h-40 overflow-y-auto">
               {linkableDocuments.map((d) => (
                 <li key={d.id}>
@@ -358,9 +324,7 @@ export function RequestDetail({
     <div className="flex flex-col items-end gap-1">
       {confirmDelete ? (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-ink-2">
-            Delete this request and its follow-ups?
-          </span>
+          <span className="text-xs text-ink-2">Delete this request and its follow-ups?</span>
           <button
             type="button"
             disabled={deletePending}
@@ -408,16 +372,14 @@ export function RequestDetail({
               {detail.custodianName} · {detail.typeName}
             </p>
           </div>
-          <Badge variant="neutral">
-            {RECORDS_STATUS_LABEL[detail.status]}
-          </Badge>
+          <Badge variant="neutral">{RECORDS_STATUS_LABEL[detail.status]}</Badge>
           {badge && (
             <span
               className={cn(
                 "inline-block text-2xs font-medium px-2 py-0.5 rounded-full shrink-0",
                 badge.overdue
                   ? "bg-warn-soft text-warn border-warn-border"
-                  : "bg-paper-2 text-ink-3 border-line"
+                  : "bg-paper-2 text-ink-3 border-line",
               )}
             >
               {badge.text}
@@ -581,7 +543,9 @@ export function RequestDetail({
             {canEdit && isOpen && !isDraft && (
               <form onSubmit={followUp.submit} className="flex flex-wrap items-end gap-2">
                 <div className="flex flex-col gap-1 flex-1 min-w-48">
-                  <label htmlFor="rr-fu-note" className={labelClass}>Note</label>
+                  <label htmlFor="rr-fu-note" className={labelClass}>
+                    Note
+                  </label>
                   <input
                     id="rr-fu-note"
                     name="note"
@@ -602,17 +566,15 @@ export function RequestDetail({
         <div className="flex flex-col gap-4 min-w-0">
           <Section title="Details">
             {canEdit ? (
-              <form
-                key={detail.updatedAt}
-                onSubmit={edit.submit}
-                className="flex flex-col gap-3"
-              >
+              <form key={detail.updatedAt} onSubmit={edit.submit} className="flex flex-col gap-3">
                 <input type="hidden" name="custodianContactId" value={detail.custodianContactId} />
                 <input type="hidden" name="expectedUpdatedAt" value={detail.updatedAt} />
                 <input type="hidden" name="typeId" value={typeChoice === ADHOC ? "" : typeChoice} />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1">
-                    <label htmlFor="rr-e-type" className={labelClass}>Type</label>
+                    <label htmlFor="rr-e-type" className={labelClass}>
+                      Type
+                    </label>
                     <NativeSelect
                       id="rr-e-type"
                       value={typeChoice}
@@ -620,17 +582,23 @@ export function RequestDetail({
                       className="w-full"
                     >
                       {types.map((t) => (
-                        <NativeSelectOption key={t.id} value={t.id}>{t.name}</NativeSelectOption>
+                        <NativeSelectOption key={t.id} value={t.id}>
+                          {t.name}
+                        </NativeSelectOption>
                       ))}
                       {detail.typeId && !types.some((t) => t.id === detail.typeId) && (
-                        <NativeSelectOption value={detail.typeId}>{detail.typeName}</NativeSelectOption>
+                        <NativeSelectOption value={detail.typeId}>
+                          {detail.typeName}
+                        </NativeSelectOption>
                       )}
                       <NativeSelectOption value={ADHOC}>Ad hoc (other)</NativeSelectOption>
                     </NativeSelect>
                   </div>
                   {typeChoice === ADHOC && (
                     <div className="flex flex-col gap-1">
-                      <label htmlFor="rr-e-adhoc" className={labelClass}>Type of records</label>
+                      <label htmlFor="rr-e-adhoc" className={labelClass}>
+                        Type of records
+                      </label>
                       <input
                         id="rr-e-adhoc"
                         name="adHocTypeName"
@@ -643,7 +611,9 @@ export function RequestDetail({
                     </div>
                   )}
                   <div className="flex flex-col gap-1 sm:col-span-2">
-                    <label htmlFor="rr-e-subject" className={labelClass}>Subject</label>
+                    <label htmlFor="rr-e-subject" className={labelClass}>
+                      Subject
+                    </label>
                     <input
                       id="rr-e-subject"
                       name="subject"
@@ -656,7 +626,9 @@ export function RequestDetail({
                     <FieldError state={edit.state} name="subject" />
                   </div>
                   <div className="flex flex-col gap-1 sm:col-span-2">
-                    <label htmlFor="rr-e-desc" className={labelClass}>Details</label>
+                    <label htmlFor="rr-e-desc" className={labelClass}>
+                      Details
+                    </label>
                     <textarea
                       id="rr-e-desc"
                       name="description"
@@ -676,7 +648,9 @@ export function RequestDetail({
                     ] as const
                   ).map(([name, text, value]) => (
                     <div key={name} className="flex flex-col gap-1">
-                      <label htmlFor={`rr-e-${name}`} className={labelClass}>{text}</label>
+                      <label htmlFor={`rr-e-${name}`} className={labelClass}>
+                        {text}
+                      </label>
                       <input
                         id={`rr-e-${name}`}
                         name={name}
@@ -688,7 +662,9 @@ export function RequestDetail({
                     </div>
                   ))}
                   <div className="flex flex-col gap-1">
-                    <label htmlFor="rr-e-owner" className={labelClass}>Owner</label>
+                    <label htmlFor="rr-e-owner" className={labelClass}>
+                      Owner
+                    </label>
                     <NativeSelect
                       id="rr-e-owner"
                       name="ownerId"
@@ -697,10 +673,14 @@ export function RequestDetail({
                     >
                       <NativeSelectOption value="">Unassigned</NativeSelectOption>
                       {users.map((u) => (
-                        <NativeSelectOption key={u.id} value={u.id}>{u.name}</NativeSelectOption>
+                        <NativeSelectOption key={u.id} value={u.id}>
+                          {u.name}
+                        </NativeSelectOption>
                       ))}
                       {detail.ownerId && !users.some((u) => u.id === detail.ownerId) && (
-                        <NativeSelectOption value={detail.ownerId}>{detail.ownerName}</NativeSelectOption>
+                        <NativeSelectOption value={detail.ownerId}>
+                          {detail.ownerName}
+                        </NativeSelectOption>
                       )}
                     </NativeSelect>
                     <FieldError state={edit.state} name="ownerId" />
@@ -723,7 +703,11 @@ export function RequestDetail({
 
           {can.fee && writable && (
             <Section title="Fee">
-              <form key={`fee-${detail.updatedAt}`} onSubmit={fee.submit} className="flex flex-wrap items-end gap-3">
+              <form
+                key={`fee-${detail.updatedAt}`}
+                onSubmit={fee.submit}
+                className="flex flex-wrap items-end gap-3"
+              >
                 {(
                   [
                     ["feeEstimate", "Fee estimate", detail.feeEstimate, "text"],
@@ -732,7 +716,9 @@ export function RequestDetail({
                   ] as const
                 ).map(([name, text, value, type]) => (
                   <div key={name} className="flex flex-col gap-1">
-                    <label htmlFor={`rr-f-${name}`} className={labelClass}>{text}</label>
+                    <label htmlFor={`rr-f-${name}`} className={labelClass}>
+                      {text}
+                    </label>
                     <input
                       id={`rr-f-${name}`}
                       name={name}
@@ -805,9 +791,7 @@ function DateSummary({
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1" data-testid="sent-tile">
-          <span className="text-2xs font-medium text-ink-3">
-            Sent
-          </span>
+          <span className="text-2xs font-medium text-ink-3">Sent</span>
           {sentAt ? (
             <>
               <span className="text-xl font-semibold text-ink">
@@ -831,19 +815,17 @@ function DateSummary({
         <div
           className={cn(
             "flex flex-col gap-1 rounded-md -m-2 p-2",
-            countdown?.overdue && "bg-warn-soft"
+            countdown?.overdue && "bg-warn-soft",
           )}
           data-testid="due-tile"
         >
-          <span className="text-2xs font-medium text-ink-3">
-            Response due
-          </span>
+          <span className="text-2xs font-medium text-ink-3">Response due</span>
           {responseDueDate ? (
             <>
               <span
                 className={cn(
                   "text-xl font-semibold",
-                  countdown?.overdue ? "text-warn" : "text-ink"
+                  countdown?.overdue ? "text-warn" : "text-ink",
                 )}
               >
                 {formatDateOnly(responseDueDate, "medium")}
@@ -852,15 +834,13 @@ function DateSummary({
                 <span
                   className={cn(
                     "text-xs font-medium",
-                    countdown.overdue ? "text-warn" : "text-ink-2"
+                    countdown.overdue ? "text-warn" : "text-ink-2",
                   )}
                 >
                   {countdown.text}
                 </span>
               )}
-              <span className="text-2xs text-ink-4">
-                {deadlineRule ?? "Set manually"}
-              </span>
+              <span className="text-2xs text-ink-4">{deadlineRule ?? "Set manually"}</span>
             </>
           ) : (
             <>

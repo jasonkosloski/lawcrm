@@ -32,10 +32,7 @@ import {
   type GlobalSearchResult,
   type SearchHitType,
 } from "@/lib/queries/search";
-import {
-  SNIPPET_MARK_END,
-  SNIPPET_MARK_START,
-} from "@/components/search/snippet";
+import { SNIPPET_MARK_END, SNIPPET_MARK_START } from "@/components/search/snippet";
 import {
   resetDb,
   seedContact,
@@ -109,7 +106,7 @@ describe("makeSnippet", () => {
 
   test("marks the match case-insensitively, preserving original casing", () => {
     expect(makeSnippet("The Ambulance report", "ambulance")).toBe(
-      `The ${marked("Ambulance")} report`
+      `The ${marked("Ambulance")} report`,
     );
   });
 
@@ -124,9 +121,7 @@ describe("makeSnippet", () => {
   });
 
   test("no leading ellipsis when the match sits near the start", () => {
-    expect(makeSnippet("ambulance up front", "ambulance")).toBe(
-      `${marked("ambulance")} up front`
-    );
+    expect(makeSnippet("ambulance up front", "ambulance")).toBe(`${marked("ambulance")} up front`);
   });
 });
 
@@ -235,8 +230,7 @@ describe("globalSearch — notes", () => {
       data: {
         matterId,
         authorId: viewerId,
-        content:
-          "<p>Client called about the <strong>ambulance</strong> report from APD.</p>",
+        content: "<p>Client called about the <strong>ambulance</strong> report from APD.</p>",
       },
       select: { id: true },
     });
@@ -336,7 +330,7 @@ describe("globalSearch — transcripts", () => {
     scope: { matterId: string } | { leadId: string },
     docName: string,
     segs: Array<{ text: string; start: number; speaker?: string }>,
-    status = "completed"
+    status = "completed",
   ) {
     const doc = await prisma.document.create({
       data: { ...scope, name: docName },
@@ -384,9 +378,7 @@ describe("globalSearch — transcripts", () => {
   });
 
   test("uses the mapped speaker display name", async () => {
-    await seedTranscript({ matterId }, "a.mp4", [
-      { text: "the Quokkaword", start: 2 },
-    ]);
+    await seedTranscript({ matterId }, "a.mp4", [{ text: "the Quokkaword", start: 2 }]);
     const g = groupOf(await globalSearch("quokkaword"), "transcript")!;
     expect(g.hits[0].speakerName).toBe("Officer Diaz");
   });
@@ -396,7 +388,7 @@ describe("globalSearch — transcripts", () => {
       { matterId },
       "p.mp4",
       [{ text: "Zorblat partial", start: 1 }],
-      "processing"
+      "processing",
     );
     expect(groupOf(await globalSearch("zorblat"), "transcript")).toBeUndefined();
   });
@@ -435,7 +427,7 @@ describe("globalSearch — transcripts", () => {
       Array.from({ length: SEARCH_GROUP_TAKE + 3 }, (_, i) => ({
         text: `Gribblefrap number ${i}`,
         start: i * 10,
-      }))
+      })),
     );
     const g = groupOf(await globalSearch("gribblefrap"), "transcript")!;
     expect(g.hits).toHaveLength(SEARCH_GROUP_TAKE);
@@ -584,7 +576,7 @@ describe("globalSearch — email", () => {
   test("matches a message body; snippet quotes the stripped body", async () => {
     const t = await seedThread(
       "RE: Discovery",
-      "Please find the <b>ambulance</b> run report attached."
+      "Please find the <b>ambulance</b> run report attached.",
     );
     const res = await globalSearch("ambulance");
     const g = groupOf(res, "email")!;
@@ -879,14 +871,12 @@ describe("globalSearch — matter lookup fields", () => {
         isArchived: true,
       },
     });
-    for (const needle of [
-      "2026-CV-00481",
-      "denver district",
-      "zenith",
-      "brightwater",
-    ]) {
+    for (const needle of ["2026-CV-00481", "denver district", "zenith", "brightwater"]) {
       const g = groupOf(await globalSearch(needle), "matter")!;
-      expect(g.hits.map((h) => h.id), needle).toEqual([otherMatterId]);
+      expect(
+        g.hits.map((h) => h.id),
+        needle,
+      ).toEqual([otherMatterId]);
       expect(g.hits[0].snippet, needle).toContain(SNIPPET_MARK_START);
     }
   });
@@ -954,10 +944,7 @@ describe("globalSearch — markup-only matches do not crowd out real hits", () =
         select: { id: true },
       });
     await mk("Newsletter", '<p style="text-align:center">Hello there</p>');
-    const real = await mk(
-      "Records",
-      "<p>Transferred to the medical center downtown</p>"
-    );
+    const real = await mk("Records", "<p>Transferred to the medical center downtown</p>");
     const g = groupOf(await globalSearch("center"), "email")!;
     expect(g.hits.map((h) => h.id)).toEqual([real.id]);
     expect(g.total).toBe(1);
@@ -990,14 +977,14 @@ describe("globalSearch — markup-only matches do not crowd out real hits", () =
     const real = await mk(
       "Records",
       "<p>Transferred to the medical center downtown</p>",
-      new Date("2025-01-01T00:00:00Z")
+      new Date("2025-01-01T00:00:00Z"),
     );
     // More than SEARCH_GROUP_TAKE (and more than one 50-thread page).
     for (let i = 0; i < 55; i++) {
       await mk(
         `Newsletter ${i}`,
         '<p style="text-align:center">Hello there</p>',
-        new Date(Date.UTC(2026, 0, 1, 0, i))
+        new Date(Date.UTC(2026, 0, 1, 0, i)),
       );
     }
     const g = groupOf(await globalSearch("center"), "email")!;
@@ -1072,9 +1059,7 @@ describe("records requests search", () => {
       href: `/intake/${leadId}/records/${id}`,
       context: "Intake \u00b7 Test Lead",
     });
-    expect(
-      collectKeys(g).filter((k) => /fee/i.test(k)),
-    ).toEqual([]);
+    expect(collectKeys(g).filter((k) => /fee/i.test(k))).toEqual([]);
   });
 
   test("no records group without records.view", async () => {

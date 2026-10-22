@@ -34,10 +34,7 @@ export const FLAG_CATEGORY_LABEL: Record<FlagCategory, string> = {
 };
 
 /** Chip tone per category — keys into FLAG_TONE_CHIP_CLASS below. */
-export const FLAG_CATEGORY_TONE: Record<
-  FlagCategory,
-  "warn" | "brand" | "neutral"
-> = {
+export const FLAG_CATEGORY_TONE: Record<FlagCategory, "warn" | "brand" | "neutral"> = {
   critical: "warn",
   use_of_force: "warn",
   miranda: "brand",
@@ -48,10 +45,7 @@ export const FLAG_CATEGORY_TONE: Record<
 
 /** Tone → pill classes, matching the app-wide status-chip recipes
  *  (same strings the document viewer's STATUS_META uses). */
-export const FLAG_TONE_CHIP_CLASS: Record<
-  (typeof FLAG_CATEGORY_TONE)[FlagCategory],
-  string
-> = {
+export const FLAG_TONE_CHIP_CLASS: Record<(typeof FLAG_CATEGORY_TONE)[FlagCategory], string> = {
   warn: "bg-warn-soft text-warn border-warn-border",
   brand: "bg-brand-soft text-brand-700 border-brand-200",
   neutral: "bg-paper-2 text-ink-3 border-line",
@@ -63,10 +57,7 @@ export function flagCategoryChipClass(category: FlagCategory): string {
 }
 
 /** Tone → background tint for transcript words a flag covers. */
-export const FLAG_TONE_TINT_CLASS: Record<
-  (typeof FLAG_CATEGORY_TONE)[FlagCategory],
-  string
-> = {
+export const FLAG_TONE_TINT_CLASS: Record<(typeof FLAG_CATEGORY_TONE)[FlagCategory], string> = {
   warn: "bg-warn-soft",
   brand: "bg-brand-100",
   neutral: "bg-paper-2",

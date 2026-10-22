@@ -109,7 +109,7 @@ export function decodeMimeWords(raw: string): string {
             const raw8bit = text
               .replace(/_/g, " ")
               .replace(/=([0-9A-Fa-f]{2})/g, (_m, hex: string) =>
-                String.fromCharCode(parseInt(hex, 16))
+                String.fromCharCode(parseInt(hex, 16)),
               );
             bytes = Buffer.from(raw8bit, "latin1");
           }
@@ -117,7 +117,7 @@ export function decodeMimeWords(raw: string): string {
         } catch {
           return whole;
         }
-      }
+      },
     );
 }
 
@@ -129,10 +129,7 @@ export { decodeHtmlEntities };
 // ── Header access ────────────────────────────────────────────────────────
 
 /** Case-insensitive header lookup on a message payload. */
-export function headerValue(
-  payload: GmailMessagePart | undefined,
-  name: string
-): string | null {
+export function headerValue(payload: GmailMessagePart | undefined, name: string): string | null {
   const lower = name.toLowerCase();
   const hit = payload?.headers?.find((h) => h.name.toLowerCase() === lower);
   return hit ? hit.value : null;
@@ -184,9 +181,7 @@ function cleanDisplayName(name: string): string {
  * deliberate subset that covers real-world Gmail headers without a
  * dependency.
  */
-export function parseAddressList(
-  raw: string | null | undefined
-): EmailAddress[] {
+export function parseAddressList(raw: string | null | undefined): EmailAddress[] {
   if (!raw || !raw.trim()) return [];
   const results: EmailAddress[] = [];
   for (const token of splitAddressList(raw)) {
@@ -224,14 +219,10 @@ export function textToHtml(text: string): string {
  *  type-targeted DFS finds the right alternative either way. */
 function findPartWithData(
   part: GmailMessagePart | undefined,
-  mimeType: string
+  mimeType: string,
 ): GmailMessagePart | null {
   if (!part) return null;
-  if (
-    part.mimeType?.toLowerCase() === mimeType &&
-    part.body?.data &&
-    !part.filename
-  ) {
+  if (part.mimeType?.toLowerCase() === mimeType && part.body?.data && !part.filename) {
     return part;
   }
   for (const child of part.parts ?? []) {
@@ -244,9 +235,7 @@ function findPartWithData(
 /** The `charset` parameter of a part's Content-Type header, or null
  *  when the part declares none (callers then assume UTF-8). */
 function partCharset(part: GmailMessagePart): string | null {
-  const ct = part.headers?.find(
-    (h) => h.name.toLowerCase() === "content-type"
-  )?.value;
+  const ct = part.headers?.find((h) => h.name.toLowerCase() === "content-type")?.value;
   if (!ct) return null;
   const m = /charset\s*=\s*(?:"([^"]+)"|([^\s;]+))/i.exec(ct);
   const charset = (m?.[1] ?? m?.[2])?.trim();
@@ -295,9 +284,7 @@ export interface AttachmentMeta {
 
 /** Collect attachment metadata: any part with a filename. Inline
  *  data-less container parts and body parts are skipped. */
-export function collectAttachments(
-  payload: GmailMessagePart | undefined
-): AttachmentMeta[] {
+export function collectAttachments(payload: GmailMessagePart | undefined): AttachmentMeta[] {
   const out: AttachmentMeta[] = [];
   const walk = (part: GmailMessagePart | undefined): void => {
     if (!part) return;
@@ -350,8 +337,7 @@ export interface ThreadFlags {
  *  - isStarred: ANY message carries STARRED;
  *  - isArchived: NO message carries INBOX. */
 export function threadFlags(messages: GmailMessage[]): ThreadFlags {
-  const has = (label: string) =>
-    messages.some((m) => (m.labelIds ?? []).includes(label));
+  const has = (label: string) => messages.some((m) => (m.labelIds ?? []).includes(label));
   return {
     isRead: !has("UNREAD"),
     isStarred: has("STARRED"),
@@ -381,8 +367,7 @@ export function parseGmailMessage(m: GmailMessage): ParsedGmailMessage {
     email: "",
   };
   const bodyHtmlRaw =
-    extractBodyHtml(m.payload) ||
-    (m.snippet ? textToHtml(decodeHtmlEntities(m.snippet)) : "");
+    extractBodyHtml(m.payload) || (m.snippet ? textToHtml(decodeHtmlEntities(m.snippet)) : "");
   return {
     externalId: m.id,
     from,

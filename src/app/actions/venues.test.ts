@@ -15,7 +15,13 @@ import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { createVenue, deleteVenue, setVenueActive, updateVenue } from "@/app/actions/venues";
 import { listVenues } from "@/lib/queries/venues";
-import { resetDb, seedFirm, seedMatter, seedPracticeArea, seedUser } from "@/test/integration-helpers";
+import {
+  resetDb,
+  seedFirm,
+  seedMatter,
+  seedPracticeArea,
+  seedUser,
+} from "@/test/integration-helpers";
 
 let userId: string;
 
@@ -93,7 +99,9 @@ describe("updateVenue", () => {
     if (!b.ok) throw new Error("setup");
     const res = await updateVenue(b.venue.id, { name: "aurora", state: "CO" });
     expect(res).toMatchObject({ ok: false, code: "exists" });
-    expect((await prisma.venue.findUniqueOrThrow({ where: { id: b.venue.id } })).name).toBe("Denver");
+    expect((await prisma.venue.findUniqueOrThrow({ where: { id: b.venue.id } })).name).toBe(
+      "Denver",
+    );
   });
 });
 

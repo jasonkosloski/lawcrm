@@ -31,10 +31,7 @@ import { CreateDock } from "@/components/create-stack/create-dock";
 import { CreateStackProvider } from "@/components/create-stack/create-stack-provider";
 import { getMatterById } from "@/lib/queries/matters";
 import { currentUserHasPermission } from "@/lib/permission-check";
-import {
-  MATTER_CREATE_ENTRIES,
-  MATTER_CREATE_PERMISSION,
-} from "@/lib/matter-create-types";
+import { MATTER_CREATE_ENTRIES, MATTER_CREATE_PERMISSION } from "@/lib/matter-create-types";
 import { requireUser } from "@/lib/current-user";
 import { BILLING_TYPE_LABEL, billingTypeOf } from "@/lib/billing-type";
 import { isMatterEmailMuted } from "@/lib/queries/notification-preferences";
@@ -48,35 +45,36 @@ export default async function MatterDetailLayout({
   const userId = await requireUser();
   const { id } = await params;
   await assertMatterAccess(id);
-  const [matter, canEditMatter, canManageTeam, canViewBilling, canViewRecords, createFlags, emailMuted] =
-    await Promise.all([
-      getMatterById(id),
-      currentUserHasPermission("matters.edit"),
-      currentUserHasPermission("matters.manage_team"),
-      currentUserHasPermission("billing.view"),
-      currentUserHasPermission("records.view"),
-      // Per-entity create keys for the "+ Create" menu (cached per
-      // request, so this is a handful of Set lookups).
-      Promise.all(
-        MATTER_CREATE_ENTRIES.map(async (e) => ({
-          type: e.type,
-          allowed: await currentUserHasPermission(
-            MATTER_CREATE_PERMISSION[e.type]
-          ),
-        }))
-      ),
-      isMatterEmailMuted(userId, id),
-    ]);
+  const [
+    matter,
+    canEditMatter,
+    canManageTeam,
+    canViewBilling,
+    canViewRecords,
+    createFlags,
+    emailMuted,
+  ] = await Promise.all([
+    getMatterById(id),
+    currentUserHasPermission("matters.edit"),
+    currentUserHasPermission("matters.manage_team"),
+    currentUserHasPermission("billing.view"),
+    currentUserHasPermission("records.view"),
+    // Per-entity create keys for the "+ Create" menu (cached per
+    // request, so this is a handful of Set lookups).
+    Promise.all(
+      MATTER_CREATE_ENTRIES.map(async (e) => ({
+        type: e.type,
+        allowed: await currentUserHasPermission(MATTER_CREATE_PERMISSION[e.type]),
+      })),
+    ),
+    isMatterEmailMuted(userId, id),
+  ]);
   if (!matter) notFound();
-  const allowedCreateTypes = createFlags
-    .filter((f) => f.allowed)
-    .map((f) => f.type);
+  const allowedCreateTypes = createFlags.filter((f) => f.allowed).map((f) => f.type);
 
   // Active lead only — a former lead shouldn't drive the metadata
   // strip (it'd display a wrong attribution and confuse reads).
-  const leadMember = matter.teamMembers.find(
-    (t) => t.role === "lead" && t.removedAt === null
-  );
+  const leadMember = matter.teamMembers.find((t) => t.role === "lead" && t.removedAt === null);
 
   return (
     <CreateStackProvider
@@ -112,10 +110,7 @@ export default async function MatterDetailLayout({
                 Edit
               </Link>
             )}
-            <PinToggle
-              matterId={matter.id}
-              initialPinned={matter.isPinnedByCurrentUser}
-            />
+            <PinToggle matterId={matter.id} initialPinned={matter.isPinnedByCurrentUser} />
             <EmailMuteToggle matterId={matter.id} initialMuted={emailMuted} />
             <MatterCreateMenu allowedTypes={allowedCreateTypes} />
           </>
@@ -130,28 +125,21 @@ export default async function MatterDetailLayout({
             style={{ background: matter.color }}
           />
           {matter.caseNumber && (
-            <span className="font-mono text-2xs text-ink-4">
-              {matter.caseNumber}
-            </span>
+            <span className="font-mono text-2xs text-ink-4">{matter.caseNumber}</span>
           )}
         </span>
         {matter.client && (
           <span>
-            Client:{" "}
-            <span className="text-ink font-medium">{matter.client.name}</span>
+            Client: <span className="text-ink font-medium">{matter.client.name}</span>
           </span>
         )}
         {matter.court && <span>{matter.court}</span>}
         <span>
-          Billing:{" "}
-          <span className="text-ink">
-            {BILLING_TYPE_LABEL[billingTypeOf(matter)]}
-          </span>
+          Billing: <span className="text-ink">{BILLING_TYPE_LABEL[billingTypeOf(matter)]}</span>
         </span>
         {leadMember && (
           <span>
-            Lead:{" "}
-            <span className="text-ink font-medium">{leadMember.user.name}</span>
+            Lead: <span className="text-ink font-medium">{leadMember.user.name}</span>
           </span>
         )}
       </div>

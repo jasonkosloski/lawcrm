@@ -32,10 +32,7 @@ import {
 } from "@/lib/queries/leads";
 import { requireUser } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
-import {
-  ACTIVE_LEADS_SAFETY_CAP,
-  sortIntakeQueue,
-} from "@/lib/queries/leads";
+import { ACTIVE_LEADS_SAFETY_CAP, sortIntakeQueue } from "@/lib/queries/leads";
 import { parsePageParam } from "@/lib/pagination";
 import { Pager, TruncationNotice } from "@/components/shared/pager";
 import { describeStatuteRemaining } from "@/lib/lead-statute";
@@ -115,15 +112,8 @@ function StatuteText({ lead }: { lead: LeadListRow }) {
   const warn = s.warn && lead.isActive;
   return (
     <span
-      className={
-        "font-mono text-2xs " +
-        (warn ? "text-warn font-medium" : "text-ink-3")
-      }
-      title={
-        s.expired
-          ? "The statute window has run"
-          : "Days left, counted down from intake"
-      }
+      className={"font-mono text-2xs " + (warn ? "text-warn font-medium" : "text-ink-3")}
+      title={s.expired ? "The statute window has run" : "Days left, counted down from intake"}
     >
       {s.short}
     </span>
@@ -155,9 +145,7 @@ function AssessmentBadges({ row }: { row: LeadListRow }) {
   );
 }
 
-export default async function IntakePage({
-  searchParams,
-}: PageProps<"/intake">) {
+export default async function IntakePage({ searchParams }: PageProps<"/intake">) {
   await requireUser();
   const sp = await searchParams;
   const [leads, summary, canCreate] = await Promise.all([
@@ -221,9 +209,7 @@ export default async function IntakePage({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-ink truncate">
-                        {lead.name}
-                      </div>
+                      <div className="text-sm font-medium text-ink truncate">{lead.name}</div>
                       {lead.summary && (
                         <div className="text-2xs text-ink-3 line-clamp-2 mt-0.5">
                           {lead.summary}
@@ -232,18 +218,13 @@ export default async function IntakePage({
                       <div className="flex items-center gap-2 flex-wrap mt-1.5">
                         <LeadStageChip stage={lead.stage} />
                         {lead.restricted && <RestrictedBadge />}
-                        <SourceLabel
-                          source={lead.source}
-                          detail={lead.sourceDetail}
-                        />
+                        <SourceLabel source={lead.source} detail={lead.sourceDetail} />
                         <ConflictDot status={lead.conflictCheck} />
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <ScoreBadge score={lead.score} />
-                      {lead.statuteDaysRemaining !== null && (
-                        <StatuteText lead={lead} />
-                      )}
+                      {lead.statuteDaysRemaining !== null && <StatuteText lead={lead} />}
                     </div>
                   </div>
                 </Link>
@@ -329,12 +310,7 @@ export default async function IntakePage({
           </Table>
         </Card>
 
-        <Pager
-          {...leads.closed}
-          href="/intake"
-          prevLabel="Newer closed"
-          nextLabel="Older closed"
-        />
+        <Pager {...leads.closed} href="/intake" prevLabel="Newer closed" nextLabel="Older closed" />
       </div>
     </>
   );

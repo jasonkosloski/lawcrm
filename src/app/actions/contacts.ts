@@ -35,10 +35,7 @@ import { z } from "zod";
 import { isLenientEmail } from "@/lib/email-shape";
 import { prisma } from "@/lib/prisma";
 import { actorSeesAllPortalMatters } from "@/lib/portal/identity-scope";
-import {
-  requirePermission,
-  requirePermissionResult,
-} from "@/lib/permission-check";
+import { requirePermission, requirePermissionResult } from "@/lib/permission-check";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { todayKey } from "@/lib/format-date";
 import { buildCsv } from "@/lib/csv";
@@ -48,15 +45,8 @@ import {
   CONTACT_TYPE_LABEL,
   type ContactType,
 } from "@/lib/contact-constants";
-import {
-  normalizeContactPhones,
-  phoneDedupeKey,
-  type ContactFormState,
-} from "@/lib/contact-form";
-import {
-  searchMergeCandidates,
-  type MergeCandidateOption,
-} from "@/lib/queries/contacts";
+import { normalizeContactPhones, phoneDedupeKey, type ContactFormState } from "@/lib/contact-form";
+import { searchMergeCandidates, type MergeCandidateOption } from "@/lib/queries/contacts";
 import {
   mergeConflictStatus,
   mergeContactNotes,
@@ -82,7 +72,7 @@ const contactSchema = z.object({
  *  records that predate this check stay editable. */
 function emailFieldError(
   email: string | undefined,
-  unchangedFrom?: string | null
+  unchangedFrom?: string | null,
 ): string[] | null {
   const v = (email ?? "").trim();
   if (!v || isLenientEmail(v)) return null;
@@ -125,7 +115,7 @@ async function logContactActivity(input: {
 
 export async function createContact(
   _prev: ContactFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<ContactFormState> {
   const userId = await requirePermission("contacts.create");
 
@@ -199,7 +189,7 @@ export async function createContact(
 export async function updateContact(
   contactId: string,
   _prev: ContactFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<ContactFormState> {
   const userId = await requirePermission("contacts.edit");
 
@@ -356,7 +346,7 @@ const phonesInputSchema = z
       label: z.string().trim().max(40).catch(""),
       number: z.string().trim().max(80),
       isPrimary: z.boolean().catch(false),
-    })
+    }),
   )
   .max(20, "Too many phone numbers");
 
@@ -370,7 +360,7 @@ const phonesInputSchema = z
  */
 export async function updateContactPhones(
   contactId: string,
-  phonesInput: unknown
+  phonesInput: unknown,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("contacts.edit");
 
@@ -441,7 +431,7 @@ const CONFLICT_TITLE: Record<(typeof CONFLICT_STATUSES)[number], string> = {
 export async function setContactConflictStatus(
   contactId: string,
   status: string,
-  justification: string
+  justification: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("contacts.edit");
 
@@ -495,10 +485,7 @@ class MergeAbort extends Error {}
  * (Matter.clientId or a category "client" party row) and the other on
  * the opposing side (category "opposing"). Both directions count.
  */
-async function countOppositeSideMatters(
-  aId: string,
-  bId: string
-): Promise<number> {
+async function countOppositeSideMatters(aId: string, bId: string): Promise<number> {
   const [parties, clientOf] = await Promise.all([
     prisma.matterContact.findMany({
       where: { contactId: { in: [aId, bId] } },
@@ -528,8 +515,7 @@ async function countOppositeSideMatters(
   let count = 0;
   for (const s of sides.values()) {
     const crossed = [aId, bId].some(
-      (x) =>
-        s.client.has(x) && [...s.opposing].some((other) => other !== x)
+      (x) => s.client.has(x) && [...s.opposing].some((other) => other !== x),
     );
     if (crossed) count++;
   }
@@ -572,7 +558,7 @@ export async function mergeContacts(
     /** The user saw the "opposite sides of a matter" warning and
      *  wants to merge anyway (e.g. a client who was once adverse). */
     confirmOppositeSides?: boolean;
-  }
+  },
 ): Promise<{
   ok: boolean;
   error?: string;
@@ -641,11 +627,7 @@ export async function mergeContacts(
         },
       },
     });
-    if (
-      dupe &&
-      (mergePartyDetails(dupe, row, loser.name).notes?.length ?? 0) >
-        PARTY_NOTES_MAX
-    ) {
+    if (dupe && (mergePartyDetails(dupe, row, loser.name).notes?.length ?? 0) > PARTY_NOTES_MAX) {
       return {
         ok: false,
         error:
@@ -703,7 +685,7 @@ export async function mergeContacts(
           throw new MergeAbort(
             id === survivorId
               ? "The contact to merge into was changed or merged by someone else — refresh and try again"
-              : "This contact was already merged"
+              : "This contact was already merged",
           );
         }
       }
@@ -713,16 +695,9 @@ export async function mergeContacts(
         tx.contact.findUniqueOrThrow({ where: { id: loserId } }),
         tx.contact.findUniqueOrThrow({ where: { id: survivorId } }),
       ]);
-      const mergedNotes = mergeContactNotes(
-        survivor.notes,
-        loser.notes,
-        loser.name
-      );
+      const mergedNotes = mergeContactNotes(survivor.notes, loser.notes, loser.name);
       if (mergedNotes.tooLong) throw new MergeAbort(MERGE_NOTES_TOO_LONG);
-      const nextConflict = mergeConflictStatus(
-        survivor.conflictStatus,
-        loser.conflictStatus
-      );
+      const nextConflict = mergeConflictStatus(survivor.conflictStatus, loser.conflictStatus);
 
       // MatterContact — per-row because of the (matterId, contactId,
       // category) unique: survivor already on the matter in the same
@@ -857,8 +832,7 @@ export async function mergeContacts(
         // Read state would cascade away with the loser identity; fold it
         // onto the survivor keeping the later read and email times, so
         // merged contacts don't see old messages as unread again.
-        const laterOf = (a: Date | null, b: Date | null) =>
-          a && b ? (a > b ? a : b) : (a ?? b);
+        const laterOf = (a: Date | null, b: Date | null) => (a && b ? (a > b ? a : b) : (a ?? b));
         const loserStates = await tx.portalReadState.findMany({
           where: { identityId: loserIdentity.id },
         });
@@ -909,8 +883,7 @@ export async function mergeContacts(
         }),
       ]);
       const seen = new Set(survivorPhones.map((p) => phoneDedupeKey(p.number)));
-      let nextOrder =
-        survivorPhones.reduce((max, p) => Math.max(max, p.order), -1) + 1;
+      let nextOrder = survivorPhones.reduce((max, p) => Math.max(max, p.order), -1) + 1;
       for (const p of loserPhones) {
         const key = phoneDedupeKey(p.number);
         if (seen.has(key)) {
@@ -940,8 +913,7 @@ export async function mergeContacts(
       }
       // No rows at all ⇒ fall back to the denormalized columns (some
       // contacts predate ContactPhone rows).
-      const phone =
-        combined.length > 0 ? primaryNumber : (survivor.phone ?? loser.phone);
+      const phone = combined.length > 0 ? primaryNumber : (survivor.phone ?? loser.phone);
 
       // Scalar gap backfill + phone mirror on the survivor.
       await tx.contact.update({
@@ -983,9 +955,7 @@ export async function mergeContacts(
       (mergedConflict !== survivor.conflictStatus
         ? ` Conflict flag is now "${mergedConflict}" (carried over from the merged contact).`
         : "") +
-      (loser.notes?.trim()
-        ? " Internal notes were appended to the surviving record."
-        : "") +
+      (loser.notes?.trim() ? " Internal notes were appended to the surviving record." : "") +
       portalFoldDetail(portalFold),
   });
 
@@ -997,9 +967,7 @@ export async function mergeContacts(
   return { ok: true };
 }
 
-function portalFoldDetail(
-  fold: { moved: true } | { folded: number } | null
-): string {
+function portalFoldDetail(fold: { moved: true } | { folded: number } | null): string {
   if (!fold) return "";
   if ("moved" in fold) {
     return " Client portal access moved to the surviving record.";
@@ -1032,7 +1000,7 @@ function endPortalAccessFor(contactIds: string[]) {
  */
 export async function searchMergeCandidatesAction(
   contactId: string,
-  query: string
+  query: string,
 ): Promise<MergeCandidateOption[]> {
   await requirePermission("contacts.merge");
   if (typeof query !== "string") return [];
@@ -1044,9 +1012,7 @@ export async function searchMergeCandidatesAction(
 
 // ── Delete (soft) ───────────────────────────────────────────────────────
 
-export async function deleteContact(
-  contactId: string
-): Promise<{ ok: boolean; error?: string }> {
+export async function deleteContact(contactId: string): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("contacts.delete");
 
   const c = await prisma.contact.findUnique({
@@ -1100,7 +1066,7 @@ const CLOSED_LEAD_STAGES = ["converted", "declined"];
  * the contact is on a live case.
  */
 async function findDeactivationBlockers(
-  contacts: Array<{ id: string; name: string }>
+  contacts: Array<{ id: string; name: string }>,
 ): Promise<string[]> {
   const ids = contacts.map((c) => c.id);
   const [matters, parties, leads] = await Promise.all([
@@ -1111,10 +1077,7 @@ async function findDeactivationBlockers(
     prisma.matterContact.findMany({
       where: {
         matter: { isArchived: false },
-        OR: [
-          { contactId: { in: ids } },
-          { representationContactId: { in: ids } },
-        ],
+        OR: [{ contactId: { in: ids } }, { representationContactId: { in: ids } }],
       },
       select: { matterId: true, contactId: true, representationContactId: true },
     }),
@@ -1170,7 +1133,7 @@ async function findDeactivationBlockers(
  * stays retired: its references moved to the survivor.
  */
 export async function reactivateContact(
-  contactId: string
+  contactId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("contacts.delete");
 
@@ -1211,7 +1174,7 @@ const bulkIdsSchema = z
   .min(1, "No contacts selected")
   .max(
     BULK_CONTACT_LIMIT,
-    `Too many contacts selected — bulk actions run on up to ${BULK_CONTACT_LIMIT} at a time`
+    `Too many contacts selected — bulk actions run on up to ${BULK_CONTACT_LIMIT} at a time`,
   );
 
 type BulkContactRow = {
@@ -1232,10 +1195,8 @@ type BulkContactRow = {
  */
 async function loadBulkContacts(
   contactIds: unknown,
-  opts: { requireActive: boolean }
-): Promise<
-  { ok: false; error: string } | { ok: true; contacts: BulkContactRow[] }
-> {
+  opts: { requireActive: boolean },
+): Promise<{ ok: false; error: string } | { ok: true; contacts: BulkContactRow[] }> {
   const parsed = bulkIdsSchema.safeParse(contactIds);
   if (!parsed.success) {
     return {
@@ -1267,8 +1228,7 @@ async function loadBulkContacts(
     if (stale.length > 0) {
       return {
         ok: false,
-        error:
-          "The selection includes inactive or merged contacts — refresh and try again",
+        error: "The selection includes inactive or merged contacts — refresh and try again",
       };
     }
   }
@@ -1292,7 +1252,7 @@ function pluralContacts(count: number): string {
  */
 export async function bulkSetContactType(
   contactIds: string[],
-  type: string
+  type: string,
 ): Promise<{ ok: boolean; error?: string; count?: number }> {
   const userId = await requirePermission("contacts.edit");
 
@@ -1338,7 +1298,7 @@ export async function bulkSetContactType(
  * whole batch.
  */
 export async function bulkDeactivateContacts(
-  contactIds: string[]
+  contactIds: string[],
 ): Promise<{ ok: boolean; error?: string; count?: number }> {
   const userId = await requirePermission("contacts.delete");
 
@@ -1347,9 +1307,7 @@ export async function bulkDeactivateContacts(
 
   // Same guard as the single deleteContact: all-or-nothing, so a
   // client of an open matter can't slip out of the directory in a batch.
-  const blockers = await findDeactivationBlockers(
-    loaded.contacts.filter((c) => c.isActive)
-  );
+  const blockers = await findDeactivationBlockers(loaded.contacts.filter((c) => c.isActive));
   if (blockers.length > 0) {
     return {
       ok: false,
@@ -1389,10 +1347,8 @@ export async function bulkDeactivateContacts(
  * mutation. Address folds address/city/state/zip into one column.
  */
 export async function exportContactsCsv(
-  contactIds: string[]
-): Promise<
-  { ok: true; csv: string; filename: string } | { ok: false; error: string }
-> {
+  contactIds: string[],
+): Promise<{ ok: true; csv: string; filename: string } | { ok: false; error: string }> {
   const gate = await requirePermissionResult("contacts.export");
   if (!gate.ok) return gate;
   const { userId } = gate;
@@ -1425,11 +1381,9 @@ export async function exportContactsCsv(
       c.organization,
       c.email,
       c.phone,
-      [c.address, c.city, [c.state, c.zip].filter(Boolean).join(" ")]
-        .filter(Boolean)
-        .join(", "),
+      [c.address, c.city, [c.state, c.zip].filter(Boolean).join(" ")].filter(Boolean).join(", "),
       c.isActive ? "yes" : "no",
-    ])
+    ]),
   );
 
   await logContactActivity({

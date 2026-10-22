@@ -24,5 +24,5 @@ export const RichTextEditor = dynamic(
         Loading editor…
       </div>
     ),
-  }
+  },
 );

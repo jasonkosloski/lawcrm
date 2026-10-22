@@ -60,11 +60,25 @@ beforeEach(async () => {
   ({ userId } = await seedUser({ firmId }));
   ({ userId: otherUserId } = await seedUser({ firmId }));
   const { stageId, areaId } = await seedPracticeArea();
-  ({ matterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name: "Smith v Jones" }));
-  ({ matterId: otherMatterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name: "Other" }));
-  await prisma.matterTeamMember.create({ data: { matterId, userId: otherUserId, role: "paralegal" } });
+  ({ matterId } = await seedMatter({
+    practiceAreaId: areaId,
+    stageId,
+    leadUserId: userId,
+    name: "Smith v Jones",
+  }));
+  ({ matterId: otherMatterId } = await seedMatter({
+    practiceAreaId: areaId,
+    stageId,
+    leadUserId: userId,
+    name: "Other",
+  }));
+  await prisma.matterTeamMember.create({
+    data: { matterId, userId: otherUserId, role: "paralegal" },
+  });
   const { contactId } = await seedContact({ name: "Pat Client", email: "pat@example.com" });
-  identityId = (await prisma.portalIdentity.create({ data: { contactId, email: "pat@example.com" } })).id;
+  identityId = (
+    await prisma.portalIdentity.create({ data: { contactId, email: "pat@example.com" } })
+  ).id;
   await prisma.portalMatterAccess.create({ data: { identityId, matterId, invitedById: userId } });
 });
 
@@ -78,7 +92,10 @@ describe("recordPortalUpload", () => {
     const r = await recordPortalUpload(i);
     expect(r).toMatchObject({ ok: true, requestClosed: false });
     if (!r.ok) return;
-    const doc = await prisma.document.findUniqueOrThrow({ where: { id: r.documentId }, include: { folder: true } });
+    const doc = await prisma.document.findUniqueOrThrow({
+      where: { id: r.documentId },
+      include: { folder: true },
+    });
     expect(doc).toMatchObject({
       clientNote: "My lease",
       matterId,
@@ -101,7 +118,9 @@ describe("recordPortalUpload", () => {
       parentId: null,
       matterId,
     });
-    const log = await prisma.activityLog.findFirstOrThrow({ where: { matterId, title: "Client uploaded a document" } });
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId, title: "Client uploaded a document" },
+    });
     expect(log.userId).toBeNull();
     expect(log.detail).toContain(identityId);
     expect(log.detail).toContain("My lease");
@@ -111,18 +130,29 @@ describe("recordPortalUpload", () => {
   test("a second upload reuses the folder", async () => {
     await recordPortalUpload(input());
     await recordPortalUpload(input({ batchId: BATCH2 }));
-    expect(await prisma.documentFolder.count({ where: { matterId, systemKind: "portal_uploads" } })).toBe(1);
+    expect(
+      await prisma.documentFolder.count({ where: { matterId, systemKind: "portal_uploads" } }),
+    ).toBe(1);
     expect(await prisma.document.count({ where: { matterId } })).toBe(2);
   });
 
   test("an existing (oldest) From client folder is used even if a duplicate exists", async () => {
     const oldest = await prisma.documentFolder.create({
-      data: { matterId, name: "From client", systemKind: "portal_uploads", createdAt: new Date(Date.now() - 60_000) },
+      data: {
+        matterId,
+        name: "From client",
+        systemKind: "portal_uploads",
+        createdAt: new Date(Date.now() - 60_000),
+      },
     });
-    await prisma.documentFolder.create({ data: { matterId, name: "From client", systemKind: "portal_uploads" } });
+    await prisma.documentFolder.create({
+      data: { matterId, name: "From client", systemKind: "portal_uploads" },
+    });
     const r = await recordPortalUpload(input());
     if (!r.ok) throw new Error(r.error);
-    expect((await prisma.document.findUniqueOrThrow({ where: { id: r.documentId } })).folderId).toBe(oldest.id);
+    expect(
+      (await prisma.document.findUniqueOrThrow({ where: { id: r.documentId } })).folderId,
+    ).toBe(oldest.id);
   });
 
   // Smoke test only, NOT a regression guard for the advisory lock: it also
@@ -135,7 +165,9 @@ describe("recordPortalUpload", () => {
       recordPortalUpload(input()),
     ]);
     expect(results.every((r) => r.ok)).toBe(true);
-    expect(await prisma.documentFolder.count({ where: { matterId, systemKind: "portal_uploads" } })).toBe(1);
+    expect(
+      await prisma.documentFolder.count({ where: { matterId, systemKind: "portal_uploads" } }),
+    ).toBe(1);
     expect(await prisma.notification.count({ where: { type: "portal_upload" } })).toBe(2);
   });
 
@@ -144,8 +176,12 @@ describe("recordPortalUpload", () => {
     const r = await recordPortalUpload(input({ requestId }));
     expect(r).toMatchObject({ ok: true, requestClosed: false });
     if (!r.ok) return;
-    expect((await prisma.document.findUniqueOrThrow({ where: { id: r.documentId } })).documentRequestId).toBe(requestId);
-    expect(await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } })).toMatchObject({
+    expect(
+      (await prisma.document.findUniqueOrThrow({ where: { id: r.documentId } })).documentRequestId,
+    ).toBe(requestId);
+    expect(
+      await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } }),
+    ).toMatchObject({
       status: "submitted",
       returnNote: null,
     });
@@ -166,8 +202,12 @@ describe("recordPortalUpload", () => {
     const long = await recordPortalUpload(input({ note: "x".repeat(600) }));
     const blank = await recordPortalUpload(input({ note: "   " }));
     if (!long.ok || !blank.ok) throw new Error("upload failed");
-    expect((await prisma.document.findUniqueOrThrow({ where: { id: long.documentId } })).clientNote).toHaveLength(500);
-    expect((await prisma.document.findUniqueOrThrow({ where: { id: blank.documentId } })).clientNote).toBeNull();
+    expect(
+      (await prisma.document.findUniqueOrThrow({ where: { id: long.documentId } })).clientNote,
+    ).toHaveLength(500);
+    expect(
+      (await prisma.document.findUniqueOrThrow({ where: { id: blank.documentId } })).clientNote,
+    ).toBeNull();
   });
 
   test("a late file of a batch never re-submits a request sent back since, nor clears its note", async () => {
@@ -181,15 +221,22 @@ describe("recordPortalUpload", () => {
     const late = await recordPortalUpload(input({ requestId }));
     expect(late).toMatchObject({ ok: true, requestClosed: true });
     if (!late.ok) return;
-    expect((await prisma.document.findUniqueOrThrow({ where: { id: late.documentId } })).documentRequestId).toBeNull();
-    expect(await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } })).toMatchObject({
+    expect(
+      (await prisma.document.findUniqueOrThrow({ where: { id: late.documentId } }))
+        .documentRequestId,
+    ).toBeNull();
+    expect(
+      await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } }),
+    ).toMatchObject({
       status: "open",
       returnNote: "Wrong year",
     });
     // A NEW batch is a real resubmission: it submits and clears the note.
     const fresh = await recordPortalUpload(input({ requestId, batchId: BATCH2 }));
     expect(fresh).toMatchObject({ ok: true, requestClosed: false });
-    expect(await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } })).toMatchObject({
+    expect(
+      await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } }),
+    ).toMatchObject({
       status: "submitted",
       returnNote: null,
     });
@@ -200,21 +247,45 @@ describe("recordPortalUpload", () => {
     const r = await recordPortalUpload(input({ requestId }));
     expect(r).toMatchObject({ ok: true, requestClosed: true });
     if (!r.ok) return;
-    expect((await prisma.document.findUniqueOrThrow({ where: { id: r.documentId } })).documentRequestId).toBeNull();
-    expect((await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } })).status).toBe("cancelled");
+    expect(
+      (await prisma.document.findUniqueOrThrow({ where: { id: r.documentId } })).documentRequestId,
+    ).toBeNull();
+    expect(
+      (await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } })).status,
+    ).toBe("cancelled");
   });
 
   test("a request on another matter is never linked or moved", async () => {
     const requestId = await request("open", otherMatterId);
     const r = await recordPortalUpload(input({ requestId }));
     expect(r).toMatchObject({ ok: true, requestClosed: true });
-    expect((await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } })).status).toBe("open");
+    expect(
+      (await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } })).status,
+    ).toBe("open");
   });
 
   test.each([
-    ["revoked access", async () => { await prisma.portalMatterAccess.updateMany({ data: { revokedAt: new Date() } }); }],
-    ["portal off", async () => { await prisma.firm.update({ where: { id: firmId }, data: { portalEnabled: false } }); }],
-    ["identity disabled", async () => { await prisma.portalIdentity.update({ where: { id: identityId }, data: { disabledAt: new Date() } }); }],
+    [
+      "revoked access",
+      async () => {
+        await prisma.portalMatterAccess.updateMany({ data: { revokedAt: new Date() } });
+      },
+    ],
+    [
+      "portal off",
+      async () => {
+        await prisma.firm.update({ where: { id: firmId }, data: { portalEnabled: false } });
+      },
+    ],
+    [
+      "identity disabled",
+      async () => {
+        await prisma.portalIdentity.update({
+          where: { id: identityId },
+          data: { disabledAt: new Date() },
+        });
+      },
+    ],
     ["no access to that matter", async () => {}],
   ])("%s: no row, stored file deleted", async (label, arrange) => {
     await arrange();

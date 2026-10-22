@@ -42,7 +42,7 @@ to the Vercel project's Development environment as
 the production database** (`DATABASE_URL` in Vercel) — the seed
 overwrites data and resets every user's password. Watch out for
 `vercel env pull` / `vercel link`: they write Development variables
-into `.env.local`, which Next.js loads *over* `.env`. Schema changes ship as migrations
+into `.env.local`, which Next.js loads _over_ `.env`. Schema changes ship as migrations
 (`npx prisma migrate dev --name <change>`) — see ADR-016 in
 `docs/decisions/`. Staff sign in with Google via Clerk and there is no self sign-up: admins invite
 people from Settings -> Team, and the first sign-in links the Clerk identity to

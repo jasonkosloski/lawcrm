@@ -45,7 +45,7 @@ const renderCard = (over: Partial<React.ComponentProps<typeof ClientRequestsCard
       canEdit
       canDelete
       {...over}
-    />
+    />,
   );
 
 beforeEach(() => vi.clearAllMocks());
@@ -71,7 +71,7 @@ describe("ClientRequestsCard", () => {
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
     expect(screen.getByRole("link", { name: "w2.pdf" })).toHaveAttribute(
       "href",
-      "/matters/m1/documents/d1"
+      "/matters/m1/documents/d1",
     );
   });
 
@@ -97,7 +97,7 @@ describe("ClientRequestsCard", () => {
     await userEvent.type(screen.getByLabelText("Note to the client"), "Missing page 2");
     await userEvent.click(screen.getByRole("button", { name: "Send to client" }));
     await waitFor(() =>
-      expect(sendBackDocumentRequest).toHaveBeenCalledWith("r1", "Missing page 2")
+      expect(sendBackDocumentRequest).toHaveBeenCalledWith("r1", "Missing page 2"),
     );
   });
 
@@ -128,7 +128,7 @@ describe("ClientRequestsCard", () => {
         title: "Bank statements",
         instructions: "",
         dueDate: "",
-      })
+      }),
     );
   });
 });

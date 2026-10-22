@@ -76,16 +76,9 @@ import { canAccessDraft } from "@/lib/draft-access";
 import { deleteFile } from "@/lib/file-storage";
 import { resolveRecordsUpload } from "@/lib/records-requests/folder";
 import { revalidatePath } from "next/cache";
-import {
-  MAX_MEDIA_UPLOAD_BYTES,
-  MAX_STANDARD_UPLOAD_BYTES,
-} from "../upload-config";
+import { MAX_MEDIA_UPLOAD_BYTES, MAX_STANDARD_UPLOAD_BYTES } from "../upload-config";
 import { makeStorageKey } from "@/lib/storage/storage-key";
-import {
-  UploadTokenError,
-  onBeforeGenerateToken,
-  onUploadCompleted,
-} from "./blob-upload";
+import { UploadTokenError, onBeforeGenerateToken, onUploadCompleted } from "./blob-upload";
 
 const mockedAuth = vi.mocked(getSession);
 const mockedPerm = vi.mocked(currentUserHasPermission);
@@ -117,11 +110,11 @@ function wireHappyGates() {
 /** Await the rejection and hand back the UploadTokenError. */
 async function tokenError(
   pathname: string,
-  clientPayload: string | null
+  clientPayload: string | null,
 ): Promise<UploadTokenError> {
   const err = await onBeforeGenerateToken(pathname, clientPayload, false).then(
     () => null,
-    (e: unknown) => e
+    (e: unknown) => e,
   );
   expect(err).toBeInstanceOf(UploadTokenError);
   return err as UploadTokenError;
@@ -165,11 +158,7 @@ describe("onBeforeGenerateToken — gates", () => {
 
   test("pathname outside the key scheme → 400 (no fake folders, no traversal)", async () => {
     wireHappyGates();
-    for (const bad of [
-      "evil/../x.pdf",
-      "plain-name.pdf",
-      "AAAAAAAAAAAAAAAA__a/b.pdf",
-    ]) {
+    for (const bad of ["evil/../x.pdf", "plain-name.pdf", "AAAAAAAAAAAAAAAA__a/b.pdf"]) {
       const err = await tokenError(bad, PAYLOAD);
       expect(err.status, bad).toBe(400);
     }
@@ -220,7 +209,7 @@ describe("onBeforeGenerateToken — token contract", () => {
     const token = await onBeforeGenerateToken(
       "AAAAAAAAAAAAAAAA__bodycam.mp4",
       JSON.stringify({ matterId: "m1", folderId: null, name: "bodycam.mp4" }),
-      false
+      false,
     );
     expect(token.allowedContentTypes).toEqual(["video/mp4"]);
     expect(token.maximumSizeInBytes).toBe(MAX_MEDIA_UPLOAD_BYTES);
@@ -231,7 +220,7 @@ describe("onBeforeGenerateToken — token contract", () => {
     const token = await onBeforeGenerateToken(
       "AAAAAAAAAAAAAAAA__mystery.xyz",
       JSON.stringify({ matterId: "m1", name: "mystery.xyz" }),
-      false
+      false,
     );
     expect(token.allowedContentTypes).toEqual(["application/octet-stream"]);
     expect(token.maximumSizeInBytes).toBe(MAX_STANDARD_UPLOAD_BYTES);
@@ -255,13 +244,13 @@ describe("onBeforeGenerateToken — token contract", () => {
     const token = await onBeforeGenerateToken(
       KEY,
       JSON.stringify({ matterId: "m1", name: "brief.pdf", category: "contract" }),
-      false
+      false,
     );
     expect(JSON.parse(token.tokenPayload as string).category).toBe("contract");
 
     const err = await tokenError(
       KEY,
-      JSON.stringify({ matterId: "m1", name: "brief.pdf", category: "bogus" })
+      JSON.stringify({ matterId: "m1", name: "brief.pdf", category: "bogus" }),
     );
     expect(err.status).toBe(400);
   });
@@ -272,7 +261,7 @@ describe("onBeforeGenerateToken — token contract", () => {
     const media = await onBeforeGenerateToken(
       "AAAAAAAAAAAAAAAA__bodycam.mp4",
       JSON.stringify({ matterId: "m1", name: "bodycam.mp4" }),
-      false
+      false,
     );
     const pdf = await onBeforeGenerateToken(KEY, PAYLOAD, false);
     const HOUR = 60 * 60 * 1000;
@@ -287,7 +276,7 @@ describe("onBeforeGenerateToken — token contract", () => {
     const token = await onBeforeGenerateToken(
       key,
       JSON.stringify({ matterId: "m1", name: "x".repeat(200) + ".pdf" }),
-      false
+      false,
     );
     expect(token.allowedContentTypes).toEqual(["application/pdf"]);
   });
@@ -297,7 +286,7 @@ describe("onBeforeGenerateToken — token contract", () => {
     const token = await onBeforeGenerateToken(
       KEY,
       JSON.stringify({ matterId: "m1", name: "brief.pdf" }),
-      false
+      false,
     );
     expect(JSON.parse(token.tokenPayload as string).folderId).toBeNull();
     // No folder lookup when there's nothing to scope.
@@ -335,15 +324,27 @@ describe("onUploadCompleted", () => {
   test.each([
     [
       "a portal-shaped payload",
-      { kind: "portal", identityId: "i1", matterId: "m1", requestId: null, batchId: "b", name: "x.pdf", note: null, contentType: "application/pdf" },
+      {
+        kind: "portal",
+        identityId: "i1",
+        matterId: "m1",
+        requestId: null,
+        batchId: "b",
+        name: "x.pdf",
+        note: null,
+        contentType: "application/pdf",
+      },
     ],
-    ["a payload without userId", { matterId: "m1", folderId: null, name: "x.pdf", contentType: "application/pdf" }],
+    [
+      "a payload without userId",
+      { matterId: "m1", folderId: null, name: "x.pdf", contentType: "application/pdf" },
+    ],
   ])("%s: blob deleted, no row, no throw", async (_label, p) => {
     wireCompletion();
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     mockedDel.mockResolvedValue(undefined);
     await expect(
-      onUploadCompleted({ blob: BLOB, tokenPayload: JSON.stringify(p) })
+      onUploadCompleted({ blob: BLOB, tokenPayload: JSON.stringify(p) }),
     ).resolves.toBeUndefined();
     expect(mockedDel).toHaveBeenCalledWith(BLOB.url);
     expect(mockedCreate).not.toHaveBeenCalled();
@@ -375,10 +376,7 @@ describe("onUploadCompleted", () => {
       },
     });
     expect(logActivity).toHaveBeenCalledTimes(1);
-    expect(revalidatePath).toHaveBeenCalledWith(
-      "/matters/m1/documents",
-      "layout"
-    );
+    expect(revalidatePath).toHaveBeenCalledWith("/matters/m1/documents", "layout");
     expect(revalidatePath).toHaveBeenCalledWith("/matters/m1");
   });
 
@@ -394,9 +392,9 @@ describe("onUploadCompleted", () => {
   });
 
   test("missing tokenPayload throws (Vercel will retry; we never guess identity)", async () => {
-    await expect(
-      onUploadCompleted({ blob: BLOB, tokenPayload: null })
-    ).rejects.toThrow(/token payload/i);
+    await expect(onUploadCompleted({ blob: BLOB, tokenPayload: null })).rejects.toThrow(
+      /token payload/i,
+    );
     expect(mockedCreate).not.toHaveBeenCalled();
   });
 
@@ -455,7 +453,7 @@ describe("onUploadCompleted", () => {
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(
-      onUploadCompleted({ blob: BLOB, tokenPayload: TOKEN_PAYLOAD })
+      onUploadCompleted({ blob: BLOB, tokenPayload: TOKEN_PAYLOAD }),
     ).resolves.toBeUndefined();
     errSpy.mockRestore();
 
@@ -468,9 +466,9 @@ describe("onUploadCompleted", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockedHead.mockResolvedValue({ size: 10 } as any);
     mockedCreate.mockRejectedValue(new Error("connection reset"));
-    await expect(
-      onUploadCompleted({ blob: BLOB, tokenPayload: TOKEN_PAYLOAD })
-    ).rejects.toThrow(/connection reset/);
+    await expect(onUploadCompleted({ blob: BLOB, tokenPayload: TOKEN_PAYLOAD })).rejects.toThrow(
+      /connection reset/,
+    );
     expect(mockedDel).not.toHaveBeenCalled();
   });
 
@@ -485,7 +483,7 @@ describe("onUploadCompleted", () => {
     });
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     await expect(
-      onUploadCompleted({ blob: BLOB, tokenPayload: TOKEN_PAYLOAD })
+      onUploadCompleted({ blob: BLOB, tokenPayload: TOKEN_PAYLOAD }),
     ).resolves.toBeUndefined();
     errSpy.mockRestore();
     vi.mocked(revalidatePath).mockReset();
@@ -537,7 +535,7 @@ describe("lead scope — onBeforeGenerateToken", () => {
     wireLeadGates();
     const err = await tokenError(
       KEY,
-      JSON.stringify({ matterId: "m1", leadId: "l1", name: "brief.pdf" })
+      JSON.stringify({ matterId: "m1", leadId: "l1", name: "brief.pdf" }),
     );
     expect(err.status).toBe(400);
   });
@@ -602,9 +600,8 @@ describe("lead scope — onUploadCompleted", () => {
     mockedDocFind.mockResolvedValue(null);
     // The upload runs in an interactive transaction; the mock client
     // doubles as the tx client.
-    vi.mocked(prisma.$transaction).mockImplementation((async (
-      fn: (tx: unknown) => unknown
-    ) => fn(prisma)) as unknown as typeof prisma.$transaction);
+    vi.mocked(prisma.$transaction).mockImplementation((async (fn: (tx: unknown) => unknown) =>
+      fn(prisma)) as unknown as typeof prisma.$transaction);
     vi.mocked(prisma.$queryRaw).mockResolvedValue([{ id: "l1" }] as never);
     vi.mocked(canAccessMatter).mockResolvedValue(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -758,15 +755,15 @@ describe("records requests", () => {
     const withRole = await onBeforeGenerateToken(
       KEY,
       JSON.stringify({ ...JSON.parse(RR_PAYLOAD), recordsRole: "request_letter" }),
-      false
+      false,
     );
-    expect(
-      JSON.parse((withRole as { tokenPayload: string }).tokenPayload).recordsRole
-    ).toBe("request_letter");
+    expect(JSON.parse((withRole as { tokenPayload: string }).tokenPayload).recordsRole).toBe(
+      "request_letter",
+    );
     const without = await onBeforeGenerateToken(KEY, RR_PAYLOAD, false);
-    expect(
-      JSON.parse((without as { tokenPayload: string }).tokenPayload).recordsRole
-    ).toBe("received_records");
+    expect(JSON.parse((without as { tokenPayload: string }).tokenPayload).recordsRole).toBe(
+      "received_records",
+    );
   });
 
   test("token: an invalid recordsRole -> 400, no token issued", async () => {
@@ -774,7 +771,7 @@ describe("records requests", () => {
     mockedReq.mockResolvedValue({ id: "rr1" } as never);
     const err = await tokenError(
       KEY,
-      JSON.stringify({ ...JSON.parse(RR_PAYLOAD), recordsRole: "bogus" })
+      JSON.stringify({ ...JSON.parse(RR_PAYLOAD), recordsRole: "bogus" }),
     );
     expect(err.status).toBe(400);
     expect(err.message).toBe("Invalid records document kind.");
@@ -806,9 +803,8 @@ describe("records requests", () => {
 
     function wire(stage = "new", convertedMatterId: string | null = null) {
       mockedDocFind.mockResolvedValue(null);
-      vi.mocked(prisma.$transaction).mockImplementation((async (
-        fn: (tx: unknown) => unknown
-      ) => fn(prisma)) as unknown as typeof prisma.$transaction);
+      vi.mocked(prisma.$transaction).mockImplementation((async (fn: (tx: unknown) => unknown) =>
+        fn(prisma)) as unknown as typeof prisma.$transaction);
       vi.mocked(prisma.$queryRaw).mockResolvedValue([{ id: "l1" }] as never);
       vi.mocked(canAccessMatter).mockResolvedValue(true);
       mockedMatter.mockResolvedValue({ id: "m1" } as never);
@@ -931,16 +927,13 @@ describe("draft target", () => {
       { recordsRequestId: "r1" },
     ]) {
       wireDraftGates();
-      const err = await tokenError(
-        KEY,
-        JSON.stringify({ draftId: "d1", name: "a.pdf", ...extra })
-      );
+      const err = await tokenError(KEY, JSON.stringify({ draftId: "d1", name: "a.pdf", ...extra }));
       expect(err.status, JSON.stringify(extra)).toBe(400);
     }
     wireDraftGates();
     const err = await tokenError(
       KEY,
-      JSON.stringify({ draftId: "d1", matterId: "m1", name: "a.pdf" })
+      JSON.stringify({ draftId: "d1", matterId: "m1", name: "a.pdf" }),
     );
     expect(err.message).toBe("Choose exactly one of a matter, a lead or a draft.");
   });
@@ -977,7 +970,7 @@ describe("draft target", () => {
           fileSize: 1234,
           uploadedBy: "u1",
         }),
-      })
+      }),
     );
     expect(mockedCreate).not.toHaveBeenCalled();
     expect(logActivity).toHaveBeenCalledWith(
@@ -985,7 +978,7 @@ describe("draft target", () => {
         matterId: null,
         type: "filing",
         title: "File attached to a matter draft",
-      })
+      }),
     );
   });
 
@@ -1004,7 +997,7 @@ describe("draft target", () => {
   test("completed: draft claimed by Create during the insert (P2003) -> blob removed, no throw", async () => {
     wireDraftGates();
     vi.mocked(prisma.matterDraftFile.create).mockRejectedValue(
-      Object.assign(new Error("fk"), { code: "P2003" })
+      Object.assign(new Error("fk"), { code: "P2003" }),
     );
     mockedHead.mockResolvedValue({ size: 10 } as never);
     await onUploadCompleted({

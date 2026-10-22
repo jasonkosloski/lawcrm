@@ -6,6 +6,7 @@
 **Context:** The design uses three fonts. Fraunces is a personality font that should be used sparingly.
 
 **Decision:** Fraunces is used exclusively for:
+
 - Page titles (h1 in topbar)
 - Email subjects
 - Email body paragraphs

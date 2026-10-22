@@ -126,7 +126,7 @@ describe("createRecordsRequest", () => {
         custodianContactId: custodianId,
         typeId,
         subject: "Chart 2024",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     expect(requirePermission).toHaveBeenCalledWith("records.create");
@@ -143,7 +143,7 @@ describe("createRecordsRequest", () => {
     const res = await createRecordsRequest(
       { kind: "lead", leadId },
       IDLE,
-      fd({ custodianContactId: custodianId, typeId, subject: "Chart" })
+      fd({ custodianContactId: custodianId, typeId, subject: "Chart" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.recordsRequest.findFirstOrThrow();
@@ -159,7 +159,7 @@ describe("createRecordsRequest", () => {
     const res = await createRecordsRequest(
       M,
       IDLE,
-      fd({ custodianContactId: custodianId, typeId: "", subject: "x" })
+      fd({ custodianContactId: custodianId, typeId: "", subject: "x" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.adHocTypeName).toBeDefined();
@@ -176,7 +176,7 @@ describe("createRecordsRequest", () => {
         adHocTypeName: "Body cam",
         subject: "Footage",
         responseDueDate: "2026-11-01",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.recordsRequest.findFirstOrThrow();
@@ -191,7 +191,7 @@ describe("createRecordsRequest", () => {
     const res = await createRecordsRequest(
       { kind: "lead", leadId },
       IDLE,
-      fd({ custodianContactId: custodianId, typeId, subject: "x" })
+      fd({ custodianContactId: custodianId, typeId, subject: "x" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?._form?.[0]).toMatch(/already converted/);
@@ -214,11 +214,7 @@ describe("updateRecordsRequest", () => {
     });
     const r = await seedRequest();
     await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
-    const res = await updateRecordsRequest(
-      r.id,
-      IDLE,
-      fd({ ...base(), ownerId: other.userId })
-    );
+    const res = await updateRecordsRequest(r.id, IDLE, fd({ ...base(), ownerId: other.userId }));
     expect(res.status).toBe("ok");
     expect(requirePermission).toHaveBeenCalledWith("records.edit");
     const task = await prisma.task.findFirstOrThrow({
@@ -241,16 +237,14 @@ describe("updateRecordsRequest", () => {
     const res = await updateRecordsRequest(
       r.id,
       IDLE,
-      fd({ ...base(), typeId: t2.id, responseDueDate: "2026-10-21" })
+      fd({ ...base(), typeId: t2.id, responseDueDate: "2026-10-21" }),
     );
     expect(res.status).toBe("ok");
     const after = await prisma.recordsRequest.findUniqueOrThrow({
       where: { id: r.id },
     });
     expect(after.typeId).toBe(t2.id);
-    expect(after.responseDueDate?.toISOString().slice(0, 10)).toBe(
-      "2026-10-21"
-    );
+    expect(after.responseDueDate?.toISOString().slice(0, 10)).toBe("2026-10-21");
   });
 
   test("stale expectedUpdatedAt is a _form error", async () => {
@@ -262,7 +256,7 @@ describe("updateRecordsRequest", () => {
         ...base(),
         expectedUpdatedAt: new Date(r.updatedAt.getTime() - 5000).toISOString(),
         subject: "Changed",
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?._form).toBeDefined();
@@ -305,7 +299,11 @@ describe("setRecordsRequestStatus", () => {
   });
 
   test("complete -> sent logs a reopen", async () => {
-    const r = await seedRequest({ status: "complete", nextFollowUpDate: null, sentAt: new Date("2026-10-01T00:00:00Z") });
+    const r = await seedRequest({
+      status: "complete",
+      nextFollowUpDate: null,
+      sentAt: new Date("2026-10-01T00:00:00Z"),
+    });
     const res = await setRecordsRequestStatus(r.id, "sent");
     expect(res.ok).toBe(true);
     const log = await prisma.activityLog.findFirst({
@@ -323,9 +321,9 @@ describe("draft and reopen constraints", () => {
       const r = await seedRequest({ status: "draft", nextFollowUpDate: null });
       const res = await setRecordsRequestStatus(r.id, to);
       expect(res).toEqual({ ok: false, error: "Use Mark sent to send a request." });
-      expect(
-        (await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } })).status
-      ).toBe("draft");
+      expect((await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } })).status).toBe(
+        "draft",
+      );
     }
   });
 
@@ -341,7 +339,7 @@ describe("draft and reopen constraints", () => {
     await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
     expect(await prisma.task.count({ where: { recordsRequestId: r.id } })).toBe(0);
     const rolled = await prisma.$transaction((tx) =>
-      rollFollowUp(tx, r.id, { actorId: userId, note: null, today: "2026-10-18" })
+      rollFollowUp(tx, r.id, { actorId: userId, note: null, today: "2026-10-18" }),
     );
     expect(rolled).toBe(false);
     expect(await prisma.recordsRequestFollowUp.count()).toBe(0);
@@ -374,9 +372,7 @@ describe("draft and reopen constraints", () => {
     expect(bad.ok).toBe(false);
     const ok = await setRecordsRequestStatus(r.id, "partial");
     expect(ok.ok).toBe(true);
-    expect(
-      await prisma.task.count({ where: { recordsRequestId: r.id, status: "open" } })
-    ).toBe(1);
+    expect(await prisma.task.count({ where: { recordsRequestId: r.id, status: "open" } })).toBe(1);
   });
 
   test("markRecordsRequestSent re-dates an already-open follow-up task", async () => {
@@ -433,13 +429,15 @@ describe("deleteRecordsRequest", () => {
           custodianName: "Memorial Hospital",
           typeName: "CORA",
         },
-        "received_records"
-      )
+        "received_records",
+      ),
     );
     const { documentId } = await seedDocument({ matterId, folderId });
     await deleteRecordsRequest(r.id);
     const folders = await prisma.documentFolder.findMany({ where: { matterId } });
-    const linked = folders.filter((f) => f.name !== "Investigation" && f.name !== "Records Requests");
+    const linked = folders.filter(
+      (f) => f.name !== "Investigation" && f.name !== "Records Requests",
+    );
     expect(linked).toHaveLength(2);
     for (const f of linked) {
       expect(f.systemKind).toBeNull();
@@ -464,7 +462,7 @@ describe("rollFollowUp", () => {
     const r = await seedRequest();
     await prisma.$transaction((tx) => openFollowUpTask(tx, r.id));
     const rolled = await prisma.$transaction((tx) =>
-      rollFollowUp(tx, r.id, { actorId: userId, note: "Called", today: "2026-10-18" })
+      rollFollowUp(tx, r.id, { actorId: userId, note: "Called", today: "2026-10-18" }),
     );
     expect(rolled).toBe(true);
     const after = await prisma.recordsRequest.findUniqueOrThrow({
@@ -483,7 +481,7 @@ describe("rollFollowUp", () => {
   test("no-op on a closed request", async () => {
     const r = await seedRequest({ status: "complete" });
     const rolled = await prisma.$transaction((tx) =>
-      rollFollowUp(tx, r.id, { actorId: userId, note: null, today: "2026-10-18" })
+      rollFollowUp(tx, r.id, { actorId: userId, note: null, today: "2026-10-18" }),
     );
     expect(rolled).toBe(false);
     expect(await prisma.recordsRequestFollowUp.count()).toBe(0);
@@ -500,12 +498,16 @@ describe("concurrency and reopen", () => {
     expect(
       await prisma.task.count({
         where: { recordsRequestId: r.id, status: "open" },
-      })
+      }),
     ).toBe(1);
   });
 
   test("concurrent reopen: one wins, one open task", async () => {
-    const r = await seedRequest({ status: "complete", nextFollowUpDate: null, sentAt: new Date("2026-10-01T00:00:00Z") });
+    const r = await seedRequest({
+      status: "complete",
+      nextFollowUpDate: null,
+      sentAt: new Date("2026-10-01T00:00:00Z"),
+    });
     const res = await Promise.all([
       setRecordsRequestStatus(r.id, "sent"),
       setRecordsRequestStatus(r.id, "sent"),
@@ -515,18 +517,20 @@ describe("concurrency and reopen", () => {
     expect(
       await prisma.task.count({
         where: { recordsRequestId: r.id, status: "open" },
-      })
+      }),
     ).toBe(1);
   });
 
   test("reopen restarts the chase at today + interval", async () => {
-    const r = await seedRequest({ status: "complete", nextFollowUpDate: null, sentAt: new Date("2026-10-01T00:00:00Z") });
+    const r = await seedRequest({
+      status: "complete",
+      nextFollowUpDate: null,
+      sentAt: new Date("2026-10-01T00:00:00Z"),
+    });
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/Denver",
     });
-    const expected = new Date(
-      Date.parse(`${today}T00:00:00Z`) + 7 * 86400000
-    );
+    const expected = new Date(Date.parse(`${today}T00:00:00Z`) + 7 * 86400000);
     await setRecordsRequestStatus(r.id, "sent");
     const after = await prisma.recordsRequest.findUniqueOrThrow({
       where: { id: r.id },
@@ -558,11 +562,7 @@ describe("markRecordsRequestSent", () => {
       status: "draft",
       nextFollowUpDate: null,
     });
-    const res = await markRecordsRequestSent(
-      r.id,
-      IDLE,
-      fd({ sentAt: "2026-10-16" })
-    );
+    const res = await markRecordsRequestSent(r.id, IDLE, fd({ sentAt: "2026-10-16" }));
     expect(res.status).toBe("ok");
     expect(requirePermission).toHaveBeenCalledWith("records.edit");
     const after = await prisma.recordsRequest.findUniqueOrThrow({
@@ -570,9 +570,7 @@ describe("markRecordsRequestSent", () => {
     });
     expect(after.status).toBe("sent");
     expect(after.responseDueDate?.toISOString().slice(0, 10)).toBe("2026-10-21");
-    expect(after.nextFollowUpDate?.toISOString().slice(0, 10)).toBe(
-      "2026-10-23"
-    );
+    expect(after.nextFollowUpDate?.toISOString().slice(0, 10)).toBe("2026-10-23");
     const tasks = await prisma.task.findMany({
       where: { recordsRequestId: r.id, status: "open" },
     });
@@ -593,9 +591,7 @@ describe("markRecordsRequestSent", () => {
       where: { id: r.id },
     });
     expect(after.responseDueDate).toBeNull();
-    expect(after.nextFollowUpDate?.toISOString().slice(0, 10)).toBe(
-      "2026-10-23"
-    );
+    expect(after.nextFollowUpDate?.toISOString().slice(0, 10)).toBe("2026-10-23");
   });
 
   test("rejects a request that is not a draft", async () => {
@@ -622,9 +618,7 @@ describe("logRecordsFollowUp", () => {
     const res = await logRecordsFollowUp(r.id, IDLE, fd({ note: "Called" }));
     expect(res.status).toBe("ok");
     expect(await prisma.recordsRequestFollowUp.count()).toBe(1);
-    expect(
-      (await prisma.task.findUniqueOrThrow({ where: { id: old.id } })).status
-    ).toBe("done");
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: old.id } })).status).toBe("done");
     const open = await prisma.task.findMany({
       where: { recordsRequestId: r.id, status: "open" },
     });
@@ -666,9 +660,7 @@ describe("task completion hook", () => {
       ok: false,
       error: "This records request is closed \u2014 reopen the request first.",
     });
-    expect(
-      (await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status
-    ).toBe("cancelled");
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status).toBe("cancelled");
     expect(await prisma.recordsRequestFollowUp.count()).toBe(0);
   });
 
@@ -687,12 +679,9 @@ describe("task completion hook", () => {
     const res = await setTaskStatus(t.id, "open");
     expect(res).toEqual({
       ok: false,
-      error:
-        "This follow-up was already rescheduled \u2014 use the open follow-up task instead.",
+      error: "This follow-up was already rescheduled \u2014 use the open follow-up task instead.",
     });
-    expect(
-      (await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status
-    ).toBe("done");
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status).toBe("done");
     expect(await openCount()).toBe(1);
     expect(await prisma.recordsRequestFollowUp.count()).toBe(1);
   });
@@ -707,15 +696,13 @@ describe("task completion hook", () => {
     const res = await updateTask(
       t.id,
       updateTaskInitialState,
-      fd({ title: t.title, priority: "normal", status: "open" })
+      fd({ title: t.title, priority: "normal", status: "open" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?._form?.[0]).toBe(
-      "This follow-up was already rescheduled \u2014 use the open follow-up task instead."
+      "This follow-up was already rescheduled \u2014 use the open follow-up task instead.",
     );
-    expect(
-      (await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status
-    ).toBe("done");
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: t.id } })).status).toBe("done");
   });
 
   test("a follow-up cancelled by hand can be reopened when none is open", async () => {
@@ -727,9 +714,7 @@ describe("task completion hook", () => {
     await setTaskStatus(t.id, "cancelled");
     const res = await setTaskStatus(t.id, "open");
     expect(res.ok).toBe(true);
-    expect(
-      await prisma.task.count({ where: { recordsRequestId: r.id, status: "open" } })
-    ).toBe(1);
+    expect(await prisma.task.count({ where: { recordsRequestId: r.id, status: "open" } })).toBe(1);
   });
 
   test("a concurrent task done and logged follow-up both finish with one open task", async () => {
@@ -746,7 +731,7 @@ describe("task completion hook", () => {
     expect(
       await prisma.task.count({
         where: { recordsRequestId: r.id, status: { in: ["open", "in_progress"] } },
-      })
+      }),
     ).toBe(1);
   });
 
@@ -761,7 +746,7 @@ describe("task completion hook", () => {
     expect(
       await prisma.task.count({
         where: { recordsRequestId: r.id, status: "open" },
-      })
+      }),
     ).toBe(1);
   });
 });
@@ -781,7 +766,7 @@ describe("saveRecordsFee", () => {
     const res = await saveRecordsFee(
       r.id,
       IDLE,
-      fee({ feeEstimate: "40", feeAmount: "25.00", feePaidAt: "2026-10-20" })
+      fee({ feeEstimate: "40", feeAmount: "25.00", feePaidAt: "2026-10-20" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.recordsRequest.findUniqueOrThrow({
@@ -831,9 +816,7 @@ describe("saveRecordsFee", () => {
       data: { invoiceId: inv.id },
     });
     const res = await saveRecordsFee(r.id, IDLE, fee({ ...f, feeAmount: "30.00" }));
-    expect(res.errors?._form?.[0]).toBe(
-      "This fee is on an invoice and can't be changed."
-    );
+    expect(res.errors?._form?.[0]).toBe("This fee is on an invoice and can't be changed.");
     const e = await prisma.expense.findUniqueOrThrow({ where: { id: cur.expenseId! } });
     expect(e.amount.toString()).toBe("25");
     const after = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
@@ -844,11 +827,7 @@ describe("saveRecordsFee", () => {
     const { leadId } = await seedLead();
     const r = await seedRequest({ matterId: null, leadId });
     vi.mocked(currentUserHasPermission).mockResolvedValue(false);
-    const res = await saveRecordsFee(
-      r.id,
-      IDLE,
-      fee({ feeAmount: "25", feePaidAt: "2026-10-20" })
-    );
+    const res = await saveRecordsFee(r.id, IDLE, fee({ feeAmount: "25", feePaidAt: "2026-10-20" }));
     vi.mocked(currentUserHasPermission).mockResolvedValue(true);
     expect(res.status).toBe("ok");
     const row = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
@@ -865,13 +844,9 @@ describe("saveRecordsFee", () => {
   test("a matter fee needs matters.expense.view", async () => {
     const r = await feeRequest();
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k !== "matters.expense.view"
+      async (k: string) => k !== "matters.expense.view",
     );
-    const res = await saveRecordsFee(
-      r.id,
-      IDLE,
-      fee({ feeEstimate: "10" })
-    );
+    const res = await saveRecordsFee(r.id, IDLE, fee({ feeEstimate: "10" }));
     vi.mocked(currentUserHasPermission).mockResolvedValue(true);
     expect(res.errors?._form?.[0]).toBe("You don't have permission to view expenses.");
     const row = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
@@ -881,13 +856,9 @@ describe("saveRecordsFee", () => {
   test("missing matters.expense.create saves nothing", async () => {
     const r = await feeRequest();
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k !== "matters.expense.create"
+      async (k: string) => k !== "matters.expense.create",
     );
-    const res = await saveRecordsFee(
-      r.id,
-      IDLE,
-      fee({ feeAmount: "25", feePaidAt: "2026-10-20" })
-    );
+    const res = await saveRecordsFee(r.id, IDLE, fee({ feeAmount: "25", feePaidAt: "2026-10-20" }));
     vi.mocked(currentUserHasPermission).mockResolvedValue(true);
     expect(res.errors?._form?.[0]).toBe("You don't have permission to add expenses.");
     const row = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
@@ -918,7 +889,9 @@ describe("saveRecordsFee", () => {
     const row = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
     expect(row.feeAmount!.toString()).toBe("25");
     expect(row.feePaidAt).not.toBeNull();
-    expect((await prisma.expense.findUniqueOrThrow({ where: { id: row.expenseId! } })).amount.toString()).toBe("25");
+    expect(
+      (await prisma.expense.findUniqueOrThrow({ where: { id: row.expenseId! } })).amount.toString(),
+    ).toBe("25");
   });
 
   test("invoiced Expense with cleared fields is refused unchanged", async () => {
@@ -945,14 +918,16 @@ describe("saveRecordsFee", () => {
     const f = { feeAmount: "25", feePaidAt: "2026-10-20" };
     await saveRecordsFee(r.id, IDLE, fee(f));
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k !== "matters.expense.edit"
+      async (k: string) => k !== "matters.expense.edit",
     );
     const res = await saveRecordsFee(r.id, IDLE, fee({ ...f, feeEstimate: "50" }));
     vi.mocked(currentUserHasPermission).mockResolvedValue(true);
     expect(res.status).toBe("ok");
     const row = await prisma.recordsRequest.findUniqueOrThrow({ where: { id: r.id } });
     expect(row.feeEstimate!.toString()).toBe("50");
-    expect((await prisma.expense.findUniqueOrThrow({ where: { id: row.expenseId! } })).amount.toString()).toBe("25");
+    expect(
+      (await prisma.expense.findUniqueOrThrow({ where: { id: row.expenseId! } })).amount.toString(),
+    ).toBe("25");
   });
 
   test("a zero fee never creates an Expense", async () => {
@@ -1034,7 +1009,7 @@ describe("linkRecordsDocuments / unlinkRecordsDocument", () => {
     const res = await linkRecordsDocuments(
       r.id,
       [documentId],
-      "bogus" as unknown as "request_letter"
+      "bogus" as unknown as "request_letter",
     );
     expect(res).toEqual({ ok: false, error: "Invalid records document kind." });
     const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });

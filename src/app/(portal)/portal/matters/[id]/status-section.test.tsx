@@ -2,9 +2,7 @@ import { describe, expect, test } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { StatusSection } from "./status-section";
 
-const u = (
-  over: Partial<Parameters<typeof StatusSection>[0]["updates"][0]>,
-) => ({
+const u = (over: Partial<Parameters<typeof StatusSection>[0]["updates"][0]>) => ({
   id: "u1",
   stageLabel: "Discovery",
   body: "We filed.",
@@ -17,9 +15,7 @@ describe("StatusSection", () => {
   test("empty state", () => {
     render(<StatusSection updates={[]} />);
     expect(screen.getByText("Where things stand")).toBeTruthy();
-    expect(
-      screen.getByText("Your legal team hasn't posted an update yet."),
-    ).toBeTruthy();
+    expect(screen.getByText("Your legal team hasn't posted an update yet.")).toBeTruthy();
     expect(screen.queryByText("Earlier updates")).toBeNull();
   });
 

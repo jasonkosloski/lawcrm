@@ -68,9 +68,7 @@ const formProps = vi.hoisted(() => ({
     | undefined,
 }));
 const teamProps = vi.hoisted(() => ({
-  current: undefined as
-    | { userOptions: Array<{ id: string }> }
-    | undefined,
+  current: undefined as { userOptions: Array<{ id: string }> } | undefined,
 }));
 vi.mock("@/components/matters/edit-matter-form", () => ({
   EditMatterForm: (props: NonNullable<typeof formProps.current>) => {
@@ -90,9 +88,7 @@ vi.mock("@/components/matters/matter-restrict-card", () => ({
   ),
 }));
 vi.mock("@/components/settings/calendar-defaults-card", () => ({
-  MatterCalendarDefaultsCard: () => (
-    <div data-testid="calendar-defaults-card" />
-  ),
+  MatterCalendarDefaultsCard: () => <div data-testid="calendar-defaults-card" />,
 }));
 
 import { prisma } from "@/lib/prisma";
@@ -124,18 +120,16 @@ const matter = {
 
 /** Grant exactly these permission keys; everything else denies. */
 const grant = (...keys: string[]) =>
-  vi
-    .mocked(currentUserHasPermission)
-    .mockImplementation(async (key) => keys.includes(key));
+  vi.mocked(currentUserHasPermission).mockImplementation(async (key) => keys.includes(key));
 
 const renderPage = async () => {
   vi.mocked(prisma.matter.findUnique).mockResolvedValue(
-    matter as unknown as Awaited<ReturnType<typeof prisma.matter.findUnique>>
+    matter as unknown as Awaited<ReturnType<typeof prisma.matter.findUnique>>,
   );
   render(
     await EditMatterPage({
       params: Promise.resolve({ id: "m1" }),
-    } as Parameters<typeof EditMatterPage>[0])
+    } as Parameters<typeof EditMatterPage>[0]),
   );
 };
 
@@ -148,9 +142,7 @@ describe("EditMatterPage — matters.edit gate", () => {
     grant(); // page access only, no matter keys
     await renderPage();
     expect(screen.queryByTestId("edit-matter-form")).toBeNull();
-    expect(
-      screen.getByText(/read-only for your role/i)
-    ).toBeTruthy();
+    expect(screen.getByText(/read-only for your role/i)).toBeTruthy();
   });
 
   test("with matters.edit — form renders, notice is absent", async () => {
@@ -184,15 +176,14 @@ describe("EditMatterPage — matters.restrict gate (ADR-049)", () => {
 
   test("with matters.restrict the card gets the matter's flag", async () => {
     grant("matters.restrict");
-    vi.mocked(prisma.matter.findUnique).mockResolvedValue(
-      { ...matter, restricted: true } as unknown as Awaited<
-        ReturnType<typeof prisma.matter.findUnique>
-      >
-    );
+    vi.mocked(prisma.matter.findUnique).mockResolvedValue({
+      ...matter,
+      restricted: true,
+    } as unknown as Awaited<ReturnType<typeof prisma.matter.findUnique>>);
     render(
       await EditMatterPage({
         params: Promise.resolve({ id: "m1" }),
-      } as Parameters<typeof EditMatterPage>[0])
+      } as Parameters<typeof EditMatterPage>[0]),
     );
     expect(screen.getByTestId("restrict-card").dataset.restricted).toBe("true");
   });
@@ -216,15 +207,14 @@ describe("EditMatterPage — option lists keep the current client and lead (F082
   test("client and user queries always include the matter's current client and active lead", async () => {
     grant("matters.edit");
     vi.mocked(prisma.matter.findUnique).mockResolvedValue(
-      withTeam as unknown as Awaited<ReturnType<typeof prisma.matter.findUnique>>
+      withTeam as unknown as Awaited<ReturnType<typeof prisma.matter.findUnique>>,
     );
     render(
       await EditMatterPage({
         params: Promise.resolve({ id: "m1" }),
-      } as Parameters<typeof EditMatterPage>[0])
+      } as Parameters<typeof EditMatterPage>[0]),
     );
-    const clientWhere = vi.mocked(prisma.contact.findMany).mock.calls[0][0]!
-      .where;
+    const clientWhere = vi.mocked(prisma.contact.findMany).mock.calls[0][0]!.where;
     expect(clientWhere).toEqual({
       OR: [{ type: "client", isActive: true }, { id: "c1" }],
     });
@@ -237,7 +227,7 @@ describe("EditMatterPage — option lists keep the current client and lead (F082
   test("inactive rows are flagged for the form and kept out of the team card's picker", async () => {
     grant("matters.edit", "matters.manage_team");
     vi.mocked(prisma.matter.findUnique).mockResolvedValue(
-      withTeam as unknown as Awaited<ReturnType<typeof prisma.matter.findUnique>>
+      withTeam as unknown as Awaited<ReturnType<typeof prisma.matter.findUnique>>,
     );
     vi.mocked(prisma.contact.findMany).mockResolvedValueOnce([
       { id: "c1", name: "Maria", organization: null, isActive: false },
@@ -249,7 +239,7 @@ describe("EditMatterPage — option lists keep the current client and lead (F082
     render(
       await EditMatterPage({
         params: Promise.resolve({ id: "m1" }),
-      } as Parameters<typeof EditMatterPage>[0])
+      } as Parameters<typeof EditMatterPage>[0]),
     );
     expect(formProps.current?.options.clients).toEqual([
       expect.objectContaining({ id: "c1", inactive: true }),
@@ -309,9 +299,7 @@ describe("EditMatterPage — venue options", () => {
   test("includes the matter's archived current venue", async () => {
     grant("matters.edit");
     vi.mocked(listVenues).mockResolvedValueOnce([venue("v1", true)]);
-    vi.mocked(prisma.venue.findUnique).mockResolvedValueOnce(
-      venue("v-old", false) as never
-    );
+    vi.mocked(prisma.venue.findUnique).mockResolvedValueOnce(venue("v-old", false) as never);
     vi.mocked(prisma.matter.findUnique).mockResolvedValue({
       ...matter,
       venueId: "v-old",
@@ -319,7 +307,7 @@ describe("EditMatterPage — venue options", () => {
     render(
       await EditMatterPage({
         params: Promise.resolve({ id: "m1" }),
-      } as Parameters<typeof EditMatterPage>[0])
+      } as Parameters<typeof EditMatterPage>[0]),
     );
     expect(formProps.current?.options.venues).toEqual([
       expect.objectContaining({ id: "v1" }),

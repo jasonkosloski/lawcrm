@@ -15,10 +15,7 @@ const DEFAULT_FOLLOW_UP_DAYS = 7;
 
 /** Row-lock the request for the rest of the caller's transaction so
  *  concurrent read-then-write helpers serialize. */
-export async function lockRecordsRequest(
-  tx: Tx,
-  requestId: string
-): Promise<void> {
+export async function lockRecordsRequest(tx: Tx, requestId: string): Promise<void> {
   await tx.$queryRaw`SELECT id FROM "records_requests" WHERE id = ${requestId} FOR UPDATE`;
 }
 
@@ -36,7 +33,7 @@ export const REQUEST_CLOSED_ERROR =
 export async function checkFollowUpReopen(
   tx: Tx,
   requestId: string,
-  taskId: string
+  taskId: string,
 ): Promise<string | null> {
   await lockRecordsRequest(tx, requestId);
   const r = await tx.recordsRequest.findUnique({
@@ -57,10 +54,7 @@ export async function checkFollowUpReopen(
 
 /** Create the follow-up task unless one is already open (or the
  *  request is missing, a draft, or closed). Drafts are not chased. */
-export async function openFollowUpTask(
-  tx: Tx,
-  requestId: string
-): Promise<void> {
+export async function openFollowUpTask(tx: Tx, requestId: string): Promise<void> {
   await lockRecordsRequest(tx, requestId);
   const r = await tx.recordsRequest.findUnique({
     where: { id: requestId },
@@ -94,10 +88,7 @@ export async function openFollowUpTask(
 }
 
 /** Cancel every open follow-up task for the request. */
-export async function cancelFollowUpTasks(
-  tx: Tx,
-  requestId: string
-): Promise<void> {
+export async function cancelFollowUpTasks(tx: Tx, requestId: string): Promise<void> {
   await lockRecordsRequest(tx, requestId);
   await tx.task.updateMany({
     where: { recordsRequestId: requestId, status: { in: OPEN_TASK_STATUSES } },
@@ -113,7 +104,7 @@ export async function cancelFollowUpTasks(
 export async function rollFollowUp(
   tx: Tx,
   requestId: string,
-  opts: { actorId: string; note: string | null; today: string }
+  opts: { actorId: string; note: string | null; today: string },
 ): Promise<boolean> {
   await lockRecordsRequest(tx, requestId);
   const r = await tx.recordsRequest.findUnique({
@@ -141,10 +132,7 @@ export async function rollFollowUp(
   await tx.recordsRequest.update({
     where: { id: requestId },
     data: {
-      nextFollowUpDate: addCalendarDays(
-        todayDate,
-        r.type?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS
-      ),
+      nextFollowUpDate: addCalendarDays(todayDate, r.type?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS),
     },
   });
   await openFollowUpTask(tx, requestId);
@@ -155,7 +143,7 @@ export async function rollFollowUp(
 export async function syncFollowUpTaskOwner(
   tx: Tx,
   requestId: string,
-  ownerId: string | null
+  ownerId: string | null,
 ): Promise<void> {
   await tx.task.updateMany({
     where: { recordsRequestId: requestId, status: { in: OPEN_TASK_STATUSES } },

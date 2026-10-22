@@ -43,19 +43,14 @@ export async function GET(request: NextRequest): Promise<Response> {
   // button too; this covers a stale tab / hand-typed URL).
   if (!googleIntegrationConfigured()) {
     return NextResponse.redirect(
-      new URL(
-        "/settings/integrations?error=not_configured",
-        request.nextUrl.origin
-      )
+      new URL("/settings/integrations?error=not_configured", request.nextUrl.origin),
     );
   }
 
   const { state, nonce } = createOAuthState();
   const redirectUri = resolveGoogleRedirectUri(request.nextUrl);
 
-  const response = NextResponse.redirect(
-    buildGoogleAuthUrl({ redirectUri, state })
-  );
+  const response = NextResponse.redirect(buildGoogleAuthUrl({ redirectUri, state }));
   response.cookies.set(OAUTH_STATE_COOKIE, nonce, {
     httpOnly: true,
     // lax: the callback arrives as a top-level cross-site GET

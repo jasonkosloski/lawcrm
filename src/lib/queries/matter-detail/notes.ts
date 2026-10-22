@@ -9,10 +9,7 @@ import { REACTION_EMOJIS } from "@/lib/note-constants";
 import { noteToPlainText } from "@/lib/note-text";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import { formatPhone } from "@/lib/format-phone";
-import {
-  EVENT_REF_SELECT,
-  eventLabelForViewer,
-} from "./shared";
+import { EVENT_REF_SELECT, eventLabelForViewer } from "./shared";
 
 // ── Notes ────────────────────────────────────────────────────────────────
 
@@ -121,7 +118,7 @@ export function capitalizeKind(k: string): string {
 
 export async function getMatterNotes(
   matterId: string,
-  options: { pinnedOnly?: boolean } = {}
+  options: { pinnedOnly?: boolean } = {},
 ): Promise<NoteRow[]> {
   return getNoteRows({
     matterId,
@@ -256,8 +253,7 @@ async function getNoteRows(where: Prisma.NoteWhereInput): Promise<NoteRow[]> {
       // Messenger items don't have a label; derive one from the
       // thread's contact (or pretty-printed phone fallback).
       const t = n.messengerItem.thread;
-      const label =
-        t?.contact?.name ?? prettyPhoneForLink(t?.contactPhone ?? "");
+      const label = t?.contact?.name ?? prettyPhoneForLink(t?.contactPhone ?? "");
       link = {
         kind: "message",
         // Link by thread id so navigation lands on the conversation
@@ -278,13 +274,11 @@ async function getNoteRows(where: Prisma.NoteWhereInput): Promise<NoteRow[]> {
       if (r.userId === userId) entry.userReacted = true;
       byEmoji.set(r.emoji, entry);
     }
-    const reactions = REACTION_EMOJIS.filter((e) => byEmoji.has(e)).map(
-      (emoji) => ({
-        emoji,
-        count: byEmoji.get(emoji)!.count,
-        userReacted: byEmoji.get(emoji)!.userReacted,
-      })
-    );
+    const reactions = REACTION_EMOJIS.filter((e) => byEmoji.has(e)).map((emoji) => ({
+      emoji,
+      count: byEmoji.get(emoji)!.count,
+      userReacted: byEmoji.get(emoji)!.userReacted,
+    }));
 
     return {
       id: n.id,

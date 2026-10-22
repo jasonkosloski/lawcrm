@@ -44,7 +44,5 @@ export const ACTIVITY_ICONS: Record<string, LucideIcon> = {
 
 /** The icon for a stored icon name, or a plain circle when unknown. */
 export function activityIcon(name: string | null | undefined): LucideIcon {
-  return name && Object.hasOwn(ACTIVITY_ICONS, name)
-    ? ACTIVITY_ICONS[name]!
-    : Circle;
+  return name && Object.hasOwn(ACTIVITY_ICONS, name) ? ACTIVITY_ICONS[name]! : Circle;
 }

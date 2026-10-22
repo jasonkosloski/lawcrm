@@ -14,10 +14,7 @@ vi.mock("./thread-reader", () => ({
   ThreadReader: () => <div data-testid="reader" />,
 }));
 
-import type {
-  ThreadDetail,
-  ThreadListRow,
-} from "@/lib/queries/communication";
+import type { ThreadDetail, ThreadListRow } from "@/lib/queries/communication";
 import { EmbeddedInbox } from "./embedded-inbox";
 
 // `overflow-hidden` on the reader is unrelated to the display toggle.
@@ -35,7 +32,7 @@ function panes(selectedThread: ThreadDetail | null) {
       leadOptions={[]}
       basePath="/matters/m1/communication"
       emptyLabel="Nothing"
-    />
+    />,
   );
   return {
     list: screen.getByTestId("list").parentElement!,

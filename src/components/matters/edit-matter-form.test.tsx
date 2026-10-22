@@ -30,11 +30,7 @@ vi.mock("@/app/actions/matters", () => ({
   }),
 }));
 
-import {
-  EditMatterForm,
-  type EditMatterFormOptions,
-  type MatterForEdit,
-} from "./edit-matter-form";
+import { EditMatterForm, type EditMatterFormOptions, type MatterForEdit } from "./edit-matter-form";
 
 const options: EditMatterFormOptions = {
   areas: [
@@ -131,7 +127,7 @@ describe("EditMatterForm — SOL auto vs override", () => {
         }}
         options={options}
         canChangeLead
-      />
+      />,
     );
     expect(screen.getByLabelText(/deadline date/i)).toHaveValue("2027-01-15");
     expect(screen.getByText(/manual override/i)).toBeTruthy();
@@ -162,13 +158,9 @@ describe("EditMatterForm — people", () => {
   test("the inactive current client and lead stay in the lists and selected", () => {
     render(<EditMatterForm matter={matter} options={options} canChangeLead />);
     expect(screen.getByLabelText(/^client/i)).toHaveValue("c1");
-    expect(
-      screen.getByRole("option", { name: /maria alvarez \(inactive\)/i })
-    ).toBeTruthy();
+    expect(screen.getByRole("option", { name: /maria alvarez \(inactive\)/i })).toBeTruthy();
     expect(screen.getByLabelText(/lead attorney/i)).toHaveValue("u-lead");
-    expect(
-      screen.getByRole("option", { name: /dana lead.*\(inactive\)/i })
-    ).toBeTruthy();
+    expect(screen.getByRole("option", { name: /dana lead.*\(inactive\)/i })).toBeTruthy();
   });
 
   test("without manage_team the lead is locked and still posted unchanged", async () => {
@@ -182,11 +174,7 @@ describe("EditMatterForm — people", () => {
 
   test("a matter with no lead shows a placeholder instead of picking the first user", () => {
     render(
-      <EditMatterForm
-        matter={{ ...matter, leadUserId: null }}
-        options={options}
-        canChangeLead
-      />
+      <EditMatterForm matter={{ ...matter, leadUserId: null }} options={options} canChangeLead />,
     );
     expect(screen.getByLabelText(/lead attorney/i)).toHaveValue("");
   });
@@ -200,14 +188,7 @@ describe("EditMatterForm — validation error keeps the user's selections (F095)
       errors: { description: ["Summary is too long"] },
       values: {},
     };
-    render(
-      <EditMatterForm
-        matter={matter}
-        options={options}
-        canChangeLead
-        canEditBillingType
-      />
-    );
+    render(<EditMatterForm matter={matter} options={options} canChangeLead canEditBillingType />);
 
     await user.selectOptions(screen.getByLabelText(/billing type/i), "hourly");
     await user.selectOptions(screen.getByLabelText(/^client/i), "c2");
@@ -267,7 +248,7 @@ describe("EditMatterForm — venue, filed/trial dates, required fields", () => {
     areas: options.areas.map((a) =>
       a.id === "civil"
         ? { ...a, requiredMatterFields: ["venue", "court", "filedDate", "incidentDate"] }
-        : a
+        : a,
     ),
   };
 
@@ -282,7 +263,7 @@ describe("EditMatterForm — venue, filed/trial dates, required fields", () => {
         }}
         options={reqOptions}
         canChangeLead
-      />
+      />,
     );
     expect(screen.getByLabelText("Venue")).toHaveValue("Denver District Court");
     expect(screen.getByLabelText(/filed date/i)).toHaveValue("2025-02-03");
@@ -292,11 +273,7 @@ describe("EditMatterForm — venue, filed/trial dates, required fields", () => {
   test("an archived current venue is kept selected and labelled (archived)", async () => {
     const user = userEvent.setup();
     render(
-      <EditMatterForm
-        matter={{ ...matter, venueId: "v2" }}
-        options={reqOptions}
-        canChangeLead
-      />
+      <EditMatterForm matter={{ ...matter, venueId: "v2" }} options={reqOptions} canChangeLead />,
     );
     expect(screen.getByLabelText("Venue")).toHaveValue("Old Court (archived)");
     await user.click(screen.getByLabelText("Venue"));
@@ -306,7 +283,9 @@ describe("EditMatterForm — venue, filed/trial dates, required fields", () => {
   test("required markers follow the selected area", async () => {
     const user = userEvent.setup();
     render(<EditMatterForm matter={matter} options={reqOptions} canChangeLead />);
-    expect(screen.getAllByText("Required for Civil Rights", { exact: false }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Required for Civil Rights", { exact: false }).length,
+    ).toBeGreaterThan(0);
     await user.selectOptions(screen.getByLabelText(/practice area/i), "emp");
     expect(screen.queryByText("Required for Civil Rights", { exact: false })).toBeNull();
   });
@@ -318,7 +297,7 @@ describe("EditMatterForm — venue, filed/trial dates, required fields", () => {
         matter={{ ...matter, court: "D. Colo." }}
         options={reqOptions}
         canChangeLead
-      />
+      />,
     );
     await user.clear(screen.getByLabelText(/^court/i));
     await user.click(screen.getByRole("button", { name: /save changes/i }));
@@ -338,26 +317,23 @@ describe("EditMatterForm — venue, filed/trial dates, required fields", () => {
 describe("EditMatterForm — billing type lock", () => {
   test("without canEditBillingType it shows read-only text and posts no billingType", () => {
     const { container } = render(
-      <EditMatterForm matter={matter} options={options} canChangeLead />
+      <EditMatterForm matter={matter} options={options} canChangeLead />,
     );
     expect(screen.getByText("Court-appointed · set at creation")).toBeTruthy();
     expect(container.querySelector('[name="billingType"]')).toBeNull();
   });
 
   test("with canEditBillingType it offers the five types with the current one selected", () => {
-    render(
-      <EditMatterForm
-        matter={matter}
-        options={options}
-        canChangeLead
-        canEditBillingType
-      />
-    );
+    render(<EditMatterForm matter={matter} options={options} canChangeLead canEditBillingType />);
     const select = screen.getByLabelText(/billing type/i);
     expect(select).toHaveValue("court_appointed");
-    expect(
-      Array.from(select.querySelectorAll("option")).map((o) => o.value)
-    ).toEqual(["hourly", "flat", "contingent", "court_appointed", "pro_bono"]);
+    expect(Array.from(select.querySelectorAll("option")).map((o) => o.value)).toEqual([
+      "hourly",
+      "flat",
+      "contingent",
+      "court_appointed",
+      "pro_bono",
+    ]);
   });
 
   test("a legacy hybrid matter gets a Hybrid option only while it is hybrid", () => {
@@ -367,7 +343,7 @@ describe("EditMatterForm — billing type lock", () => {
         options={options}
         canChangeLead
         canEditBillingType
-      />
+      />,
     );
     const select = screen.getByLabelText(/billing type/i);
     expect(select).toHaveValue("hybrid");

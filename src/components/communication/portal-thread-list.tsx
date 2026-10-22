@@ -40,10 +40,7 @@ export function PortalThreadList({
 
       {rows.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
-          <EmptyState
-            icon={MessagesSquare}
-            title="No client portal messages yet."
-          />
+          <EmptyState icon={MessagesSquare} title="No client portal messages yet." />
         </div>
       ) : (
         <ul className="flex-1 overflow-y-auto">
@@ -57,7 +54,7 @@ export function PortalThreadList({
                   <span
                     className={cn(
                       "text-xs truncate text-ink",
-                      r.unread > 0 ? "font-semibold" : "font-medium"
+                      r.unread > 0 ? "font-semibold" : "font-medium",
                     )}
                   >
                     {r.matterName}
@@ -75,7 +72,7 @@ export function PortalThreadList({
                   <span
                     className={cn(
                       "text-2xs truncate",
-                      r.unread > 0 ? "text-ink-2 font-medium" : "text-ink-3"
+                      r.unread > 0 ? "text-ink-2 font-medium" : "text-ink-3",
                     )}
                   >
                     {r.snippet}

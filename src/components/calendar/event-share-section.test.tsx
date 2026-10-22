@@ -53,7 +53,7 @@ describe("EventShareSection", () => {
         eventTitle="Hearing"
         canShare
         share={{ clientTitle: "Court date", clientNote: "Bring ID" }}
-      />
+      />,
     );
     expect(screen.getByText("Shared")).toBeInTheDocument();
     expect(screen.getByText("Court date")).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe("EventShareSection", () => {
         eventTitle="Hearing"
         canShare={false}
         share={{ clientTitle: "Court date", clientNote: null }}
-      />
+      />,
     );
     expect(screen.getByText("Shared")).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
@@ -79,7 +79,7 @@ describe("EventShareSection", () => {
 
   test("without canShare and unshared: renders nothing", () => {
     const { container } = render(
-      <EventShareSection eventId="e1" eventTitle="Hearing" canShare={false} share={null} />
+      <EventShareSection eventId="e1" eventTitle="Hearing" canShare={false} share={null} />,
     );
     expect(container).toBeEmptyDOMElement();
   });
@@ -107,7 +107,7 @@ describe("EventShareSection", () => {
         eventTitle="Hearing"
         canShare
         share={{ clientTitle: "Court date", clientNote: null }}
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: "Edit share" }));
     await user.click(screen.getByRole("button", { name: "Save" }));

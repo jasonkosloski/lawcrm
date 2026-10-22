@@ -18,16 +18,9 @@ import { Card } from "@/components/ui/card";
 import { EventDetailModal } from "@/components/calendar/event-detail-modal";
 import { EventComposer } from "@/components/matters/captures/event-composer";
 import { EventRowExpandable } from "@/components/matters/events/event-row-expandable";
-import {
-  getMatterEvents,
-  type MatterEventRow,
-} from "@/lib/queries/matter-detail";
+import { getMatterEvents, type MatterEventRow } from "@/lib/queries/matter-detail";
 import { getMatterById } from "@/lib/queries/matters";
-import {
-  getCalendarEventById,
-  getEventNotes,
-  getEventTimeEntries,
-} from "@/lib/queries/calendar";
+import { getCalendarEventById, getEventNotes, getEventTimeEntries } from "@/lib/queries/calendar";
 import { getEventPortalShareProp } from "@/lib/queries/portal-status";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { firstParam } from "@/lib/search-params";
@@ -43,8 +36,7 @@ export default async function MatterEventsPage({
   const sp = await searchParams;
 
   const rawEventParam = firstParam(sp.event);
-  const requestedEventId =
-    typeof rawEventParam === "string" ? rawEventParam : null;
+  const requestedEventId = typeof rawEventParam === "string" ? rawEventParam : null;
 
   const tz = await getCurrentUserTimeZone();
   const [matter, events, canCreateEvent] = await Promise.all([
@@ -62,9 +54,7 @@ export default async function MatterEventsPage({
   // and against URL tampering (same guard the billing tab applies
   // to ?invoice=). A foreign-matter id must not open a modal here.
   const eventId =
-    requestedEventId && events.some((e) => e.id === requestedEventId)
-      ? requestedEventId
-      : null;
+    requestedEventId && events.some((e) => e.id === requestedEventId) ? requestedEventId : null;
 
   // The event must resolve BEFORE notes/time entries are fetched:
   // getCalendarEventById scrubs private events to a "Busy" shell, but
@@ -102,20 +92,10 @@ export default async function MatterEventsPage({
       ) : null}
 
       {upcoming.length > 0 && (
-        <EventSection
-          title="Upcoming"
-          events={upcoming}
-          matterId={id}
-          matterName={matter.name}
-        />
+        <EventSection title="Upcoming" events={upcoming} matterId={id} matterName={matter.name} />
       )}
       {past.length > 0 && (
-        <EventSection
-          title="Past"
-          events={past}
-          matterId={id}
-          matterName={matter.name}
-        />
+        <EventSection title="Past" events={past} matterId={id} matterName={matter.name} />
       )}
 
       {selectedEvent && (
@@ -144,9 +124,7 @@ function EventSection({
   return (
     <section>
       <div className="flex items-center gap-2 mb-2">
-        <h2 className="text-2xs font-medium text-ink-3">
-          {title}
-        </h2>
+        <h2 className="text-2xs font-medium text-ink-3">{title}</h2>
         <span className="text-2xs font-mono text-ink-4">{events.length}</span>
       </div>
       <Card className="p-0 overflow-hidden">

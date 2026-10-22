@@ -37,10 +37,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { recordInvoicePayment } from "@/app/actions/billing";
-import {
-  billingInitialState,
-  type BillingFormState,
-} from "@/lib/billing-form";
+import { billingInitialState, type BillingFormState } from "@/lib/billing-form";
 import { todayKey } from "@/lib/format-date";
 import { parseMoneyInput } from "@/lib/parse-money-input";
 import { useUserTimeZone } from "@/components/user-time-zone";
@@ -70,10 +67,11 @@ export function ApplyTrustDialog({
   // Wrapped useActionState: masks state left over from a previous
   // open, so a failed attempt's error banner doesn't reappear when
   // the dialog is reopened. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    BillingFormState,
-    FormData
-  >(action, billingInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<BillingFormState, FormData>(
+    action,
+    billingInitialState,
+    open,
+  );
 
   // Default to MIN(trust, invoice balance) — the most common case
   // is "earn out as much as the retainer covers."
@@ -99,10 +97,9 @@ export function ApplyTrustDialog({
         <DialogHeader>
           <DialogTitle>Apply trust to {invoiceNumber}</DialogTitle>
           <DialogDescription>
-            Records an earned-fee transfer from the matter&apos;s IOLTA
-            balance against this invoice. All four legs (trust ledger,
-            trust balance, invoice paidAmount + status, payment record)
-            update in one transaction.
+            Records an earned-fee transfer from the matter&apos;s IOLTA balance against this
+            invoice. All four legs (trust ledger, trust balance, invoice paidAmount + status,
+            payment record) update in one transaction.
           </DialogDescription>
         </DialogHeader>
 
@@ -174,13 +171,9 @@ function ApplyTrustForm({
   const overBalance = parsedAmount !== null && parsedAmount > invoiceBalance;
 
   const trustAfter =
-    parsedAmount !== null
-      ? Math.max(0, trustBalance - parsedAmount)
-      : trustBalance;
+    parsedAmount !== null ? Math.max(0, trustBalance - parsedAmount) : trustBalance;
   const invoiceAfter =
-    parsedAmount !== null
-      ? Math.max(0, invoiceBalance - parsedAmount)
-      : invoiceBalance;
+    parsedAmount !== null ? Math.max(0, invoiceBalance - parsedAmount) : invoiceBalance;
   const willMarkPaid = validAmount && invoiceAfter === 0;
 
   return (
@@ -193,34 +186,16 @@ function ApplyTrustForm({
           this-application previews. */}
       <div className="grid grid-cols-2 gap-2 text-2xs">
         <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
-          <div className="text-2xs font-medium text-ink-3">
-            Trust balance
-          </div>
-          <div className="text-ink font-mono mt-0.5">
-            {formatMoney(trustBalance)}
-          </div>
-          <div
-            className={cn(
-              "text-2xs font-mono mt-0.5",
-              overTrust ? "text-warn" : "text-ink-4"
-            )}
-          >
+          <div className="text-2xs font-medium text-ink-3">Trust balance</div>
+          <div className="text-ink font-mono mt-0.5">{formatMoney(trustBalance)}</div>
+          <div className={cn("text-2xs font-mono mt-0.5", overTrust ? "text-warn" : "text-ink-4")}>
             after: {formatMoney(trustAfter)}
           </div>
         </div>
         <div className="px-3 py-2 rounded-md border border-line bg-paper-2/40">
-          <div className="text-2xs font-medium text-ink-3">
-            Invoice balance
-          </div>
-          <div className="text-ink font-mono mt-0.5">
-            {formatMoney(invoiceBalance)}
-          </div>
-          <div
-            className={cn(
-              "text-2xs font-mono mt-0.5",
-              willMarkPaid ? "text-ok" : "text-ink-4"
-            )}
-          >
+          <div className="text-2xs font-medium text-ink-3">Invoice balance</div>
+          <div className="text-ink font-mono mt-0.5">{formatMoney(invoiceBalance)}</div>
+          <div className={cn("text-2xs font-mono mt-0.5", willMarkPaid ? "text-ok" : "text-ink-4")}>
             after: {formatMoney(invoiceAfter)}
             {willMarkPaid && " · paid"}
           </div>
@@ -228,10 +203,7 @@ function ApplyTrustForm({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label
-          htmlFor={`${ids}-amount`}
-          className="text-2xs font-medium text-ink-3"
-        >
+        <label htmlFor={`${ids}-amount`} className="text-2xs font-medium text-ink-3">
           Amount <span className="text-warn">*</span>
         </label>
         <input
@@ -242,18 +214,18 @@ function ApplyTrustForm({
           required
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          className={cn(inputClass(!!(errs.amount || amountUnparseable || overTrust || overBalance), "md"), "text-sm font-mono")}
+          className={cn(
+            inputClass(!!(errs.amount || amountUnparseable || overTrust || overBalance), "md"),
+            "text-sm font-mono",
+          )}
         />
-        {errs.amount && (
-          <span className="text-2xs text-warn">{errs.amount[0]}</span>
-        )}
+        {errs.amount && <span className="text-2xs text-warn">{errs.amount[0]}</span>}
         {!errs.amount && amountUnparseable && (
           <span className="text-2xs text-warn">Enter a valid amount.</span>
         )}
         {!errs.amount && overTrust && (
           <span className="text-2xs text-warn">
-            Exceeds the trust balance — drop the amount or deposit
-            more trust first.
+            Exceeds the trust balance — drop the amount or deposit more trust first.
           </span>
         )}
         {!errs.amount && !overTrust && overBalance && (
@@ -264,10 +236,7 @@ function ApplyTrustForm({
       </div>
 
       <div className="flex flex-col gap-1">
-        <label
-          htmlFor={`${ids}-date`}
-          className="text-2xs font-medium text-ink-3"
-        >
+        <label htmlFor={`${ids}-date`} className="text-2xs font-medium text-ink-3">
           Date
         </label>
         <input
@@ -288,7 +257,7 @@ function ApplyTrustForm({
           "flex items-start gap-2 px-3 py-2 rounded-md border text-xs",
           clientEmail
             ? "cursor-pointer border-line bg-paper-2/40 hover:bg-paper-2/60"
-            : "border-line bg-paper-2/30 cursor-not-allowed opacity-70"
+            : "border-line bg-paper-2/30 cursor-not-allowed opacity-70",
         )}
       >
         <input
@@ -304,9 +273,7 @@ function ApplyTrustForm({
           value={notifyClient && clientEmail ? "true" : ""}
         />
         <div>
-          <div className="text-ink font-medium">
-            Client needs an updated invoice
-          </div>
+          <div className="text-ink font-medium">Client needs an updated invoice</div>
           <div className="text-2xs text-ink-4 mt-0.5">
             {clientEmail
               ? `Logs that ${clientEmail} should get a refreshed copy reflecting the trust application. Nothing is emailed — send it yourself.`
@@ -321,10 +288,7 @@ function ApplyTrustForm({
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
-        <Button
-          type="submit"
-          disabled={isPending || !validAmount || overTrust || overBalance}
-        >
+        <Button type="submit" disabled={isPending || !validAmount || overTrust || overBalance}>
           {isPending
             ? "Applying…"
             : willMarkPaid

@@ -19,8 +19,7 @@ export function LoginScreen({ action }: { action: ReactNode }) {
           LitGox
         </h1>
         <p className="mt-6 max-w-[36ch] text-lg leading-snug text-brand-200">
-          Case management for the firm: matters, deadlines, documents
-          and billing in one place.
+          Case management for the firm: matters, deadlines, documents and billing in one place.
         </p>
       </div>
 
@@ -37,8 +36,8 @@ export function LoginScreen({ action }: { action: ReactNode }) {
           </p>
           {action}
           <p className="mt-6 text-sm leading-relaxed text-ink-3">
-            Access is by invitation. If you&apos;re new to the firm, ask an
-            administrator to add you.
+            Access is by invitation. If you&apos;re new to the firm, ask an administrator to add
+            you.
           </p>
         </section>
       </div>

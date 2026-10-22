@@ -62,10 +62,7 @@ import {
   contentTypeForFilename,
   isMediaType,
 } from "@/app/api/documents/upload/upload-config";
-import {
-  makeStorageKey,
-  type StorageDriver,
-} from "@/lib/storage/storage-key";
+import { makeStorageKey, type StorageDriver } from "@/lib/storage/storage-key";
 import { blobUploadErrorMessage } from "./upload-errors";
 import { Button } from "@/components/ui/button";
 
@@ -112,8 +109,7 @@ export type MultiFileUploadHandle = {
   upload: (files: File[], folderId?: string | null) => void;
 };
 
-const formatMiB = (bytes: number): string =>
-  `${Math.floor(bytes / (1024 * 1024))} MiB`;
+const formatMiB = (bytes: number): string => `${Math.floor(bytes / (1024 * 1024))} MiB`;
 
 export function MultiFileUpload({
   scope,
@@ -157,7 +153,7 @@ export function MultiFileUpload({
     () => () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     },
-    []
+    [],
   );
 
   const reset = () => {
@@ -181,9 +177,7 @@ export function MultiFileUpload({
         return DRAFT_FILE_TOO_LARGE_ERROR;
       }
       const type = contentTypeForFilename(f.name);
-      const cap = isMediaType(type)
-        ? MAX_MEDIA_UPLOAD_BYTES
-        : MAX_STANDARD_UPLOAD_BYTES;
+      const cap = isMediaType(type) ? MAX_MEDIA_UPLOAD_BYTES : MAX_STANDARD_UPLOAD_BYTES;
       if (f.size > cap) {
         return `"${f.name}" is too large (max ${formatMiB(cap)} for ${
           isMediaType(type) ? "media" : "this file type"
@@ -197,7 +191,7 @@ export function MultiFileUpload({
   const startXhrUpload = (
     files: File[],
     target: RecordScope | DraftTarget,
-    folderId: string | null
+    folderId: string | null,
   ) => {
     // Field order per the route contract: target BEFORE file parts.
     const fd = new FormData();
@@ -253,7 +247,7 @@ export function MultiFileUpload({
   const startBlobUpload = async (
     files: File[],
     target: RecordScope | DraftTarget,
-    folderId: string | null
+    folderId: string | null,
   ) => {
     const controller = new AbortController();
     cancelRef.current = { abort: () => controller.abort() };
@@ -262,9 +256,7 @@ export function MultiFileUpload({
     const loadedPerFile = files.map(() => 0);
     const reportProgress = () => {
       const loaded = loadedPerFile.reduce((sum, n) => sum + n, 0);
-      setProgress(
-        totalBytes > 0 ? Math.round((loaded / totalBytes) * 100) : 0
-      );
+      setProgress(totalBytes > 0 ? Math.round((loaded / totalBytes) * 100) : 0);
     };
 
     try {
@@ -395,9 +387,7 @@ export function MultiFileUpload({
             style={{ width: `${progress}%` }}
           />
         </div>
-        <span className="font-mono text-2xs text-ink-4 w-8 text-right">
-          {progress}%
-        </span>
+        <span className="font-mono text-2xs text-ink-4 w-8 text-right">{progress}%</span>
         <button
           type="button"
           onClick={() => cancelRef.current?.abort()}

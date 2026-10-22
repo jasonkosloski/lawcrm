@@ -18,9 +18,7 @@ export function AuthPanel({
           <h1 className="font-display text-2xl font-medium tracking-tight text-brand-900">
             {title}
           </h1>
-          {description ? (
-            <p className="text-sm leading-relaxed text-ink-3">{description}</p>
-          ) : null}
+          {description ? <p className="text-sm leading-relaxed text-ink-3">{description}</p> : null}
         </div>
         {children}
       </Card>

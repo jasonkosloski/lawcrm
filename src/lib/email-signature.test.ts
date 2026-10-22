@@ -6,11 +6,7 @@
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
-import {
-  getEmailSignature,
-  normalizeEmailSignature,
-  wrapEmailSignature,
-} from "./email-signature";
+import { getEmailSignature, normalizeEmailSignature, wrapEmailSignature } from "./email-signature";
 
 describe("normalizeEmailSignature", () => {
   test("empty or whitespace-only HTML is no signature", () => {
@@ -23,9 +19,7 @@ describe("normalizeEmailSignature", () => {
 
 describe("wrapEmailSignature", () => {
   test("puts the caret line and delimiter above the signature", () => {
-    expect(wrapEmailSignature("<p>Jane</p>")).toBe(
-      "<p></p><p>-- </p><p>Jane</p>"
-    );
+    expect(wrapEmailSignature("<p>Jane</p>")).toBe("<p></p><p>-- </p><p>Jane</p>");
   });
 
   test("re-sanitizes stored HTML", () => {
@@ -61,8 +55,6 @@ describe("getEmailSignature", () => {
       where: { id: userId },
       data: { emailSignature: "<p><strong>Jane</strong></p>" },
     });
-    expect(await getEmailSignature(userId)).toBe(
-      "<p></p><p>-- </p><p><strong>Jane</strong></p>"
-    );
+    expect(await getEmailSignature(userId)).toBe("<p></p><p>-- </p><p><strong>Jane</strong></p>");
   });
 });

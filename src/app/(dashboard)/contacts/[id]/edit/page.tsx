@@ -15,9 +15,7 @@ import { getContactById } from "@/lib/queries/contacts";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { requireUser } from "@/lib/current-user";
 
-export default async function EditContactPage({
-  params,
-}: PageProps<"/contacts/[id]/edit">) {
+export default async function EditContactPage({ params }: PageProps<"/contacts/[id]/edit">) {
   await requireUser();
   const { id } = await params;
   const [c, canEdit] = await Promise.all([
@@ -32,10 +30,7 @@ export default async function EditContactPage({
 
   return (
     <>
-      <TopBar
-        title="Edit contact"
-        crumbs={`Contacts / ${c.name} / Edit`}
-      />
+      <TopBar title="Edit contact" crumbs={`Contacts / ${c.name} / Edit`} />
       <div className="flex-1 overflow-y-auto p-5 animate-page-enter">
         <ContactForm
           action={boundUpdate}

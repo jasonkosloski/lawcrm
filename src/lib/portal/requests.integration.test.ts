@@ -22,7 +22,7 @@ let userId: string;
 async function mkReq(
   matterId: string,
   title: string,
-  extra: Partial<{ status: string; dueDate: Date; returnNote: string }> = {}
+  extra: Partial<{ status: string; dueDate: Date; returnNote: string }> = {},
 ) {
   return prisma.documentRequest.create({
     data: { matterId, title, createdById: userId, ...extra },

@@ -37,10 +37,7 @@ import {
 } from "@/lib/portal/record-upload";
 import { isValidStorageKey } from "@/lib/storage/storage-key";
 import { BLOB_CACHE_MAX_AGE_SECONDS } from "@/lib/storage/blob-driver";
-import {
-  MAX_DOCUMENT_NAME_LENGTH,
-  isMediaType,
-} from "@/app/api/documents/upload/upload-config";
+import { MAX_DOCUMENT_NAME_LENGTH, isMediaType } from "@/app/api/documents/upload/upload-config";
 
 /** Public path of this route on the portal host. */
 export const PORTAL_UPLOAD_CALLBACK_PATH = "/api/documents/upload/blob";
@@ -85,66 +82,68 @@ const tokenPayloadSchema = z.object({
 });
 type TokenPayload = z.infer<typeof tokenPayloadSchema>;
 
-export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"] =
-  async (pathname, clientPayload) => {
-    const identity = await getPortalIdentity();
-    if (!identity) throw new PortalUploadError(401, "Please sign in again.");
+export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"] = async (
+  pathname,
+  clientPayload,
+) => {
+  const identity = await getPortalIdentity();
+  if (!identity) throw new PortalUploadError(401, "Please sign in again.");
 
-    if (!isValidStorageKey(pathname)) {
-      throw new PortalUploadError(400, "Invalid upload pathname.");
-    }
-    let payload: z.infer<typeof clientPayloadSchema>;
-    try {
-      payload = clientPayloadSchema.parse(JSON.parse(clientPayload ?? ""));
-    } catch {
-      throw new PortalUploadError(400, "Invalid upload payload.");
-    }
+  if (!isValidStorageKey(pathname)) {
+    throw new PortalUploadError(400, "Invalid upload pathname.");
+  }
+  let payload: z.infer<typeof clientPayloadSchema>;
+  try {
+    payload = clientPayloadSchema.parse(JSON.parse(clientPayload ?? ""));
+  } catch {
+    throw new PortalUploadError(400, "Invalid upload payload.");
+  }
 
-    // The key's extension decides the stored type; the display name must
-    // agree so a ".exe" can't hide behind a ".pdf" key.
-    const policy = checkPortalUpload(pathname);
-    if (!policy.ok) throw new PortalUploadError(400, policy.error);
-    const named = checkPortalUpload(payload.name);
-    if (!named.ok) throw new PortalUploadError(400, named.error);
-    if (named.contentType !== policy.contentType) {
-      throw new PortalUploadError(400, "Invalid upload payload.");
-    }
+  // The key's extension decides the stored type; the display name must
+  // agree so a ".exe" can't hide behind a ".pdf" key.
+  const policy = checkPortalUpload(pathname);
+  if (!policy.ok) throw new PortalUploadError(400, policy.error);
+  const named = checkPortalUpload(payload.name);
+  if (!named.ok) throw new PortalUploadError(400, named.error);
+  if (named.contentType !== policy.contentType) {
+    throw new PortalUploadError(400, "Invalid upload payload.");
+  }
 
-    const requestId = payload.requestId ?? null;
-    const target = await checkPortalUploadTarget({
-      identityId: identity.identityId,
-      matterId: payload.matterId,
-      requestId,
-      batchId: payload.batchId,
-    });
-    if (!target.ok) throw new PortalUploadError(target.status, target.error);
+  const requestId = payload.requestId ?? null;
+  const target = await checkPortalUploadTarget({
+    identityId: identity.identityId,
+    matterId: payload.matterId,
+    requestId,
+    batchId: payload.batchId,
+  });
+  if (!target.ok) throw new PortalUploadError(target.status, target.error);
 
-    const callbackUrl = portalUploadCallbackUrl();
-    if (!callbackUrl) {
-      throw new PortalUploadError(503, "Uploads aren't available right now.");
-    }
+  const callbackUrl = portalUploadCallbackUrl();
+  if (!callbackUrl) {
+    throw new PortalUploadError(503, "Uploads aren't available right now.");
+  }
 
-    const tokenPayload: TokenPayload = {
-      kind: "portal",
-      identityId: identity.identityId,
-      matterId: payload.matterId,
-      requestId,
-      batchId: payload.batchId,
-      name: payload.name,
-      note: payload.note?.trim() || null,
-      contentType: policy.contentType,
-    };
-    return {
-      allowedContentTypes: [policy.contentType],
-      maximumSizeInBytes: policy.maxBytes,
-      validUntil: Date.now() + (isMediaType(policy.contentType) ? MEDIA_TOKEN_TTL_MS : TOKEN_TTL_MS),
-      addRandomSuffix: false,
-      allowOverwrite: false,
-      cacheControlMaxAge: BLOB_CACHE_MAX_AGE_SECONDS,
-      tokenPayload: JSON.stringify(tokenPayload),
-      callbackUrl,
-    };
+  const tokenPayload: TokenPayload = {
+    kind: "portal",
+    identityId: identity.identityId,
+    matterId: payload.matterId,
+    requestId,
+    batchId: payload.batchId,
+    name: payload.name,
+    note: payload.note?.trim() || null,
+    contentType: policy.contentType,
   };
+  return {
+    allowedContentTypes: [policy.contentType],
+    maximumSizeInBytes: policy.maxBytes,
+    validUntil: Date.now() + (isMediaType(policy.contentType) ? MEDIA_TOKEN_TTL_MS : TOKEN_TTL_MS),
+    addRandomSuffix: false,
+    allowOverwrite: false,
+    cacheControlMaxAge: BLOB_CACHE_MAX_AGE_SECONDS,
+    tokenPayload: JSON.stringify(tokenPayload),
+    callbackUrl,
+  };
+};
 
 /**
  * Delivered at least once; retried on any throw. A refusal that a retry
@@ -152,53 +151,55 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
  * returns normally. A payload we didn't write throws: we never guess an
  * identity.
  */
-export const onUploadCompleted: NonNullable<HandleUploadOptions["onUploadCompleted"]> =
-  async ({ blob, tokenPayload }) => {
-    if (!tokenPayload) throw new Error("Missing token payload on completed upload.");
-    const t = tokenPayloadSchema.parse(JSON.parse(tokenPayload));
+export const onUploadCompleted: NonNullable<HandleUploadOptions["onUploadCompleted"]> = async ({
+  blob,
+  tokenPayload,
+}) => {
+  if (!tokenPayload) throw new Error("Missing token payload on completed upload.");
+  const t = tokenPayloadSchema.parse(JSON.parse(tokenPayload));
 
-    // Redelivery: skip the size probe; recordPortalUpload no-ops too.
-    const existing = await prisma.document.findFirst({
-      where: { fileUrl: blob.url },
-      select: { id: true },
-    });
-    if (existing) return;
+  // Redelivery: skip the size probe; recordPortalUpload no-ops too.
+  const existing = await prisma.document.findFirst({
+    where: { fileUrl: blob.url },
+    select: { id: true },
+  });
+  if (existing) return;
 
-    // A redelivery after we refused (and deleted) the blob finds nothing:
-    // succeed so Vercel stops retrying.
-    let meta: Awaited<ReturnType<typeof head>>;
-    try {
-      meta = await head(blob.url);
-    } catch (err) {
-      if (err instanceof BlobNotFoundError) return;
-      throw err;
-    }
-    if (meta.size === 0) {
-      await del(blob.url).catch(() => {});
-      return;
-    }
+  // A redelivery after we refused (and deleted) the blob finds nothing:
+  // succeed so Vercel stops retrying.
+  let meta: Awaited<ReturnType<typeof head>>;
+  try {
+    meta = await head(blob.url);
+  } catch (err) {
+    if (err instanceof BlobNotFoundError) return;
+    throw err;
+  }
+  if (meta.size === 0) {
+    await del(blob.url).catch(() => {});
+    return;
+  }
 
-    // The stored key's type must still pass (it did at token time).
-    if (!checkPortalUpload(blob.pathname).ok) {
-      await del(blob.url).catch(() => {});
-      return;
-    }
+  // The stored key's type must still pass (it did at token time).
+  if (!checkPortalUpload(blob.pathname).ok) {
+    await del(blob.url).catch(() => {});
+    return;
+  }
 
-    const result = await recordPortalUpload({
-      identityId: t.identityId,
+  const result = await recordPortalUpload({
+    identityId: t.identityId,
+    matterId: t.matterId,
+    requestId: t.requestId,
+    batchId: t.batchId,
+    storageKey: blob.url,
+    filename: t.name,
+    contentType: t.contentType,
+    size: meta.size,
+    note: t.note,
+  });
+  if (!result.ok) {
+    console.error("[portal-blob-upload] upload refused at completion; blob removed", {
       matterId: t.matterId,
-      requestId: t.requestId,
-      batchId: t.batchId,
-      storageKey: blob.url,
-      filename: t.name,
-      contentType: t.contentType,
-      size: meta.size,
-      note: t.note,
+      error: result.error,
     });
-    if (!result.ok) {
-      console.error("[portal-blob-upload] upload refused at completion; blob removed", {
-        matterId: t.matterId,
-        error: result.error,
-      });
-    }
-  };
+  }
+};

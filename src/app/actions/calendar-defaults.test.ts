@@ -74,10 +74,7 @@ function form(entries: Record<string, string>): FormData {
 
 describe("updateFirmCalendarDefaults", () => {
   test("gates on firm.edit_info; checkbox present = true, absent = false; audits", async () => {
-    const res = await updateFirmCalendarDefaults(
-      idle,
-      form({ autoAddTeamToNewEvents: "on" })
-    );
+    const res = await updateFirmCalendarDefaults(idle, form({ autoAddTeamToNewEvents: "on" }));
     expect(res.status).toBe("ok");
     expect(mockedRequire).toHaveBeenCalledWith("firm.edit_info");
     const firm = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
@@ -86,16 +83,11 @@ describe("updateFirmCalendarDefaults", () => {
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { title: "Firm calendar defaults updated" },
     });
-    expect(log.detail).toBe(
-      "Auto-add team to new events: on; to upcoming events: off"
-    );
+    expect(log.detail).toBe("Auto-add team to new events: on; to upcoming events: off");
   });
 
   test("rejects a non-'on' value without writing", async () => {
-    const res = await updateFirmCalendarDefaults(
-      idle,
-      form({ autoAddTeamToNewEvents: "yes" })
-    );
+    const res = await updateFirmCalendarDefaults(idle, form({ autoAddTeamToNewEvents: "yes" }));
     expect(res.status).toBe("error");
     const firm = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
     expect(firm.autoAddTeamToNewEvents).toBe(true); // schema default untouched
@@ -103,9 +95,7 @@ describe("updateFirmCalendarDefaults", () => {
 
   test("a denied permission propagates and writes nothing", async () => {
     mockedRequire.mockRejectedValue(new Error("__DENIED__"));
-    await expect(
-      updateFirmCalendarDefaults(idle, form({}))
-    ).rejects.toThrow("__DENIED__");
+    await expect(updateFirmCalendarDefaults(idle, form({}))).rejects.toThrow("__DENIED__");
     const firm = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
     expect(firm.autoAddTeamToUpcomingEvents).toBe(true);
   });
@@ -119,7 +109,7 @@ describe("updateMatterCalendarDefaults", () => {
       form({
         autoAddTeamToNewEvents: "true",
         autoAddTeamToUpcomingEvents: "false",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     expect(mockedRequire).toHaveBeenCalledWith("matters.edit");
@@ -133,7 +123,7 @@ describe("updateMatterCalendarDefaults", () => {
       form({
         autoAddTeamToNewEvents: "inherit",
         autoAddTeamToUpcomingEvents: "inherit",
-      })
+      }),
     );
     m = await prisma.matter.findUniqueOrThrow({ where: { id: matterId } });
     expect(m.autoAddTeamToNewEvents).toBeNull();
@@ -154,7 +144,7 @@ describe("updateMatterCalendarDefaults", () => {
     const res = await updateMatterCalendarDefaults(
       matterId,
       idle,
-      form({ autoAddTeamToNewEvents: "maybe" })
+      form({ autoAddTeamToNewEvents: "maybe" }),
     );
     expect(res.status).toBe("error");
     expect(await prisma.activityLog.count()).toBe(0);
@@ -166,11 +156,7 @@ describe("updateMatterCalendarDefaults", () => {
   });
 
   test("writes a matter-scoped audit row", async () => {
-    await updateMatterCalendarDefaults(
-      matterId,
-      idle,
-      form({ autoAddTeamToNewEvents: "false" })
-    );
+    await updateMatterCalendarDefaults(matterId, idle, form({ autoAddTeamToNewEvents: "false" }));
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { title: "Matter calendar defaults updated" },
     });

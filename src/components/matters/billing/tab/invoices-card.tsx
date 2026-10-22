@@ -3,12 +3,7 @@
 import Link from "next/link";
 import { Printer } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -53,9 +48,7 @@ export function InvoicesCard({
         {billing.invoices.length === 0 ? (
           <div className="p-6 text-center">
             <div className="text-xs text-ink-3 mb-1">No invoices yet.</div>
-            <div className="text-2xs text-ink-4">
-              Generate the first one from WIP below.
-            </div>
+            <div className="text-2xs text-ink-4">Generate the first one from WIP below.</div>
           </div>
         ) : (
           <Table>
@@ -83,10 +76,7 @@ export function InvoicesCard({
                 // would otherwise eat half the click target — the
                 // first/last cells get extra px-4 for the table's
                 // outer gutter.
-                const cellLink = (
-                  children: React.ReactNode,
-                  extraClasses?: string
-                ) => (
+                const cellLink = (children: React.ReactNode, extraClasses?: string) => (
                   <Link
                     href={invoiceHref(inv.id)}
                     scroll={false}
@@ -100,9 +90,7 @@ export function InvoicesCard({
                     key={inv.id}
                     className={cn(
                       "cursor-pointer transition-colors",
-                      isSelected
-                        ? "bg-brand-tint hover:bg-brand-tint"
-                        : "hover:bg-paper-2"
+                      isSelected ? "bg-brand-tint hover:bg-brand-tint" : "hover:bg-paper-2",
                     )}
                   >
                     <TableCell className="font-mono text-xs p-0">
@@ -120,17 +108,11 @@ export function InvoicesCard({
                           )}
                           {inv.lineItemCount > 0 && (
                             <span className="ml-2 text-2xs text-ink-4 font-sans">
-                              · {inv.lineItemCount}{" "}
-                              {inv.lineItemCount === 1 ? "item" : "items"}
+                              · {inv.lineItemCount} {inv.lineItemCount === 1 ? "item" : "items"}
                             </span>
                           )}
                         </>,
-                        cn(
-                          "pl-4",
-                          isSelected
-                            ? "text-brand-700 font-semibold"
-                            : "text-ink"
-                        )
+                        cn("pl-4", isSelected ? "text-brand-700 font-semibold" : "text-ink"),
                       )}
                     </TableCell>
                     <TableCell className="p-0">
@@ -139,10 +121,7 @@ export function InvoicesCard({
                           <span
                             className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${INVOICE_STATUS_CLASS[inv.status] ?? INVOICE_STATUS_CLASS.draft}`}
                           >
-                            {invoiceStatusLabel(
-                              inv.status,
-                              inv.kind as InvoiceKind
-                            )}
+                            {invoiceStatusLabel(inv.status, inv.kind as InvoiceKind)}
                           </span>
                           {/* Drift indicator: an old row that
                               pre-dates the "partial" status sits in
@@ -160,7 +139,7 @@ export function InvoicesCard({
                                 partial
                               </Badge>
                             )}
-                        </span>
+                        </span>,
                       )}
                     </TableCell>
                     <TableCell className="text-2xs font-mono text-ink-3 p-0">
@@ -170,20 +149,18 @@ export function InvoicesCard({
                       {cellLink(
                         <span
                           className={
-                            inv.daysUntilDue !== null &&
-                            inv.daysUntilDue < 0
+                            inv.daysUntilDue !== null && inv.daysUntilDue < 0
                               ? "text-warn font-medium"
                               : "text-ink-3"
                           }
                         >
                           {formatDate(inv.dueDate, "medium", timeZone)}
-                          {inv.daysUntilDue !== null &&
-                            inv.daysUntilDue < 0 && (
-                              <span className="ml-1 text-warn">
-                                ({Math.abs(inv.daysUntilDue)}d late)
-                              </span>
-                            )}
-                        </span>
+                          {inv.daysUntilDue !== null && inv.daysUntilDue < 0 && (
+                            <span className="ml-1 text-warn">
+                              ({Math.abs(inv.daysUntilDue)}d late)
+                            </span>
+                          )}
+                        </span>,
                       )}
                     </TableCell>
                     <TableCell className="text-xs font-mono text-ink p-0">
@@ -198,17 +175,13 @@ export function InvoicesCard({
                       {cellLink(
                         <span
                           className={
-                            inv.status !== "void" && inv.balance > 0
-                              ? "text-ink"
-                              : "text-ink-4"
+                            inv.status !== "void" && inv.balance > 0 ? "text-ink" : "text-ink-4"
                           }
                         >
                           {/* A voided invoice owes nothing (its stored
                               balance is just the untouched total). */}
-                          {inv.status === "void"
-                            ? "—"
-                            : formatMoney(inv.balance)}
-                        </span>
+                          {inv.status === "void" ? "—" : formatMoney(inv.balance)}
+                        </span>,
                       )}
                     </TableCell>
                     {/* Print column — sits outside the row's

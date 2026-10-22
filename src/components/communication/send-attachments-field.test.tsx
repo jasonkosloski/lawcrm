@@ -35,14 +35,7 @@ function Host({
   initial?: AttachableDocument[];
 }) {
   const [value, setValue] = useState<AttachableDocument[]>(initial);
-  return (
-    <SendAttachmentsField
-      scope={scope}
-      value={value}
-      onChange={setValue}
-      canUpload={false}
-    />
-  );
+  return <SendAttachmentsField scope={scope} value={value} onChange={setValue} canUpload={false} />;
 }
 
 beforeEach(() => {
@@ -64,9 +57,7 @@ describe("SendAttachmentsField", () => {
     expect(listAttachableDocuments).toHaveBeenCalledWith(SCOPE, "");
     await user.click(row);
     expect(screen.getAllByTestId("send-attachment")).toHaveLength(1);
-    expect(screen.getByTestId("send-attachment")).toHaveTextContent(
-      "Retainer.pdf"
-    );
+    expect(screen.getByTestId("send-attachment")).toHaveTextContent("Retainer.pdf");
   });
 
   test("removing a chip drops the attachment", async () => {
@@ -81,18 +72,10 @@ describe("SendAttachmentsField", () => {
     vi.mocked(listAttachableDocuments).mockResolvedValue([
       { id: "big", name: "Exhibits.zip", fileSize: 20 * 1024 * 1024 },
     ]);
-    render(
-      <Host
-        initial={[{ id: "d0", name: "Prior.pdf", fileSize: 10 * 1024 * 1024 }]}
-      />
-    );
+    render(<Host initial={[{ id: "d0", name: "Prior.pdf", fileSize: 10 * 1024 * 1024 }]} />);
     await user.click(screen.getByRole("button", { name: /attach/i }));
-    await user.click(
-      await screen.findByRole("button", { name: /Exhibits\.zip/ })
-    );
-    await waitFor(() =>
-      expect(screen.getByText(/at most 25 MB/i)).toBeInTheDocument()
-    );
+    await user.click(await screen.findByRole("button", { name: /Exhibits\.zip/ }));
+    await waitFor(() => expect(screen.getByText(/at most 25 MB/i)).toBeInTheDocument());
     expect(screen.getAllByTestId("send-attachment")).toHaveLength(1);
   });
 
@@ -103,14 +86,7 @@ describe("SendAttachmentsField", () => {
       const [value, setValue] = useState<AttachableDocument[]>([
         { id: "d0", name: "Prior.pdf", fileSize: 20 * 1024 * 1024 },
       ]);
-      return (
-        <SendAttachmentsField
-          scope={SCOPE}
-          value={value}
-          onChange={setValue}
-          canUpload
-        />
-      );
+      return <SendAttachmentsField scope={SCOPE} value={value} onChange={setValue} canUpload />;
     }
     render(<UploadHost />);
     const input = screen.getByLabelText("Upload a new document");

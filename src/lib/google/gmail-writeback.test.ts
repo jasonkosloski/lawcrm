@@ -15,8 +15,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
-  const mod =
-    await importOriginal<typeof import("@/lib/google/gmail-client")>();
+  const mod = await importOriginal<typeof import("@/lib/google/gmail-client")>();
   return { ...mod, gmailFetch: vi.fn() };
 });
 
@@ -56,8 +55,7 @@ async function seedAccount(opts?: {
     data: {
       userId,
       emailAddress: "me@gmail.com",
-      refreshToken:
-        opts?.refreshToken === undefined ? "rt-secret" : opts.refreshToken,
+      refreshToken: opts?.refreshToken === undefined ? "rt-secret" : opts.refreshToken,
       syncStatus: opts?.syncStatus ?? "connected",
     },
     select: { id: true },
@@ -116,7 +114,7 @@ describe("modifyGmailThread", () => {
     const accountId = await seedAccount();
     mockedFetch.mockResolvedValue(new Response("{}", { status: 500 }));
     await expect(
-      modifyGmailThread(accountId, "t-123", { removeLabelIds: ["UNREAD"] })
+      modifyGmailThread(accountId, "t-123", { removeLabelIds: ["UNREAD"] }),
     ).rejects.toThrow(GmailWritebackError);
   });
 });
@@ -171,7 +169,7 @@ describe("modifyGmailMessages / writebackGmailMessages (F250)", () => {
     await expect(
       modifyGmailMessages(accountId, ["m1", "m-gone", "m2"], {
         removeLabelIds: ["UNREAD"],
-      })
+      }),
     ).resolves.toBeUndefined();
 
     const paths = mockedFetch.mock.calls.map(([, p]) => p);
@@ -191,10 +189,10 @@ describe("modifyGmailMessages / writebackGmailMessages (F250)", () => {
     mockedFetch.mockImplementation(async (_id, path) =>
       path === "/users/me/messages/batchModify"
         ? new Response("{}", { status: 404 })
-        : new Response("{}", { status: 500 })
+        : new Response("{}", { status: 500 }),
     );
     await expect(
-      modifyGmailMessages(accountId, ["m1"], { removeLabelIds: ["UNREAD"] })
+      modifyGmailMessages(accountId, ["m1"], { removeLabelIds: ["UNREAD"] }),
     ).rejects.toThrow(GmailWritebackError);
   });
 
@@ -202,11 +200,11 @@ describe("modifyGmailMessages / writebackGmailMessages (F250)", () => {
     const accountId = await seedAccount();
     mockedFetch.mockResolvedValue(new Response("{}", { status: 500 }));
     await expect(
-      modifyGmailMessages(accountId, ["m1"], { removeLabelIds: ["UNREAD"] })
+      modifyGmailMessages(accountId, ["m1"], { removeLabelIds: ["UNREAD"] }),
     ).rejects.toThrow(GmailWritebackError);
 
     await expect(
-      writebackGmailMessages(accountId, ["m1"], { removeLabelIds: ["UNREAD"] })
+      writebackGmailMessages(accountId, ["m1"], { removeLabelIds: ["UNREAD"] }),
     ).resolves.toBeUndefined();
     expect(warnSpy).toHaveBeenCalled();
 
@@ -260,12 +258,10 @@ describe("writebackGmailThread — fire-and-forget contract", () => {
 
   test("GmailAuthError → reconnect signal recorded on the account, no throw", async () => {
     const accountId = await seedAccount();
-    mockedFetch.mockRejectedValue(
-      new GmailAuthError("Reconnect this mailbox.", accountId)
-    );
+    mockedFetch.mockRejectedValue(new GmailAuthError("Reconnect this mailbox.", accountId));
 
     await expect(
-      writebackGmailThread(accountId, "t-9", { addLabelIds: ["STARRED"] })
+      writebackGmailThread(accountId, "t-9", { addLabelIds: ["STARRED"] }),
     ).resolves.toBeUndefined();
 
     const account = await prisma.emailAccount.findUniqueOrThrow({
@@ -280,7 +276,7 @@ describe("writebackGmailThread — fire-and-forget contract", () => {
     mockedFetch.mockResolvedValue(new Response("{}", { status: 429 }));
 
     await expect(
-      writebackGmailThread(accountId, "t-9", { removeLabelIds: ["INBOX"] })
+      writebackGmailThread(accountId, "t-9", { removeLabelIds: ["INBOX"] }),
     ).resolves.toBeUndefined();
 
     expect(warnSpy).toHaveBeenCalled();
@@ -296,7 +292,7 @@ describe("writebackGmailThread — fire-and-forget contract", () => {
     mockedFetch.mockRejectedValue(new Error("socket hang up"));
 
     await expect(
-      writebackGmailThread(accountId, "t-9", { removeLabelIds: ["UNREAD"] })
+      writebackGmailThread(accountId, "t-9", { removeLabelIds: ["UNREAD"] }),
     ).resolves.toBeUndefined();
     expect(warnSpy).toHaveBeenCalled();
   });

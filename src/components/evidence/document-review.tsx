@@ -35,9 +35,7 @@ export function DocumentReview({
   /** The viewer body (image, fallback card…). */
   children: React.ReactNode;
 }) {
-  const [composerAnchor, setComposerAnchor] = useState<ComposerAnchor | null>(
-    null
-  );
+  const [composerAnchor, setComposerAnchor] = useState<ComposerAnchor | null>(null);
 
   return (
     <ReviewPanel

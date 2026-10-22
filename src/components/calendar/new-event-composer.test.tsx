@@ -33,7 +33,7 @@ function renderComposer(onClose?: () => void) {
   return render(
     <UserTimeZoneProvider timeZone="America/Denver">
       <NewEventComposer onClose={onClose} />
-    </UserTimeZoneProvider>
+    </UserTimeZoneProvider>,
   );
 }
 

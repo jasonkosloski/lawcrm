@@ -24,10 +24,7 @@ function Failed() {
 }
 
 /** Catches a throw from the Clerk callback component. */
-class CallbackBoundary extends Component<
-  { children: ReactNode },
-  { failed: boolean }
-> {
+class CallbackBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };

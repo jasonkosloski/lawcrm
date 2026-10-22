@@ -101,16 +101,14 @@ export function ApplyDeadlineRuleDialog({
           <DialogHeader>
             <DialogTitle>Apply a deadline rule</DialogTitle>
             <DialogDescription>
-              Calculates the due date from the firm&apos;s rule and adds it to
-              this matter&apos;s deadlines.
+              Calculates the due date from the firm&apos;s rule and adds it to this matter&apos;s
+              deadlines.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-3">
             <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-ink-2">
-                Rule
-              </span>
+              <span className="text-xs font-medium text-ink-2">Rule</span>
               <NativeSelect
                 value={ruleId}
                 onChange={(e) => {
@@ -127,16 +125,12 @@ export function ApplyDeadlineRuleDialog({
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
-              {selected && (
-                <span className="text-2xs text-ink-4">{selected.summary}</span>
-              )}
+              {selected && <span className="text-2xs text-ink-4">{selected.summary}</span>}
             </label>
 
             {needsDate && (
               <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-ink-2">
-                  {result.label}
-                </span>
+                <span className="text-xs font-medium text-ink-2">{result.label}</span>
                 <input
                   type="date"
                   value={anchorDate}
@@ -144,16 +138,14 @@ export function ApplyDeadlineRuleDialog({
                   className="w-full"
                   autoFocus
                 />
-                <span className="text-2xs text-ink-4">
-                  Needed because {result.reason}.
-                </span>
+                <span className="text-2xs text-ink-4">Needed because {result.reason}.</span>
               </label>
             )}
 
             {result?.status === "duplicate" && (
               <Notice>
-                &ldquo;{result.title}&rdquo; is already on this matter. Apply it
-                again to add a second deadline?
+                &ldquo;{result.title}&rdquo; is already on this matter. Apply it again to add a
+                second deadline?
               </Notice>
             )}
             {result?.status === "error" && <Notice>{result.error}</Notice>}

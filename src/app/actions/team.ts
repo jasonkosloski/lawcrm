@@ -62,18 +62,10 @@ import {
   revokeAllStaffSessions,
   unbanStaff,
 } from "@/lib/clerk-admin";
-import {
-  ADMIN_ROLE_NAME,
-  DEFAULT_ROLE_NAME,
-  getCurrentFirm,
-  isCurrentUserAdmin,
-} from "@/lib/firm";
+import { ADMIN_ROLE_NAME, DEFAULT_ROLE_NAME, getCurrentFirm, isCurrentUserAdmin } from "@/lib/firm";
 import { requirePermissionResult } from "@/lib/permission-check";
 import { getPrivilegedRoleIds } from "@/lib/queries/team";
-import {
-  teamInitialState,
-  type TeamFormState,
-} from "@/lib/team-form";
+import { teamInitialState, type TeamFormState } from "@/lib/team-form";
 
 /** Thrown inside the update transaction when the in-transaction
  *  admin recount says the write would leave zero active admins.
@@ -108,8 +100,7 @@ async function getFirmRoleMap(firmId: string): Promise<{
   });
   const byId = new Map(roles.map((r) => [r.id, r]));
   const adminId = roles.find((r) => r.name === ADMIN_ROLE_NAME)?.id ?? null;
-  const defaultId =
-    roles.find((r) => r.name === DEFAULT_ROLE_NAME)?.id ?? null;
+  const defaultId = roles.find((r) => r.name === DEFAULT_ROLE_NAME)?.id ?? null;
   return { byId, adminId, defaultId };
 }
 
@@ -123,25 +114,26 @@ function denied(error: string, values?: Record<string, string>): TeamFormState {
 const PRIVILEGED_ROLE_MESSAGE =
   "Only an Admin can grant or remove the Admin role, or roles that carry access-management permissions.";
 
-const INVITE_WARNING =
-  "Member added, but the invitation email didn't send. Use Resend invite.";
+const INVITE_WARNING = "Member added, but the invitation email didn't send. Use Resend invite.";
 const BAN_WARNING =
   "Deactivated. They can't use the CRM, but the sign-in service didn't confirm signing them out. Use Sign out everywhere to retry.";
 const UNBAN_WARNING =
   "Reactivated, but the sign-in service still blocks their sign-in. Deactivate and reactivate them to retry.";
 
-const ADMIN_TARGET_MESSAGE =
-  "Only an Admin can edit or deactivate an Admin.";
+const ADMIN_TARGET_MESSAGE = "Only an Admin can edit or deactivate an Admin.";
 
 /** " — granted: A; revoked: B" for the audit detail (empty when the
  *  role set didn't change). */
 function roleDiffSuffix(
   added: string[],
   removed: string[],
-  byId: Map<string, { name: string }>
+  byId: Map<string, { name: string }>,
 ): string {
   const names = (ids: string[]) =>
-    ids.map((id) => byId.get(id)?.name ?? id).sort().join(", ");
+    ids
+      .map((id) => byId.get(id)?.name ?? id)
+      .sort()
+      .join(", ");
   const parts: string[] = [];
   if (added.length) parts.push(`granted: ${names(added)}`);
   if (removed.length) parts.push(`revoked: ${names(removed)}`);
@@ -169,7 +161,7 @@ const inviteSchema = z.object({
 
 export async function inviteFirmMember(
   _prev: TeamFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<TeamFormState> {
   const gate = await requirePermissionResult("firm.manage_team_directory");
   if (!gate.ok) return denied(gate.error);
@@ -257,9 +249,7 @@ export async function inviteFirmMember(
 
   // Audit trail — an invite grants roles; a firm needs to be able to
   // retrace who added whom with what access.
-  const grantedRoleNames = [...validRoleIds]
-    .map((id) => roleMap.byId.get(id)?.name ?? id)
-    .sort();
+  const grantedRoleNames = [...validRoleIds].map((id) => roleMap.byId.get(id)?.name ?? id).sort();
   await logActivity({
     matterId: null,
     userId: currentUserId,
@@ -300,7 +290,7 @@ const updateSchema = z.object({
 export async function updateFirmMember(
   userId: string,
   _prev: TeamFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<TeamFormState> {
   const gate = await requirePermissionResult("firm.manage_team_directory");
   if (!gate.ok) return denied(gate.error);
@@ -339,10 +329,7 @@ export async function updateFirmMember(
   // non-interactive indicator + hidden input so the value round-
   // trips, but a tampered post would otherwise hit the deactivate
   // path and trip the guard below.
-  const newIsActive =
-    target.id === currentUserId
-      ? target.isActive
-      : parsed.data.isActive === "on";
+  const newIsActive = target.id === currentUserId ? target.isActive : parsed.data.isActive === "on";
 
   // Self-protection check: redundant given the above, but kept as a
   // belt-and-suspenders guard in case the assignment above ever
@@ -385,7 +372,7 @@ export async function updateFirmMember(
     }
     const privileged = await getPrivilegedRoleIds(firm.id);
     const held = new Set(
-      target.userRoles.map((ur) => ur.roleId).filter((id) => privileged.has(id))
+      target.userRoles.map((ur) => ur.roleId).filter((id) => privileged.has(id)),
     );
     const wanted = new Set([...validRoleIds].filter((id) => privileged.has(id)));
     if (!sameSet(held, wanted)) {
@@ -408,12 +395,8 @@ export async function updateFirmMember(
     }
   }
 
-  const wasAdmin = target.userRoles.some(
-    (ur) => ur.role.name === ADMIN_ROLE_NAME
-  );
-  const willBeAdmin = roleMap.adminId
-    ? validRoleIds.has(roleMap.adminId)
-    : false;
+  const wasAdmin = target.userRoles.some((ur) => ur.role.name === ADMIN_ROLE_NAME);
+  const willBeAdmin = roleMap.adminId ? validRoleIds.has(roleMap.adminId) : false;
 
   // "At least one Admin" invariant — losing the Admin role OR going
   // inactive while being the last admin is rejected.
@@ -472,7 +455,7 @@ export async function updateFirmMember(
               where: { userId: target.id },
               select: { roleId: true },
             })
-          ).map((r) => r.roleId)
+          ).map((r) => r.roleId),
         );
         removedRoleIds = [...currentIds].filter((id) => !validRoleIds.has(id));
         addedRoleIds = [...validRoleIds].filter((id) => !currentIds.has(id));
@@ -492,7 +475,7 @@ export async function updateFirmMember(
           });
         }
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
   } catch (err) {
     if (err instanceof LastActiveAdminError) {
@@ -509,10 +492,7 @@ export async function updateFirmMember(
     // P2034 = serialization failure — a concurrent team edit raced
     // this one. Rare enough that "try again" beats an auto-retry
     // loop that would re-run the invariant check anyway.
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === "P2034"
-    ) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2034") {
       return {
         status: "error",
         errors: {
@@ -526,9 +506,7 @@ export async function updateFirmMember(
 
   // Audit trail — role grants/revocations and (de)activation are at
   // least as sensitive as the permission-matrix flips roles.ts logs.
-  const roleNames = [...validRoleIds]
-    .map((id) => roleMap.byId.get(id)?.name ?? id)
-    .sort();
+  const roleNames = [...validRoleIds].map((id) => roleMap.byId.get(id)?.name ?? id).sort();
   await logActivity({
     matterId: null,
     userId: currentUserId,
@@ -588,7 +566,7 @@ type SignInTarget = {
 /** Shared gate for the sign-in actions: permission, same-firm lookup,
  *  and the Admin-class escalation guard. */
 async function loadSignInTarget(
-  userId: string
+  userId: string,
 ): Promise<{ target: SignInTarget } | { error: TeamFormState }> {
   const gate = await requirePermissionResult("firm.manage_team_directory");
   if (!gate.ok) return { error: denied(gate.error) };
@@ -619,9 +597,7 @@ async function loadSignInTarget(
   return { target: rest };
 }
 
-export async function resendFirmMemberInvite(
-  userId: string
-): Promise<TeamFormState> {
+export async function resendFirmMemberInvite(userId: string): Promise<TeamFormState> {
   const loaded = await loadSignInTarget(userId);
   if ("error" in loaded) return loaded.error;
   const { target } = loaded;
@@ -645,9 +621,7 @@ export async function resendFirmMemberInvite(
   return { ...teamInitialState, status: "ok" };
 }
 
-export async function signOutFirmMemberEverywhere(
-  userId: string
-): Promise<TeamFormState> {
+export async function signOutFirmMemberEverywhere(userId: string): Promise<TeamFormState> {
   const loaded = await loadSignInTarget(userId);
   if ("error" in loaded) return loaded.error;
   const { target } = loaded;
@@ -678,9 +652,7 @@ export async function signOutFirmMemberEverywhere(
  * first, and only then is the DB link cleared (otherwise a surviving
  * session would re-link itself). The member's next verified-email sign-in re-links.
  */
-export async function resetFirmMemberSignInLink(
-  userId: string
-): Promise<TeamFormState> {
+export async function resetFirmMemberSignInLink(userId: string): Promise<TeamFormState> {
   const loaded = await loadSignInTarget(userId);
   if ("error" in loaded) return loaded.error;
   const { target } = loaded;
@@ -698,7 +670,7 @@ export async function resetFirmMemberSignInLink(
   const revoked = await revokeAllStaffSessions(oldClerkUserId);
   if (!revoked.ok) {
     return denied(
-      "Couldn't sign them out of the sign-in service, so the link was not reset. Try again."
+      "Couldn't sign them out of the sign-in service, so the link was not reset. Try again.",
     );
   }
   // Conditional on the id we read, so a concurrent re-link isn't wiped.

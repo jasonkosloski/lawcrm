@@ -16,10 +16,7 @@ import { useMemo, useState } from "react";
 import { Check, Pin, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RecordScope } from "@/lib/record-scope";
-import type {
-  FilingLeadOption,
-  FilingMatterOption,
-} from "@/lib/queries/communication";
+import type { FilingLeadOption, FilingMatterOption } from "@/lib/queries/communication";
 import { inputClass } from "@/components/ui/field";
 
 export function RecordPicker({
@@ -44,9 +41,7 @@ export function RecordPicker({
     () =>
       q
         ? matters.filter(
-            (m) =>
-              m.name.toLowerCase().includes(q) ||
-              m.area.toLowerCase().includes(q),
+            (m) => m.name.toLowerCase().includes(q) || m.area.toLowerCase().includes(q),
           )
         : matters,
     [q, matters],
@@ -54,11 +49,7 @@ export function RecordPicker({
   const filteredLeads = useMemo(
     () =>
       q
-        ? leads.filter(
-            (l) =>
-              l.name.toLowerCase().includes(q) ||
-              l.stage.toLowerCase().includes(q),
-          )
+        ? leads.filter((l) => l.name.toLowerCase().includes(q) || l.stage.toLowerCase().includes(q))
         : leads,
     [q, leads],
   );
@@ -73,10 +64,7 @@ export function RecordPicker({
   return (
     <div className="flex flex-col gap-2">
       <div className="relative">
-        <Search
-          size={12}
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4"
-        />
+        <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4" />
         <input
           type="text"
           autoFocus
@@ -100,28 +88,21 @@ export function RecordPicker({
 
       <div className="flex flex-col gap-2 max-h-72 overflow-y-auto">
         {filteredMatters.length === 0 && filteredLeads.length === 0 && (
-          <p className="text-2xs text-ink-4 italic px-2 py-1.5">
-            No matters or leads match.
-          </p>
+          <p className="text-2xs text-ink-4 italic px-2 py-1.5">No matters or leads match.</p>
         )}
 
         {filteredMatters.length > 0 && (
           <section aria-label="Matters">
-            <h3 className="px-2 pb-1 text-2xs font-medium text-ink-4">
-              Matters
-            </h3>
+            <h3 className="px-2 pb-1 text-2xs font-medium text-ink-4">Matters</h3>
             <ul className="flex flex-col gap-px">
               {filteredMatters.map((m) => {
-                const active =
-                  value?.kind === "matter" && value.matterId === m.id;
+                const active = value?.kind === "matter" && value.matterId === m.id;
                 return (
                   <li key={m.id}>
                     <button
                       type="button"
                       disabled={disabled}
-                      onClick={() =>
-                        onChange({ kind: "matter", matterId: m.id })
-                      }
+                      onClick={() => onChange({ kind: "matter", matterId: m.id })}
                       className={rowClass(active)}
                     >
                       <span
@@ -130,18 +111,10 @@ export function RecordPicker({
                       />
                       <span className="flex-1 truncate">{m.name}</span>
                       {m.isPinned && (
-                        <Pin
-                          size={10}
-                          className="text-ink-4 shrink-0"
-                          aria-label="Pinned"
-                        />
+                        <Pin size={10} className="text-ink-4 shrink-0" aria-label="Pinned" />
                       )}
-                      <span className="text-2xs font-mono text-ink-4 shrink-0">
-                        {m.area}
-                      </span>
-                      {active && (
-                        <Check size={11} className="text-brand-700 shrink-0" />
-                      )}
+                      <span className="text-2xs font-mono text-ink-4 shrink-0">{m.area}</span>
+                      {active && <Check size={11} className="text-brand-700 shrink-0" />}
                     </button>
                   </li>
                 );
@@ -152,9 +125,7 @@ export function RecordPicker({
 
         {filteredLeads.length > 0 && (
           <section aria-label="Leads">
-            <h3 className="px-2 pb-1 text-2xs font-medium text-ink-4">
-              Leads
-            </h3>
+            <h3 className="px-2 pb-1 text-2xs font-medium text-ink-4">Leads</h3>
             <ul className="flex flex-col gap-px">
               {filteredLeads.map((l) => {
                 const active = value?.kind === "lead" && value.leadId === l.id;
@@ -167,12 +138,8 @@ export function RecordPicker({
                       className={rowClass(active)}
                     >
                       <span className="flex-1 truncate">{l.name}</span>
-                      <span className="text-2xs font-mono text-ink-4 shrink-0">
-                        {l.stage}
-                      </span>
-                      {active && (
-                        <Check size={11} className="text-brand-700 shrink-0" />
-                      )}
+                      <span className="text-2xs font-mono text-ink-4 shrink-0">{l.stage}</span>
+                      {active && <Check size={11} className="text-brand-700 shrink-0" />}
                     </button>
                   </li>
                 );

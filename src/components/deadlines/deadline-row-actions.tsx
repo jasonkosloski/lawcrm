@@ -35,10 +35,7 @@ import { deleteDeadline, setDeadlineStatus } from "@/app/actions/deadlines";
 import { SOL_SOURCE_TYPE } from "@/lib/sol";
 import { confirmAction } from "@/lib/feedback";
 import { addTimeEntryToDeadline } from "@/app/actions/time-on-entity";
-import {
-  EditDeadlineDialog,
-  type EditableDeadline,
-} from "./edit-deadline-dialog";
+import { EditDeadlineDialog, type EditableDeadline } from "./edit-deadline-dialog";
 import { LogTimeOnEntityDialog } from "@/components/time-entries/log-time-on-entity-dialog";
 import { AddNoteOnEntityDialog } from "@/components/notes/add-note-on-entity-dialog";
 import { addNoteToDeadline } from "@/app/actions/note-on-entity";
@@ -140,10 +137,7 @@ export function DeadlineRowMenu({
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Set status</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={deadline.status}
-                  onValueChange={onSelectStatus}
-                >
+                <DropdownMenuRadioGroup value={deadline.status} onValueChange={onSelectStatus}>
                   {DEADLINE_STATUSES.map((s) => (
                     <DropdownMenuRadioItem key={s} value={s}>
                       {STATUS_LABEL[s]}
@@ -165,11 +159,7 @@ export function DeadlineRowMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <EditDeadlineDialog
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        deadline={deadline}
-      />
+      <EditDeadlineDialog open={editOpen} onOpenChange={setEditOpen} deadline={deadline} />
 
       <LogTimeOnEntityDialog
         open={logTimeOpen}

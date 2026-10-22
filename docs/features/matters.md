@@ -5,6 +5,7 @@ Documents, Billing, Communication, settlements and expenses are in their own fea
 Related: [ADR-006](../decisions/006-matter-urls-use-cuid-not-slug.md), [ADR-010](../decisions/010-per-user-matter-pins-usermatterpin-join-table.md), [ADR-021](../decisions/021-matter-tabs-honour-calendar-visibility-and-money.md), [ADR-025](../decisions/025-captures-do-not-inherit-the-primary-s.md), [ADR-027](../decisions/027-the-matter-owns-the-statute-of-limitations.md), [ADR-035](../decisions/035-statute-periods-are-calendar-amount-unit-computed.md), [ADR-039](../decisions/039-matter-team-access-ethical-walls.md), [ADR-054](../decisions/054-new-matter-screens-both-directions-and-overrides-on-the-matter.md)
 
 ## Open work
+
 - [~] **New matter form — v1** (P1) — working; v2 follow-ups below.
 - [ ] **`/matters/new` v2 follow-ups** (P1) — tag-from-existing-lead; conflict screening of a renamed party contact or counsel added to an existing party row (ADR-054); trust deposit at intake; multi-plaintiff matters; sensitive-field encryption (DOB/SSN); edit-form mobile polish; richer validation; real-form component library consolidation; lead → matter conversion enforces the originating-document gate but still not per-area required fields or a venue.
 - [ ] **Matters list — Cards view** (P2) — visual grid as a third view mode (today: Table + Kanban).
@@ -12,6 +13,7 @@ Related: [ADR-006](../decisions/006-matter-urls-use-cuid-not-slug.md), [ADR-010]
 - Known small gaps: no Note edit UI (`updateNote` has no caller); no "Add note" on deadline rows (`addNoteToDeadline` has no caller); `CaptureStack` still shows every kind and the sibling Pin toggle to users who lack the keys (denial redirects and loses the draft).
 
 ## Shipped
+
 > Scope note: each matter-detail tab is its own substantial area, not one line item. "Shipped" below means the tab exists and renders real data; deeper work (create/edit flows, rich text, drag-drop, in-tab search, OCR, deadline auto-generation, conflict checks) belongs to dedicated phases.
 
 - [x] **Drafts and originating document** (2026-10-20, ADR-056) — `/matters/new` saves and resumes drafts (visible to the creator, the chosen lead and team seats holding `matters.create`, and Admins) (values plus intake files, one marked as the originating document; drafts untouched for 90 days are swept by the daily `/api/matter-draft-sweep` cron). Every new matter has a `MatterAgreement` (status, signed date, linked document) shown as an Overview card, editable with `matters.agreement.edit`. Admins can turn on a firm switch that requires a signed originating document to create a matter or convert a lead; the label is per practice area. Settings: [settings-admin](settings-admin.md).

@@ -16,7 +16,7 @@ describe("StatStrip", () => {
           { label: "Open matters", value: "10", detail: "+2 this week" },
           { label: "Hours today", value: "9.2" },
         ]}
-      />
+      />,
     );
     expect(screen.getByText("Open matters")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
@@ -32,7 +32,7 @@ describe("StatStrip", () => {
           { label: "B", value: "2" },
           { label: "C", value: "3" },
         ]}
-      />
+      />,
     );
     expect(container.firstElementChild).toHaveClass("sm:grid-cols-3");
   });
@@ -44,7 +44,7 @@ describe("StatStrip", () => {
           { label: "Unread email", value: "3", href: "/communication" },
           { label: "Trust balance", value: "$0.00" },
         ]}
-      />
+      />,
     );
     expect(screen.getByRole("link")).toHaveAttribute("href", "/communication");
     expect(screen.getAllByRole("link")).toHaveLength(1);
@@ -57,7 +57,7 @@ describe("StatStrip", () => {
           { label: "Overdue", value: "2", tone: "danger" },
           { label: "Open", value: "5" },
         ]}
-      />
+      />,
     );
     expect(screen.getByText("2")).toHaveClass("text-danger");
     expect(screen.getByText("5")).toHaveClass("text-ink");

@@ -100,7 +100,7 @@ describe("GET /api/notification-sweep", () => {
     expect(mockedSweep).toHaveBeenCalledOnce();
     expect(console.error).toHaveBeenCalledWith(
       "[notification-sweep] portal prune failed",
-      expect.any(Error)
+      expect.any(Error),
     );
   });
 

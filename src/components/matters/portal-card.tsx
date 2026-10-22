@@ -36,10 +36,7 @@ export type PortalContactOption = {
   email: string | null;
 };
 
-type InviteState =
-  | { status: "idle" }
-  | { status: "ok" }
-  | { status: "error"; error: string };
+type InviteState = { status: "idle" } | { status: "ok" } | { status: "error"; error: string };
 
 const inviteInitial: InviteState = { status: "idle" };
 
@@ -122,11 +119,7 @@ export function PortalCard({
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold">Portal</CardTitle>
           {canInvite && portalEnabled && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setInviteOpen(true)}
-            >
+            <Button size="sm" variant="outline" onClick={() => setInviteOpen(true)}>
               Invite
             </Button>
           )}
@@ -135,8 +128,8 @@ export function PortalCard({
       <CardContent className="px-4 pb-4">
         {!portalEnabled && (
           <div className="mb-2 text-2xs text-warn">
-            The client portal is turned off for the firm. Turn it on in
-            Settings → Firm to send invites.
+            The client portal is turned off for the firm. Turn it on in Settings → Firm to send
+            invites.
           </div>
         )}
         {revokeError && (
@@ -145,26 +138,15 @@ export function PortalCard({
           </div>
         )}
         {rows.length === 0 ? (
-          <div className="py-2 text-xs text-ink-4">
-            No one has portal access to this matter.
-          </div>
+          <div className="py-2 text-xs text-ink-4">No one has portal access to this matter.</div>
         ) : (
           <ul className="flex flex-col divide-y divide-line">
             {rows.map((row) => (
-              <li
-                key={row.accessId}
-                className="flex items-center gap-2 py-2 first:pt-0 last:pb-0"
-              >
+              <li key={row.accessId} className="flex items-center gap-2 py-2 first:pt-0 last:pb-0">
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium text-ink truncate">
-                    {row.contactName}
-                  </div>
-                  <div className="text-2xs text-ink-4 truncate">
-                    {row.email}
-                  </div>
-                  <div className="text-2xs text-ink-3">
-                    {portalStatusLabel(row, tz)}
-                  </div>
+                  <div className="text-xs font-medium text-ink truncate">{row.contactName}</div>
+                  <div className="text-2xs text-ink-4 truncate">{row.email}</div>
+                  <div className="text-2xs text-ink-3">{portalStatusLabel(row, tz)}</div>
                 </div>
                 {canRevoke && !row.revokedAt && (
                   <Button
@@ -185,9 +167,7 @@ export function PortalCard({
             <label
               className="flex items-start gap-2 text-xs select-none"
               title={
-                canShareBilling
-                  ? undefined
-                  : "You need permission to share billing in the portal."
+                canShareBilling ? undefined : "You need permission to share billing in the portal."
               }
             >
               <input
@@ -198,9 +178,7 @@ export function PortalCard({
                 onChange={(e) => toggleBilling(e.target.checked)}
                 className="h-3.5 w-3.5 mt-0.5 rounded border-line"
               />
-              <span className="text-ink font-medium">
-                Show billing in the portal
-              </span>
+              <span className="text-ink font-medium">Show billing in the portal</span>
             </label>
             {!canShareBilling && (
               <div className="mt-1 text-2xs text-ink-4">
@@ -247,23 +225,19 @@ function InviteDialog({
 }) {
   // The form body unmounts with the dialog content, so contact/email
   // re-seed on every open; the action reads them from FormData.
-  const action = async (
-    _prev: InviteState,
-    fd: FormData
-  ): Promise<InviteState> => {
+  const action = async (_prev: InviteState, fd: FormData): Promise<InviteState> => {
     const result = await invitePortalUser(
       matterId,
       String(fd.get("contactId") ?? ""),
-      String(fd.get("email") ?? "")
+      String(fd.get("email") ?? ""),
     );
-    return result.ok
-      ? { status: "ok" }
-      : { status: "error", error: result.error };
+    return result.ok ? { status: "ok" } : { status: "error", error: result.error };
   };
-  const [state, formAction, isPending] = useDialogActionState<
-    InviteState,
-    FormData
-  >(action, inviteInitial, open);
+  const [state, formAction, isPending] = useDialogActionState<InviteState, FormData>(
+    action,
+    inviteInitial,
+    open,
+  );
 
   // Keyed on the state object so every fresh success closes the dialog.
   useEffect(() => {
@@ -276,8 +250,8 @@ function InviteDialog({
         <DialogHeader>
           <DialogTitle>Invite to the client portal</DialogTitle>
           <DialogDescription>
-            We email a sign-in link that lasts 7 days. The person can then
-            see this matter in the portal.
+            We email a sign-in link that lasts 7 days. The person can then see this matter in the
+            portal.
           </DialogDescription>
         </DialogHeader>
         <InviteForm
@@ -349,10 +323,7 @@ function InviteForm({
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button
-          type="submit"
-          disabled={isPending || !contactId || !email.trim()}
-        >
+        <Button type="submit" disabled={isPending || !contactId || !email.trim()}>
           {isPending ? "Sending…" : "Send invite"}
         </Button>
       </DialogFooter>

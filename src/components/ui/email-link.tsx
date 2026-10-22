@@ -34,9 +34,7 @@ export function mailtoHref(email: string | null | undefined): string | null {
   const trimmed = email?.trim();
   if (!trimmed || !SINGLE_ADDRESS.test(trimmed)) return null;
   if (/[\u0000-\u001f\u007f]/.test(trimmed)) return null;
-  const encoded = encodeURIComponent(trimmed)
-    .replace(/%40/gi, "@")
-    .replace(/%2B/gi, "+");
+  const encoded = encodeURIComponent(trimmed).replace(/%40/gi, "@").replace(/%2B/gi, "+");
   return `mailto:${encoded}`;
 }
 
@@ -61,10 +59,7 @@ export function EmailLink({
     <a
       href={href}
       onClick={(e: MouseEvent<HTMLAnchorElement>) => e.stopPropagation()}
-      className={cn(
-        "text-ink hover:text-brand-700 hover:underline transition-colors",
-        className
-      )}
+      className={cn("text-ink hover:text-brand-700 hover:underline transition-colors", className)}
     >
       {children ?? email}
     </a>

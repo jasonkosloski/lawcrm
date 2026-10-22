@@ -30,10 +30,7 @@ describe("SettlementLienForm", () => {
     expect(screen.getByLabelText(/^lienholder/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^original amount/i)).toBeInTheDocument();
     const type = screen.getByLabelText(/^type/i) as HTMLSelectElement;
-    expect(Array.from(type.options).map((o) => o.value)).toEqual([
-      "",
-      ...LIENHOLDER_TYPES,
-    ]);
+    expect(Array.from(type.options).map((o) => o.value)).toEqual(["", ...LIENHOLDER_TYPES]);
   });
 
   test("validation errors render as text under the field (F891)", async () => {
@@ -51,24 +48,18 @@ describe("SettlementLienForm", () => {
     expect(await screen.findByText("Enter a valid amount")).toBeInTheDocument();
     expect(screen.getByText("Lienholder is required")).toBeInTheDocument();
     // Typed values survive the failed submit.
-    expect((screen.getByLabelText(/^original amount/i) as HTMLInputElement).value).toBe(
-      "12.345"
-    );
+    expect((screen.getByLabelText(/^original amount/i) as HTMLInputElement).value).toBe("12.345");
   });
 
   test("a successful add collapses and resets, twice in a row", async () => {
     render(<SettlementLienForm settlementId="s1" />);
     for (const lienholder of ["Aetna", "Medicare"]) {
       await userEvent.click(screen.getByRole("button", { name: /add lien/i }));
-      expect(
-        (screen.getByLabelText(/^lienholder/i) as HTMLInputElement).value
-      ).toBe("");
+      expect((screen.getByLabelText(/^lienholder/i) as HTMLInputElement).value).toBe("");
       await userEvent.type(screen.getByLabelText(/^lienholder/i), lienholder);
       await userEvent.type(screen.getByLabelText(/^original amount/i), "100");
       await userEvent.click(screen.getByRole("button", { name: /^add lien$/i }));
-      await waitFor(() =>
-        expect(screen.queryByLabelText(/^lienholder/i)).toBeNull()
-      );
+      await waitFor(() => expect(screen.queryByLabelText(/^lienholder/i)).toBeNull());
     }
     expect(addSettlementLien).toHaveBeenCalledTimes(2);
   });

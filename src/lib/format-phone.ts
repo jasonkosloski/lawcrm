@@ -23,9 +23,7 @@
  * wrong-but-dialable US number.
  */
 
-export function formatPhone(
-  raw: string | null | undefined
-): string {
+export function formatPhone(raw: string | null | undefined): string {
   if (!raw) return "";
   if (/[a-z]/i.test(raw)) return raw;
   const digits = raw.replace(/\D/g, "");

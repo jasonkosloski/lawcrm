@@ -36,18 +36,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { optionalRecordAccessClause } from "@/lib/matter-access";
-import {
-  isBlobKey,
-  openReadStream,
-  signedBlobUrl,
-  statFile,
-} from "@/lib/file-storage";
+import { isBlobKey, openReadStream, signedBlobUrl, statFile } from "@/lib/file-storage";
 import { isInlineSafeType } from "@/lib/inline-safe-types";
 import { contentTypeForFilename } from "@/app/api/documents/upload/upload-config";
-import {
-  AttachmentBytesError,
-  ensureAttachmentBytes,
-} from "@/lib/email-attachments";
+import { AttachmentBytesError, ensureAttachmentBytes } from "@/lib/email-attachments";
 import { resolveRangeHeader } from "@/app/api/documents/[id]/download/range";
 import type { Readable } from "node:stream";
 
@@ -57,7 +49,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: NextRequest,
-  ctx: { params: Promise<{ id: string }> }
+  ctx: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const session = await getSession();
   if (!session?.user?.id) {
@@ -107,7 +99,7 @@ export async function GET(
     console.error("[email-attachments] download failed", err);
     return NextResponse.json(
       { error: "Couldn't fetch the attachment. Try again." },
-      { status: 502 }
+      { status: 502 },
     );
   }
 
@@ -158,19 +150,19 @@ export async function GET(
           "Content-Range": `bytes */${fsStat.size}`,
           "Accept-Ranges": "bytes",
         },
-      }
+      },
     );
   }
   const partial = range.kind === "partial";
 
   const nodeStream = openReadStream(
     key,
-    partial ? { start: range.start, end: range.end } : undefined
+    partial ? { start: range.start, end: range.end } : undefined,
   ) as Readable;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const webStream = (nodeStream as any).toWeb
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? (nodeStream as any).toWeb()
+    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (nodeStream as any).toWeb()
     : new ReadableStream({
         start(controller) {
           nodeStream.on("data", (chunk) => controller.enqueue(chunk));
@@ -181,9 +173,7 @@ export async function GET(
 
   const headers: Record<string, string> = {
     "Content-Type": contentType,
-    "Content-Length": String(
-      partial ? range.end - range.start + 1 : fsStat.size
-    ),
+    "Content-Length": String(partial ? range.end - range.start + 1 : fsStat.size),
     "Accept-Ranges": "bytes",
     // Without nosniff, browsers may sniff even a benign declared
     // type into something active (e.g. octet-stream → HTML).
@@ -197,8 +187,7 @@ export async function GET(
     headers["Content-Security-Policy"] = "sandbox";
   }
   if (partial) {
-    headers["Content-Range"] =
-      `bytes ${range.start}-${range.end}/${fsStat.size}`;
+    headers["Content-Range"] = `bytes ${range.start}-${range.end}/${fsStat.size}`;
   }
 
   return new Response(webStream, { status: partial ? 206 : 200, headers });

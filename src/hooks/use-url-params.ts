@@ -55,7 +55,7 @@ export function useUrlParams() {
         router.replace(`?${query}`, { scroll: false });
       });
     },
-    [router]
+    [router],
   );
 
   return { searchParams, setParams, pending };

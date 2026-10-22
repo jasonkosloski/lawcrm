@@ -1,9 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { Prisma } from "@/generated/prisma/client";
-import {
-  computeSettlementWaterfall,
-  firmFeeFromPercent,
-} from "@/lib/settlement-waterfall";
+import { computeSettlementWaterfall, firmFeeFromPercent } from "@/lib/settlement-waterfall";
 
 const D = (v: string | number) => new Prisma.Decimal(v);
 
@@ -31,9 +28,7 @@ describe("firmFeeFromPercent", () => {
     ["333.33", "33.33", "111.10"],
     ["0.01", "50", "0.01"],
   ])("gross %s at %s%% = %s", (gross, pct, fee) => {
-    expect(firmFeeFromPercent(D(gross), D(pct)).toFixed(2)).toBe(
-      D(fee).toFixed(2)
-    );
+    expect(firmFeeFromPercent(D(gross), D(pct)).toFixed(2)).toBe(D(fee).toFixed(2));
   });
 });
 
@@ -112,8 +107,8 @@ describe("computeSettlementWaterfall", () => {
       liens: [{ originalAmount: D("1000.02"), negotiatedAmount: null }],
     });
     expect(w.firmFee.toFixed(2)).toBe("5000.53");
-    expect(
-      D("10001.05").sub(w.firmFee).sub("0.01").sub(w.lienTotal).toFixed(2)
-    ).toBe(w.clientNet.toFixed(2));
+    expect(D("10001.05").sub(w.firmFee).sub("0.01").sub(w.lienTotal).toFixed(2)).toBe(
+      w.clientNet.toFixed(2),
+    );
   });
 });

@@ -39,8 +39,8 @@ export default async function LeadDocumentsPage({
         <div className="px-5 pt-5">
           <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-paper-2 px-3 py-2.5">
             <p className="text-xs text-ink-3">
-              This lead converted — its intake documents were carried forward
-              to the matter. Add new documents there.
+              This lead converted — its intake documents were carried forward to the matter. Add new
+              documents there.
             </p>
             {lead.convertedMatterId && (
               <Link

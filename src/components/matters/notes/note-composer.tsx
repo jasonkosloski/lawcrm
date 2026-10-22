@@ -104,11 +104,7 @@ export function NoteComposer({
           <input type="hidden" name="content" value={html} />
           <input type="hidden" name="type" value={type} />
           {canPin && pin && <input type="hidden" name="isPinned" value="on" />}
-          <input
-            type="hidden"
-            name="attachments"
-            value={JSON.stringify(captures)}
-          />
+          <input type="hidden" name="attachments" value={JSON.stringify(captures)} />
 
           {!expanded ? (
             <Button
@@ -122,9 +118,7 @@ export function NoteComposer({
               className="flex gap-2 text-xs text-ink-4 border-dashed text-left"
             >
               <Plus size={14} />
-              {scope.kind === "matter"
-                ? "Write a note for this matter…"
-                : "Write an intake note…"}
+              {scope.kind === "matter" ? "Write a note for this matter…" : "Write an intake note…"}
             </Button>
           ) : (
             <>
@@ -162,9 +156,7 @@ export function NoteComposer({
                         aria-pressed={type === t}
                         className={cn(
                           "text-2xs font-medium px-2 py-0.5 rounded transition-colors",
-                          type === t
-                            ? "bg-paper-2 text-ink"
-                            : "text-ink-3 hover:text-brand-700"
+                          type === t ? "bg-paper-2 text-ink" : "text-ink-3 hover:text-brand-700",
                         )}
                       >
                         {NOTE_TYPE_LABEL[t]}
@@ -182,13 +174,10 @@ export function NoteComposer({
                         "inline-flex items-center gap-1 h-6 px-2 rounded-md text-2xs font-medium border transition-colors",
                         pin
                           ? "bg-brand-soft text-brand-700 border-brand-200"
-                          : "bg-white text-ink-3 border-line hover:text-brand-700 hover:border-brand-300"
+                          : "bg-white text-ink-3 border-line hover:text-brand-700 hover:border-brand-300",
                       )}
                     >
-                      <Pin
-                        size={11}
-                        className={pin ? "fill-brand-500 text-brand-500" : ""}
-                      />
+                      <Pin size={11} className={pin ? "fill-brand-500 text-brand-500" : ""} />
                       Pin
                     </button>
                   )}
@@ -202,11 +191,7 @@ export function NoteComposer({
                   >
                     Cancel
                   </button>
-                  <Button
-                    size="xs"
-                    type="submit"
-                    disabled={isPending || html.trim().length === 0}
-                  >
+                  <Button size="xs" type="submit" disabled={isPending || html.trim().length === 0}>
                     {isPending
                       ? "Saving…"
                       : captures.length > 0

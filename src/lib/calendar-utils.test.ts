@@ -55,15 +55,10 @@ describe("parseCalendarParams", () => {
   });
 
   test("view=day round-trips with a d= date", () => {
-    const { view, focal } = parseCalendarParams(
-      { view: "day", d: "2026-07-07" },
-      TZ
-    );
+    const { view, focal } = parseCalendarParams({ view: "day", d: "2026-07-07" }, TZ);
     expect(view).toBe("day");
     expect(toDateParam(focal)).toBe("2026-07-07");
-    expect(buildCalendarHref(view, focal)).toBe(
-      "/calendar?view=day&d=2026-07-07"
-    );
+    expect(buildCalendarHref(view, focal)).toBe("/calendar?view=day&d=2026-07-07");
   });
 
   test("unknown view falls back to default", () => {
@@ -84,13 +79,8 @@ describe("parseCalendarParams", () => {
   });
 
   test("array params take the first value", () => {
-    expect(parseCalendarParams({ view: ["month", "week"] }, TZ).view).toBe(
-      "month"
-    );
-    const { focal } = parseCalendarParams(
-      { d: ["2026-01-01", "2026-12-31"] },
-      TZ
-    );
+    expect(parseCalendarParams({ view: ["month", "week"] }, TZ).view).toBe("month");
+    const { focal } = parseCalendarParams({ d: ["2026-01-01", "2026-12-31"] }, TZ);
     expect(focal.getMonth()).toBe(0);
   });
 
@@ -112,20 +102,12 @@ describe("parseCalendarParams", () => {
   });
 
   test("no d=, tz west of server around midnight → prior calendar day", () => {
-    const { focal } = parseCalendarParams(
-      {},
-      "America/Denver",
-      nearMidnightUtc
-    );
+    const { focal } = parseCalendarParams({}, "America/Denver", nearMidnightUtc);
     expect(toDateParam(focal)).toBe("2026-07-05");
   });
 
   test("malformed d= falls back to user-tz today, same rule", () => {
-    const { focal } = parseCalendarParams(
-      { d: "not-a-date" },
-      "Asia/Tokyo",
-      nearMidnightUtc
-    );
+    const { focal } = parseCalendarParams({ d: "not-a-date" }, "Asia/Tokyo", nearMidnightUtc);
     expect(toDateParam(focal)).toBe("2026-07-06");
   });
 
@@ -137,9 +119,7 @@ describe("parseCalendarParams", () => {
   });
 
   test("show=deadlines is honored", () => {
-    expect(parseCalendarParams({ show: "deadlines" }, TZ).show).toBe(
-      "deadlines"
-    );
+    expect(parseCalendarParams({ show: "deadlines" }, TZ).show).toBe("deadlines");
   });
 
   test("unknown show value falls back to 'all'", () => {
@@ -148,22 +128,18 @@ describe("parseCalendarParams", () => {
   });
 
   test("array show takes the first value", () => {
-    expect(
-      parseCalendarParams({ show: ["deadlines", "all"] }, TZ).show
-    ).toBe("deadlines");
+    expect(parseCalendarParams({ show: ["deadlines", "all"] }, TZ).show).toBe("deadlines");
   });
 
   test("show round-trips through buildCalendarHref", () => {
     const { view, focal, show } = parseCalendarParams(
       { view: "day", d: "2026-07-07", show: "deadlines" },
-      TZ
+      TZ,
     );
     const href = buildCalendarHref(view, focal, {}, show);
     expect(href).toBe("/calendar?view=day&d=2026-07-07&show=deadlines");
     // Parse the emitted href's params back — lossless round-trip.
-    const qs = Object.fromEntries(
-      new URLSearchParams(href.split("?")[1]!).entries()
-    );
+    const qs = Object.fromEntries(new URLSearchParams(href.split("?")[1]!).entries());
     const reparsed = parseCalendarParams(qs, TZ);
     expect(reparsed.view).toBe("day");
     expect(toDateParam(reparsed.focal)).toBe("2026-07-07");
@@ -191,16 +167,12 @@ describe("buildCalendarHref", () => {
     const href = buildCalendarHref("month", new Date("2026-04-15T12:00:00"));
     expect(href).toBe("/calendar?view=month&d=2026-04-15");
     expect(buildCalendarHref("day", new Date("2026-04-15T12:00:00"))).toBe(
-      "/calendar?view=day&d=2026-04-15"
+      "/calendar?view=day&d=2026-04-15",
     );
   });
 
   test("override applies to view + focal independently", () => {
-    const href = buildCalendarHref(
-      "week",
-      new Date("2026-04-15T12:00:00"),
-      { view: "month" }
-    );
+    const href = buildCalendarHref("week", new Date("2026-04-15T12:00:00"), { view: "month" });
     expect(href).toContain("view=month");
     expect(href).toContain("d=2026-04-15");
   });
@@ -210,12 +182,7 @@ describe("buildCalendarHref", () => {
   });
 
   test("default show ('all') is dropped from the URL", () => {
-    const href = buildCalendarHref(
-      "week",
-      new Date("2026-04-15T12:00:00"),
-      {},
-      "all"
-    );
+    const href = buildCalendarHref("week", new Date("2026-04-15T12:00:00"), {}, "all");
     expect(href).toBe("/calendar?d=2026-04-15");
   });
 
@@ -224,20 +191,20 @@ describe("buildCalendarHref", () => {
     // overrides view. Both must preserve the active filter.
     const focal = new Date("2026-04-15T12:00:00");
     expect(
-      buildCalendarHref("week", focal, { focal: new Date("2026-04-22T12:00:00") }, "deadlines")
+      buildCalendarHref("week", focal, { focal: new Date("2026-04-22T12:00:00") }, "deadlines"),
     ).toBe("/calendar?d=2026-04-22&show=deadlines");
     expect(buildCalendarHref("week", focal, { view: "month" }, "deadlines")).toBe(
-      "/calendar?view=month&d=2026-04-15&show=deadlines"
+      "/calendar?view=month&d=2026-04-15&show=deadlines",
     );
   });
 
   test("override.show wins over the current show (the toggle itself)", () => {
     const focal = new Date("2026-04-15T12:00:00");
     expect(buildCalendarHref("week", focal, { show: "deadlines" }, "all")).toBe(
-      "/calendar?d=2026-04-15&show=deadlines"
+      "/calendar?d=2026-04-15&show=deadlines",
     );
     expect(buildCalendarHref("week", focal, { show: "all" }, "deadlines")).toBe(
-      "/calendar?d=2026-04-15"
+      "/calendar?d=2026-04-15",
     );
   });
 });
@@ -251,19 +218,11 @@ describe("filterCalendarItems", () => {
   ];
 
   test("'all' keeps everything (order preserved)", () => {
-    expect(filterCalendarItems(items, "all").map((i) => i.id)).toEqual([
-      "e1",
-      "d1",
-      "e2",
-      "d2",
-    ]);
+    expect(filterCalendarItems(items, "all").map((i) => i.id)).toEqual(["e1", "d1", "e2", "d2"]);
   });
 
   test("'deadlines' drops events", () => {
-    expect(filterCalendarItems(items, "deadlines").map((i) => i.id)).toEqual([
-      "d1",
-      "d2",
-    ]);
+    expect(filterCalendarItems(items, "deadlines").map((i) => i.id)).toEqual(["d1", "d2"]);
   });
 
   test("returns a new array (never mutates the fetch result)", () => {
@@ -303,20 +262,14 @@ describe("calendarDayInTz", () => {
 
   test("spring-forward day is 23 hours (Denver, 2026-03-08)", () => {
     // Midnight is still MST (UTC-7) → 07:00Z; 23:59 is MDT (UTC-6).
-    const { rangeStart, rangeEnd } = calendarDayInTz(
-      focal(2026, 3, 8),
-      "America/Denver"
-    );
+    const { rangeStart, rangeEnd } = calendarDayInTz(focal(2026, 3, 8), "America/Denver");
     expect(rangeStart.toISOString()).toBe("2026-03-08T07:00:00.000Z");
     expect(rangeEnd.toISOString()).toBe("2026-03-09T05:59:00.000Z");
   });
 
   test("fall-back day is 25 hours (Denver, 2026-11-01)", () => {
     // Midnight is MDT (UTC-6) → 06:00Z; 23:59 is MST (UTC-7).
-    const { rangeStart, rangeEnd } = calendarDayInTz(
-      focal(2026, 11, 1),
-      "America/Denver"
-    );
+    const { rangeStart, rangeEnd } = calendarDayInTz(focal(2026, 11, 1), "America/Denver");
     expect(rangeStart.toISOString()).toBe("2026-11-01T06:00:00.000Z");
     expect(rangeEnd.toISOString()).toBe("2026-11-02T06:59:00.000Z");
   });
@@ -324,11 +277,8 @@ describe("calendarDayInTz", () => {
 
 describe("stepCalendarFocal", () => {
   const focal = (y: number, m: number, d: number) => new Date(y, m - 1, d);
-  const step = (
-    view: Parameters<typeof stepCalendarFocal>[0],
-    f: Date,
-    dir: 1 | -1
-  ) => toDateParam(stepCalendarFocal(view, f, dir));
+  const step = (view: Parameters<typeof stepCalendarFocal>[0], f: Date, dir: 1 | -1) =>
+    toDateParam(stepCalendarFocal(view, f, dir));
 
   test("day view steps ±1 calendar day", () => {
     expect(step("day", focal(2026, 7, 7), 1)).toBe("2026-07-08");
@@ -393,7 +343,7 @@ describe("HOURS / formatHourLabel", () => {
 const ev = (
   id: string,
   startHour: number,
-  durationHours: number
+  durationHours: number,
 ): { id: string; start: Date; end: Date } => {
   const start = new Date(2026, 4, 1, startHour, 0, 0, 0);
   const end = new Date(start.getTime() + durationHours * 60 * 60 * 1000);
@@ -425,23 +375,25 @@ describe("layoutOverlappingEvents", () => {
     // 9–11 and 10–12 overlap from 10–11
     const result = layoutOverlappingEvents([ev("a", 9, 2), ev("b", 10, 2)]);
     expect(result).toEqual([
-      expect.objectContaining({ event: expect.objectContaining({ id: "a" }), lane: 0, laneCount: 2 }),
-      expect.objectContaining({ event: expect.objectContaining({ id: "b" }), lane: 1, laneCount: 2 }),
+      expect.objectContaining({
+        event: expect.objectContaining({ id: "a" }),
+        lane: 0,
+        laneCount: 2,
+      }),
+      expect.objectContaining({
+        event: expect.objectContaining({ id: "b" }),
+        lane: 1,
+        laneCount: 2,
+      }),
     ]);
   });
 
   test("three events all overlapping get 3 lanes", () => {
-    const result = layoutOverlappingEvents([
-      ev("a", 9, 3),
-      ev("b", 10, 2),
-      ev("c", 11, 1),
-    ]);
+    const result = layoutOverlappingEvents([ev("a", 9, 3), ev("b", 10, 2), ev("c", 11, 1)]);
     // All three overlap at 11.
     expect(result.every((r) => r.laneCount === 3)).toBe(true);
     // Lanes assigned in arrival order: a=0, b=1, c=2.
-    const byId = Object.fromEntries(
-      result.map((r) => [r.event.id, r.lane])
-    );
+    const byId = Object.fromEntries(result.map((r) => [r.event.id, r.lane]));
     expect(byId.a).toBe(0);
     expect(byId.b).toBe(1);
     expect(byId.c).toBe(2);
@@ -458,9 +410,7 @@ describe("layoutOverlappingEvents", () => {
       { id: "b", start: new Date(2026, 4, 1, 9, 30), end: new Date(2026, 4, 1, 11, 0) },
       { id: "c", start: new Date(2026, 4, 1, 10, 0), end: new Date(2026, 4, 1, 10, 30) },
     ]);
-    const byId = Object.fromEntries(
-      result.map((r) => [r.event.id, r])
-    );
+    const byId = Object.fromEntries(result.map((r) => [r.event.id, r]));
     // a + b + c are all in one cluster (chained via b).
     expect(byId.a!.laneCount).toBe(2);
     expect(byId.b!.laneCount).toBe(2);
@@ -493,14 +443,8 @@ describe("layoutOverlappingEvents", () => {
   test("clusters are independent — adding more events in one doesn't widen another", () => {
     // Cluster 1 (overlapping): A 9-11, B 10-12 → 2 lanes
     // Cluster 2 (single): D 14-15 → 1 lane
-    const result = layoutOverlappingEvents([
-      ev("a", 9, 2),
-      ev("b", 10, 2),
-      ev("d", 14, 1),
-    ]);
-    const byId = Object.fromEntries(
-      result.map((r) => [r.event.id, r])
-    );
+    const result = layoutOverlappingEvents([ev("a", 9, 2), ev("b", 10, 2), ev("d", 14, 1)]);
+    const byId = Object.fromEntries(result.map((r) => [r.event.id, r]));
     expect(byId.a!.laneCount).toBe(2);
     expect(byId.b!.laneCount).toBe(2);
     expect(byId.d!.laneCount).toBe(1);
@@ -519,7 +463,7 @@ describe("parseCalendarParams — impossible dates", () => {
       const { focal } = parseCalendarParams({ d }, TZ, NOW);
       expect(Number.isNaN(focal.getTime())).toBe(false);
       expect(toDateParam(focal)).toBe("2026-04-27");
-    }
+    },
   );
 
   test("a leap day in a leap year is honored", () => {
@@ -544,8 +488,8 @@ describe("eventDayKeys", () => {
           endTime: new Date("2026-07-13T00:00:00Z"),
           isAllDay: true,
         },
-        TZ
-      )
+        TZ,
+      ),
     ).toEqual(["2026-07-10", "2026-07-11", "2026-07-12", "2026-07-13"]);
   });
 
@@ -557,8 +501,8 @@ describe("eventDayKeys", () => {
           endTime: new Date("2026-07-10T00:00:00Z"),
           isAllDay: true,
         },
-        TZ
-      )
+        TZ,
+      ),
     ).toEqual(["2026-07-10"]);
   });
 
@@ -571,8 +515,8 @@ describe("eventDayKeys", () => {
           endTime: new Date("2026-06-11T08:00:00Z"),
           isAllDay: false,
         },
-        TZ
-      )
+        TZ,
+      ),
     ).toEqual(["2026-06-10", "2026-06-11"]);
   });
 
@@ -584,16 +528,16 @@ describe("eventDayKeys", () => {
           endTime: new Date("2026-06-11T06:00:00Z"), // Jun 11 00:00 MDT
           isAllDay: false,
         },
-        TZ
-      )
+        TZ,
+      ),
     ).toEqual(["2026-06-10"]);
   });
 
   test("a zero-length timed event is one day", () => {
     const at = new Date("2026-06-11T06:00:00Z"); // Jun 11 00:00 MDT
-    expect(
-      eventDayKeys({ startTime: at, endTime: at, isAllDay: false }, TZ)
-    ).toEqual(["2026-06-11"]);
+    expect(eventDayKeys({ startTime: at, endTime: at, isAllDay: false }, TZ)).toEqual([
+      "2026-06-11",
+    ]);
   });
 
   test("`within` clips to the visible range", () => {
@@ -605,8 +549,8 @@ describe("eventDayKeys", () => {
           isAllDay: true,
         },
         TZ,
-        { first: "2026-07-12", last: "2026-07-14" }
-      )
+        { first: "2026-07-12", last: "2026-07-14" },
+      ),
     ).toEqual(["2026-07-12", "2026-07-13", "2026-07-14"]);
   });
 
@@ -618,8 +562,8 @@ describe("eventDayKeys", () => {
           endTime: new Date("2026-07-08T00:00:00Z"),
           isAllDay: true,
         },
-        TZ
-      )
+        TZ,
+      ),
     ).toEqual(["2026-07-10"]);
   });
 
@@ -630,7 +574,7 @@ describe("eventDayKeys", () => {
         endTime: new Date("2030-01-01T00:00:00Z"),
         isAllDay: true,
       },
-      TZ
+      TZ,
     );
     expect(keys.length).toBe(366);
   });

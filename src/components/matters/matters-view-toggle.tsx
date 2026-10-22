@@ -38,7 +38,7 @@ export function MattersViewToggle({ view }: { view: ViewMode }) {
       aria-label="View mode"
       className={cn(
         "inline-flex items-center rounded-md bg-paper-2 p-0.5",
-        pending && "opacity-70"
+        pending && "opacity-70",
       )}
     >
       {VIEWS.map((v) => {
@@ -52,9 +52,7 @@ export function MattersViewToggle({ view }: { view: ViewMode }) {
             aria-pressed={active}
             className={cn(
               "inline-flex items-center gap-1.5 h-6 px-2 rounded-[5px] text-2xs font-medium transition-colors",
-              active
-                ? "bg-white text-ink shadow-sm"
-                : "text-ink-3 hover:text-ink"
+              active ? "bg-white text-ink shadow-sm" : "text-ink-3 hover:text-ink",
             )}
           >
             <Icon size={12} />

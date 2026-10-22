@@ -22,11 +22,7 @@ vi.mock("@/lib/lead-access", () => ({
 
 import { prisma } from "@/lib/prisma";
 import { assertLeadAccess } from "@/lib/lead-access";
-import {
-  assertScopeAccess,
-  assertScopeWritable,
-  revalidateDocumentScope,
-} from "./scope-access";
+import { assertScopeAccess, assertScopeWritable, revalidateDocumentScope } from "./scope-access";
 
 const findUnique = prisma.lead.findUnique as unknown as ReturnType<typeof vi.fn>;
 
@@ -61,7 +57,7 @@ describe("assertScopeAccess", () => {
   test("lead scope goes through the lead wall (ADR-049)", async () => {
     vi.mocked(assertLeadAccess).mockRejectedValueOnce(new Error("NEXT_NOT_FOUND"));
     await expect(assertScopeAccess({ kind: "lead", leadId: "x" })).rejects.toThrow(
-      "NEXT_NOT_FOUND"
+      "NEXT_NOT_FOUND",
     );
     await expect(assertScopeAccess({ kind: "lead", leadId: "l1" })).resolves.toBe("u1");
     expect(assertLeadAccess).toHaveBeenLastCalledWith("l1");
@@ -70,13 +66,9 @@ describe("assertScopeAccess", () => {
 
 describe("assertScopeWritable", () => {
   test("matter scope is always writable; converted lead is not", async () => {
-    await expect(
-      assertScopeWritable({ kind: "matter", matterId: "m1" })
-    ).resolves.toBeNull();
+    await expect(assertScopeWritable({ kind: "matter", matterId: "m1" })).resolves.toBeNull();
     findUnique.mockResolvedValueOnce({ stage: "converted" });
-    expect(await assertScopeWritable({ kind: "lead", leadId: "l1" })).toMatch(
-      /converted/
-    );
+    expect(await assertScopeWritable({ kind: "lead", leadId: "l1" })).toMatch(/converted/);
     findUnique.mockResolvedValueOnce({ stage: "new" });
     expect(await assertScopeWritable({ kind: "lead", leadId: "l1" })).toBeNull();
   });

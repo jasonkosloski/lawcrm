@@ -54,20 +54,18 @@ describe("EventRowExpandable", () => {
     render(
       <ul>
         <EventRowExpandable event={base} matterId="m1" matterName="Smith" />
-      </ul>
+      </ul>,
     );
     expect(screen.getByText("Client prep call")).toBeTruthy();
     expect(screen.getByTestId("event-link")).toBeTruthy();
-    expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe(
-      "false"
-    );
+    expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe("false");
   });
 
   test("Busy shell: disabled row, no full-view link, no attachments sections", () => {
     render(
       <ul>
         <EventRowExpandable event={busy} matterId="m1" matterName="Smith" />
-      </ul>
+      </ul>,
     );
     expect(screen.getByText("Busy")).toBeTruthy();
     expect(screen.queryByTestId("event-link")).toBeNull();

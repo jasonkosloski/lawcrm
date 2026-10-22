@@ -24,7 +24,7 @@ function renderComposer(tz = "America/Denver") {
   return render(
     <UserTimeZoneProvider timeZone={tz}>
       <LeadTimeComposer leadId="lead1" />
-    </UserTimeZoneProvider>
+    </UserTimeZoneProvider>,
   );
 }
 
@@ -66,9 +66,7 @@ describe("LeadTimeComposer", () => {
     await user.click(screen.getByRole("button", { name: /save time entry/i }));
     expect(await screen.findByText("Hours must be positive")).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/activity/i)).toHaveValue("Intake call");
-    expect(
-      (document.querySelector('input[name="hours"]') as HTMLInputElement).value
-    ).toBe("0");
+    expect((document.querySelector('input[name="hours"]') as HTMLInputElement).value).toBe("0");
   });
 
   test("a successful save collapses the composer and clears the fields", async () => {
@@ -77,14 +75,9 @@ describe("LeadTimeComposer", () => {
     renderComposer();
     await expand(user);
     await user.type(screen.getByPlaceholderText(/activity/i), "Intake call");
-    await user.type(
-      document.querySelector('input[name="hours"]') as HTMLInputElement,
-      "0.5"
-    );
+    await user.type(document.querySelector('input[name="hours"]') as HTMLInputElement, "0.5");
     await user.click(screen.getByRole("button", { name: /save time entry/i }));
-    await waitFor(() =>
-      expect(screen.queryByPlaceholderText(/activity/i)).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByPlaceholderText(/activity/i)).not.toBeInTheDocument());
     expect(mockedCreate.mock.calls[0][0]).toBe("lead1");
 
     await expand(user);

@@ -32,9 +32,7 @@ describe("parseTimeParams — view", () => {
   test("accepts day, rejects junk", () => {
     expect(parseTimeParams({ view: "day" }, DENVER, NOW).view).toBe("day");
     expect(parseTimeParams({ view: "month" }, DENVER, NOW).view).toBe("week");
-    expect(parseTimeParams({ view: ["day", "week"] }, DENVER, NOW).view).toBe(
-      "day"
-    );
+    expect(parseTimeParams({ view: ["day", "week"] }, DENVER, NOW).view).toBe("day");
   });
 });
 
@@ -58,16 +56,16 @@ describe("parseTimeParams — focal date", () => {
       const { focal } = parseTimeParams({ d }, DENVER, NOW);
       expect(Number.isNaN(focal.getTime())).toBe(false);
       expect(toTimeDateParam(focal)).toBe("2026-06-15");
-    }
+    },
   );
 
   test("a leap day is accepted, a non-leap Feb 29 is not", () => {
-    expect(
-      toTimeDateParam(parseTimeParams({ d: "2028-02-29" }, DENVER, NOW).focal)
-    ).toBe("2028-02-29");
-    expect(
-      toTimeDateParam(parseTimeParams({ d: "2026-02-29" }, DENVER, NOW).focal)
-    ).toBe("2026-06-15");
+    expect(toTimeDateParam(parseTimeParams({ d: "2028-02-29" }, DENVER, NOW).focal)).toBe(
+      "2028-02-29",
+    );
+    expect(toTimeDateParam(parseTimeParams({ d: "2026-02-29" }, DENVER, NOW).focal)).toBe(
+      "2026-06-15",
+    );
   });
 
   test("no ?d=: focal is today on the USER's calendar, not the server's", () => {
@@ -91,12 +89,10 @@ describe("buildTimeHref", () => {
   });
 
   test("overrides replace view/focal independently", () => {
-    expect(buildTimeHref("week", focal, { view: "day" })).toBe(
-      "/time?view=day&d=2026-06-15"
+    expect(buildTimeHref("week", focal, { view: "day" })).toBe("/time?view=day&d=2026-06-15");
+    expect(buildTimeHref("day", focal, { focal: new Date(2026, 5, 16) })).toBe(
+      "/time?view=day&d=2026-06-16",
     );
-    expect(
-      buildTimeHref("day", focal, { focal: new Date(2026, 5, 16) })
-    ).toBe("/time?view=day&d=2026-06-16");
   });
 });
 
@@ -106,12 +102,8 @@ describe("dayKeyFromNoonUtc", () => {
     const noon = new Date(Date.UTC(2026, 5, 15, 12));
     expect(dayKeyFromNoonUtc(noon)).toBe("2026-06-15");
     // Month/year boundaries hold too.
-    expect(dayKeyFromNoonUtc(new Date(Date.UTC(2026, 11, 31, 12)))).toBe(
-      "2026-12-31"
-    );
-    expect(dayKeyFromNoonUtc(new Date(Date.UTC(2027, 0, 1, 12)))).toBe(
-      "2027-01-01"
-    );
+    expect(dayKeyFromNoonUtc(new Date(Date.UTC(2026, 11, 31, 12)))).toBe("2026-12-31");
+    expect(dayKeyFromNoonUtc(new Date(Date.UTC(2027, 0, 1, 12)))).toBe("2027-01-01");
   });
 });
 

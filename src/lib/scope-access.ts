@@ -24,9 +24,7 @@ export async function assertScopeAccess(scope: RecordScope): Promise<string> {
 /** Error string when the scope is read-only (a converted lead — its
  *  records moved to the matter), else null. Matter scopes are always
  *  writable here. */
-export async function assertScopeWritable(
-  scope: RecordScope
-): Promise<string | null> {
+export async function assertScopeWritable(scope: RecordScope): Promise<string | null> {
   if (scope.kind === "matter") return null;
   const lead = await prisma.lead.findUnique({
     where: { id: scope.leadId },
@@ -40,10 +38,7 @@ export async function assertScopeWritable(
 
 /** Revalidate the scope's documents tab (layout — it nests the
  *  viewer routes) and record overview, plus a document's viewer page. */
-export function revalidateDocumentScope(
-  scope: RecordScope,
-  documentId?: string
-): void {
+export function revalidateDocumentScope(scope: RecordScope, documentId?: string): void {
   const [tab, base] = scopePaths(scope, "documents");
   revalidatePath(tab, "layout");
   revalidatePath(base);

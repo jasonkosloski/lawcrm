@@ -1,10 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import {
-  isEffectivelyShared,
-  shareReason,
-  sharedFolderIds,
-} from "./document-visibility";
+import { isEffectivelyShared, shareReason, sharedFolderIds } from "./document-visibility";
 
 const folders = [
   { id: "root", name: "Root", parentId: null, clientShared: false },
@@ -46,8 +42,14 @@ describe("document visibility", () => {
       { id: "leaf", name: "Leaf", parentId: "deep", clientShared: false },
     ];
     expect(shareReason({ clientShare: "shared", folderId: "c" }, nested)).toEqual({ kind: "file" });
-    expect(shareReason({ clientShare: null, folderId: "leaf" }, nested)).toEqual({ kind: "folder", folderName: "Deep shared" });
-    expect(shareReason({ clientShare: null, folderId: "c" }, nested)).toEqual({ kind: "folder", folderName: "Shared GP" });
+    expect(shareReason({ clientShare: null, folderId: "leaf" }, nested)).toEqual({
+      kind: "folder",
+      folderName: "Deep shared",
+    });
+    expect(shareReason({ clientShare: null, folderId: "c" }, nested)).toEqual({
+      kind: "folder",
+      folderName: "Shared GP",
+    });
     expect(shareReason({ clientShare: null, folderId: "other" }, nested)).toBeNull();
     expect(shareReason({ clientShare: "hidden", folderId: "c" }, nested)).toBeNull();
   });

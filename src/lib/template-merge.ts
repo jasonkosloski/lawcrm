@@ -93,7 +93,7 @@ export type MergeContext = {
 export function composeCityStateZip(
   city: string | null,
   state: string | null,
-  zip: string | null
+  zip: string | null,
 ): string | null {
   const locality = [city, state].filter(Boolean).join(", ");
   const line = [locality, zip].filter(Boolean).join(" ").trim();
@@ -103,12 +103,7 @@ export function composeCityStateZip(
 // ── Field catalog ──────────────────────────────────────────────────────
 
 export type MergeFieldGroup =
-  | "Matter"
-  | "Client"
-  | "Firm"
-  | "General"
-  | "Records request"
-  | "Custodian";
+  "Matter" | "Client" | "Firm" | "General" | "Records request" | "Custodian";
 
 export type MergeField = {
   /** Token key as written in template bodies: `{{matter.name}}`. */
@@ -123,16 +118,14 @@ export type MergeField = {
 
 /** Real instants (today) render "long" ("April 15, 2026") in the
  *  generating user's zone — letter-appropriate. */
-const instantDate = (d: Date, ctx: MergeContext): string =>
-  formatDate(d, "long", ctx.timeZone);
+const instantDate = (d: Date, ctx: MergeContext): string => formatDate(d, "long", ctx.timeZone);
 
 /** Date-only values (Matter incidentDate / statuteOfLimitationsDate)
  *  are calendar dates stored at UTC midnight (ADR-012). They are read
  *  on the UTC day grid and NEVER shifted into the user's zone — doing
  *  so renders them a day early for every user west of UTC, which in a
  *  letter or pleading is a wrong incident date / limitations date. */
-const calendarDate = (d: Date | null): string | null =>
-  d ? formatDateOnly(d, "long") : null;
+const calendarDate = (d: Date | null): string | null => (d ? formatDateOnly(d, "long") : null);
 
 /** Normalize "present but blank" to null so it takes the visible
  *  missing-placeholder path instead of merging an invisible "". */
@@ -257,8 +250,7 @@ export const MERGE_FIELDS: readonly MergeField[] = [
     label: "Firm city/state/zip",
     description: 'Composed locality line, e.g. "Denver, CO 80202".',
     group: "Firm",
-    resolve: (ctx) =>
-      composeCityStateZip(ctx.firm.city, ctx.firm.state, ctx.firm.zip),
+    resolve: (ctx) => composeCityStateZip(ctx.firm.city, ctx.firm.state, ctx.firm.zip),
   },
   {
     key: "firm.phone",
@@ -374,8 +366,7 @@ export const MERGE_FIELDS: readonly MergeField[] = [
   {
     key: "today",
     label: "Today's date",
-    description:
-      'Generation date, e.g. "April 15, 2026" (your time zone).',
+    description: 'Generation date, e.g. "April 15, 2026" (your time zone).',
     group: "General",
     resolve: (ctx) => instantDate(ctx.today, ctx),
   },
@@ -388,17 +379,12 @@ const FIELD_BY_KEY = new Map(MERGE_FIELDS.map((f) => [f.key, f]));
 export const MERGE_FIELD_GROUPS: ReadonlyArray<{
   group: MergeFieldGroup;
   fields: readonly MergeField[];
-}> = ([
-  "Matter",
-  "Client",
-  "Firm",
-  "General",
-  "Records request",
-  "Custodian",
-] as const).map((group) => ({
-  group,
-  fields: MERGE_FIELDS.filter((f) => f.group === group),
-}));
+}> = (["Matter", "Client", "Firm", "General", "Records request", "Custodian"] as const).map(
+  (group) => ({
+    group,
+    fields: MERGE_FIELDS.filter((f) => f.group === group),
+  }),
+);
 
 // ── Merge ──────────────────────────────────────────────────────────────
 
@@ -425,10 +411,7 @@ const KEY_RE = /^[A-Za-z0-9_.]+$/;
  * visible in the output and reported — see the file header for the
  * three-way semantics. Lists are de-duplicated, first-seen order.
  */
-export function mergeTemplate(
-  body: string,
-  ctx: MergeContext
-): MergeResult {
+export function mergeTemplate(body: string, ctx: MergeContext): MergeResult {
   const unresolved: string[] = [];
   const missing: string[] = [];
   const seenUnresolved = new Set<string>();

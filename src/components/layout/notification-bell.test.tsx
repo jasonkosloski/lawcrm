@@ -29,12 +29,7 @@ import userEvent from "@testing-library/user-event";
 // the caller's own onClick (e.g. the footer's close-popover handler)
 // still runs first, like the real next/link.
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    onClick,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, onClick, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a
       href={href}
       data-nextjs-link=""
@@ -56,15 +51,9 @@ vi.mock("@/app/actions/notifications", () => ({
   markNotificationRead: vi.fn(),
 }));
 
-import {
-  markAllNotificationsRead,
-  markNotificationRead,
-} from "@/app/actions/notifications";
+import { markAllNotificationsRead, markNotificationRead } from "@/app/actions/notifications";
 import { NotificationBell } from "./notification-bell";
-import {
-  BELL_MUTATION_ERROR,
-  NotificationBellProvider,
-} from "./notification-bell-provider";
+import { BELL_MUTATION_ERROR, NotificationBellProvider } from "./notification-bell-provider";
 
 const mockedMarkOne = vi.mocked(markNotificationRead);
 const mockedMarkAll = vi.mocked(markAllNotificationsRead);
@@ -126,9 +115,7 @@ beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
   fetchMock.mockReset();
   // Fresh object per call, like a real network response.
-  fetchMock.mockImplementation(async () =>
-    jsonResponse(bellJson(defaultRows()))
-  );
+  fetchMock.mockImplementation(async () => jsonResponse(bellJson(defaultRows())));
   vi.stubGlobal("fetch", fetchMock);
   mockedMarkOne.mockResolvedValue({ ok: true });
   mockedMarkAll.mockResolvedValue({ ok: true });
@@ -143,7 +130,7 @@ const renderBell = () =>
   render(
     <NotificationBellProvider>
       <NotificationBell />
-    </NotificationBellProvider>
+    </NotificationBellProvider>,
   );
 
 /** Render, wait for the initial fetch, and open the dropdown. */
@@ -178,14 +165,12 @@ describe("NotificationBell — linked rows navigate client-side", () => {
             link: null,
             isRead: true,
           }),
-        ])
-      )
+        ]),
+      ),
     );
     const user = userEvent.setup();
     renderBell();
-    await user.click(
-      await screen.findByRole("button", { name: /notifications \(1 unread\)/i })
-    );
+    await user.click(await screen.findByRole("button", { name: /notifications \(1 unread\)/i }));
     const old = await screen.findByText("Old news");
     expect(old.closest("a")).toBeNull();
     expect(old.closest("button")).toBeNull();
@@ -227,9 +212,7 @@ describe("NotificationBell — feed page footer", () => {
     fetchMock.mockImplementation(async () => jsonResponse(bellJson([])));
     const user = userEvent.setup();
     renderBell();
-    await user.click(
-      await screen.findByRole("button", { name: /^notifications$/i })
-    );
+    await user.click(await screen.findByRole("button", { name: /^notifications$/i }));
     await screen.findByText(/no notifications yet/i);
     expect(screen.getByText(/view all notifications/i)).toBeInTheDocument();
   });
@@ -270,9 +253,7 @@ describe("NotificationBell — accessibility", () => {
     await openBell(user);
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(
-      screen.getByRole("button", { name: /notifications/i })
-    ).toHaveFocus();
+    expect(screen.getByRole("button", { name: /notifications/i })).toHaveFocus();
   });
 });
 
@@ -283,20 +264,16 @@ describe("NotificationBellProvider — fetch races and failures", () => {
     // resolve with the STALE pre-mark data.
     let releaseStale: (r: Response) => void = () => {};
     fetchMock
-      .mockImplementationOnce(async () =>
-        jsonResponse(bellJson(defaultRows()))
-      )
+      .mockImplementationOnce(async () => jsonResponse(bellJson(defaultRows())))
       .mockImplementationOnce(
         () =>
           new Promise<Response>((resolve) => {
             releaseStale = resolve;
-          })
+          }),
       )
       // The post-mutation reconcile fetch sees the server truth.
       .mockImplementation(async () =>
-        jsonResponse(
-          bellJson(defaultRows().map((r) => ({ ...r, isRead: true })))
-        )
+        jsonResponse(bellJson(defaultRows().map((r) => ({ ...r, isRead: true })))),
       );
 
     const user = userEvent.setup();
@@ -313,9 +290,7 @@ describe("NotificationBellProvider — fetch races and failures", () => {
     });
 
     await waitFor(() => expect(mockedMarkAll).toHaveBeenCalledTimes(1));
-    expect(
-      screen.queryByRole("button", { name: /\(2 unread\)/i })
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /\(2 unread\)/i })).toBeNull();
     expect(screen.queryByText(/2 unread/)).toBeNull();
   });
 
@@ -331,14 +306,12 @@ describe("NotificationBellProvider — fetch races and failures", () => {
       name: /notifications/i,
     });
     await user.click(trigger);
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      BELL_MUTATION_ERROR
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(BELL_MUTATION_ERROR);
     // Reconcile refetch rolled the optimistic decrement back.
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /notifications \(2 unread\)/i })
-      ).toBeInTheDocument()
+        screen.getByRole("button", { name: /notifications \(2 unread\)/i }),
+      ).toBeInTheDocument(),
     );
   });
 
@@ -347,17 +320,13 @@ describe("NotificationBellProvider — fetch races and failures", () => {
     const user = userEvent.setup();
     await openBell(user);
     await user.click(screen.getByText("Mark all read"));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      BELL_MUTATION_ERROR
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(BELL_MUTATION_ERROR);
   });
 
   test("a failed poll is swallowed (non-blocking)", async () => {
     fetchMock.mockRejectedValue(new Error("offline"));
     renderBell();
-    expect(
-      await screen.findByRole("button", { name: /^notifications$/i })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^notifications$/i })).toBeInTheDocument();
   });
 });
 
@@ -379,9 +348,7 @@ describe("NotificationBellProvider — lives above the page", () => {
 
     rerender(<Harness page={2} />);
     // Badge is there immediately (no null-state flash) and no new fetch.
-    expect(
-      screen.getByRole("button", { name: /notifications \(2 unread\)/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /notifications \(2 unread\)/i })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -397,7 +364,7 @@ describe("NotificationBellProvider — lives above the page", () => {
     });
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(
-      await screen.findByRole("button", { name: /notifications \(2 unread\)/i })
+      await screen.findByRole("button", { name: /notifications \(2 unread\)/i }),
     ).toBeInTheDocument();
   });
 

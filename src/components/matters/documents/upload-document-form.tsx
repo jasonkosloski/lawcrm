@@ -78,7 +78,7 @@ export function UploadDocumentForm({
     () => () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     },
-    []
+    [],
   );
 
   const collapse = () => {
@@ -89,10 +89,7 @@ export function UploadDocumentForm({
   };
 
   /** local driver: one multipart POST to the streaming route. */
-  const uploadViaRoute = async (
-    file: File,
-    meta: { name: string; category: DocumentCategory }
-  ) => {
+  const uploadViaRoute = async (file: File, meta: { name: string; category: DocumentCategory }) => {
     // Field order per the route contract: matterId before the file.
     const body = new FormData();
     if (scope.kind === "matter") body.append("matterId", scope.matterId);
@@ -117,10 +114,7 @@ export function UploadDocumentForm({
   };
 
   /** vercel-blob driver: client-direct upload. */
-  const uploadViaBlob = async (
-    file: File,
-    meta: { name: string; category: DocumentCategory }
-  ) => {
+  const uploadViaBlob = async (file: File, meta: { name: string; category: DocumentCategory }) => {
     const key = makeStorageKey(file.name);
     await upload(key, file, {
       // Documents live in a PRIVATE store (ADR-018).
@@ -180,7 +174,7 @@ export function UploadDocumentForm({
             ? NETWORK_ERROR
             : err instanceof Error && err.message
               ? err.message
-              : NETWORK_ERROR
+              : NETWORK_ERROR,
       );
     } finally {
       setPending(false);
@@ -210,10 +204,7 @@ export function UploadDocumentForm({
       className="flex flex-col gap-3 p-4 rounded-md border border-line bg-paper-2/40"
     >
       <div className="flex flex-col gap-1.5">
-        <label
-          htmlFor={fileId}
-          className="text-2xs font-medium text-ink-3"
-        >
+        <label htmlFor={fileId} className="text-2xs font-medium text-ink-3">
           File <span className="text-warn">*</span>
         </label>
         <div className="flex items-center gap-2">
@@ -229,7 +220,7 @@ export function UploadDocumentForm({
               "file:mr-3 file:py-1.5 file:px-3 file:rounded-md",
               "file:border-0 file:text-xs file:font-medium",
               "file:bg-brand-700 file:text-white file:cursor-pointer",
-              "hover:file:bg-brand-900"
+              "hover:file:bg-brand-900",
             )}
           />
         </div>
@@ -240,10 +231,7 @@ export function UploadDocumentForm({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor={nameId}
-            className="text-2xs font-medium text-ink-3"
-          >
+          <label htmlFor={nameId} className="text-2xs font-medium text-ink-3">
             Display name (optional)
           </label>
           <input
@@ -256,10 +244,7 @@ export function UploadDocumentForm({
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor={categoryId}
-            className="text-2xs font-medium text-ink-3"
-          >
+          <label htmlFor={categoryId} className="text-2xs font-medium text-ink-3">
             Category
           </label>
           <NativeSelect
@@ -289,11 +274,7 @@ export function UploadDocumentForm({
         >
           Cancel
         </button>
-        <Button
-          size="sm"
-          type="submit"
-          disabled={pending}
-        >
+        <Button size="sm" type="submit" disabled={pending}>
           <Upload size={12} />
           {pending ? "Uploading…" : "Upload"}
         </Button>

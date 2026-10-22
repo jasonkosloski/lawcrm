@@ -67,7 +67,7 @@ describe("RecordsTab", () => {
     const ro = await RecordsTab({ scope: SCOPE, writable: false });
     expect(findAll(ro, NewRequestComposer)).toHaveLength(0);
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k !== "records.create"
+      async (k: string) => k !== "records.create",
     );
     const denied = await RecordsTab({ scope: SCOPE, writable: true });
     expect(findAll(denied, NewRequestComposer)).toHaveLength(0);
@@ -82,21 +82,27 @@ describe("RecordsTab", () => {
 
   test("matter fees are requested only with matters.expense.view", async () => {
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k !== "matters.expense.view"
+      async (k: string) => k !== "matters.expense.view",
     );
     await RecordsTab({ scope: SCOPE, writable: true });
-    expect(getRecordsRequests).toHaveBeenLastCalledWith(SCOPE, "America/Denver", { includeFees: false });
+    expect(getRecordsRequests).toHaveBeenLastCalledWith(SCOPE, "America/Denver", {
+      includeFees: false,
+    });
     vi.mocked(currentUserHasPermission).mockResolvedValue(true);
     await RecordsTab({ scope: SCOPE, writable: true });
-    expect(getRecordsRequests).toHaveBeenLastCalledWith(SCOPE, "America/Denver", { includeFees: true });
+    expect(getRecordsRequests).toHaveBeenLastCalledWith(SCOPE, "America/Denver", {
+      includeFees: true,
+    });
   });
 
   test("a lead always includes fees", async () => {
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k !== "matters.expense.view"
+      async (k: string) => k !== "matters.expense.view",
     );
     const lead = { kind: "lead", leadId: "l1" } as const;
     await RecordsTab({ scope: lead, writable: true });
-    expect(getRecordsRequests).toHaveBeenLastCalledWith(lead, "America/Denver", { includeFees: true });
+    expect(getRecordsRequests).toHaveBeenLastCalledWith(lead, "America/Denver", {
+      includeFees: true,
+    });
   });
 });

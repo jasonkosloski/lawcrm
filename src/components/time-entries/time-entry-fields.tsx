@@ -23,7 +23,11 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { NativeSelect, NativeSelectOption, NativeSelectOptGroup } from "@/components/ui/native-select";
+import {
+  NativeSelect,
+  NativeSelectOption,
+  NativeSelectOptGroup,
+} from "@/components/ui/native-select";
 import {
   UTBMS_ACTIVITY_CODES,
   UTBMS_LITIGATION_TASK_CODES,
@@ -122,9 +126,7 @@ export function DurationFields({
       }}
       className={cn(
         "px-1.5 h-5 rounded text-2xs leading-none transition-colors",
-        m === mode
-          ? "bg-brand-soft text-brand-700 font-medium"
-          : "text-ink-4 hover:text-ink-2"
+        m === mode ? "bg-brand-soft text-brand-700 font-medium" : "text-ink-4 hover:text-ink-2",
       )}
     >
       {label}

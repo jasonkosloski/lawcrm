@@ -104,9 +104,7 @@ describe("TEAM mode", () => {
     const where = await matterAccessWhere(alice);
     const rows = await prisma.matter.findMany({ where, select: { id: true } });
     expect(rows.map((r) => r.id)).toEqual([matterA]);
-    expect(
-      await prisma.matter.findMany({ where: await matterAccessWhere(bob) })
-    ).toHaveLength(0);
+    expect(await prisma.matter.findMany({ where: await matterAccessWhere(bob) })).toHaveLength(0);
   });
 
   test("a removed member loses access", async () => {
@@ -164,9 +162,7 @@ describe("TEAM mode", () => {
 
   test("assertOptionalMatterAccess passes a null matter", async () => {
     await expect(assertOptionalMatterAccess(null)).resolves.toBe(alice);
-    await expect(assertOptionalMatterAccess(matterB)).rejects.toThrow(
-      "NEXT_NOT_FOUND"
-    );
+    await expect(assertOptionalMatterAccess(matterB)).rejects.toThrow("NEXT_NOT_FOUND");
   });
 
   test("relation fragments wrap the matter clause", async () => {
@@ -192,9 +188,7 @@ describe("TEAM mode", () => {
       },
     });
     expect(await matterIdOfChild("note", note.id)).toBe(matterB);
-    await expect(assertChildMatterAccess("note", note.id)).rejects.toThrow(
-      "NEXT_NOT_FOUND"
-    );
+    await expect(assertChildMatterAccess("note", note.id)).rejects.toThrow("NEXT_NOT_FOUND");
     expect(await matterIdOfChild("note", "missing")).toBeUndefined();
     await expect(assertChildMatterAccess("note", "missing")).resolves.toBeNull();
     const task = await prisma.task.create({
@@ -252,9 +246,7 @@ describe("restricted matters (ADR-049)", () => {
   });
 
   test("filterAccessibleMatterIds honours the flag", async () => {
-    expect([...(await filterAccessibleMatterIds(bob, [matterA, matterB]))]).toEqual([
-      matterB,
-    ]);
+    expect([...(await filterAccessibleMatterIds(bob, [matterA, matterB]))]).toEqual([matterB]);
   });
 });
 
@@ -299,9 +291,7 @@ describe("lead-scoped children (ADR-049)", () => {
     ] as const;
     for (const [kind, id] of cases) {
       expect(await leadIdOfChild(kind, id)).toBe(walled);
-      await expect(assertChildMatterAccess(kind, id)).rejects.toThrow(
-        "NEXT_NOT_FOUND"
-      );
+      await expect(assertChildMatterAccess(kind, id)).rejects.toThrow("NEXT_NOT_FOUND");
     }
     mockedUser.mockResolvedValue(alice);
     for (const [kind, id] of cases) {

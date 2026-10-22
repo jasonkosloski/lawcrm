@@ -74,7 +74,7 @@ function loadPdfJs(): Promise<PdfJs> {
     if (!pdfjs.GlobalWorkerOptions.workerPort) {
       pdfjs.GlobalWorkerOptions.workerPort = new Worker(
         new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url),
-        { type: "module" }
+        { type: "module" },
       );
     }
     return pdfjs;
@@ -162,7 +162,9 @@ export function PdfDocumentViewer({
       } catch (err) {
         if (cancelled) return;
         console.warn("PDF failed to load", err);
-        setFailure((err as { name?: string })?.name === "PasswordException" ? "password" : "failed");
+        setFailure(
+          (err as { name?: string })?.name === "PasswordException" ? "password" : "failed",
+        );
       }
     })();
     return () => {
@@ -209,7 +211,7 @@ export function PdfDocumentViewer({
       const s = sizeOverrides.get(page) ?? baseSize ?? { w: 612, h: 792 };
       return { w: Math.floor(s.w * scale), h: Math.floor(s.h * scale) };
     },
-    [sizeOverrides, baseSize, scale]
+    [sizeOverrides, baseSize, scale],
   );
 
   /** Top offset of every page, by arithmetic — the layout below uses
@@ -270,7 +272,9 @@ export function PdfDocumentViewer({
     const place = placeRef.current;
     if (place) {
       el.scrollTop =
-        pageTops[place.page - 1] + place.frac * sizeOf(place.page).h - el.clientHeight * READING_LINE;
+        pageTops[place.page - 1] +
+        place.frac * sizeOf(place.page).h -
+        el.clientHeight * READING_LINE;
     }
   }, [pageTops, sizeOf]);
   // ── Text-layer registry (for the parent's highlight/capture) ────────
@@ -304,7 +308,7 @@ export function PdfDocumentViewer({
         return next;
       });
     },
-    [baseSize]
+    [baseSize],
   );
 
   const goToPage = useCallback(
@@ -315,7 +319,7 @@ export function PdfDocumentViewer({
       el.scrollTop = pageTops[p - 1] - PAD_TOP / 2;
       syncFromScroll();
     },
-    [numPages, pageTops, syncFromScroll]
+    [numPages, pageTops, syncFromScroll],
   );
 
   /** Resolve with `page`'s text layer once it's rendered (or null
@@ -357,7 +361,7 @@ export function PdfDocumentViewer({
         return Promise.all(pages.map(waitForLayer));
       },
     }),
-    [goToPage, current, numPages, waitForLayer]
+    [goToPage, current, numPages, waitForLayer],
   );
 
   const readyFired = useRef(false);
@@ -372,7 +376,12 @@ export function PdfDocumentViewer({
   // ── Render ─────────────────────────────────────────────────────────
   const fallbackLinks = (
     <span>
-      <a href={src} target="_blank" rel="noopener noreferrer" className="underline hover:text-brand-700">
+      <a
+        href={src}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline hover:text-brand-700"
+      >
         Open it in a new tab
       </a>{" "}
       or{" "}
@@ -404,10 +413,22 @@ export function PdfDocumentViewer({
     <div className="lc-pdf flex min-h-0 flex-1 flex-col gap-2 max-lg:h-[80dvh] max-lg:flex-none">
       <div className="flex flex-wrap items-center gap-2 text-xs text-ink-3">
         <div className="flex items-center gap-1">
-          <button type="button" className={toolButton} disabled={!doc || current <= 1} onClick={() => goToPage(current - 1)} aria-label="Previous page">
+          <button
+            type="button"
+            className={toolButton}
+            disabled={!doc || current <= 1}
+            onClick={() => goToPage(current - 1)}
+            aria-label="Previous page"
+          >
             <ChevronUp className="h-3.5 w-3.5" aria-hidden />
           </button>
-          <button type="button" className={toolButton} disabled={!doc || current >= numPages} onClick={() => goToPage(current + 1)} aria-label="Next page">
+          <button
+            type="button"
+            className={toolButton}
+            disabled={!doc || current >= numPages}
+            onClick={() => goToPage(current + 1)}
+            aria-label="Next page"
+          >
             <ChevronDown className="h-3.5 w-3.5" aria-hidden />
           </button>
           <form
@@ -436,13 +457,25 @@ export function PdfDocumentViewer({
           </form>
         </div>
         <div className="flex items-center gap-1">
-          <button type="button" className={toolButton} disabled={!doc || zoom <= MIN_ZOOM} onClick={() => changeZoom(stepZoom(zoom, -1))} aria-label="Zoom out">
+          <button
+            type="button"
+            className={toolButton}
+            disabled={!doc || zoom <= MIN_ZOOM}
+            onClick={() => changeZoom(stepZoom(zoom, -1))}
+            aria-label="Zoom out"
+          >
             <Minus className="h-3.5 w-3.5" aria-hidden />
           </button>
           <span className="w-11 text-center font-mono" aria-live="polite">
             {doc ? `${zoomPct}%` : "—"}
           </span>
-          <button type="button" className={toolButton} disabled={!doc || zoom >= MAX_ZOOM} onClick={() => changeZoom(stepZoom(zoom, 1))} aria-label="Zoom in">
+          <button
+            type="button"
+            className={toolButton}
+            disabled={!doc || zoom >= MAX_ZOOM}
+            onClick={() => changeZoom(stepZoom(zoom, 1))}
+            aria-label="Zoom in"
+          >
             <Plus className="h-3.5 w-3.5" aria-hidden />
           </button>
           <Button
@@ -456,7 +489,13 @@ export function PdfDocumentViewer({
           </Button>
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <a href={src} target="_blank" rel="noopener noreferrer" className={toolButton} title="Open in a new tab">
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={toolButton}
+            title="Open in a new tab"
+          >
             <ExternalLink className="h-3.5 w-3.5" aria-hidden />
             <span className="sr-only">Open in a new tab</span>
           </a>
@@ -473,11 +512,17 @@ export function PdfDocumentViewer({
         style={{ minHeight: 420 }}
       >
         {!doc ? (
-          <div className="flex h-full min-h-[420px] items-center justify-center text-xs text-ink-4" role="status">
+          <div
+            className="flex h-full min-h-[420px] items-center justify-center text-xs text-ink-4"
+            role="status"
+          >
             Loading PDF…
           </div>
         ) : (
-          <div className="flex flex-col items-center" style={{ paddingTop: PAD_TOP, paddingBottom: PAD_TOP, gap: PAGE_GAP }}>
+          <div
+            className="flex flex-col items-center"
+            style={{ paddingTop: PAD_TOP, paddingBottom: PAD_TOP, gap: PAGE_GAP }}
+          >
             {pageTops.map((_, i) => {
               const page = i + 1;
               const size = sizeOf(page);

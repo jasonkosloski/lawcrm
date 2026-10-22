@@ -1,13 +1,6 @@
 import { describe, expect, test } from "vitest";
-import {
-  parsePhonesJson,
-  phonesSignature,
-  MAX_PHONES_PER_CONTACT,
-} from "./contact-phones";
-import {
-  isOpposingCounselRole,
-  representationFlag,
-} from "./party-constants";
+import { parsePhonesJson, phonesSignature, MAX_PHONES_PER_CONTACT } from "./contact-phones";
+import { isOpposingCounselRole, representationFlag } from "./party-constants";
 
 describe("parsePhonesJson", () => {
   test("parses and normalizes to exactly one primary", () => {
@@ -15,7 +8,7 @@ describe("parsePhonesJson", () => {
       JSON.stringify([
         { label: " Mobile ", number: " 555-0100 ", isPrimary: true },
         { label: "", number: "555-0101", isPrimary: true },
-      ])
+      ]),
     );
     expect(r).toEqual({
       ok: true,
@@ -27,9 +20,7 @@ describe("parsePhonesJson", () => {
   });
 
   test("promotes the first entry when none is primary", () => {
-    const r = parsePhonesJson(
-      JSON.stringify([{ number: "1" }, { number: "2" }])
-    );
+    const r = parsePhonesJson(JSON.stringify([{ number: "1" }, { number: "2" }]));
     expect(r.ok && r.phones.map((p) => p.isPrimary)).toEqual([true, false]);
   });
 
@@ -38,12 +29,8 @@ describe("parsePhonesJson", () => {
   });
 
   test("drops blank numbers via normalization", () => {
-    const r = parsePhonesJson(
-      JSON.stringify([{ number: "  " }, { number: "555" }])
-    );
-    expect(r.ok && r.phones).toEqual([
-      { label: "", number: "555", isPrimary: true },
-    ]);
+    const r = parsePhonesJson(JSON.stringify([{ number: "  " }, { number: "555" }]));
+    expect(r.ok && r.phones).toEqual([{ label: "", number: "555", isPrimary: true }]);
   });
 
   test.each([
@@ -56,7 +43,7 @@ describe("parsePhonesJson", () => {
       JSON.stringify(
         Array.from({ length: MAX_PHONES_PER_CONTACT + 1 }, () => ({
           number: "1",
-        }))
+        })),
       ),
     ],
   ])("%s is an error, never an empty list", (_name, raw) => {
@@ -82,14 +69,12 @@ describe("phonesSignature", () => {
       { label: "", number: "1", isPrimary: true },
       { label: "", number: "2", isPrimary: false },
     ];
-    expect(phonesSignature(base)).not.toBe(
-      phonesSignature([{ ...base[0], number: "9" }, base[1]])
-    );
+    expect(phonesSignature(base)).not.toBe(phonesSignature([{ ...base[0], number: "9" }, base[1]]));
     expect(phonesSignature(base)).not.toBe(
       phonesSignature([
         { ...base[0], isPrimary: false },
         { ...base[1], isPrimary: true },
-      ])
+      ]),
     );
   });
 });

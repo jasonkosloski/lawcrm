@@ -81,11 +81,7 @@ export function ReplyComposer({
       <input type="hidden" name="content" value={html} />
       <input type="hidden" name="parentNoteId" value={parentNoteId} />
       <input type="hidden" name="type" value="note" />
-      <input
-        type="hidden"
-        name="attachments"
-        value={JSON.stringify(captures)}
-      />
+      <input type="hidden" name="attachments" value={JSON.stringify(captures)} />
 
       <NoteEditor onChange={setHtml} placeholder="Reply…" autoFocus />
 
@@ -102,9 +98,7 @@ export function ReplyComposer({
         onChange={setCaptures}
         errors={attachmentErrors}
         allowedKinds={
-          scope.kind === "matter"
-            ? allowedCaptureKinds(access, ["task", "deadline", "time"])
-            : []
+          scope.kind === "matter" ? allowedCaptureKinds(access, ["task", "deadline", "time"]) : []
         }
       />
 
@@ -116,16 +110,8 @@ export function ReplyComposer({
         >
           Cancel
         </button>
-        <Button
-          size="xs"
-          type="submit"
-          disabled={isPending || html.trim().length === 0}
-        >
-          {isPending
-            ? "Posting…"
-            : captures.length > 0
-              ? `Reply + ${captures.length}`
-              : "Reply"}
+        <Button size="xs" type="submit" disabled={isPending || html.trim().length === 0}>
+          {isPending ? "Posting…" : captures.length > 0 ? `Reply + ${captures.length}` : "Reply"}
         </Button>
       </div>
     </form>

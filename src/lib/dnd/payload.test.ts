@@ -39,9 +39,7 @@ describe("setDragPayload", () => {
       kind: "calendar-event",
       data: { id: "abc", isAllDay: false },
     });
-    expect(e.dataTransfer.getData("application/x-lawcrm-dnd-kind")).toBe(
-      "calendar-event"
-    );
+    expect(e.dataTransfer.getData("application/x-lawcrm-dnd-kind")).toBe("calendar-event");
     expect(JSON.parse(e.dataTransfer.getData("application/json"))).toEqual({
       id: "abc",
       isAllDay: false,

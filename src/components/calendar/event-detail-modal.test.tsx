@@ -71,18 +71,13 @@ vi.mock("@/app/actions/attendee-search", () => ({
 // out of scope here. The notes stub renders a textarea so the
 // composer-Escape guard can be exercised.
 vi.mock("./event-notes-section", () => ({
-  EventNotesSection: () => (
-    <textarea aria-label="Draft note" defaultValue="half typed" />
-  ),
+  EventNotesSection: () => <textarea aria-label="Draft note" defaultValue="half typed" />,
 }));
 vi.mock("./event-time-entries-section", () => ({
   EventTimeEntriesSection: () => null,
 }));
 
-import {
-  deleteCalendarEvent,
-  updateCalendarEvent,
-} from "@/app/actions/calendar-events";
+import { deleteCalendarEvent, updateCalendarEvent } from "@/app/actions/calendar-events";
 import { confirmAction } from "@/lib/feedback";
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
 import { parseDateOnly } from "@/lib/format-date";
@@ -96,9 +91,7 @@ const deleteMock = vi.mocked(deleteCalendarEvent);
  *  runs, so old browser-local code can't pass in either. */
 const TZ = "Pacific/Auckland";
 
-function makeEvent(
-  overrides: Partial<CalendarEventDetail> = {}
-): CalendarEventDetail {
+function makeEvent(overrides: Partial<CalendarEventDetail> = {}): CalendarEventDetail {
   return {
     id: "e1",
     title: "Deposition prep",
@@ -141,13 +134,7 @@ type Props = Partial<React.ComponentProps<typeof EventDetailModal>>;
 function ui(event: CalendarEventDetail, props: Props = {}) {
   return (
     <UserTimeZoneProvider timeZone={TZ}>
-      <EventDetailModal
-        event={event}
-        notes={[]}
-        timeEntries={[]}
-        canEdit
-        {...props}
-      />
+      <EventDetailModal event={event} notes={[]} timeEntries={[]} canEdit {...props} />
     </UserTimeZoneProvider>
   );
 }
@@ -165,11 +152,7 @@ beforeEach(() => {
   deleteMock.mockResolvedValue({ ok: true, matterId: null });
 });
 
-async function editTitle(
-  user: ReturnType<typeof userEvent.setup>,
-  from: string,
-  to: string
-) {
+async function editTitle(user: ReturnType<typeof userEvent.setup>, from: string, to: string) {
   await user.click(screen.getByText(from));
   const input = screen.getByRole("textbox", { name: "Event title" });
   await user.clear(input);
@@ -196,9 +179,7 @@ describe("Escape handling — inline editors cancel without closing the modal", 
     await user.keyboard("{Escape}");
 
     // Edit cancelled: input gone, original value back, no commit.
-    expect(
-      screen.queryByRole("textbox", { name: "Event title" })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Event title" })).not.toBeInTheDocument();
     expect(screen.getByText("Deposition prep")).toBeInTheDocument();
     expect(updateMock).not.toHaveBeenCalled();
     // Modal still open.
@@ -213,9 +194,7 @@ describe("Escape handling — inline editors cancel without closing the modal", 
     screen.getByRole("textbox", { name: "Description" });
     await user.keyboard("{Escape}");
 
-    expect(
-      screen.queryByRole("textbox", { name: "Description" })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Description" })).not.toBeInTheDocument();
     expect(replaceMock).not.toHaveBeenCalled();
   });
 
@@ -227,9 +206,7 @@ describe("Escape handling — inline editors cancel without closing the modal", 
     screen.getByRole("combobox", { name: "Event type" });
     await user.keyboard("{Escape}");
 
-    expect(
-      screen.queryByRole("combobox", { name: "Event type" })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Event type" })).not.toBeInTheDocument();
     expect(replaceMock).not.toHaveBeenCalled();
     expect(updateMock).not.toHaveBeenCalled();
   });
@@ -240,17 +217,12 @@ describe("Escape handling — inline editors cancel without closing the modal", 
 
     // Typing a non-matching name opens the dropdown (the
     // "Add as new contact" row shows even with zero results).
-    await user.type(
-      screen.getByRole("combobox", { name: "Search attendees" }),
-      "Bob"
-    );
+    await user.type(screen.getByRole("combobox", { name: "Search attendees" }), "Bob");
     await screen.findByRole("listbox", { name: "Attendee suggestions" });
 
     // First Escape: dropdown dismissed, modal stays.
     await user.keyboard("{Escape}");
-    expect(
-      screen.queryByRole("listbox", { name: "Attendee suggestions" })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("listbox", { name: "Attendee suggestions" })).not.toBeInTheDocument();
     expect(replaceMock).not.toHaveBeenCalled();
 
     // Second Escape (dropdown already closed): modal closes.
@@ -338,8 +310,8 @@ describe("committed state re-seeds from a refreshed event prop", () => {
         makeEvent({
           title: "Prep session",
           attendees: [savedContactAttendee],
-        })
-      )
+        }),
+      ),
     );
 
     // Re-seeded state is visible immediately…
@@ -351,7 +323,7 @@ describe("committed state re-seeds from a refreshed event prop", () => {
     await user.click(
       screen.getByRole("checkbox", {
         name: /show details to everyone/i,
-      })
+      }),
     );
     await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(2));
     const fd = updateMock.mock.calls[1]![2];
@@ -369,31 +341,23 @@ describe("committed state re-seeds from a refreshed event prop", () => {
   test("a stale refresh mid-save does not clobber the optimistic merge, and the settled save re-seeds server truth", async () => {
     const user = userEvent.setup();
     let resolveSave!: (v: { status: "ok" }) => void;
-    updateMock.mockImplementationOnce(
-      () => new Promise((r) => (resolveSave = r))
-    );
+    updateMock.mockImplementationOnce(() => new Promise((r) => (resolveSave = r)));
     const { rerender } = renderModal(makeEvent());
 
     await editTitle(user, "Deposition prep", "Optimistic title");
-    expect(
-      screen.getByRole("heading", { name: "Optimistic title" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Optimistic title" })).toBeInTheDocument();
 
     // A refresh with pre-save data lands while the save is still
     // in flight — the optimistic title must survive.
     rerender(ui(makeEvent()));
-    expect(
-      screen.getByRole("heading", { name: "Optimistic title" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Optimistic title" })).toBeInTheDocument();
 
     // The save settles; the row the server saved differs from the
     // optimistic text (it normalized the title). Committed state
     // must re-seed to that server truth.
     rerender(ui(makeEvent({ title: "Server title" })));
     resolveSave({ status: "ok" });
-    expect(
-      await screen.findByRole("heading", { name: "Server title" })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Server title" })).toBeInTheDocument();
   });
 
   test("a failed save reverts the optimistic edit and shows the reason", async () => {
@@ -407,11 +371,9 @@ describe("committed state re-seeds from a refreshed event prop", () => {
     await editTitle(user, "Deposition prep", "Nope");
 
     expect(
-      await screen.findByText("You don't have permission to edit this event.")
+      await screen.findByText("You don't have permission to edit this event."),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Deposition prep" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Deposition prep" })).toBeInTheDocument();
   });
 
   test("a save does not trigger a second router.refresh render", async () => {
@@ -448,7 +410,7 @@ describe("schedule round trip — ADR-012 wire format", () => {
         isAllDay: true,
         startTime: parseDateOnly("2026-07-06")!,
         endTime: parseDateOnly("2026-07-08")!,
-      })
+      }),
     );
 
     await editTitle(user, "Deposition prep", "Trial");
@@ -465,9 +427,7 @@ describe("schedule round trip — ADR-012 wire format", () => {
   test("renders the schedule in the user's zone, all-day dates unshifted", () => {
     renderModal(makeEvent());
     // 03:00 Tuesday Jul 7 in Auckland.
-    expect(
-      screen.getByText("Tuesday, July 7, 2026")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Tuesday, July 7, 2026")).toBeInTheDocument();
     expect(screen.getByText(/3:00\s?AM\s?–\s?4:00\s?AM/)).toBeInTheDocument();
   });
 
@@ -477,12 +437,10 @@ describe("schedule round trip — ADR-012 wire format", () => {
         isAllDay: true,
         startTime: parseDateOnly("2026-07-06")!,
         endTime: parseDateOnly("2026-07-08")!,
-      })
+      }),
     );
     expect(screen.getByText("Monday, July 6, 2026")).toBeInTheDocument();
-    expect(
-      screen.getByText("All day · through Jul 8, 2026")
-    ).toBeInTheDocument();
+    expect(screen.getByText("All day · through Jul 8, 2026")).toBeInTheDocument();
   });
 
   test("saving the time editor posts the edited wall clock", async () => {
@@ -556,9 +514,7 @@ describe("opening a different event", () => {
     rerender(ui(makeEvent({ id: "e2", title: "Other event" })));
 
     expect(screen.queryByLabelText("Starts")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Other event" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Other event" })).toBeInTheDocument();
   });
 });
 
@@ -570,38 +526,28 @@ describe("Busy view and read-only mode", () => {
         viewerCanSeeDetails: false,
         location: null,
         description: null,
-      })
+      }),
     );
     const dialog = screen.getByRole("dialog", { name: "Busy" });
     expect(dialog).toHaveTextContent("Unavailable");
     expect(dialog).toHaveTextContent(/don't have access/i);
-    expect(
-      screen.queryByRole("button", { name: "Edit Event title" })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit Event title" })).not.toBeInTheDocument();
     expect(screen.queryByText("Delete")).not.toBeInTheDocument();
   });
 
   test("canEdit=false shows static values with no editors or Delete", () => {
     renderModal(makeEvent(), { canEdit: false });
-    expect(
-      screen.getByRole("heading", { name: "Deposition prep" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Deposition prep" })).toBeInTheDocument();
     expect(screen.getByText("Conference room")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Edit date and time" })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("checkbox", { name: /show details/i })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit date and time" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /show details/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Delete")).not.toBeInTheDocument();
   });
 
   test("canDelete=false hides Delete even for an editor", () => {
     renderModal(makeEvent(), { canDelete: false });
     expect(screen.queryByText("Delete")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Edit date and time" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit date and time" })).toBeInTheDocument();
   });
 });
 
@@ -618,7 +564,7 @@ describe("Delete", () => {
     await user.click(screen.getByRole("button", { name: /Delete/ }));
 
     expect(
-      await screen.findByText("You don't have permission to delete this event.")
+      await screen.findByText("You don't have permission to delete this event."),
     ).toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
   });
@@ -631,7 +577,10 @@ describe("Delete", () => {
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/calendar"));
     expect(confirmAction).toHaveBeenCalledWith(
-      expect.objectContaining({ title: expect.stringMatching(/^Delete ".+"\?$/), destructive: true })
+      expect.objectContaining({
+        title: expect.stringMatching(/^Delete ".+"\?$/),
+        destructive: true,
+      }),
     );
     expect(deleteMock).toHaveBeenCalledWith("e1");
   });
@@ -643,9 +592,7 @@ describe("Delete", () => {
 
     await user.click(screen.getByRole("button", { name: /Delete/ }));
 
-    await waitFor(() =>
-      expect(pushMock).toHaveBeenCalledWith("/matters/m9/events")
-    );
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/matters/m9/events"));
   });
 
   test("Delete stays disabled after success while the redirect is in flight", async () => {
@@ -674,15 +621,10 @@ describe("video link", () => {
     renderModal(makeEvent());
 
     await user.click(screen.getByRole("button", { name: "Edit Video URL" }));
-    await user.type(
-      screen.getByRole("textbox", { name: "Video URL" }),
-      "zoom.us/j/8123{Enter}"
-    );
+    await user.type(screen.getByRole("textbox", { name: "Video URL" }), "zoom.us/j/8123{Enter}");
 
     await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
-    expect(updateMock.mock.calls[0]![2].get("zoomUrl")).toBe(
-      "https://zoom.us/j/8123"
-    );
+    expect(updateMock.mock.calls[0]![2].get("zoomUrl")).toBe("https://zoom.us/j/8123");
   });
 
   test("a non-link value is rejected with a message and never saved", async () => {
@@ -692,16 +634,14 @@ describe("video link", () => {
     await user.click(screen.getByRole("button", { name: "Edit Video URL" }));
     await user.type(
       screen.getByRole("textbox", { name: "Video URL" }),
-      "javascript:alert(1){Enter}"
+      "javascript:alert(1){Enter}",
     );
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/valid video link/i);
     expect(updateMock).not.toHaveBeenCalled();
     // The editor stays open with what was typed so it can be fixed.
-    expect(screen.getByRole("textbox", { name: "Video URL" })).toHaveValue(
-      "javascript:alert(1)"
-    );
+    expect(screen.getByRole("textbox", { name: "Video URL" })).toHaveValue("javascript:alert(1)");
   });
 
   test("Enter on the Join link activates it instead of opening the URL editor", async () => {
@@ -713,16 +653,12 @@ describe("video link", () => {
     link.focus();
     await user.keyboard("{Enter}");
 
-    expect(
-      screen.queryByRole("textbox", { name: "Video URL" })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Video URL" })).not.toBeInTheDocument();
   });
 
   test("a legacy non-URL value renders as text, not a relative link", () => {
     renderModal(makeEvent({ zoomUrl: "ask front desk" }));
-    expect(
-      screen.queryByRole("link", { name: "Join video call" })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Join video call" })).not.toBeInTheDocument();
     expect(screen.getByText("ask front desk")).toBeInTheDocument();
   });
 });
@@ -733,10 +669,7 @@ describe("type select", () => {
     renderModal(makeEvent());
 
     await user.click(screen.getByRole("button", { name: "Edit Event type" }));
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Event type" }),
-      "hearing"
-    );
+    await user.selectOptions(screen.getByRole("combobox", { name: "Event type" }), "hearing");
 
     await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
     expect(updateMock.mock.calls[0]![2].get("type")).toBe("hearing");

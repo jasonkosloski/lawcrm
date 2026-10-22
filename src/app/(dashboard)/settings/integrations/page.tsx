@@ -70,8 +70,8 @@ export default async function IntegrationsSettingsPage({
       <div>
         <h1 className="text-base font-semibold text-ink">Integrations</h1>
         <p className="text-xs text-ink-3 mt-1">
-          Third-party services connected to your account. Mailbox
-          connections are personal — each team member connects their own.
+          Third-party services connected to your account. Mailbox connections are personal — each
+          team member connects their own.
         </p>
       </div>
 
@@ -83,9 +83,7 @@ export default async function IntegrationsSettingsPage({
           id: a.id,
           emailAddress: a.emailAddress,
           syncStatus: a.syncStatus,
-          lastSyncLabel: a.lastSyncAt
-            ? formatDate(a.lastSyncAt, "datetime_medium", tz)
-            : null,
+          lastSyncLabel: a.lastSyncAt ? formatDate(a.lastSyncAt, "datetime_medium", tz) : null,
           threadCount: a._count.threads,
           syncError: a.syncError,
           oldestThreadLabel: oldestByAccount.has(a.id)
@@ -94,7 +92,6 @@ export default async function IntegrationsSettingsPage({
           calendarSyncEnabled: hasCalendarScope(a.grantedScopes),
         }))}
       />
-
     </div>
   );
 }

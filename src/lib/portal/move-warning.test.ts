@@ -12,12 +12,12 @@ describe("moveWarning", () => {
   });
   test("single file becoming visible", () => {
     expect(moveWarning([{ clientShare: null, folderId: "plain" }], "shared", folders)).toBe(
-      "This file will become visible to the client."
+      "This file will become visible to the client.",
     );
   });
   test("single file becoming hidden", () => {
     expect(moveWarning([{ clientShare: null, folderId: "shared" }], "plain", folders)).toBe(
-      "This file will no longer be visible to the client."
+      "This file will no longer be visible to the client.",
     );
   });
   test("pluralises", () => {

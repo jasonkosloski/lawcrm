@@ -44,10 +44,7 @@ import { Button } from "@/components/ui/button";
 import { Globe, Mail, Stamp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sendInvoice } from "@/app/actions/billing";
-import {
-  billingInitialState,
-  type BillingFormState,
-} from "@/lib/billing-form";
+import { billingInitialState, type BillingFormState } from "@/lib/billing-form";
 import { notifyWarning } from "@/lib/feedback";
 import { parseMoneyInput } from "@/lib/parse-money-input";
 import { formatMoney } from "@/lib/format-money";
@@ -86,18 +83,18 @@ export function SendInvoiceDialog({
   // Wrapped useActionState: masks state left over from a previous
   // open, so a failed attempt's error banner doesn't reappear when
   // the dialog is reopened. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    BillingFormState,
-    FormData
-  >(action, billingInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<BillingFormState, FormData>(
+    action,
+    billingInitialState,
+    open,
+  );
 
   // The trust-apply checkbox only exists if there's trust to draw
   // from AND the invoice has an open balance.
-  const trustEligible =
-    canApplyTrust && trustBalance > 0 && invoiceBalance > 0;
+  const trustEligible = canApplyTrust && trustBalance > 0 && invoiceBalance > 0;
   const defaultTrustApply = useMemo(
     () => Math.min(trustBalance, invoiceBalance),
-    [trustBalance, invoiceBalance]
+    [trustBalance, invoiceBalance],
   );
 
   // Close on success. Deps key on the state OBJECT, not
@@ -120,9 +117,8 @@ export function SendInvoiceDialog({
         <DialogHeader>
           <DialogTitle>Send invoice {invoiceNumber}</DialogTitle>
           <DialogDescription>
-            Email sends the invoice as a PDF from the firm; replies come to
-            you. Client portal posts it for the client to view and emails
-            them a notice. US mail is coming soon.
+            Email sends the invoice as a PDF from the firm; replies come to you. Client portal posts
+            it for the client to view and emails them a notice. US mail is coming soon.
           </DialogDescription>
         </DialogHeader>
 
@@ -183,27 +179,20 @@ function SendInvoiceForm({
     startSubmit(() => formAction(fd));
   };
   // Working copies, seeded when the form mounts (= on every open).
-  const [method, setMethod] = useState<"email" | "mail" | "portal">(
-    "email"
-  );
+  const [method, setMethod] = useState<"email" | "mail" | "portal">("email");
   const [recipient, setRecipient] = useState(clientEmail ?? "");
   const [applyTrust, setApplyTrust] = useState(false);
-  const [trustAmount, setTrustAmount] = useState(
-    defaultTrustApply.toFixed(2)
-  );
+  const [trustAmount, setTrustAmount] = useState(defaultTrustApply.toFixed(2));
 
   const errs = state.errors ?? {};
   // Same parse as the server's trustAmount schema — parseFloat
   // reads "1,200.00" as 1 and "$500" as NaN.
   const parsedTrustAmount = parseMoneyInput(trustAmount);
   const trustCap = Math.min(trustBalance, invoiceBalance);
-  const trustUnparseable =
-    applyTrust && trustAmount.trim() !== "" && parsedTrustAmount === null;
-  const trustOver =
-    applyTrust && parsedTrustAmount !== null && parsedTrustAmount > trustCap;
+  const trustUnparseable = applyTrust && trustAmount.trim() !== "" && parsedTrustAmount === null;
+  const trustOver = applyTrust && parsedTrustAmount !== null && parsedTrustAmount > trustCap;
   const trustValid =
-    !applyTrust ||
-    (parsedTrustAmount !== null && parsedTrustAmount > 0 && !trustOver);
+    !applyTrust || (parsedTrustAmount !== null && parsedTrustAmount > 0 && !trustOver);
 
   const balanceAfter =
     applyTrust && trustValid && parsedTrustAmount !== null
@@ -216,18 +205,11 @@ function SendInvoiceForm({
       {/* Channel selector — segmented buttons. Mail is visible
           but disabled so the firm sees the surface area. */}
       <div className="flex flex-col gap-1">
-        <span
-          id={`${ids}-method`}
-          className="text-2xs font-medium text-ink-3"
-        >
+        <span id={`${ids}-method`} className="text-2xs font-medium text-ink-3">
           Sent via <span className="text-warn">*</span>
         </span>
         <input type="hidden" name="method" value={method} />
-        <div
-          role="group"
-          aria-labelledby={`${ids}-method`}
-          className="grid grid-cols-3 gap-2"
-        >
+        <div role="group" aria-labelledby={`${ids}-method`} className="grid grid-cols-3 gap-2">
           <button
             type="button"
             onClick={() => setMethod("email")}
@@ -236,7 +218,7 @@ function SendInvoiceForm({
               "flex items-center gap-2 px-3 py-2 rounded-md border text-xs",
               method === "email"
                 ? "border-brand-500 bg-brand-soft text-brand-700"
-                : "border-line bg-white text-ink hover:border-brand-300"
+                : "border-line bg-white text-ink hover:border-brand-300",
             )}
           >
             <Mail size={14} />
@@ -257,7 +239,7 @@ function SendInvoiceForm({
                 ? "border-line bg-paper-2/50 text-ink-4 cursor-not-allowed opacity-70"
                 : method === "portal"
                   ? "border-brand-500 bg-brand-soft text-brand-700"
-                  : "border-line bg-white text-ink hover:border-brand-300"
+                  : "border-line bg-white text-ink hover:border-brand-300",
             )}
           >
             <Globe size={14} />
@@ -289,40 +271,32 @@ function SendInvoiceForm({
           address summary once the mail path lands. */}
       {method === "portal" ? (
         <p className="text-2xs text-ink-4">
-          The invoice is posted to the client portal and the billed
-          client is emailed a notice (no amount or matter details).
+          The invoice is posted to the client portal and the billed client is emailed a notice (no
+          amount or matter details).
         </p>
       ) : (
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor={`${ids}-recipient`}
-          className="text-2xs font-medium text-ink-3"
-        >
-          {method === "email" ? "Sent to (email)" : "Mailing address"}{" "}
-          <span className="text-warn">*</span>
-        </label>
-        <input
-          id={`${ids}-recipient`}
-          name="recipient"
-          type={method === "email" ? "email" : "text"}
-          required
-          value={recipient}
-          onChange={(e) => setRecipient(e.target.value)}
-          placeholder={
-            method === "email" ? "client@example.com" : "Mailing address"
-          }
-          className={cn(inputClass(!!errs.recipient, "md"), "text-sm")}
-        />
-        {errs.recipient && (
-          <span className="text-2xs text-warn">{errs.recipient[0]}</span>
-        )}
-        {!clientEmail && method === "email" && (
-          <span className="text-2xs text-ink-4">
-            The client doesn&apos;t have an email on file — anything
-            you enter here is one-shot.
-          </span>
-        )}
-      </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`${ids}-recipient`} className="text-2xs font-medium text-ink-3">
+            {method === "email" ? "Sent to (email)" : "Mailing address"}{" "}
+            <span className="text-warn">*</span>
+          </label>
+          <input
+            id={`${ids}-recipient`}
+            name="recipient"
+            type={method === "email" ? "email" : "text"}
+            required
+            value={recipient}
+            onChange={(e) => setRecipient(e.target.value)}
+            placeholder={method === "email" ? "client@example.com" : "Mailing address"}
+            className={cn(inputClass(!!errs.recipient, "md"), "text-sm")}
+          />
+          {errs.recipient && <span className="text-2xs text-warn">{errs.recipient[0]}</span>}
+          {!clientEmail && method === "email" && (
+            <span className="text-2xs text-ink-4">
+              The client doesn&apos;t have an email on file — anything you enter here is one-shot.
+            </span>
+          )}
+        </div>
       )}
 
       {/* Apply trust — collapsed checkbox; expands amount field
@@ -338,27 +312,18 @@ function SendInvoiceForm({
               onChange={(e) => setApplyTrust(e.target.checked)}
               className="mt-0.5"
             />
-            <input
-              type="hidden"
-              name="applyTrust"
-              value={applyTrust ? "true" : ""}
-            />
+            <input type="hidden" name="applyTrust" value={applyTrust ? "true" : ""} />
             <div className="text-xs">
-              <div className="text-ink font-medium">
-                Apply trust toward this invoice
-              </div>
+              <div className="text-ink font-medium">Apply trust toward this invoice</div>
               <div className="text-2xs text-ink-4 mt-0.5">
-                Trust balance: {formatMoney(trustBalance)} · invoice
-                balance: {formatMoney(invoiceBalance)}
+                Trust balance: {formatMoney(trustBalance)} · invoice balance:{" "}
+                {formatMoney(invoiceBalance)}
               </div>
             </div>
           </label>
           {applyTrust && (
             <div className="flex flex-col gap-1 pl-6">
-              <label
-                htmlFor={`${ids}-trust-amount`}
-                className="text-2xs font-medium text-ink-3"
-              >
+              <label htmlFor={`${ids}-trust-amount`} className="text-2xs font-medium text-ink-3">
                 Amount
               </label>
               <input
@@ -371,24 +336,16 @@ function SendInvoiceForm({
                 className={cn(inputClass(!!(trustOver || trustUnparseable)), "font-mono")}
               />
               {trustUnparseable && (
-                <span className="text-2xs text-warn">
-                  Enter a valid amount.
-                </span>
+                <span className="text-2xs text-warn">Enter a valid amount.</span>
               )}
               {trustOver && (
                 <span className="text-2xs text-warn">
                   Capped at {formatMoney(trustCap)} (limited by{" "}
-                  {trustBalance < invoiceBalance ? "trust" : "invoice"}{" "}
-                  balance).
+                  {trustBalance < invoiceBalance ? "trust" : "invoice"} balance).
                 </span>
               )}
               {trustValid && (
-                <span
-                  className={cn(
-                    "text-2xs font-mono",
-                    willMarkPaid ? "text-ok" : "text-ink-4"
-                  )}
-                >
+                <span className={cn("text-2xs font-mono", willMarkPaid ? "text-ok" : "text-ink-4")}>
                   Balance after: {formatMoney(balanceAfter)}
                   {willMarkPaid && " · paid in full"}
                 </span>
@@ -407,10 +364,7 @@ function SendInvoiceForm({
         <Button
           type="submit"
           disabled={
-            isPending ||
-            method === "mail" ||
-            (method === "email" && !recipient) ||
-            !trustValid
+            isPending || method === "mail" || (method === "email" && !recipient) || !trustValid
           }
         >
           {isPending
@@ -418,10 +372,10 @@ function SendInvoiceForm({
             : method === "portal"
               ? "Send via client portal"
               : willMarkPaid
-              ? "Send + pay from trust"
-              : applyTrust && trustValid
-                ? "Send + apply trust"
-                : "Send email"}
+                ? "Send + pay from trust"
+                : applyTrust && trustValid
+                  ? "Send + apply trust"
+                  : "Send email"}
         </Button>
       </DialogFooter>
     </form>

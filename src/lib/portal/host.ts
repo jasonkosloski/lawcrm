@@ -8,8 +8,7 @@ import { headers } from "next/headers";
  */
 export function isPortalHost(host: string | null): boolean {
   if (!host) return false;
-  const norm = (h: string) =>
-    h.trim().toLowerCase().replace(/:\d+$/, "").replace(/\.$/, "");
+  const norm = (h: string) => h.trim().toLowerCase().replace(/:\d+$/, "").replace(/\.$/, "");
   const name = norm(host);
   const configured = norm(process.env.PORTAL_HOST ?? "");
   if (configured && name === configured) return true;
@@ -33,11 +32,7 @@ export async function requestIsOnPortalHost(): Promise<boolean> {
  */
 export function isDevPortalHost(host: string | null): boolean {
   if (!host || process.env.NODE_ENV === "production") return false;
-  const name = host
-    .trim()
-    .toLowerCase()
-    .replace(/:\d+$/, "")
-    .replace(/\.$/, "");
+  const name = host.trim().toLowerCase().replace(/:\d+$/, "").replace(/\.$/, "");
   return name === "portal.localhost";
 }
 

@@ -49,7 +49,7 @@ export async function searchAttendees(
      *  so the picker doesn't suggest the same row twice. */
     excludeUserIds?: readonly string[];
     excludeContactIds?: readonly string[];
-  } = {}
+  } = {},
 ): Promise<AttendeeSearchResult[]> {
   const query = rawQuery.trim();
   if (query.length === 0) return [];

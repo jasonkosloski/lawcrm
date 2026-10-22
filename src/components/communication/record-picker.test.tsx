@@ -6,10 +6,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type {
-  FilingLeadOption,
-  FilingMatterOption,
-} from "@/lib/queries/communication";
+import type { FilingLeadOption, FilingMatterOption } from "@/lib/queries/communication";
 import { RecordPicker } from "./record-picker";
 
 const matters = [
@@ -30,32 +27,14 @@ const setup = () => userEvent.setup({ pointerEventsCheck: 0 });
 
 describe("RecordPicker", () => {
   test("groups matters and leads", () => {
-    render(
-      <RecordPicker
-        matters={matters}
-        leads={leads}
-        value={null}
-        onChange={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole("region", { name: "Matters" })).toHaveTextContent(
-      "Smith v. Jones",
-    );
-    expect(screen.getByRole("region", { name: "Leads" })).toHaveTextContent(
-      "Pat Prospect",
-    );
+    render(<RecordPicker matters={matters} leads={leads} value={null} onChange={vi.fn()} />);
+    expect(screen.getByRole("region", { name: "Matters" })).toHaveTextContent("Smith v. Jones");
+    expect(screen.getByRole("region", { name: "Leads" })).toHaveTextContent("Pat Prospect");
   });
 
   test("search filters both groups and hides an emptied group", async () => {
     const user = setup();
-    render(
-      <RecordPicker
-        matters={matters}
-        leads={leads}
-        value={null}
-        onChange={vi.fn()}
-      />,
-    );
+    render(<RecordPicker matters={matters} leads={leads} value={null} onChange={vi.fn()} />);
     await user.type(screen.getByRole("textbox"), "quinn");
     expect(screen.queryByText("Smith v. Jones")).toBeNull();
     expect(screen.queryByText("Pat Prospect")).toBeNull();
@@ -69,14 +48,7 @@ describe("RecordPicker", () => {
   test("selecting emits the scope", async () => {
     const user = setup();
     const onChange = vi.fn();
-    render(
-      <RecordPicker
-        matters={matters}
-        leads={leads}
-        value={null}
-        onChange={onChange}
-      />,
-    );
+    render(<RecordPicker matters={matters} leads={leads} value={null} onChange={onChange} />);
     await user.click(screen.getByRole("button", { name: /Pat Prospect/ }));
     expect(onChange).toHaveBeenCalledWith({ kind: "lead", leadId: "l1" });
     await user.click(screen.getByRole("button", { name: /Smith v\. Jones/ }));

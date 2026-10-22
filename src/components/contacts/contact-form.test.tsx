@@ -18,11 +18,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, refresh: vi.fn() }),
 }));
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -31,9 +27,7 @@ vi.mock("next/link", () => ({
 
 import { ContactForm } from "./contact-form";
 
-const action = vi.fn<
-  (prev: ContactFormState, fd: FormData) => Promise<ContactFormState>
->();
+const action = vi.fn<(prev: ContactFormState, fd: FormData) => Promise<ContactFormState>>();
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -48,11 +42,9 @@ describe("ContactForm", () => {
         submitLabel="Create contact"
         backHref="/contacts"
         redirectsOnSuccess
-      />
+      />,
     );
-    expect(screen.getByRole("combobox", { name: /contact type/i })).toHaveValue(
-      "other"
-    );
+    expect(screen.getByRole("combobox", { name: /contact type/i })).toHaveValue("other");
   });
 
   test("submits every field as FormData", async () => {
@@ -63,14 +55,11 @@ describe("ContactForm", () => {
         submitLabel="Create contact"
         backHref="/contacts"
         redirectsOnSuccess
-      />
+      />,
     );
 
     await user.type(screen.getByPlaceholderText("Full name"), "Dana Whitfield");
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: /contact type/i }),
-      "client"
-    );
+    await user.selectOptions(screen.getByRole("combobox", { name: /contact type/i }), "client");
     await user.type(screen.getByPlaceholderText("email@example.com"), "d@x.com");
     await user.click(screen.getByRole("button", { name: "Create contact" }));
 
@@ -93,16 +82,14 @@ describe("ContactForm", () => {
         submitLabel="Create contact"
         backHref="/contacts"
         redirectsOnSuccess
-      />
+      />,
     );
 
     await user.type(screen.getByPlaceholderText("Full name"), "Dana Whitfield");
     await user.type(screen.getByPlaceholderText("email@example.com"), "bad");
     await user.click(screen.getByRole("button", { name: "Create contact" }));
 
-    expect(
-      await screen.findByText("Enter a valid email address")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Enter a valid email address")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Full name")).toHaveValue("Dana Whitfield");
     expect(screen.getByPlaceholderText("email@example.com")).toHaveValue("bad");
     expect(push).not.toHaveBeenCalled();
@@ -118,7 +105,7 @@ describe("ContactForm", () => {
         submitLabel="Save changes"
         backHref="/contacts/c1"
         redirectsOnSuccess={false}
-      />
+      />,
     );
 
     await user.click(screen.getByRole("button", { name: "Save changes" }));
@@ -135,7 +122,7 @@ describe("ContactForm", () => {
         submitLabel="Create contact"
         backHref="/contacts"
         redirectsOnSuccess
-      />
+      />,
     );
 
     await user.type(screen.getByPlaceholderText("Full name"), "Dana");

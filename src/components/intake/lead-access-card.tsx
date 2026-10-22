@@ -87,7 +87,7 @@ export function LeadAccessCard({
               title: "Open this intake to the firm?",
               description: "Everyone at the firm will be able to see it again.",
               confirmLabel: "Open to firm",
-            }
+            },
       ))
     )
       return;
@@ -135,9 +135,7 @@ export function LeadAccessCard({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-xs text-ink truncate">{m.name}</div>
-                <div className="text-2xs text-ink-4 truncate">
-                  {matterTeamRoleLabel(m.role)}
-                </div>
+                <div className="text-2xs text-ink-4 truncate">{matterTeamRoleLabel(m.role)}</div>
               </div>
               {canManage && (
                 <button
@@ -159,10 +157,7 @@ export function LeadAccessCard({
       {restricted && canManage && candidates.length > 0 && (
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1 flex-1 min-w-36">
-            <label
-              htmlFor={userSelectId}
-              className="text-2xs font-medium text-ink-3"
-            >
+            <label htmlFor={userSelectId} className="text-2xs font-medium text-ink-3">
               Add member
             </label>
             <NativeSelect
@@ -182,10 +177,7 @@ export function LeadAccessCard({
             </NativeSelect>
           </div>
           <div className="flex flex-col gap-1 w-32">
-            <label
-              htmlFor={roleSelectId}
-              className="text-2xs font-medium text-ink-3"
-            >
+            <label htmlFor={roleSelectId} className="text-2xs font-medium text-ink-3">
               Role
             </label>
             <NativeSelect

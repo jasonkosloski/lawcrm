@@ -33,12 +33,7 @@ import { requirePermissionResult } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { setPortalEnabled, updateFirmAction } from "@/app/actions/firm";
 import { firmInitialState } from "@/lib/firm-form";
-import {
-  resetDb,
-  seedContact,
-  seedFirm,
-  seedUser,
-} from "@/test/integration-helpers";
+import { resetDb, seedContact, seedFirm, seedUser } from "@/test/integration-helpers";
 
 const mockedGetFirm = vi.mocked(loadCurrentFirm);
 const mockedGetGoals = vi.mocked(loadFirmGoals);
@@ -96,10 +91,7 @@ function firmForm(overrides: Record<string, string> = {}): FormData {
 
 describe("updateFirmAction", () => {
   test("updates the firm row on valid input", async () => {
-    const res = await updateFirmAction(
-      firmInitialState,
-      firmForm({ city: "Denver", state: "CO" })
-    );
+    const res = await updateFirmAction(firmInitialState, firmForm({ city: "Denver", state: "CO" }));
     expect(res.status).toBe("ok");
     const firm = await prisma.firm.findUniqueOrThrow({
       where: { id: firmId },
@@ -110,10 +102,7 @@ describe("updateFirmAction", () => {
   });
 
   test("rejects empty name with a field error", async () => {
-    const res = await updateFirmAction(
-      firmInitialState,
-      firmForm({ name: "   " })
-    );
+    const res = await updateFirmAction(firmInitialState, firmForm({ name: "   " }));
     expect(res.status).toBe("error");
     expect(res.errors?.name?.length).toBeGreaterThan(0);
   });
@@ -122,7 +111,7 @@ describe("updateFirmAction", () => {
     test("stores YYYY-MM-DD as UTC midnight of that day (date-only, ADR-012)", async () => {
       const res = await updateFirmAction(
         firmInitialState,
-        firmForm({ establishedAt: "2015-03-09" })
+        firmForm({ establishedAt: "2015-03-09" }),
       );
       expect(res.status).toBe("ok");
       const firm = await prisma.firm.findUniqueOrThrow({
@@ -140,10 +129,7 @@ describe("updateFirmAction", () => {
         where: { id: firmId },
         data: { establishedAt: new Date("2015-03-09T00:00:00.000Z") },
       });
-      const res = await updateFirmAction(
-        firmInitialState,
-        firmForm({ establishedAt: "" })
-      );
+      const res = await updateFirmAction(firmInitialState, firmForm({ establishedAt: "" }));
       expect(res.status).toBe("ok");
       const firm = await prisma.firm.findUniqueOrThrow({
         where: { id: firmId },
@@ -155,10 +141,7 @@ describe("updateFirmAction", () => {
     test("malformed value returns a field error instead of crashing", async () => {
       // A tampered post ("abc") used to reach Prisma as an Invalid
       // Date and blow up with an unhandled runtime error.
-      const res = await updateFirmAction(
-        firmInitialState,
-        firmForm({ establishedAt: "abc" })
-      );
+      const res = await updateFirmAction(firmInitialState, firmForm({ establishedAt: "abc" }));
       expect(res.status).toBe("error");
       expect(res.errors?.establishedAt?.length).toBeGreaterThan(0);
       // And nothing was written.
@@ -196,7 +179,7 @@ describe("updateFirmAction", () => {
           city: "Denver",
           establishedAt: "2015-03-09",
           dailyHoursGoal: "7.5",
-        })
+        }),
       );
       expect(res.status).toBe("ok");
       const log = await prisma.activityLog.findFirstOrThrow({
@@ -215,15 +198,12 @@ describe("updateFirmAction", () => {
     });
 
     test("an unchanged re-save writes no log row", async () => {
-      const res = await updateFirmAction(
-        firmInitialState,
-        firmForm({ name: "Test Firm LLC" })
-      );
+      const res = await updateFirmAction(firmInitialState, firmForm({ name: "Test Firm LLC" }));
       expect(res.status).toBe("ok");
       expect(
         await prisma.activityLog.count({
           where: { title: "Updated firm profile" },
-        })
+        }),
       ).toBe(0);
     });
   });
@@ -232,7 +212,7 @@ describe("updateFirmAction", () => {
     test("persists both goals as numbers", async () => {
       const res = await updateFirmAction(
         firmInitialState,
-        firmForm({ dailyHoursGoal: "7.5", monthlyBillableGoal: "160" })
+        firmForm({ dailyHoursGoal: "7.5", monthlyBillableGoal: "160" }),
       );
       expect(res.status).toBe("ok");
       const firm = await prisma.firm.findUniqueOrThrow({
@@ -251,10 +231,7 @@ describe("updateFirmAction", () => {
       ["two decimals", "6.25"],
       ["over the 24h ceiling", "25"],
     ])("rejects a %s dailyHoursGoal", async (_label, value) => {
-      const res = await updateFirmAction(
-        firmInitialState,
-        firmForm({ dailyHoursGoal: value })
-      );
+      const res = await updateFirmAction(firmInitialState, firmForm({ dailyHoursGoal: value }));
       expect(res.status).toBe("error");
       expect(res.errors?.dailyHoursGoal?.length).toBeGreaterThan(0);
       // Nothing written — the row keeps the schema default.
@@ -268,7 +245,7 @@ describe("updateFirmAction", () => {
     test("rejects a monthlyBillableGoal above 744", async () => {
       const res = await updateFirmAction(
         firmInitialState,
-        firmForm({ monthlyBillableGoal: "2000" })
+        firmForm({ monthlyBillableGoal: "2000" }),
       );
       expect(res.status).toBe("error");
       expect(res.errors?.monthlyBillableGoal?.length).toBeGreaterThan(0);
@@ -289,13 +266,13 @@ describe("setPortalEnabled", () => {
   test("flips the switch and logs it", async () => {
     expect(await setPortalEnabled(true)).toEqual({ ok: true });
     expect(mockedGate).toHaveBeenCalledWith("firm.edit_info");
-    expect(
-      (await prisma.firm.findUniqueOrThrow({ where: { id: firmId } })).portalEnabled
-    ).toBe(true);
+    expect((await prisma.firm.findUniqueOrThrow({ where: { id: firmId } })).portalEnabled).toBe(
+      true,
+    );
     expect(await setPortalEnabled(false)).toEqual({ ok: true });
-    expect(
-      (await prisma.firm.findUniqueOrThrow({ where: { id: firmId } })).portalEnabled
-    ).toBe(false);
+    expect((await prisma.firm.findUniqueOrThrow({ where: { id: firmId } })).portalEnabled).toBe(
+      false,
+    );
     const logs = await prisma.activityLog.findMany({
       where: { userId: actorId, title: { contains: "client portal" } },
     });
@@ -329,7 +306,7 @@ describe("updateFirmAction matter-name template", () => {
   test("stores a template and audits it", async () => {
     const res = await updateFirmAction(
       firmInitialState,
-      firmForm({ matterNameTemplate: "{client_last} - {case_number}" })
+      firmForm({ matterNameTemplate: "{client_last} - {case_number}" }),
     );
     expect(res.status).toBe("ok");
     const firm = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
@@ -342,10 +319,7 @@ describe("updateFirmAction matter-name template", () => {
 
   test("blank template is an error and nothing changes", async () => {
     const before = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
-    const res = await updateFirmAction(
-      firmInitialState,
-      firmForm({ matterNameTemplate: "  " })
-    );
+    const res = await updateFirmAction(firmInitialState, firmForm({ matterNameTemplate: "  " }));
     expect(res.status).toBe("error");
     expect(res.errors?.matterNameTemplate).toEqual(["A default template is required."]);
     const after = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
@@ -355,7 +329,7 @@ describe("updateFirmAction matter-name template", () => {
   test("invalid token is a field error", async () => {
     const res = await updateFirmAction(
       firmInitialState,
-      firmForm({ matterNameTemplate: "{nope}" })
+      firmForm({ matterNameTemplate: "{nope}" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.matterNameTemplate?.length).toBeGreaterThan(0);
@@ -378,9 +352,9 @@ describe("setRequireOriginatingDoc", () => {
     await setRequireOriginatingDoc(true);
     const firm = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
     expect(firm.requireOriginatingDoc).toBe(true);
-    expect(
-      await prisma.activityLog.count({ where: { type: "settings", userId: actorId } })
-    ).toBe(1);
+    expect(await prisma.activityLog.count({ where: { type: "settings", userId: actorId } })).toBe(
+      1,
+    );
 
     vi.mocked(requireAdmin).mockRejectedValue(new Error("REDIRECT"));
     await expect(setRequireOriginatingDoc(false)).rejects.toThrow("REDIRECT");

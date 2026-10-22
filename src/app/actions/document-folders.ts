@@ -56,9 +56,7 @@ import {
   type FolderRecord,
 } from "@/lib/folder-tree";
 
-export type FolderActionResult =
-  | { ok: true; folderId?: string }
-  | { ok: false; error: string };
+export type FolderActionResult = { ok: true; folderId?: string } | { ok: false; error: string };
 
 const MAX_FOLDER_NAME_LENGTH = 120;
 
@@ -88,19 +86,11 @@ function fetchScopeFolders(scope: RecordScope): Promise<FolderRecord[]> {
   });
 }
 
-const siblingsOf = (
-  folders: FolderRecord[],
-  parentId: string | null
-): FolderRecord[] => folders.filter((f) => f.parentId === parentId);
+const siblingsOf = (folders: FolderRecord[], parentId: string | null): FolderRecord[] =>
+  folders.filter((f) => f.parentId === parentId);
 
-const hasNameCollision = (
-  siblings: FolderRecord[],
-  name: string,
-  excludeId?: string
-): boolean =>
-  siblings.some(
-    (s) => s.id !== excludeId && s.name.toLowerCase() === name.toLowerCase()
-  );
+const hasNameCollision = (siblings: FolderRecord[], name: string, excludeId?: string): boolean =>
+  siblings.some((s) => s.id !== excludeId && s.name.toLowerCase() === name.toLowerCase());
 
 const nextOrder = (siblings: FolderRecord[]): number =>
   siblings.reduce((max, s) => Math.max(max, s.order + 1), 0);
@@ -110,7 +100,7 @@ const nextOrder = (siblings: FolderRecord[]): number =>
 export async function createFolder(
   scope: RecordScope,
   parentId: string | null,
-  name: string
+  name: string,
 ): Promise<FolderActionResult> {
   const userId = await requirePermission("documents.folder.create");
   await assertScopeAccess(scope);
@@ -182,10 +172,7 @@ export async function createFolder(
 
 // ── renameFolder ─────────────────────────────────────────────────────────
 
-export async function renameFolder(
-  id: string,
-  name: string
-): Promise<FolderActionResult> {
+export async function renameFolder(id: string, name: string): Promise<FolderActionResult> {
   const userId = await requirePermission("documents.folder.edit");
   await assertChildMatterAccess("documentFolder", id);
 
@@ -211,9 +198,7 @@ export async function renameFolder(
 
   const folders = await fetchScopeFolders(scopeOf(folder));
   // Excluding self allows a case-only rename ("exhibits" → "Exhibits").
-  if (
-    hasNameCollision(siblingsOf(folders, folder.parentId), valid.name, folder.id)
-  ) {
+  if (hasNameCollision(siblingsOf(folders, folder.parentId), valid.name, folder.id)) {
     return {
       ok: false,
       error: `A folder named "${valid.name}" already exists here.`,
@@ -277,78 +262,78 @@ export async function deleteFolder(id: string): Promise<FolderActionResult> {
   const userId = await requirePermission("documents.folder.delete");
   await assertChildMatterAccess("documentFolder", id);
 
-  const outcome = await prisma.$transaction(async (tx): Promise<DeleteOutcome | { error: string } | null> => {
-    // Lock the folder row FIRST. A concurrent child create/move into
-    // this folder takes a FOR KEY SHARE lock on it (FK check) and so
-    // waits for us; once we commit, its insert fails its FK cleanly
-    // instead of being silently cascade-deleted with the folder. A
-    // child committed BEFORE the lock is visible to the reads below.
-    const locked = await tx.$queryRaw<{ id: string }[]>`
+  const outcome = await prisma.$transaction(
+    async (tx): Promise<DeleteOutcome | { error: string } | null> => {
+      // Lock the folder row FIRST. A concurrent child create/move into
+      // this folder takes a FOR KEY SHARE lock on it (FK check) and so
+      // waits for us; once we commit, its insert fails its FK cleanly
+      // instead of being silently cascade-deleted with the folder. A
+      // child committed BEFORE the lock is visible to the reads below.
+      const locked = await tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM document_folders WHERE id = ${id} FOR UPDATE`;
-    if (locked.length === 0) return null;
+      if (locked.length === 0) return null;
 
-    const folder = await tx.documentFolder.findUniqueOrThrow({
-      where: { id },
-      select: {
-        id: true,
-        matterId: true,
-        leadId: true,
-        parentId: true,
-        name: true,
-        systemKind: true,
-      },
-    });
-    const folders: FolderRecord[] = await tx.documentFolder.findMany({
-      where: scopeWhere(scopeOf(folder)),
-      select: { id: true, parentId: true, name: true, order: true, systemKind: true },
-    });
-    if (isProtectedFolder(folder)) {
-      return { error: PROTECTED_FOLDER_ERROR };
-    }
-    const descendants = collectDescendantIds(folders, folder.id);
-    if (
-      folders.some(
-        (f) =>
-          descendants.has(f.id) &&
-          isProtectedFolder({ systemKind: f.systemKind ?? null })
-      )
-    ) {
-      return { error: PROTECTED_ANCESTOR_ERROR };
-    }
-    const children = siblingsOf(folders, folder.id);
-    // Names occupied at the destination once this folder is gone — its
-    // own name frees up, so exclude it alongside the moving children.
-    const taken = new Set(
-      siblingsOf(folders, folder.parentId)
-        .filter((s) => s.id !== folder.id)
-        .map((s) => s.name.toLowerCase())
-    );
-    const parentName = folder.parentId
-      ? (folders.find((f) => f.id === folder.parentId)?.name ?? null)
-      : null;
-
-    let order = nextOrder(siblingsOf(folders, folder.parentId));
-    for (const child of children) {
-      const newName = nextAvailableFolderName(child.name, taken);
-      taken.add(newName.toLowerCase());
-      await tx.documentFolder.update({
-        where: { id: child.id },
-        data: { parentId: folder.parentId, name: newName, order: order++ },
+      const folder = await tx.documentFolder.findUniqueOrThrow({
+        where: { id },
+        select: {
+          id: true,
+          matterId: true,
+          leadId: true,
+          parentId: true,
+          name: true,
+          systemKind: true,
+        },
       });
-    }
-    const docs = await tx.document.updateMany({
-      where: { folderId: folder.id },
-      data: { folderId: folder.parentId },
-    });
-    await tx.documentFolder.delete({ where: { id: folder.id } });
+      const folders: FolderRecord[] = await tx.documentFolder.findMany({
+        where: scopeWhere(scopeOf(folder)),
+        select: { id: true, parentId: true, name: true, order: true, systemKind: true },
+      });
+      if (isProtectedFolder(folder)) {
+        return { error: PROTECTED_FOLDER_ERROR };
+      }
+      const descendants = collectDescendantIds(folders, folder.id);
+      if (
+        folders.some(
+          (f) => descendants.has(f.id) && isProtectedFolder({ systemKind: f.systemKind ?? null }),
+        )
+      ) {
+        return { error: PROTECTED_ANCESTOR_ERROR };
+      }
+      const children = siblingsOf(folders, folder.id);
+      // Names occupied at the destination once this folder is gone — its
+      // own name frees up, so exclude it alongside the moving children.
+      const taken = new Set(
+        siblingsOf(folders, folder.parentId)
+          .filter((s) => s.id !== folder.id)
+          .map((s) => s.name.toLowerCase()),
+      );
+      const parentName = folder.parentId
+        ? (folders.find((f) => f.id === folder.parentId)?.name ?? null)
+        : null;
 
-    return {
-      folder,
-      parentName,
-      childCount: children.length,
-      docsMoved: docs.count,
-    };
-  });
+      let order = nextOrder(siblingsOf(folders, folder.parentId));
+      for (const child of children) {
+        const newName = nextAvailableFolderName(child.name, taken);
+        taken.add(newName.toLowerCase());
+        await tx.documentFolder.update({
+          where: { id: child.id },
+          data: { parentId: folder.parentId, name: newName, order: order++ },
+        });
+      }
+      const docs = await tx.document.updateMany({
+        where: { folderId: folder.id },
+        data: { folderId: folder.parentId },
+      });
+      await tx.documentFolder.delete({ where: { id: folder.id } });
+
+      return {
+        folder,
+        parentName,
+        childCount: children.length,
+        docsMoved: docs.count,
+      };
+    },
+  );
   if (!outcome) return { ok: false, error: "Folder not found." };
   if ("error" in outcome) return { ok: false, error: outcome.error };
 
@@ -375,7 +360,7 @@ export async function deleteFolder(id: string): Promise<FolderActionResult> {
  */
 export async function moveDocuments(
   documentIds: string[],
-  folderId: string | null
+  folderId: string | null,
 ): Promise<FolderActionResult> {
   const userId = await requirePermission("documents.organize");
 
@@ -402,14 +387,15 @@ export async function moveDocuments(
   if (docs.some((d) => d.parentDocumentId)) {
     return {
       ok: false,
-      error: "Email attachments move with their email. Use “Copy to…” to put a copy in another folder.",
+      error:
+        "Email attachments move with their email. Use “Copy to…” to put a copy in another folder.",
     };
   }
   const scopes = new Map(
     docs.map((d) => {
       const s = scopeOf(d);
       return [scopeBasePath(s), s] as const;
-    })
+    }),
   );
   for (const s of scopes.values()) await assertScopeAccess(s);
   if (scopes.size > 1) return { ok: false, error: SAME_SCOPE_ERROR };
@@ -474,7 +460,7 @@ export async function moveDocuments(
  */
 export async function moveFolder(
   id: string,
-  newParentId: string | null
+  newParentId: string | null,
 ): Promise<FolderActionResult> {
   const userId = await requirePermission("documents.organize");
   await assertChildMatterAccess("documentFolder", id);
@@ -505,10 +491,9 @@ export async function moveFolder(
   // a stale check and leave a parent cycle that no root reaches.
   const result = await prisma.$transaction(
     async (
-      tx
+      tx,
     ): Promise<
-      | { ok: true; destName: string | null; noop?: boolean }
-      | { ok: false; error: string }
+      { ok: true; destName: string | null; noop?: boolean } | { ok: false; error: string }
     > => {
       const folderScope = scopeOf(folder);
       if (folderScope.kind === "matter") {
@@ -581,7 +566,7 @@ export async function moveFolder(
         data: { parentId: newParentId, order: nextOrder(siblings) },
       });
       return { ok: true, destName };
-    }
+    },
   );
   if (!result.ok) return result;
   if (result.noop) return { ok: true, folderId: folder.id };

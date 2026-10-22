@@ -14,24 +14,12 @@
  */
 
 import { Card } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CreateRoleForm } from "@/components/settings/create-role-form";
 import { PermissionsMatrix } from "@/components/settings/permissions-matrix";
 import { RoleRow } from "@/components/settings/role-row";
-import {
-  currentUserHasPermission,
-  getCurrentUserPermissions,
-} from "@/lib/permission-check";
-import {
-  listFirmRoles,
-  listRolePermissionGrants,
-} from "@/lib/queries/team";
+import { currentUserHasPermission, getCurrentUserPermissions } from "@/lib/permission-check";
+import { listFirmRoles, listRolePermissionGrants } from "@/lib/queries/team";
 import { requireUser } from "@/lib/current-user";
 
 export default async function RolesSettingsPage() {
@@ -45,14 +33,13 @@ export default async function RolesSettingsPage() {
   // action only lets Admins grant/revoke firm.manage_permissions /
   // firm.manage_roles, so the matrix greys those cells for
   // non-admin editors instead of surfacing a server error on click.
-  const [roles, canManageRoles, canManagePerms, grantsMap, resolved] =
-    await Promise.all([
-      listFirmRoles(),
-      currentUserHasPermission("firm.manage_roles"),
-      currentUserHasPermission("firm.manage_permissions"),
-      listRolePermissionGrants(),
-      getCurrentUserPermissions(),
-    ]);
+  const [roles, canManageRoles, canManagePerms, grantsMap, resolved] = await Promise.all([
+    listFirmRoles(),
+    currentUserHasPermission("firm.manage_roles"),
+    currentUserHasPermission("firm.manage_permissions"),
+    listRolePermissionGrants(),
+    getCurrentUserPermissions(),
+  ]);
 
   // Convert the Map<roleId, Set<key>> into a plain object the
   // matrix component can serialize across the server/client
@@ -67,9 +54,8 @@ export default async function RolesSettingsPage() {
       <div>
         <h1 className="text-base font-semibold text-ink">Roles</h1>
         <p className="text-xs text-ink-3 mt-1">
-          Permission groups for your firm. Members can hold any number
-          of roles; permissions flow through these. Admins can change
-          which roles grant which permissions in the matrix below.
+          Permission groups for your firm. Members can hold any number of roles; permissions flow
+          through these. Admins can change which roles grant which permissions in the matrix below.
         </p>
       </div>
 
@@ -111,10 +97,9 @@ export default async function RolesSettingsPage() {
             <CreateRoleForm />
             <div className="text-3xs text-ink-4 leading-relaxed">
               System roles (<span className="font-mono">Admin</span>,{" "}
-              <span className="font-mono">default</span>) can&apos;t
-              be renamed or deleted. The{" "}
-              <span className="font-mono">default</span> role is
-              auto-assigned to every new firm member.
+              <span className="font-mono">default</span>) can&apos;t be renamed or deleted. The{" "}
+              <span className="font-mono">default</span> role is auto-assigned to every new firm
+              member.
             </div>
           </div>
         )}

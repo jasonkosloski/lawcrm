@@ -33,11 +33,7 @@ vi.mock("@/lib/permission-check", () => ({
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
-import {
-  deleteDeadline,
-  setDeadlineStatus,
-  updateDeadline,
-} from "@/app/actions/deadlines";
+import { deleteDeadline, setDeadlineStatus, updateDeadline } from "@/app/actions/deadlines";
 import { updateDeadlineInitialState } from "@/lib/deadline-form";
 import { dateOnlyKey } from "@/lib/format-date";
 import {
@@ -378,7 +374,7 @@ describe("auto-managed SOL deadline (F090/F096/F040/F022/F279)", () => {
     const res = await updateDeadline(
       id,
       updateDeadlineInitialState,
-      editForm({ dueDate: "2027-03-01" })
+      editForm({ dueDate: "2027-03-01" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.dueDate?.[0]).toMatch(/managed on the matter/i);
@@ -391,7 +387,7 @@ describe("auto-managed SOL deadline (F090/F096/F040/F022/F279)", () => {
     const res = await updateDeadline(
       id,
       updateDeadlineInitialState,
-      editForm({ status: "completed", title: "Renamed", kind: "manual" })
+      editForm({ status: "completed", title: "Renamed", kind: "manual" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.deadline.findUniqueOrThrow({ where: { id } });
@@ -409,7 +405,7 @@ describe("auto-managed SOL deadline (F090/F096/F040/F022/F279)", () => {
     const res = await updateDeadline(
       id,
       updateDeadlineInitialState,
-      editForm({ dueDate: "2027-05-31", status: "waived" })
+      editForm({ dueDate: "2027-05-31", status: "waived" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.dueDate?.[0]).toMatch(/managed on the matter/i);
@@ -423,7 +419,7 @@ describe("auto-managed SOL deadline (F090/F096/F040/F022/F279)", () => {
     const res = await updateDeadline(
       id,
       updateDeadlineInitialState,
-      editForm({ dueDate: "2027-05-30" })
+      editForm({ dueDate: "2027-05-30" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.dueDate?.[0]).toMatch(/managed on the matter/i);
@@ -432,9 +428,7 @@ describe("auto-managed SOL deadline (F090/F096/F040/F022/F279)", () => {
   test("setDeadlineStatus (complete / reopen) stays allowed", async () => {
     const id = await seedSolDeadline();
     expect((await setDeadlineStatus(id, "completed")).ok).toBe(true);
-    expect(
-      (await prisma.deadline.findUniqueOrThrow({ where: { id } })).status
-    ).toBe("completed");
+    expect((await prisma.deadline.findUniqueOrThrow({ where: { id } })).status).toBe("completed");
     expect((await setDeadlineStatus(id, "open")).ok).toBe(true);
   });
 
@@ -445,9 +439,9 @@ describe("auto-managed SOL deadline (F090/F096/F040/F022/F279)", () => {
         await updateDeadline(
           id,
           updateDeadlineInitialState,
-          editForm({ title: "Discovery cutoff", dueDate: "2027-03-01" })
+          editForm({ title: "Discovery cutoff", dueDate: "2027-03-01" }),
         )
-      ).status
+      ).status,
     ).toBe("ok");
     expect((await deleteDeadline(id)).ok).toBe(true);
   });
@@ -469,10 +463,7 @@ describe("deadline audit trail (F189/F220/F142)", () => {
     await setDeadlineStatus(id, "completed"); // no change
     await setDeadlineStatus(id, "open");
     const rows = await logs();
-    expect(rows.map((r) => r.title)).toEqual([
-      "Deadline completed",
-      "Deadline reopened",
-    ]);
+    expect(rows.map((r) => r.title)).toEqual(["Deadline completed", "Deadline reopened"]);
     expect(rows[0].detail).toContain("Answer due");
     expect(rows[0].detail).toContain("open → completed");
     expect(rows[0].userId).toBe(userId);
@@ -550,7 +541,7 @@ describe("updateDeadline - stale form guard (F521)", () => {
     const res = await updateDeadline(
       id,
       updateDeadlineInitialState,
-      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() })
+      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?._form?.[0]).toMatch(/changed by someone else/i);
@@ -572,7 +563,7 @@ describe("updateDeadline - stale form guard (F521)", () => {
     const res = await updateDeadline(
       id,
       updateDeadlineInitialState,
-      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() })
+      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() }),
     );
     expect(res.status).toBe("error");
     expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/deadlines`);
@@ -585,7 +576,7 @@ describe("updateDeadline - stale form guard (F521)", () => {
     const res = await updateDeadline(
       id,
       updateDeadlineInitialState,
-      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() })
+      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() }),
     );
     expect(res.status).toBe("ok");
   });
@@ -600,7 +591,7 @@ describe("updateDeadline - stale form guard (F521)", () => {
     await updateDeadline(
       id,
       updateDeadlineInitialState,
-      form({ title: "Original", sourceRef: "CRS 13-80-101", description: "why" })
+      form({ title: "Original", sourceRef: "CRS 13-80-101", description: "why" }),
     );
     const rows = await prisma.activityLog.findMany({
       where: { matterId, type: "deadline" },
@@ -621,14 +612,26 @@ describe("updateDeadline — dependent deadlines need explicit confirmation", ()
       data: { title: "Trial", anchor: "prompt", offsetDays: 0 },
     });
     const motionsRule = await prisma.deadlineRule.create({
-      data: { title: "Motions in limine", anchor: "rule", anchorRuleId: trialRule.id, offsetDays: -30 },
+      data: {
+        title: "Motions in limine",
+        anchor: "rule",
+        anchorRuleId: trialRule.id,
+        offsetDays: -30,
+      },
     });
     const witnessRule = await prisma.deadlineRule.create({
       data: { title: "Witness list", anchor: "rule", anchorRuleId: motionsRule.id, offsetDays: -7 },
     });
     const mk = (title: string, ruleId: string, key: string) =>
       prisma.deadline.create({
-        data: { matterId, title, dueDate: new Date(`${key}T00:00:00Z`), kind: "auto_rule", status: "open", deadlineRuleId: ruleId },
+        data: {
+          matterId,
+          title,
+          dueDate: new Date(`${key}T00:00:00Z`),
+          kind: "auto_rule",
+          status: "open",
+          deadlineRuleId: ruleId,
+        },
         select: { id: true, updatedAt: true },
       });
     const trial = await mk("Trial", trialRule.id, "2027-06-01");
@@ -668,16 +671,22 @@ describe("updateDeadline — dependent deadlines need explicit confirmation", ()
     const res = await updateDeadline(
       trial.id,
       updateDeadlineInitialState,
-      moveForm("2027-07-01", { cascadeDecision: "apply", cascadeId: [motions.id, witness.id] })
+      moveForm("2027-07-01", { cascadeDecision: "apply", cascadeId: [motions.id, witness.id] }),
     );
     expect(res.status).toBe("ok");
     expect(await due(trial.id)).toBe("2027-07-01");
     expect(await due(motions.id)).toBe("2027-06-01");
     expect(await due(witness.id)).toBe("2027-05-25");
     // The edited deadline was set by hand; the recalculated ones are back on their rule.
-    expect((await prisma.deadline.findUniqueOrThrow({ where: { id: trial.id } })).dueDateSetManually).toBe(true);
-    expect((await prisma.deadline.findUniqueOrThrow({ where: { id: motions.id } })).dueDateSetManually).toBe(false);
-    const logs = await prisma.activityLog.findMany({ where: { matterId, title: "Deadline recalculated" } });
+    expect(
+      (await prisma.deadline.findUniqueOrThrow({ where: { id: trial.id } })).dueDateSetManually,
+    ).toBe(true);
+    expect(
+      (await prisma.deadline.findUniqueOrThrow({ where: { id: motions.id } })).dueDateSetManually,
+    ).toBe(false);
+    const logs = await prisma.activityLog.findMany({
+      where: { matterId, title: "Deadline recalculated" },
+    });
     expect(logs.map((l) => l.detail).sort()).toEqual([
       'Motions in limine: due 2027-05-02 → 2027-06-01 (counts from Trial) — after "Trial" moved',
       'Witness list: due 2027-04-25 → 2027-05-25 (counts from Motions in limine) — after "Trial" moved',
@@ -689,7 +698,7 @@ describe("updateDeadline — dependent deadlines need explicit confirmation", ()
     await updateDeadline(
       trial.id,
       updateDeadlineInitialState,
-      moveForm("2027-07-01", { cascadeDecision: "apply", cascadeId: [witness.id] })
+      moveForm("2027-07-01", { cascadeDecision: "apply", cascadeId: [witness.id] }),
     );
     expect(await due(trial.id)).toBe("2027-07-01");
     expect(await due(motions.id)).toBe("2027-05-02");
@@ -701,7 +710,7 @@ describe("updateDeadline — dependent deadlines need explicit confirmation", ()
     const res = await updateDeadline(
       trial.id,
       updateDeadlineInitialState,
-      moveForm("2027-07-01", { cascadeDecision: "skip", cascadeId: [motions.id] })
+      moveForm("2027-07-01", { cascadeDecision: "skip", cascadeId: [motions.id] }),
     );
     expect(res.status).toBe("ok");
     expect(await due(trial.id)).toBe("2027-07-01");
@@ -711,17 +720,23 @@ describe("updateDeadline — dependent deadlines need explicit confirmation", ()
 
   test("an id that wasn't part of the plan is never touched", async () => {
     const { trial } = await seedChain();
-    const unrelated = await seedDeadline({ title: "Unrelated", dueDate: new Date("2027-01-15T00:00:00Z") });
+    const unrelated = await seedDeadline({
+      title: "Unrelated",
+      dueDate: new Date("2027-01-15T00:00:00Z"),
+    });
     await updateDeadline(
       trial.id,
       updateDeadlineInitialState,
-      moveForm("2027-07-01", { cascadeDecision: "apply", cascadeId: [unrelated] })
+      moveForm("2027-07-01", { cascadeDecision: "apply", cascadeId: [unrelated] }),
     );
     expect(await due(unrelated)).toBe("2027-01-15");
   });
 
   test("deadlines nothing counts from save directly — no confirmation", async () => {
-    const id = await seedDeadline({ title: "Hand-entered", dueDate: new Date("2027-01-15T00:00:00Z") });
+    const id = await seedDeadline({
+      title: "Hand-entered",
+      dueDate: new Date("2027-01-15T00:00:00Z"),
+    });
     const fd = new FormData();
     fd.set("title", "Hand-entered");
     fd.set("dueDate", "2027-02-15");
@@ -730,7 +745,9 @@ describe("updateDeadline — dependent deadlines need explicit confirmation", ()
     expect((await updateDeadline(id, updateDeadlineInitialState, fd)).status).toBe("ok");
     expect(await due(id)).toBe("2027-02-15");
     // Not rule-generated → never marked as hand-set.
-    expect((await prisma.deadline.findUniqueOrThrow({ where: { id } })).dueDateSetManually).toBe(false);
+    expect((await prisma.deadline.findUniqueOrThrow({ where: { id } })).dueDateSetManually).toBe(
+      false,
+    );
   });
 
   test("a hand-set dependent is listed and flagged", async () => {
@@ -746,7 +763,11 @@ describe("updateDeadline — dependent deadlines need explicit confirmation", ()
     const res = await updateDeadline(
       trial.id,
       updateDeadlineInitialState,
-      moveForm("2027-07-01", { cascadeDecision: "apply", cascadeId: [motions.id], expectedUpdatedAt: stale })
+      moveForm("2027-07-01", {
+        cascadeDecision: "apply",
+        cascadeId: [motions.id],
+        expectedUpdatedAt: stale,
+      }),
     );
     expect(res.status).toBe("error");
     expect(await due(trial.id)).toBe("2027-06-01");

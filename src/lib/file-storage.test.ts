@@ -23,13 +23,7 @@
  */
 
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
-import {
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  realpathSync,
-  rmSync,
-} from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -110,7 +104,7 @@ describe("storeStream", () => {
     const { key, size } = await mod.storeStream(
       Readable.from([Buffer.from("01234"), Buffer.from("56789")]),
       "clip.mp4",
-      1024
+      1024,
     );
     expect(size).toBe(10);
     expect(await mod.statFile(key)).toEqual({ size: 10 });
@@ -119,11 +113,7 @@ describe("storeStream", () => {
   });
 
   test("a file exactly at the cap is allowed", async () => {
-    const { size } = await mod.storeStream(
-      Readable.from([Buffer.alloc(8, "x")]),
-      "at-cap.bin",
-      8
-    );
+    const { size } = await mod.storeStream(Readable.from([Buffer.alloc(8, "x")]), "at-cap.bin", 8);
     expect(size).toBe(8);
   });
 
@@ -135,23 +125,21 @@ describe("storeStream", () => {
         // (a partial with no Document row is an invisible orphan).
         Readable.from([Buffer.alloc(6, "a"), Buffer.alloc(3, "b")]),
         "over-cap.bin",
-        8
-      )
+        8,
+      ),
     ).rejects.toBeInstanceOf(mod.FileTooLargeError);
 
     const leftovers = readdirSync(join(TEST_TMP, "uploads")).filter((f) =>
-      f.endsWith("__over-cap.bin")
+      f.endsWith("__over-cap.bin"),
     );
     expect(leftovers).toEqual([]);
   });
 
   test("FileTooLargeError carries the cap for the 413 message", async () => {
-    const err = await mod
-      .storeStream(Readable.from([Buffer.alloc(9, "z")]), "big.bin", 4)
-      .then(
-        () => null,
-        (e: unknown) => e
-      );
+    const err = await mod.storeStream(Readable.from([Buffer.alloc(9, "z")]), "big.bin", 4).then(
+      () => null,
+      (e: unknown) => e,
+    );
     expect(err).toBeInstanceOf(mod.FileTooLargeError);
     expect((err as InstanceType<FileStorage["FileTooLargeError"]>).maxBytes).toBe(4);
   });
@@ -223,23 +211,17 @@ describe("deleteFile", () => {
   test("missing file is a no-op (best-effort delete)", async () => {
     // No throw — delete on a key that was never written is fine
     // because the DB row may already be gone.
-    await expect(
-      mod.deleteFile("never-existed__file.txt")
-    ).resolves.toBeUndefined();
+    await expect(mod.deleteFile("never-existed__file.txt")).resolves.toBeUndefined();
   });
 });
 
 describe("path-traversal guard", () => {
   test("statFile refuses keys that escape STORAGE_ROOT", async () => {
-    await expect(
-      mod.statFile("../../../etc/passwd")
-    ).rejects.toThrow(/STORAGE_ROOT/);
+    await expect(mod.statFile("../../../etc/passwd")).rejects.toThrow(/STORAGE_ROOT/);
   });
 
   test("deleteFile refuses keys that escape STORAGE_ROOT", async () => {
-    await expect(mod.deleteFile("../escape")).rejects.toThrow(
-      /STORAGE_ROOT/
-    );
+    await expect(mod.deleteFile("../escape")).rejects.toThrow(/STORAGE_ROOT/);
   });
 
   test("openReadStream refuses keys that escape STORAGE_ROOT", () => {

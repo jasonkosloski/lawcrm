@@ -66,7 +66,15 @@ const INTERACTIVE = "a, button, input, [role='checkbox'], [role='menuitem']";
 
 export function DocumentsTable({ rows }: { rows: RowData[] }) {
   const ws = useWorkspace()!;
-  const visible = rows.filter((r) => !ws.hidden.has(r.key) && !(r.target.kind === "doc" && (r as DocRowData).parentKey && ws.hidden.has((r as DocRowData).parentKey!)));
+  const visible = rows.filter(
+    (r) =>
+      !ws.hidden.has(r.key) &&
+      !(
+        r.target.kind === "doc" &&
+        (r as DocRowData).parentKey &&
+        ws.hidden.has((r as DocRowData).parentKey!)
+      ),
+  );
   const order = visible.map((r) => r.key);
   const bodyRef = useRef<HTMLTableSectionElement>(null);
 
@@ -166,7 +174,7 @@ export function DocumentsTable({ rows }: { rows: RowData[] }) {
       </TableHeader>
       <TableBody ref={bodyRef} onKeyDown={onKeyDown}>
         {visible.map((r) =>
-          isFolderRow(r) ? <FolderRow key={r.key} row={r} /> : <DocRow key={r.key} row={r} />
+          isFolderRow(r) ? <FolderRow key={r.key} row={r} /> : <DocRow key={r.key} row={r} />,
         )}
       </TableBody>
     </Table>
@@ -219,7 +227,10 @@ function useEntryRow(key: EntryKey, draggable: boolean) {
         aria-label="Select"
         checked={selected}
         onCheckedChange={(_checked, details) =>
-          ws.select(key, { toggle: true, range: (details.event as unknown as MouseEvent)?.shiftKey ?? false })
+          ws.select(key, {
+            toggle: true,
+            range: (details.event as unknown as MouseEvent)?.shiftKey ?? false,
+          })
         }
       />
     ),
@@ -230,7 +241,7 @@ const rowClass = (selected: boolean, dragging: boolean) =>
   cn(
     "select-none outline-none focus-visible:bg-paper-2 data-[selected]:bg-brand-soft/60",
     selected && "hover:bg-brand-soft/80",
-    dragging && "opacity-40"
+    dragging && "opacity-40",
   );
 
 function FolderRow({ row }: { row: FolderRowData }) {
@@ -238,7 +249,7 @@ function FolderRow({ row }: { row: FolderRowData }) {
   const t = row.target;
   const { selected, dragging, setDragRef, rowProps, checkbox } = useEntryRow(
     row.key,
-    ws.perms.organize && !t.isProtected
+    ws.perms.organize && !t.isProtected,
   );
   const { setNodeRef, dropProps, state } = useFolderDropTarget(t.id, "row");
   return (
@@ -286,15 +297,11 @@ function DocRow({ row }: { row: DocRowData }) {
   const t = row.target;
   const { selected, dragging, setDragRef, rowProps, checkbox } = useEntryRow(
     row.key,
-    ws.perms.organize && !t.isAttachment
+    ws.perms.organize && !t.isAttachment,
   );
   const Icon = t.isAttachment ? Paperclip : row.isEmail ? Mail : FileText;
   return (
-    <TableRow
-      ref={setDragRef}
-      {...rowProps}
-      className={rowClass(selected, dragging)}
-    >
+    <TableRow ref={setDragRef} {...rowProps} className={rowClass(selected, dragging)}>
       <TableCell className="pl-4 w-8">{checkbox}</TableCell>
       <TableCell className={t.isAttachment ? "pl-8 font-medium text-ink" : "font-medium text-ink"}>
         <Link
@@ -311,7 +318,9 @@ function DocRow({ row }: { row: DocRowData }) {
       </TableCell>
       <TableCell className="text-xs text-ink-3">{row.category}</TableCell>
       <TableCell>
-        <span className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full ${row.status.className}`}>
+        <span
+          className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full ${row.status.className}`}
+        >
           {row.status.label}
         </span>
       </TableCell>

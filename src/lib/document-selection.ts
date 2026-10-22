@@ -6,7 +6,13 @@
  * items) so a doomed move never starts.
  */
 
-import { MAX_FOLDER_DEPTH, collectDescendantIds, folderDepth, subtreeHeight, type FolderRecord } from "@/lib/folder-tree";
+import {
+  MAX_FOLDER_DEPTH,
+  collectDescendantIds,
+  folderDepth,
+  subtreeHeight,
+  type FolderRecord,
+} from "@/lib/folder-tree";
 
 /** Row key: `folder:<id>` or `doc:<id>`. */
 export type EntryKey = `folder:${string}` | `doc:${string}`;
@@ -35,7 +41,12 @@ export type ClickMods = { toggle: boolean; range: boolean };
  * range (shift) = everything from the anchor to it, added to the
  * selection when toggle is held too (Finder/Drive behaviour).
  */
-export function applyClick(sel: Selection, key: EntryKey, order: readonly EntryKey[], mods: ClickMods): Selection {
+export function applyClick(
+  sel: Selection,
+  key: EntryKey,
+  order: readonly EntryKey[],
+  mods: ClickMods,
+): Selection {
   if (mods.range && sel.anchor && order.includes(sel.anchor)) {
     const a = order.indexOf(sel.anchor);
     const b = order.indexOf(key);
@@ -77,7 +88,7 @@ export type MovePayload = {
 export function moveBlockReason(
   payload: MovePayload,
   targetId: string | null,
-  folders: FolderRecord[]
+  folders: FolderRecord[],
 ): string | null {
   if (payload.docs.length + payload.folders.length === 0) return "Nothing selected.";
   if (payload.docs.some((d) => d.isAttachment)) {
@@ -96,7 +107,8 @@ export function moveBlockReason(
     }
   }
   const allInPlace =
-    payload.docs.every((d) => d.folderId === targetId) && payload.folders.every((f) => f.parentId === targetId);
+    payload.docs.every((d) => d.folderId === targetId) &&
+    payload.folders.every((f) => f.parentId === targetId);
   if (allInPlace) return "Already here.";
   return null;
 }

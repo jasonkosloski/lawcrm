@@ -75,20 +75,13 @@ describe("InvoiceActionBar — Apply trust visibility", () => {
   });
 
   test("hidden even with the key when the matter has no trust funds", () => {
-    render(
-      <InvoiceActionBar {...baseProps} {...ALL} trustBalance={0} canApplyTrust />
-    );
+    render(<InvoiceActionBar {...baseProps} {...ALL} trustBalance={0} canApplyTrust />);
     expect(button(/apply trust/i)).not.toBeInTheDocument();
   });
 
   test("hidden when the viewer has apply_trust but not record_payment (the server needs both)", () => {
     render(
-      <InvoiceActionBar
-        {...baseProps}
-        {...ALL}
-        canRecordInvoicePayment={false}
-        canApplyTrust
-      />
+      <InvoiceActionBar {...baseProps} {...ALL} canRecordInvoicePayment={false} canApplyTrust />,
     );
     expect(button(/apply trust/i)).not.toBeInTheDocument();
     expect(button(/record payment/i)).not.toBeInTheDocument();
@@ -97,31 +90,19 @@ describe("InvoiceActionBar — Apply trust visibility", () => {
 
 describe("InvoiceActionBar — per-action permission gating", () => {
   test("no flags at all (defaults): nothing is offered, the bar renders nothing", () => {
-    const { container } = render(
-      <InvoiceActionBar {...baseProps} currentStatus="draft" />
-    );
+    const { container } = render(<InvoiceActionBar {...baseProps} currentStatus="draft" />);
     expect(container).toBeEmptyDOMElement();
   });
 
   test("draft: Approve needs billing.approve_invoice", () => {
     const { rerender } = render(
-      <InvoiceActionBar
-        {...baseProps}
-        currentStatus="draft"
-        canDeleteDraft
-      />
+      <InvoiceActionBar {...baseProps} currentStatus="draft" canDeleteDraft />,
     );
     expect(button(/^approve$/i)).not.toBeInTheDocument();
     // Delete (kebab) is still reachable on its own key.
     expect(button(/more invoice actions/i)).toBeInTheDocument();
 
-    rerender(
-      <InvoiceActionBar
-        {...baseProps}
-        currentStatus="draft"
-        canApproveInvoice
-      />
-    );
+    rerender(<InvoiceActionBar {...baseProps} currentStatus="draft" canApproveInvoice />);
     expect(button(/^approve$/i)).toBeInTheDocument();
     // Without delete_draft there is no kebab for a draft.
     expect(button(/more invoice actions/i)).not.toBeInTheDocument();
@@ -129,23 +110,15 @@ describe("InvoiceActionBar — per-action permission gating", () => {
 
   test("approved: Send invoice needs billing.send_invoice", () => {
     const { rerender } = render(
-      <InvoiceActionBar {...baseProps} currentStatus="approved" canVoid />
+      <InvoiceActionBar {...baseProps} currentStatus="approved" canVoid />,
     );
     expect(button(/send invoice/i)).not.toBeInTheDocument();
-    rerender(
-      <InvoiceActionBar
-        {...baseProps}
-        currentStatus="approved"
-        canSendInvoice
-      />
-    );
+    rerender(<InvoiceActionBar {...baseProps} currentStatus="approved" canSendInvoice />);
     expect(button(/send invoice/i)).toBeInTheDocument();
   });
 
   test("void is hidden without billing.void_invoice", () => {
-    const { container } = render(
-      <InvoiceActionBar {...baseProps} currentStatus="approved" />
-    );
+    const { container } = render(<InvoiceActionBar {...baseProps} currentStatus="approved" />);
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -156,7 +129,7 @@ describe("InvoiceActionBar — per-action permission gating", () => {
         kind="internal_record"
         currentStatus="draft"
         canSendInvoice
-      />
+      />,
     );
     expect(button(/mark recorded/i)).not.toBeInTheDocument();
     rerender(
@@ -165,7 +138,7 @@ describe("InvoiceActionBar — per-action permission gating", () => {
         kind="internal_record"
         currentStatus="draft"
         canApproveInvoice
-      />
+      />,
     );
     expect(button(/mark recorded/i)).toBeInTheDocument();
   });
@@ -237,7 +210,7 @@ describe("InvoiceActionBar — status x kind x balance matrix (all permissions h
 
   test.each(rows)("$name", ({ props, shown, hidden }) => {
     const { container } = render(
-      <InvoiceActionBar {...baseProps} {...ALL} canApplyTrust {...props} />
+      <InvoiceActionBar {...baseProps} {...ALL} canApplyTrust {...props} />,
     );
     for (const re of shown) expect(button(re), String(re)).toBeInTheDocument();
     for (const re of hidden) {
@@ -256,12 +229,10 @@ describe("InvoiceActionBar — Approve", () => {
         currentStatus="draft"
         invoiceBalance={1234.5}
         canApproveInvoice
-      />
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: /approve/i }));
-    await waitFor(() =>
-      expect(approveInvoice).toHaveBeenCalledWith("inv1", "1234.50")
-    );
+    await waitFor(() => expect(approveInvoice).toHaveBeenCalledWith("inv1", "1234.50"));
   });
 });
 
@@ -280,13 +251,11 @@ describe("InvoiceActionBar — Re-send email", () => {
           {...ALL}
           currentStatus={currentStatus}
           invoiceBalance={currentStatus === "paid" ? 0 : 300}
-        />
+        />,
       );
       await openMenu();
-      expect(
-        await screen.findByRole("menuitem", { name: /re-send email/i })
-      ).toBeInTheDocument();
-    }
+      expect(await screen.findByRole("menuitem", { name: /re-send email/i })).toBeInTheDocument();
+    },
   );
 
   test("absent for approved invoices", async () => {
@@ -296,20 +265,16 @@ describe("InvoiceActionBar — Re-send email", () => {
   });
 
   test("absent without billing.send_invoice", async () => {
-    render(
-      <InvoiceActionBar {...baseProps} {...ALL} canSendInvoice={false} />
-    );
+    render(<InvoiceActionBar {...baseProps} {...ALL} canSendInvoice={false} />);
     await openMenu();
     expect(screen.queryByText(/re-send email/i)).toBeNull();
   });
 
   test("the send button tooltip describes email and portal", () => {
     render(<InvoiceActionBar {...baseProps} {...ALL} currentStatus="approved" />);
-    expect(
-      screen.getByRole("button", { name: /send invoice/i })
-    ).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /send invoice/i })).toHaveAttribute(
       "title",
-      "Email the invoice to the client, or post it to the client portal."
+      "Email the invoice to the client, or post it to the client portal.",
     );
   });
 });
@@ -359,7 +324,7 @@ describe("InvoiceActionBar — warning toast survives the revalidation", () => {
     const d = deferred();
     vi.mocked(sendInvoice).mockImplementation(() => d.promise);
     const { rerender } = render(
-      <InvoiceActionBar {...baseProps} {...ALL} currentStatus="approved" />
+      <InvoiceActionBar {...baseProps} {...ALL} currentStatus="approved" />,
     );
     await user.click(screen.getByRole("button", { name: /send invoice/i }));
     await user.click(await screen.findByRole("button", { name: /^send email$/i }));
@@ -377,13 +342,9 @@ describe("InvoiceActionBar — warning toast survives the revalidation", () => {
     vi.mocked(notifyWarning).mockReset();
     const d = deferred();
     vi.mocked(recordInvoicePayment).mockImplementation(() => d.promise);
-    const { rerender } = render(
-      <InvoiceActionBar {...baseProps} {...ALL} currentStatus="sent" />
-    );
+    const { rerender } = render(<InvoiceActionBar {...baseProps} {...ALL} currentStatus="sent" />);
     await user.click(screen.getByRole("button", { name: /record payment/i }));
-    await user.click(
-      await screen.findByRole("button", { name: /^record \$300\.00/i })
-    );
+    await user.click(await screen.findByRole("button", { name: /^record \$300\.00/i }));
     await act(async () => {
       d.resolve({ status: "ok", warning: "W" });
       rerender(
@@ -394,7 +355,7 @@ describe("InvoiceActionBar — warning toast survives the revalidation", () => {
           currentStatus="paid"
           invoiceBalance={0}
           paidAmount={300}
-        />
+        />,
       );
     });
     expect(notifyWarning).toHaveBeenCalledTimes(1);
@@ -405,21 +366,14 @@ describe("InvoiceActionBar — warning toast survives the revalidation", () => {
     vi.mocked(notifyWarning).mockReset();
     const d = deferred();
     vi.mocked(voidInvoice).mockImplementation(() => d.promise);
-    const { rerender } = render(
-      <InvoiceActionBar {...baseProps} {...ALL} currentStatus="sent" />
-    );
+    const { rerender } = render(<InvoiceActionBar {...baseProps} {...ALL} currentStatus="sent" />);
     await user.click(screen.getByRole("button", { name: /more invoice actions/i }));
     await user.click(await screen.findByRole("menuitem", { name: /void invoice/i }));
     await user.click(await screen.findByRole("button", { name: /^void invoice$/i }));
     await act(async () => {
       d.resolve({ status: "ok", warning: "W" });
       rerender(
-        <InvoiceActionBar
-          {...baseProps}
-          {...ALL}
-          currentStatus="void"
-          invoiceBalance={0}
-        />
+        <InvoiceActionBar {...baseProps} {...ALL} currentStatus="void" invoiceBalance={0} />,
       );
     });
     expect(notifyWarning).toHaveBeenCalledTimes(1);

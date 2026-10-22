@@ -56,8 +56,7 @@ function Harness({
   );
 }
 
-const hidden = () =>
-  document.querySelector<HTMLInputElement>('input[name="venueId"]')!;
+const hidden = () => document.querySelector<HTMLInputElement>('input[name="venueId"]')!;
 
 beforeEach(() => {
   create.mockReset();
@@ -82,13 +81,11 @@ describe("VenueCombobox", () => {
     await u.type(screen.getByRole("combobox"), "Auroa");
     expect(screen.getByText('Press Enter to add "Auroa"')).toBeTruthy();
     await u.keyboard("{Enter}");
-    expect((await screen.findByLabelText("Name") as HTMLInputElement).value).toBe("Auroa");
+    expect(((await screen.findByLabelText("Name")) as HTMLInputElement).value).toBe("Auroa");
     expect((screen.getByLabelText("State") as HTMLInputElement).value).toBe("CO");
     await u.click(screen.getByRole("button", { name: "Save venue" }));
     await waitFor(() => expect(lastChange?.id).toBe("v2"));
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "Auroa", state: "CO" })
-    );
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ name: "Auroa", state: "CO" }));
     expect(hidden().value).toBe("v2");
   });
 
@@ -114,7 +111,7 @@ describe("VenueCombobox", () => {
     await u.keyboard("{Enter}");
     await u.click(await screen.findByRole("button", { name: "Save venue" }));
     expect(
-      await screen.findByText('"Auroa" is archived. Restore it in Settings → Venues.')
+      await screen.findByText('"Auroa" is archived. Restore it in Settings → Venues.'),
     ).toBeTruthy();
     expect(hidden().value).toBe("");
   });
@@ -165,7 +162,13 @@ describe("VenueCombobox", () => {
 
   describe("unpicked text on blur", () => {
     const old: VenueOption = { ...aurora, id: "v9", name: "Old Court", isActive: false };
-    const denver: VenueOption = { ...aurora, id: "v3", name: "Denver District Court", city: "Denver", county: "Denver" };
+    const denver: VenueOption = {
+      ...aurora,
+      id: "v3",
+      name: "Denver District Court",
+      city: "Denver",
+      county: "Denver",
+    };
 
     test("edit: typing the exact name then blur keeps/selects the venue", async () => {
       const u = userEvent.setup();
@@ -243,7 +246,7 @@ describe("VenueCombobox", () => {
       render(<Harness venues={[aurora, old]} />);
       await u.type(screen.getByRole("combobox"), "Old Court");
       expect(
-        screen.getByText('"Old Court" is archived. Restore it in Settings → Venues.')
+        screen.getByText('"Old Court" is archived. Restore it in Settings → Venues.'),
       ).toBeTruthy();
     });
 

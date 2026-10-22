@@ -20,24 +20,24 @@ describe("folderSourceLink", () => {
     expect(
       folderSourceLink(
         { systemKind: "records_request", recordsRequestId: "r1" },
-        { kind: "matter", matterId: "m1" }
-      )
+        { kind: "matter", matterId: "m1" },
+      ),
     ).toEqual({ href: "/matters/m1/records/r1", label: "Records request" });
   });
   test("root links to the records list", () => {
     expect(
       folderSourceLink(
         { systemKind: "records_root", recordsRequestId: null },
-        { kind: "lead", leadId: "l1" }
-      )
+        { kind: "lead", leadId: "l1" },
+      ),
     ).toEqual({ href: "/intake/l1/records", label: "Records requests" });
   });
   test("ordinary folder has no link", () => {
     expect(
       folderSourceLink(
         { systemKind: null, recordsRequestId: null },
-        { kind: "matter", matterId: "m1" }
-      )
+        { kind: "matter", matterId: "m1" },
+      ),
     ).toBeNull();
   });
 });
@@ -56,8 +56,8 @@ describe("portal_uploads folder kind", () => {
     expect(
       folderSourceLink(
         { systemKind: "portal_uploads", recordsRequestId: null },
-        { kind: "matter", matterId: "m1" }
-      )
+        { kind: "matter", matterId: "m1" },
+      ),
     ).toBeNull();
   });
 });

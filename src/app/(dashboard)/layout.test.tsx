@@ -40,9 +40,7 @@ vi.mock("@/lib/current-user-tz", () => ({
 vi.mock("@/lib/firm", () => ({ getCurrentFirm: vi.fn() }));
 
 vi.mock("@/components/auth/staff-clerk-provider", () => ({
-  StaffClerkProvider: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
+  StaffClerkProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 // Leaf layout chrome — we only care that children pass through.
@@ -66,9 +64,7 @@ const mockedFirm = vi.mocked(getCurrentFirm);
 
 /** Only the name fields matter to the tab title. */
 const withFirm = (name: string, shortName: string | null) =>
-  mockedFirm.mockResolvedValue({ name, shortName } as Awaited<
-    ReturnType<typeof getCurrentFirm>
-  >);
+  mockedFirm.mockResolvedValue({ name, shortName } as Awaited<ReturnType<typeof getCurrentFirm>>);
 
 const signedIn = () =>
   mockedAuth.mockResolvedValue({
@@ -77,8 +73,7 @@ const signedIn = () =>
     clerkUserId: "clerk_1",
     sessionId: "sess_1",
   });
-const signedOut = () =>
-  mockedAuth.mockResolvedValue({ status: "signed_out" });
+const signedOut = () => mockedAuth.mockResolvedValue({ status: "signed_out" });
 /** Clerk session exists but no active firm user maps to it. */
 const noAccess = () =>
   mockedAuth.mockResolvedValue({
@@ -89,7 +84,7 @@ const noAccess = () =>
 /** Simulate the request headers the proxy forwarded (or didn't). */
 const withHeaders = (entries: Record<string, string>) =>
   mockedHeaders.mockResolvedValue(
-    new Headers(entries) as unknown as Awaited<ReturnType<typeof headers>>
+    new Headers(entries) as unknown as Awaited<ReturnType<typeof headers>>,
   );
 
 afterEach(() => {
@@ -100,38 +95,30 @@ describe("DashboardLayout — unauthenticated redirect", () => {
   test("carries pathname + search from x-pathname into ?next=", async () => {
     signedOut();
     withHeaders({ "x-pathname": "/matters/abc?tab=notes" });
-    await expect(
-      DashboardLayout({ children: null })
-    ).rejects.toThrow(REDIRECT_SENTINEL);
+    await expect(DashboardLayout({ children: null })).rejects.toThrow(REDIRECT_SENTINEL);
     expect(mockedRedirect).toHaveBeenCalledWith(
-      `/login?next=${encodeURIComponent("/matters/abc?tab=notes")}`
+      `/login?next=${encodeURIComponent("/matters/abc?tab=notes")}`,
     );
   });
 
   test("missing x-pathname falls back to bare /login", async () => {
     signedOut();
     withHeaders({});
-    await expect(
-      DashboardLayout({ children: null })
-    ).rejects.toThrow(REDIRECT_SENTINEL);
+    await expect(DashboardLayout({ children: null })).rejects.toThrow(REDIRECT_SENTINEL);
     expect(mockedRedirect).toHaveBeenCalledWith("/login");
   });
 
   test('x-pathname of "/" omits the redundant ?next=', async () => {
     signedOut();
     withHeaders({ "x-pathname": "/" });
-    await expect(
-      DashboardLayout({ children: null })
-    ).rejects.toThrow(REDIRECT_SENTINEL);
+    await expect(DashboardLayout({ children: null })).rejects.toThrow(REDIRECT_SENTINEL);
     expect(mockedRedirect).toHaveBeenCalledWith("/login");
   });
 
   test("signed in without firm access goes to /no-access, not /login", async () => {
     noAccess();
     withHeaders({ "x-pathname": "/settings" });
-    await expect(
-      DashboardLayout({ children: null })
-    ).rejects.toThrow(REDIRECT_SENTINEL);
+    await expect(DashboardLayout({ children: null })).rejects.toThrow(REDIRECT_SENTINEL);
     expect(mockedRedirect).toHaveBeenCalledWith("/no-access");
   });
 });
@@ -139,12 +126,8 @@ describe("DashboardLayout — unauthenticated redirect", () => {
 describe("DashboardLayout — authenticated", () => {
   test("renders children in the AppShell without redirecting", async () => {
     signedIn();
-    render(
-      await DashboardLayout({ children: <span>page content</span> })
-    );
-    expect(screen.getByTestId("app-shell")).toHaveTextContent(
-      "page content"
-    );
+    render(await DashboardLayout({ children: <span>page content</span> }));
+    expect(screen.getByTestId("app-shell")).toHaveTextContent("page content");
     expect(mockedRedirect).not.toHaveBeenCalled();
   });
 
@@ -154,9 +137,7 @@ describe("DashboardLayout — authenticated", () => {
       return <span>{useUserTimeZone()}</span>;
     }
     render(await DashboardLayout({ children: <ZoneProbe /> }));
-    expect(screen.getByTestId("app-shell")).toHaveTextContent(
-      "Pacific/Honolulu"
-    );
+    expect(screen.getByTestId("app-shell")).toHaveTextContent("Pacific/Honolulu");
   });
 });
 

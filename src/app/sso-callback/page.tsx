@@ -9,9 +9,7 @@ import { StaffClerkProvider } from "@/components/auth/staff-clerk-provider";
 import { safeRedirectPath } from "@/lib/safe-redirect";
 import { firstParam } from "@/lib/search-params";
 
-export default async function SsoCallbackPage({
-  searchParams,
-}: PageProps<"/sso-callback">) {
+export default async function SsoCallbackPage({ searchParams }: PageProps<"/sso-callback">) {
   const sp = await searchParams;
   const next = safeRedirectPath(firstParam(sp.next));
   return (

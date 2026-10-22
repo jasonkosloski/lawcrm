@@ -10,15 +10,7 @@
  *     narrows stale type strings to null.
  */
 
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
@@ -30,10 +22,7 @@ import {
   deleteSavedSearch,
   renameSavedSearch,
 } from "@/app/actions/saved-searches";
-import {
-  getSavedSearches,
-  SAVED_SEARCH_CAP,
-} from "@/lib/queries/saved-searches";
+import { getSavedSearches, SAVED_SEARCH_CAP } from "@/lib/queries/saved-searches";
 import { SEARCH_QUERY_MAX_LENGTH } from "@/lib/constants/search";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
@@ -178,9 +167,7 @@ describe("createSavedSearch", () => {
       ok: false,
       error: expect.stringContaining(String(SAVED_SEARCH_CAP)),
     });
-    expect(await prisma.savedSearch.count({ where: { userId } })).toBe(
-      SAVED_SEARCH_CAP
-    );
+    expect(await prisma.savedSearch.count({ where: { userId } })).toBe(SAVED_SEARCH_CAP);
 
     // The cap is per user — another user can still save.
     mockedGetUser.mockResolvedValue(otherUserId);
@@ -237,9 +224,7 @@ describe("deleteSavedSearch", () => {
 
     const res = await deleteSavedSearch(created.id);
     expect(res).toEqual({ ok: true });
-    expect(
-      await prisma.savedSearch.findUnique({ where: { id: created.id } })
-    ).toBeNull();
+    expect(await prisma.savedSearch.findUnique({ where: { id: created.id } })).toBeNull();
   });
 
   test("another user's id does not resolve", async () => {
@@ -250,9 +235,7 @@ describe("deleteSavedSearch", () => {
     const res = await deleteSavedSearch(created.id);
     expect(res).toEqual({ ok: false, error: "Saved search not found." });
 
-    expect(
-      await prisma.savedSearch.findUnique({ where: { id: created.id } })
-    ).not.toBeNull();
+    expect(await prisma.savedSearch.findUnique({ where: { id: created.id } })).not.toBeNull();
   });
 });
 

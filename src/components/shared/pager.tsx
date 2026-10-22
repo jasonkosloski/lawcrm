@@ -33,7 +33,7 @@ export function Pager({
       aria-label="Pagination"
       className={cn(
         "flex items-center justify-between gap-2 text-2xs font-mono text-ink-4",
-        className
+        className,
       )}
     >
       <PagerLink href={withPageParam(href, page - 1)} disabled={page <= 1}>
@@ -43,10 +43,7 @@ export function Pager({
       <span>
         {start}–{end} of {total} · page {page}/{pageCount}
       </span>
-      <PagerLink
-        href={withPageParam(href, page + 1)}
-        disabled={page >= pageCount}
-      >
+      <PagerLink href={withPageParam(href, page + 1)} disabled={page >= pageCount}>
         {nextLabel}
         <ChevronRight size={12} />
       </PagerLink>
@@ -67,7 +64,7 @@ function PagerLink({
     "inline-flex items-center gap-1 px-2 py-1 rounded-md border",
     disabled
       ? "border-line/60 text-ink-4/60 cursor-default"
-      : "border-line-2 bg-white text-ink-3 hover:border-brand-300 hover:text-brand-700 transition-colors"
+      : "border-line-2 bg-white text-ink-3 hover:border-brand-300 hover:text-brand-700 transition-colors",
   );
   if (disabled) {
     return (
@@ -103,7 +100,7 @@ export function TruncationNotice({
       role="status"
       className={cn(
         "text-2xs font-mono text-ink-4 px-3 py-2 border border-dashed border-line rounded-md",
-        className
+        className,
       )}
     >
       Showing the first {shown}

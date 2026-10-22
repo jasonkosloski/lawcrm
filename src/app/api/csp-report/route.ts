@@ -22,7 +22,7 @@ type Violation = {
 export function parseCspReport(raw: unknown): Violation[] {
   const pick = (r: Record<string, unknown>): Violation => ({
     directive: String(
-      r["effective-directive"] ?? r["violated-directive"] ?? r.effectiveDirective ?? ""
+      r["effective-directive"] ?? r["violated-directive"] ?? r.effectiveDirective ?? "",
     ).slice(0, 100),
     blocked: String(r["blocked-uri"] ?? r.blockedURL ?? "").slice(0, 300),
     // Path only: query strings can carry search terms.
@@ -36,9 +36,13 @@ export function parseCspReport(raw: unknown): Violation[] {
   }
   if (Array.isArray(raw)) {
     return raw.flatMap((e) =>
-      e && typeof e === "object" && e.type === "csp-violation" && e.body && typeof e.body === "object"
+      e &&
+      typeof e === "object" &&
+      e.type === "csp-violation" &&
+      e.body &&
+      typeof e.body === "object"
         ? [pick(e.body as Record<string, unknown>)]
-        : []
+        : [],
     );
   }
   return [];

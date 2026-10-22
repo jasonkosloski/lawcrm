@@ -75,9 +75,7 @@ export function ApplyTaskListDialog({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Apply a task list</DialogTitle>
-            <DialogDescription>
-              Adds every task in the list to this matter.
-            </DialogDescription>
+            <DialogDescription>Adds every task in the list to this matter.</DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-3">
@@ -105,8 +103,8 @@ export function ApplyTaskListDialog({
             )}
             {result?.status === "duplicate" && (
               <Notice>
-                &ldquo;{result.name}&rdquo; was already applied to this matter.
-                Apply it again to add another copy of every task?
+                &ldquo;{result.name}&rdquo; was already applied to this matter. Apply it again to
+                add another copy of every task?
               </Notice>
             )}
             {result?.status === "error" && <Notice>{result.error}</Notice>}
@@ -120,11 +118,7 @@ export function ApplyTaskListDialog({
               disabled={pending || !listId}
               onClick={() => submit(result?.status === "duplicate")}
             >
-              {pending
-                ? "Applying…"
-                : result?.status === "duplicate"
-                  ? "Apply again"
-                  : "Apply"}
+              {pending ? "Applying…" : result?.status === "duplicate" ? "Apply again" : "Apply"}
             </Button>
           </DialogFooter>
         </DialogContent>

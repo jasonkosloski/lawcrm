@@ -83,11 +83,9 @@ async function pickFiles(files: File[]) {
       folderId="fold1"
       folderName="Discovery"
       storageDriver={driver}
-    />
+    />,
   );
-  const input = document.querySelector(
-    'input[type="file"]'
-  ) as HTMLInputElement;
+  const input = document.querySelector('input[type="file"]') as HTMLInputElement;
   await user.upload(input, files);
 }
 
@@ -133,9 +131,9 @@ describe("records request tag", () => {
     mockedUpload.mockResolvedValue({ url: "https://s/x" } as any);
     await pickFiles([new File(["a"], "a.pdf", { type: "application/pdf" })]);
     await waitFor(() => expect(mockedUpload).toHaveBeenCalledTimes(1));
-    expect(
-      JSON.parse(mockedUpload.mock.calls[0][2].clientPayload as string).recordsRole
-    ).toBe("received_records");
+    expect(JSON.parse(mockedUpload.mock.calls[0][2].clientPayload as string).recordsRole).toBe(
+      "received_records",
+    );
   });
 
   test("blob driver carries it in the client payload and reports completion", async () => {
@@ -301,22 +299,16 @@ describe("vercel-blob driver → client-direct upload()", () => {
   test("a token-route rejection reads as friendly text, not the SDK's generic message", async () => {
     // What @vercel/blob/client really throws for ANY non-2xx from the
     // token route (it discards the route's { error } body).
-    mockedUpload.mockRejectedValue(
-      new Error("Vercel Blob: Failed to  retrieve the client token")
-    );
+    mockedUpload.mockRejectedValue(new Error("Vercel Blob: Failed to  retrieve the client token"));
     await pickFiles([new File(["a"], "a.pdf", { type: "application/pdf" })]);
-    expect(
-      await screen.findByText(/upload was rejected.*lost permission/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/upload was rejected.*lost permission/i)).toBeInTheDocument();
     expect(screen.queryByText(/retrieve the client token/)).toBeNull();
   });
 
   test("a genuine network error keeps its own message", async () => {
     mockedUpload.mockRejectedValue(new Error("Network request failed"));
     await pickFiles([new File(["a"], "a.pdf", { type: "application/pdf" })]);
-    expect(
-      await screen.findByText("Network request failed")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Network request failed")).toBeInTheDocument();
   });
 
   test("cancelling mid-batch still refreshes so finished files show up", async () => {
@@ -327,10 +319,8 @@ describe("vercel-blob driver → client-direct upload()", () => {
       .mockImplementationOnce(
         (_p, _f, opts) =>
           new Promise((_resolve, reject) => {
-            opts.abortSignal?.addEventListener("abort", () =>
-              reject(new Error("aborted"))
-            );
-          })
+            opts.abortSignal?.addEventListener("abort", () => reject(new Error("aborted")));
+          }),
       );
     const user = userEvent.setup({ applyAccept: false });
     await pickFiles([

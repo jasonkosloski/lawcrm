@@ -60,15 +60,11 @@ export default async function SecuritySettingsPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">
-            Signed-in devices
-          </CardTitle>
+          <CardTitle className="text-sm font-semibold">Signed-in devices</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
           {!devices.ok ? (
-            <p className="text-xs text-ink-3">
-              Couldn&apos;t load devices right now.
-            </p>
+            <p className="text-xs text-ink-3">Couldn&apos;t load devices right now.</p>
           ) : (
             <SessionList
               sessions={devices.sessions.map((d) => ({
@@ -86,9 +82,7 @@ export default async function SecuritySettingsPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">
-            Sign-in history
-          </CardTitle>
+          <CardTitle className="text-sm font-semibold">Sign-in history</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
           {events.length === 0 ? (
@@ -101,24 +95,22 @@ export default async function SecuritySettingsPage() {
               {events.map((e) => {
                 const detail = describeAuthDetail(e.detail);
                 return (
-                <li key={e.id} className="py-2 flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div
-                      className={cn(
-                        "text-xs font-medium",
-                        /^(Failed|Blocked)/.test(e.title) ? "text-warn" : "text-ink"
-                      )}
-                    >
-                      {e.title}
+                  <li key={e.id} className="py-2 flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div
+                        className={cn(
+                          "text-xs font-medium",
+                          /^(Failed|Blocked)/.test(e.title) ? "text-warn" : "text-ink",
+                        )}
+                      >
+                        {e.title}
+                      </div>
+                      {detail && <div className="text-2xs text-ink-4 truncate">{detail}</div>}
                     </div>
-                    {detail && (
-                      <div className="text-2xs text-ink-4 truncate">{detail}</div>
-                    )}
-                  </div>
-                  <div className="text-2xs text-ink-4 shrink-0 font-mono">
-                    {formatDate(e.timestamp, "datetime", tz)}
-                  </div>
-                </li>
+                    <div className="text-2xs text-ink-4 shrink-0 font-mono">
+                      {formatDate(e.timestamp, "datetime", tz)}
+                    </div>
+                  </li>
                 );
               })}
             </ul>

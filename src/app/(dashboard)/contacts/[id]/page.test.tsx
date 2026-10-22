@@ -47,10 +47,7 @@ vi.mock("@/lib/permission-check", () => ({
 // not their markup. TopBar pulls in provider hooks, so stub it too
 // (render actions/subtitle so presence assertions work).
 vi.mock("@/components/layout/topbar", () => ({
-  TopBar: (props: {
-    actions?: React.ReactNode;
-    subtitle?: React.ReactNode;
-  }) => (
+  TopBar: (props: { actions?: React.ReactNode; subtitle?: React.ReactNode }) => (
     <div data-testid="topbar">
       {props.subtitle}
       {props.actions}
@@ -79,10 +76,7 @@ vi.mock("@/components/communication/log-call-button", () => ({
 }));
 
 import { redirect } from "next/navigation";
-import {
-  getContactById,
-  listContactPickerOptions,
-} from "@/lib/queries/contacts";
+import { getContactById, listContactPickerOptions } from "@/lib/queries/contacts";
 import { getFilingMatterOptions } from "@/lib/queries/communication";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import ContactDetailPage from "./page";
@@ -137,21 +131,15 @@ beforeEach(() => {
 
 describe("merged-record redirect", () => {
   test("a merged-away contact redirects to the survivor", async () => {
-    mockedGetContact.mockResolvedValue(
-      contactDetail({ mergedIntoId: "c_survivor" })
-    );
+    mockedGetContact.mockResolvedValue(contactDetail({ mergedIntoId: "c_survivor" }));
 
-    await expect(ContactDetailPage(props())).rejects.toThrow(
-      "REDIRECT:/contacts/c_survivor"
-    );
+    await expect(ContactDetailPage(props())).rejects.toThrow("REDIRECT:/contacts/c_survivor");
     expect(redirect).toHaveBeenCalledWith("/contacts/c_survivor");
   });
 
   test("an unknown id 404s", async () => {
     mockedGetContact.mockResolvedValue(null);
-    await expect(ContactDetailPage(props("nope"))).rejects.toThrow(
-      "NOT_FOUND"
-    );
+    await expect(ContactDetailPage(props("nope"))).rejects.toThrow("NOT_FOUND");
   });
 });
 
@@ -172,9 +160,7 @@ describe("permission-driven mounts", () => {
   });
 
   test("merge without log-call needs no picker fetch (the dialog searches on the server)", async () => {
-    mockedHasPermission.mockImplementation(
-      async (key: string) => key === "contacts.merge"
-    );
+    mockedHasPermission.mockImplementation(async (key: string) => key === "contacts.merge");
 
     render(await ContactDetailPage(props()));
 
@@ -218,9 +204,7 @@ describe("deactivated contact", () => {
 
   test("Reactivate needs contacts.delete", async () => {
     mockedGetContact.mockResolvedValue(contactDetail({ isActive: false }));
-    mockedHasPermission.mockImplementation(
-      async (key: string) => key !== "contacts.delete"
-    );
+    mockedHasPermission.mockImplementation(async (key: string) => key !== "contacts.delete");
 
     render(await ContactDetailPage(props()));
 
@@ -254,7 +238,7 @@ describe("Matters card", () => {
           },
         ],
         matterCount: 2,
-      })
+      }),
     );
 
     render(await ContactDetailPage(props()));
@@ -264,15 +248,11 @@ describe("Matters card", () => {
     expect(screen.getByText("Represents City of Denver")).toBeInTheDocument();
     expect(screen.getByText("Represents Officer Jones")).toBeInTheDocument();
     expect(screen.getByText("archived")).toBeInTheDocument();
-    expect(
-      screen.getByText("2", { selector: "span.font-mono" })
-    ).toBeInTheDocument();
+    expect(screen.getByText("2", { selector: "span.font-mono" })).toBeInTheDocument();
   });
 
   test("empty state when the contact touches no matter", async () => {
     render(await ContactDetailPage(props()));
-    expect(
-      screen.getByText("Not linked to any matter yet.")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Not linked to any matter yet.")).toBeInTheDocument();
   });
 });

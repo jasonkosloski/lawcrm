@@ -12,10 +12,7 @@ import { useTransition } from "react";
 import { Archive, ArchiveRestore, ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { notifyError } from "@/lib/feedback";
-import {
-  movePracticeArea,
-  setPracticeAreaActive,
-} from "@/app/actions/practice-areas";
+import { movePracticeArea, setPracticeAreaActive } from "@/app/actions/practice-areas";
 import { areaArchiveBlockedMessage } from "@/lib/practice-area-constants";
 
 export function PracticeAreaRowActions({
@@ -57,11 +54,7 @@ export function PracticeAreaRowActions({
     <div className="flex items-center gap-0.5">
       {isActive && (
         <>
-          <IconButton
-            onClick={() => move("up")}
-            disabled={pending || !canMoveUp}
-            label="Move up"
-          >
+          <IconButton onClick={() => move("up")} disabled={pending || !canMoveUp} label="Move up">
             <ArrowUp size={13} />
           </IconButton>
           <IconButton
@@ -105,7 +98,7 @@ function IconButton({
       className={cn(
         "inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-3",
         "hover:text-brand-700 hover:bg-brand-soft transition-colors",
-        "disabled:opacity-60 disabled:cursor-not-allowed"
+        "disabled:opacity-60 disabled:cursor-not-allowed",
       )}
     >
       {children}

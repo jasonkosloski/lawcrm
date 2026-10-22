@@ -17,18 +17,16 @@ describe("global test setup", () => {
 
   it("blocks real network requests to non-loopback hosts", async () => {
     await expect(fetch("https://www.googleapis.com/gmail/v1/users/me")).rejects.toThrow(
-      /Blocked real network request/
+      /Blocked real network request/,
     );
     await expect(
-      fetch(new URL("https://example.public.blob.vercel-storage.com/x"))
+      fetch(new URL("https://example.public.blob.vercel-storage.com/x")),
     ).rejects.toThrow(/Blocked real network request/);
   });
 
   it("blocks URL-like inputs that are not instanceof URL (cross-realm)", async () => {
     const foreign = { href: "https://api.quo.com/v1/calls" } as unknown as URL;
-    await expect(fetch(foreign)).rejects.toThrow(
-      /Blocked real network request/
-    );
+    await expect(fetch(foreign)).rejects.toThrow(/Blocked real network request/);
   });
 
   it("rejects absolute-looking URLs it cannot parse instead of allowing them", async () => {

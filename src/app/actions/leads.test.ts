@@ -55,12 +55,7 @@ import { prisma } from "@/lib/prisma";
 import { convertLeadToMatter, createLead, declineLead } from "@/app/actions/leads";
 import { saveRecordsFee } from "@/app/actions/records-requests";
 import { renameFolder } from "@/app/actions/document-folders";
-import {
-  resetDb,
-  seedFirm,
-  seedTimeEntry,
-  seedUser,
-} from "@/test/integration-helpers";
+import { resetDb, seedFirm, seedTimeEntry, seedUser } from "@/test/integration-helpers";
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
 const mockedRequirePermission = vi.mocked(requirePermission);
@@ -82,12 +77,8 @@ async function seedArea(opts: {
       name: `Area ${Math.random().toString(36).slice(2, 8)}`,
       isActive: opts.areaActive ?? true,
       hasStatuteOfLimitations: opts.hasSol ?? false,
-      ...(opts.allowedBillingTypes
-        ? { allowedBillingTypes: opts.allowedBillingTypes }
-        : {}),
-      ...(opts.defaultBillingType
-        ? { defaultBillingType: opts.defaultBillingType }
-        : {}),
+      ...(opts.allowedBillingTypes ? { allowedBillingTypes: opts.allowedBillingTypes } : {}),
+      ...(opts.defaultBillingType ? { defaultBillingType: opts.defaultBillingType } : {}),
       // opts.periodDays is a plain day count (ADR-035: DAYS unit).
       statutePeriodAmount: opts.periodDays ?? null,
       statutePeriodUnit: opts.periodDays ? "DAYS" : null,
@@ -166,11 +157,7 @@ describe("declineLead", () => {
 
   test("marks the lead declined and stores the reason", async () => {
     const { leadId } = await seedIntakeLead();
-    const res = await declineLead(
-      leadId,
-      { status: "idle" },
-      declineForm("Statute already ran")
-    );
+    const res = await declineLead(leadId, { status: "idle" }, declineForm("Statute already ran"));
     expect(res.status).toBe("ok");
 
     const lead = await prisma.lead.findUniqueOrThrow({
@@ -183,11 +170,7 @@ describe("declineLead", () => {
 
   test("writes an audit-trail ActivityLog entry with actor + reason", async () => {
     const { leadId } = await seedIntakeLead();
-    await declineLead(
-      leadId,
-      { status: "idle" },
-      declineForm("Conflict of interest")
-    );
+    await declineLead(leadId, { status: "idle" }, declineForm("Conflict of interest"));
 
     const entry = await prisma.activityLog.findFirst({
       where: { title: { startsWith: "Lead declined" } },
@@ -226,7 +209,7 @@ describe("convertLeadToMatter — active-target validation", () => {
     const res = await convertLeadToMatter(
       leadId,
       { status: "idle" },
-      convertForm({ areaId, stageId })
+      convertForm({ areaId, stageId }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.practiceAreaId).toBeDefined();
@@ -240,7 +223,7 @@ describe("convertLeadToMatter — active-target validation", () => {
     const res = await convertLeadToMatter(
       leadId,
       { status: "idle" },
-      convertForm({ areaId, stageId })
+      convertForm({ areaId, stageId }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.stageId).toBeDefined();
@@ -260,11 +243,7 @@ describe("convertLeadToMatter — SOL carry-over", () => {
 
     // Success path ends in redirect(`/matters/…`) — sentinel throw.
     await expect(
-      convertLeadToMatter(
-        leadId,
-        { status: "idle" },
-        convertForm({ areaId, stageId })
-      )
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:\/matters\//);
 
     const matter = await prisma.matter.findFirstOrThrow({
@@ -276,9 +255,7 @@ describe("convertLeadToMatter — SOL carry-over", () => {
     });
     expect(matter.incidentDate).toEqual(incident);
     // 2024-01-15 + 730 days (365-day-year convention) = 2026-01-14.
-    expect(matter.statuteOfLimitationsDate).toEqual(
-      new Date("2026-01-14T00:00:00.000Z")
-    );
+    expect(matter.statuteOfLimitationsDate).toEqual(new Date("2026-01-14T00:00:00.000Z"));
 
     const deadline = await prisma.deadline.findFirstOrThrow({
       where: { matterId: matter.id, sourceType: "statute_of_limitations" },
@@ -306,11 +283,7 @@ describe("convertLeadToMatter — SOL carry-over", () => {
     const { leadId } = await seedIntakeLead({ dateOfIncident: incident });
 
     await expect(
-      convertLeadToMatter(
-        leadId,
-        { status: "idle" },
-        convertForm({ areaId, stageId })
-      )
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:/);
 
     const matter = await prisma.matter.findFirstOrThrow({
@@ -334,11 +307,7 @@ describe("convertLeadToMatter — SOL carry-over", () => {
     const { leadId } = await seedIntakeLead({ dateOfIncident: null });
 
     await expect(
-      convertLeadToMatter(
-        leadId,
-        { status: "idle" },
-        convertForm({ areaId, stageId })
-      )
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:/);
 
     const matter = await prisma.matter.findFirstOrThrow({
@@ -361,11 +330,7 @@ describe("convertLeadToMatter — intake time roll-forward", () => {
     await seedTimeEntry({ leadId, userId, hours: 1.25, rate: 0, amount: 0 });
 
     await expect(
-      convertLeadToMatter(
-        leadId,
-        { status: "idle" },
-        convertForm({ areaId, stageId })
-      )
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:\/matters\//);
 
     const matter = await prisma.matter.findFirstOrThrow({
@@ -403,11 +368,7 @@ describe("convertLeadToMatter — intake time roll-forward", () => {
     await seedTimeEntry({ leadId, userId, hours: 1, rate: 0, amount: 0 });
 
     await expect(
-      convertLeadToMatter(
-        leadId,
-        { status: "idle" },
-        convertForm({ areaId, stageId })
-      )
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:/);
 
     const log = await prisma.activityLog.findFirst({
@@ -422,16 +383,10 @@ describe("convertLeadToMatter — intake time roll-forward", () => {
     const { leadId } = await seedIntakeLead();
 
     await expect(
-      convertLeadToMatter(
-        leadId,
-        { status: "idle" },
-        convertForm({ areaId, stageId })
-      )
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:/);
 
-    expect(
-      await prisma.activityLog.count({ where: { type: "time_entry" } })
-    ).toBe(0);
+    expect(await prisma.activityLog.count({ where: { type: "time_entry" } })).toBe(0);
   });
 
   test("doesn't touch other leads' or other matters' entries", async () => {
@@ -456,11 +411,7 @@ describe("convertLeadToMatter — intake time roll-forward", () => {
     await seedTimeEntry({ matterId: existingMatter.id, userId, hours: 3 });
 
     await expect(
-      convertLeadToMatter(
-        leadId,
-        { status: "idle" },
-        convertForm({ areaId, stageId })
-      )
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:/);
 
     // The other lead's entry stayed lead-scoped…
@@ -470,9 +421,7 @@ describe("convertLeadToMatter — intake time roll-forward", () => {
     });
     expect(otherEntry.matterId).toBeNull();
     // …and the pre-existing matter's entry stayed put.
-    expect(
-      await prisma.timeEntry.count({ where: { matterId: existingMatter.id } })
-    ).toBe(1);
+    expect(await prisma.timeEntry.count({ where: { matterId: existingMatter.id } })).toBe(1);
   });
 });
 
@@ -504,11 +453,7 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
     });
 
     await expect(
-      convertLeadToMatter(
-        leadId,
-        { status: "idle" },
-        convertForm({ areaId, stageId })
-      )
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:\/matters\//);
 
     const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
@@ -552,21 +497,19 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
     });
 
     await expect(
-      convertLeadToMatter(
-        leadId,
-        { status: "idle" },
-        convertForm({ areaId, stageId })
-      )
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:\/matters\//);
 
     const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
     expect(await prisma.task.count({ where: { matterId: matter.id, leadId: null } })).toBe(2);
-    expect(await prisma.calendarEvent.count({ where: { matterId: matter.id, leadId: null } })).toBe(1);
+    expect(await prisma.calendarEvent.count({ where: { matterId: matter.id, leadId: null } })).toBe(
+      1,
+    );
     expect(await prisma.task.count({ where: { leadId } })).toBe(0);
     expect(await prisma.calendarEvent.count({ where: { leadId } })).toBe(0);
     // A firm-wide task is untouched.
     expect(
-      (await prisma.task.findUniqueOrThrow({ where: { id: firmWide.id } })).matterId
+      (await prisma.task.findUniqueOrThrow({ where: { id: firmWide.id } })).matterId,
     ).toBeNull();
 
     const titles = (
@@ -583,7 +526,9 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
     const { areaId, stageId } = await seedArea({});
     const { leadId } = await seedIntakeLead();
     const other = await seedUser({
-      firmId: (await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { firmId: true } })).firmId!,
+      firmId: (
+        await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { firmId: true } })
+      ).firmId!,
       email: "second@example.com",
     });
     const mk = async (uid: string, addr: string) =>
@@ -602,11 +547,13 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
     }
 
     await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:\/matters\//);
 
     const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
-    expect(await prisma.emailThread.count({ where: { matterId: matter.id, leadId: null } })).toBe(2);
+    expect(await prisma.emailThread.count({ where: { matterId: matter.id, leadId: null } })).toBe(
+      2,
+    );
     expect(await prisma.emailThread.count({ where: { leadId } })).toBe(0);
     const titles = (
       await prisma.activityLog.findMany({ where: { matterId: matter.id }, select: { title: true } })
@@ -618,7 +565,7 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
     const { areaId, stageId } = await seedArea({});
     const { leadId } = await seedIntakeLead();
     await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:\/matters\//);
     const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
     const titles = (
@@ -640,20 +587,22 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
     await prisma.document.create({ data: { leadId, name: "b.pdf" } });
 
     await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:\/matters\//);
 
     const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
-    expect(await prisma.documentFolder.count({ where: { matterId: matter.id, leadId: null } })).toBe(2);
+    expect(
+      await prisma.documentFolder.count({ where: { matterId: matter.id, leadId: null } }),
+    ).toBe(2);
     expect(await prisma.document.count({ where: { matterId: matter.id, leadId: null } })).toBe(2);
     expect(await prisma.documentFolder.count({ where: { leadId } })).toBe(0);
     expect(await prisma.document.count({ where: { leadId } })).toBe(0);
     expect(
-      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: child.id } })).parentId
+      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: child.id } })).parentId,
     ).toBe(parent.id);
-    expect(
-      (await prisma.document.findUniqueOrThrow({ where: { id: nested.id } })).folderId
-    ).toBe(child.id);
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: nested.id } })).folderId).toBe(
+      child.id,
+    );
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { matterId: matter.id, title: { contains: "intake document" } },
       select: { title: true },
@@ -688,7 +637,7 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
     });
 
     await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:\/matters\//);
 
     const after = await prisma.documentFolder.findUniqueOrThrow({ where: { id: folder.id } });
@@ -698,20 +647,16 @@ describe("convertLeadToMatter — intake notes roll-forward", () => {
     expect(after.recordsRequestId).toBe(req.id);
     const res = await renameFolder(folder.id, "Renamed");
     expect(res.ok).toBe(false);
-    expect(
-      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: folder.id } })).name
-    ).toBe("Bills");
+    expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: folder.id } })).name).toBe(
+      "Bills",
+    );
   });
 
   test("no intake notes → no notes roll-forward log", async () => {
     const { areaId, stageId } = await seedArea({});
     const { leadId } = await seedIntakeLead();
     await expect(
-      convertLeadToMatter(
-        leadId,
-        { status: "idle" },
-        convertForm({ areaId, stageId })
-      )
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:/);
     expect(await prisma.activityLog.count({ where: { type: "note" } })).toBe(0);
   });
@@ -762,7 +707,7 @@ describe("convertLeadToMatter — intake records requests", () => {
     });
 
     await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:\/matters\//);
 
     const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
@@ -786,7 +731,9 @@ describe("convertLeadToMatter — intake records requests", () => {
       expect(r.expenseId).toBeNull();
     }
     expect(await prisma.expense.count()).toBe(1);
-    expect((await prisma.task.findUniqueOrThrow({ where: { id: task.id } })).matterId).toBe(matter.id);
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: task.id } })).matterId).toBe(
+      matter.id,
+    );
     const d = await prisma.document.findUniqueOrThrow({ where: { id: doc.id } });
     expect(d.matterId).toBe(matter.id);
     expect(d.recordsRequestId).toBe(paid.id);
@@ -829,9 +776,11 @@ describe("convertLeadToMatter — intake records requests", () => {
     const { leadId } = await seedIntakeLead();
     await seedReq(leadId);
     await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:/);
-    const titles = (await prisma.activityLog.findMany({ select: { title: true } })).map((l) => l.title);
+    const titles = (await prisma.activityLog.findMany({ select: { title: true } })).map(
+      (l) => l.title,
+    );
     expect(titles).toContain("1 intake records request carried forward");
     expect(titles.some((t) => t.includes("records fee"))).toBe(false);
   });
@@ -860,7 +809,7 @@ describe("convertLeadToMatter — automatic defaults (ADR-019)", () => {
     });
 
     await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:\/matters\//);
 
     const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
@@ -870,10 +819,17 @@ describe("convertLeadToMatter — automatic defaults (ADR-019)", () => {
     expect(generated.ownerId).toBe(userId);
     expect(generated.dueDate.toISOString().slice(0, 10)).toBe("2026-09-08");
     const task = await prisma.task.findFirstOrThrow({ where: { matterId: matter.id } });
-    expect(task).toMatchObject({ title: "Send engagement letter", ownerId: userId, taskListId: list.id });
+    expect(task).toMatchObject({
+      title: "Send engagement letter",
+      ownerId: userId,
+      taskListId: list.id,
+    });
 
     const titles = (
-      await prisma.activityLog.findMany({ where: { matterId: matter.id }, orderBy: { timestamp: "asc" } })
+      await prisma.activityLog.findMany({
+        where: { matterId: matter.id },
+        orderBy: { timestamp: "asc" },
+      })
     ).map((l) => l.title);
     expect(titles).toContain("Converted from lead: Priya Patel");
     expect(titles).toContain("Automatic defaults applied: 1 deadline, 1 task (§1983 intake)");
@@ -883,7 +839,7 @@ describe("convertLeadToMatter — automatic defaults (ADR-019)", () => {
     const { areaId, stageId } = await seedArea({});
     const { leadId } = await seedIntakeLead({ conflictCheck: "clear" });
     await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:/);
     const titles = (await prisma.activityLog.findMany()).map((l) => l.title);
     expect(titles).toEqual(["Converted from lead: Priya Patel"]);
@@ -894,9 +850,7 @@ describe("convertLeadToMatter — automatic defaults (ADR-019)", () => {
 
 describe("convertLeadToMatter — conflict gate (ADR-050)", () => {
   const conversionTitles = async (): Promise<string[]> =>
-    (await prisma.activityLog.findMany({ orderBy: { timestamp: "asc" } })).map(
-      (l) => l.title
-    );
+    (await prisma.activityLog.findMany({ orderBy: { timestamp: "asc" } })).map((l) => l.title);
   /** A directory contact sharing the lead's name ("Priya Patel"). */
   const seedNamesake = (conflictStatus = "clear") =>
     prisma.contact.create({
@@ -908,10 +862,10 @@ describe("convertLeadToMatter — conflict gate (ADR-050)", () => {
     // A stale stored status doesn't matter: the live check decides.
     const { leadId } = await seedIntakeLead({ conflictCheck: "pending" });
     await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:/);
     expect(
-      (await conversionTitles()).some((t) => t.startsWith("Converted with conflict check"))
+      (await conversionTitles()).some((t) => t.startsWith("Converted with conflict check")),
     ).toBe(false);
   });
 
@@ -922,7 +876,7 @@ describe("convertLeadToMatter — conflict gate (ADR-050)", () => {
     const res = await convertLeadToMatter(
       leadId,
       { status: "idle" },
-      convertForm({ areaId, stageId })
+      convertForm({ areaId, stageId }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?._form?.[0]).toMatch(/found a conflict/);
@@ -940,16 +894,14 @@ describe("convertLeadToMatter — conflict gate (ADR-050)", () => {
     const first = await convertLeadToMatter(
       leadId,
       { status: "idle" },
-      convertForm({ areaId, stageId })
+      convertForm({ areaId, stageId }),
     );
     expect(first).toEqual({ status: "error", conflictWarnings: 1 });
     expect(await prisma.matter.count()).toBe(0);
 
     const fd = convertForm({ areaId, stageId });
     fd.set("conflictWarningsReviewed", "true");
-    await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, fd)
-    ).rejects.toThrow(/^REDIRECT:/);
+    await expect(convertLeadToMatter(leadId, { status: "idle" }, fd)).rejects.toThrow(/^REDIRECT:/);
     const row = await prisma.activityLog.findFirstOrThrow({
       where: { title: "Converted with conflict check: warn (reviewed)" },
     });
@@ -963,7 +915,7 @@ describe("convertLeadToMatter — conflict gate (ADR-050)", () => {
     const { leadId } = await seedIntakeLead({ conflictCheck: "override" });
     await seedNamesake("flagged");
     await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:/);
     expect(await conversionTitles()).toContain("Converted with conflict check: override");
     // The override is not overwritten by the live result.
@@ -990,7 +942,7 @@ describe("lead audit and description details", () => {
       dateOfIncident: new Date("2026-04-15T00:00:00.000Z"),
     });
     await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:/);
     const matter = await prisma.matter.findFirstOrThrow({
       where: { name: "Patel v. Doe" },
@@ -1005,12 +957,8 @@ describe("lead audit and description details", () => {
  *  stage, simulating a request that read the lead before another one
  *  committed. */
 function stubStaleLeadRead(staleStage: string) {
-  const real = prisma.lead.findUnique.bind(prisma.lead) as (
-    a: unknown,
-  ) => Promise<object | null>;
-  return vi.spyOn(prisma.lead, "findUnique").mockImplementationOnce((async (
-    args: unknown,
-  ) => {
+  const real = prisma.lead.findUnique.bind(prisma.lead) as (a: unknown) => Promise<object | null>;
+  return vi.spyOn(prisma.lead, "findUnique").mockImplementationOnce((async (args: unknown) => {
     const row = await real(args);
     return row ? { ...row, stage: staleStage } : row;
   }) as never);
@@ -1029,11 +977,7 @@ describe("convertLeadToMatter — client party row", () => {
     });
 
     await expect(
-      convertLeadToMatter(
-        lead.id,
-        { status: "idle" },
-        convertForm({ areaId, stageId }),
-      ),
+      convertLeadToMatter(lead.id, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/REDIRECT:/);
 
     const matter = await prisma.matter.findFirstOrThrow({
@@ -1052,11 +996,7 @@ describe("convertLeadToMatter — client party row", () => {
     const { leadId } = await seedIntakeLead();
 
     await expect(
-      convertLeadToMatter(
-        leadId,
-        { status: "idle" },
-        convertForm({ areaId, stageId }),
-      ),
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/REDIRECT:/);
 
     const matter = await prisma.matter.findFirstOrThrow({
@@ -1083,11 +1023,7 @@ describe("convertLeadToMatter — idempotent under concurrency", () => {
 
     const attempts = await Promise.all(
       [0, 1].map(() =>
-        convertLeadToMatter(
-          leadId,
-          { status: "idle" },
-          convertForm({ areaId, stageId }),
-        ).then(
+        convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })).then(
           (r) => ({ threw: false as const, r }),
           (e: Error) => ({ threw: true as const, message: e.message }),
         ),
@@ -1097,9 +1033,7 @@ describe("convertLeadToMatter — idempotent under concurrency", () => {
     // Winner reaches the redirect; loser gets the form error.
     expect(attempts.filter((a) => a.threw)).toHaveLength(1);
     const loser = attempts.find((a) => !a.threw);
-    expect(loser && !loser.threw && loser.r.errors?._form?.[0]).toMatch(
-      /already converted/i,
-    );
+    expect(loser && !loser.threw && loser.r.errors?._form?.[0]).toMatch(/already converted/i);
 
     expect(await prisma.matter.count()).toBe(1);
     expect(await prisma.deadline.count()).toBe(1); // one SOL deadline
@@ -1136,11 +1070,7 @@ describe("declineLead — idempotent under concurrency", () => {
     const { leadId } = await seedIntakeLead({ stage: "converted" });
     const spy = stubStaleLeadRead("new");
 
-    const res = await declineLead(
-      leadId,
-      { status: "idle" },
-      declineForm("too late"),
-    );
+    const res = await declineLead(leadId, { status: "idle" }, declineForm("too late"));
     spy.mockRestore();
 
     expect(res.status).toBe("error");
@@ -1159,19 +1089,11 @@ describe("declineLead — idempotent under concurrency", () => {
 
   test("declining twice is a no-op: one audit row, reason untouched", async () => {
     const { leadId } = await seedIntakeLead();
-    const first = await declineLead(
-      leadId,
-      { status: "idle" },
-      declineForm("Statute already ran"),
-    );
+    const first = await declineLead(leadId, { status: "idle" }, declineForm("Statute already ran"));
     expect(first.status).toBe("ok");
 
     // A stale tab / double submit, even with an empty reason.
-    const second = await declineLead(
-      leadId,
-      { status: "idle" },
-      declineForm(""),
-    );
+    const second = await declineLead(leadId, { status: "idle" }, declineForm(""));
     expect(second.status).toBe("error");
     expect(second.errors?._form?.[0]).toMatch(/already declined/i);
 
@@ -1198,11 +1120,7 @@ describe("declineLead — idempotent under concurrency", () => {
     });
     const spy = stubStaleLeadRead("new");
 
-    const res = await declineLead(
-      leadId,
-      { status: "idle" },
-      declineForm("overwrite"),
-    );
+    const res = await declineLead(leadId, { status: "idle" }, declineForm("overwrite"));
     spy.mockRestore();
 
     expect(res.status).toBe("error");
@@ -1276,11 +1194,7 @@ describe("convertLeadToMatter — vs. decline", () => {
     });
 
     await expect(
-      convertLeadToMatter(
-        leadId,
-        { status: "idle" },
-        convertForm({ areaId, stageId }),
-      ),
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/^REDIRECT:/);
 
     const lead = await prisma.lead.findUniqueOrThrow({
@@ -1315,11 +1229,13 @@ describe("createLead", () => {
         dateOfIncident: "2026-09-30",
         location: "Denver",
         priorCounsel: "on",
-      })
+      }),
     ).rejects.toThrow(/^REDIRECT:\/intake\//);
     expect(vi.mocked(requirePermission)).toHaveBeenCalledWith("intake.create");
 
-    const lead = await prisma.lead.findFirstOrThrow({ include: { contact: { include: { phones: true } } } });
+    const lead = await prisma.lead.findFirstOrThrow({
+      include: { contact: { include: { phones: true } } },
+    });
     expect(lead).toMatchObject({
       name: "Dana Reyes",
       email: "dana@example.com",
@@ -1329,7 +1245,9 @@ describe("createLead", () => {
     });
     expect(lead.dateOfIncident?.toISOString()).toBe("2026-09-30T00:00:00.000Z");
     expect(lead.contact).toMatchObject({ type: "client", email: "dana@example.com" });
-    expect(lead.contact?.phones.map((p) => [p.number, p.isPrimary])).toEqual([["303-555-0142", true]]);
+    expect(lead.contact?.phones.map((p) => [p.number, p.isPrimary])).toEqual([
+      ["303-555-0142", true],
+    ]);
     // Conflict check ran on save.
     expect(lead.conflictCheck).toBe("clear");
     expect(lead.conflictCheckedAt).not.toBeNull();
@@ -1345,7 +1263,11 @@ describe("createLead", () => {
     await expect(submit({ contactId: existing.id, source: "phone" })).rejects.toThrow(/^REDIRECT:/);
     expect(await prisma.contact.count()).toBe(1);
     const lead = await prisma.lead.findFirstOrThrow();
-    expect(lead).toMatchObject({ contactId: existing.id, name: "Repeat Caller", email: "repeat@example.com" });
+    expect(lead).toMatchObject({
+      contactId: existing.id,
+      name: "Repeat Caller",
+      email: "repeat@example.com",
+    });
     // The lead's own contact never matches itself → still "clear".
     expect(lead.conflictCheck).toBe("clear");
   });
@@ -1354,7 +1276,9 @@ describe("createLead", () => {
     const existing = await prisma.contact.create({
       data: { name: "Pat Moore", type: "client", email: "pat@example.com" },
     });
-    await expect(submit({ name: "Patricia Moore", email: "PAT@example.com" })).rejects.toThrow(/^REDIRECT:/);
+    await expect(submit({ name: "Patricia Moore", email: "PAT@example.com" })).rejects.toThrow(
+      /^REDIRECT:/,
+    );
     expect(await prisma.contact.count()).toBe(1);
     expect((await prisma.lead.findFirstOrThrow()).contactId).toBe(existing.id);
   });
@@ -1363,7 +1287,9 @@ describe("createLead", () => {
     await prisma.contact.create({
       data: { name: "Old Record", type: "client", email: "gone@example.com", isActive: false },
     });
-    await expect(submit({ name: "New Record", email: "gone@example.com" })).rejects.toThrow(/^REDIRECT:/);
+    await expect(submit({ name: "New Record", email: "gone@example.com" })).rejects.toThrow(
+      /^REDIRECT:/,
+    );
     expect(await prisma.contact.count()).toBe(2);
     const lead = await prisma.lead.findFirstOrThrow({ include: { contact: true } });
     expect(lead.contact?.name).toBe("New Record");
@@ -1402,7 +1328,7 @@ describe("convertLeadToMatter — restricted intake carries its wall (ADR-049)",
   async function convert(leadId: string) {
     const { areaId, stageId } = await seedArea({});
     await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/REDIRECT:/);
     return prisma.matter.findFirstOrThrow({
       select: {
@@ -1480,7 +1406,7 @@ describe("convertLeadToMatter — restricted intake carries its wall (ADR-049)",
     await prisma.leadTeamMember.create({ data: { leadId, userId: owner } });
     const { areaId, stageId } = await seedArea({});
     await expect(
-      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId }))
+      convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
     expect(await prisma.matter.count()).toBe(0);
   });
@@ -1498,16 +1424,12 @@ describe("convertLeadToMatter — originating-document gate", () => {
       select: { id: true },
     });
   }
-  function form(
-    base: { areaId: string; stageId: string },
-    extra: Record<string, string> = {}
-  ) {
+  function form(base: { areaId: string; stageId: string }, extra: Record<string, string> = {}) {
     const fd = convertForm(base);
     for (const [k, v] of Object.entries(extra)) fd.set(k, v);
     return fd;
   }
-  const run = (leadId: string, fd: FormData) =>
-    convertLeadToMatter(leadId, { status: "idle" }, fd);
+  const run = (leadId: string, fd: FormData) => convertLeadToMatter(leadId, { status: "idle" }, fd);
 
   test("switch on, nothing supplied: every piece is refused, no matter created", async () => {
     await switchOn();
@@ -1527,12 +1449,12 @@ describe("convertLeadToMatter — originating-document gate", () => {
     const doc = await leadDoc(leadId);
     const noDate = await run(
       leadId,
-      form(base, { agreementStatus: "signed", originatingDocumentId: doc.id })
+      form(base, { agreementStatus: "signed", originatingDocumentId: doc.id }),
     );
     expect(noDate.errors?.agreementSignedDate).toBeTruthy();
     const noDoc = await run(
       leadId,
-      form(base, { agreementStatus: "signed", agreementSignedDate: "2020-01-02" })
+      form(base, { agreementStatus: "signed", agreementSignedDate: "2020-01-02" }),
     );
     expect(noDoc.errors?.originatingDocumentId).toBeTruthy();
     expect(await prisma.matter.count()).toBe(0);
@@ -1552,7 +1474,7 @@ describe("convertLeadToMatter — originating-document gate", () => {
           agreementStatus: "signed",
           agreementSignedDate: "2020-01-02",
           originatingDocumentId: id,
-        })
+        }),
       );
       expect(res.errors?.originatingDocumentId).toBeTruthy();
     }
@@ -1581,8 +1503,8 @@ describe("convertLeadToMatter — originating-document gate", () => {
           agreementStatus: "signed",
           agreementSignedDate: "2020-01-02",
           originatingDocumentId: doc.id,
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow(/^REDIRECT:/);
     const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
     const a = await prisma.matterAgreement.findFirstOrThrow();
@@ -1656,9 +1578,7 @@ describe("convertLeadToMatter — billing type", () => {
       withType(convertForm({ areaId, stageId }), "pro_bono"),
     );
     expect(res.status).toBe("error");
-    expect(res.errors?.billingType).toEqual([
-      "Not offered for this practice area",
-    ]);
+    expect(res.errors?.billingType).toEqual(["Not offered for this practice area"]);
     expect(await prisma.matter.count()).toBe(0);
     const lead = await prisma.lead.findUniqueOrThrow({
       where: { id: leadId },

@@ -35,9 +35,7 @@ export type ActivityMoneyAccess = {
  *  whole (type "deposit"), expense rows by their title prefix — the
  *  writer goes through src/lib/expense-activity.ts, so the two can't
  *  drift. */
-export function activityMoneyFilters(
-  access: ActivityMoneyAccess
-): Prisma.ActivityLogWhereInput[] {
+export function activityMoneyFilters(access: ActivityMoneyAccess): Prisma.ActivityLogWhereInput[] {
   const clauses: Prisma.ActivityLogWhereInput[] = [];
   if (!access.canViewBilling) {
     clauses.push({ type: { not: "deposit" } });

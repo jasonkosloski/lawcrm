@@ -5,12 +5,6 @@
  * free String in the schema; these are the values the app writes.
  */
 
-export const FEE_STRUCTURES = [
-  "contingent",
-  "hourly",
-  "flat",
-  "hybrid",
-  "pro_bono",
-] as const;
+export const FEE_STRUCTURES = ["contingent", "hourly", "flat", "hybrid", "pro_bono"] as const;
 
 export type FeeStructure = (typeof FEE_STRUCTURES)[number];

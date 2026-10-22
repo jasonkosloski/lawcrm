@@ -54,7 +54,8 @@ beforeEach(async () => {
   vi.mocked(requirePermission).mockResolvedValue(userId);
   const { areaId, stageId } = await seedPracticeArea();
   matterId = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId })).matterId;
-  otherMatterId = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId })).matterId;
+  otherMatterId = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId }))
+    .matterId;
 });
 
 describe("updateMatterAgreement", () => {
@@ -63,7 +64,7 @@ describe("updateMatterAgreement", () => {
     const r = await updateMatterAgreement(
       matterId,
       idle,
-      form({ agreementStatus: "signed", agreementSignedDate: "2020-01-02", documentId })
+      form({ agreementStatus: "signed", agreementSignedDate: "2020-01-02", documentId }),
     );
     expect(r.status).toBe("ok");
     const row = await prisma.matterAgreement.findUniqueOrThrow({ where: { matterId } });
@@ -75,7 +76,11 @@ describe("updateMatterAgreement", () => {
 
   test("rejects a document from another matter", async () => {
     const { documentId } = await seedDocument({ matterId: otherMatterId });
-    const r = await updateMatterAgreement(matterId, idle, form({ agreementStatus: "sent", documentId }));
+    const r = await updateMatterAgreement(
+      matterId,
+      idle,
+      form({ agreementStatus: "sent", documentId }),
+    );
     expect(r.status).toBe("error");
     expect(r.errors?.documentId).toBeDefined();
     expect(await prisma.matterAgreement.count({ where: { matterId } })).toBe(0);
@@ -87,7 +92,7 @@ describe("updateMatterAgreement", () => {
     const r = await updateMatterAgreement(
       matterId,
       idle,
-      form({ agreementStatus: "signed", agreementSignedDate: "", documentId })
+      form({ agreementStatus: "signed", agreementSignedDate: "", documentId }),
     );
     expect(r.status).toBe("error");
     expect(r.errors?.signedDate).toEqual(["Enter the date it was signed."]);
@@ -98,7 +103,7 @@ describe("updateMatterAgreement", () => {
     const r = await updateMatterAgreement(
       matterId,
       idle,
-      form({ agreementStatus: "signed", agreementSignedDate: "2020-01-02", documentId: "" })
+      form({ agreementStatus: "signed", agreementSignedDate: "2020-01-02", documentId: "" }),
     );
     expect(r.errors?.documentId).toEqual(["Attach the signed Fee agreement."]);
   });
@@ -106,7 +111,11 @@ describe("updateMatterAgreement", () => {
   test("switch off: unlink is allowed", async () => {
     const { documentId } = await seedDocument({ matterId });
     await updateMatterAgreement(matterId, idle, form({ agreementStatus: "sent", documentId }));
-    const r = await updateMatterAgreement(matterId, idle, form({ agreementStatus: "sent", documentId: "" }));
+    const r = await updateMatterAgreement(
+      matterId,
+      idle,
+      form({ agreementStatus: "sent", documentId: "" }),
+    );
     expect(r.status).toBe("ok");
     const row = await prisma.matterAgreement.findUniqueOrThrow({ where: { matterId } });
     expect(row.documentId).toBeNull();
@@ -131,12 +140,17 @@ describe("updateMatterAgreement", () => {
     await prisma.firm.update({ where: { id: firmId }, data: { requireOriginatingDoc: true } });
     const { documentId } = await seedDocument({ matterId });
     await prisma.matterAgreement.create({
-      data: { matterId, status: "signed", signedDate: new Date("2020-01-02T00:00:00Z"), documentId },
+      data: {
+        matterId,
+        status: "signed",
+        signedDate: new Date("2020-01-02T00:00:00Z"),
+        documentId,
+      },
     });
     const r = await updateMatterAgreement(
       matterId,
       idle,
-      form({ agreementStatus: "sent", documentId })
+      form({ agreementStatus: "sent", documentId }),
     );
     expect(r.status).toBe("error");
     expect(r.errors?.status).toEqual(["Mark the Fee agreement as signed."]);
@@ -150,7 +164,7 @@ describe("updateMatterAgreement", () => {
     const r = await updateMatterAgreement(
       matterId,
       idle,
-      form({ agreementStatus: "signed", agreementSignedDate: "2020-01-02" })
+      form({ agreementStatus: "signed", agreementSignedDate: "2020-01-02" }),
     );
     expect(r.status).toBe("error");
     expect(r.errors?.documentId).toEqual(["Attach the signed Fee agreement."]);

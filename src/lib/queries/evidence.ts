@@ -117,9 +117,7 @@ function shapeRow(row: FlagRecord): FlaggedMomentRow {
 }
 
 /** Every flag on one document, anchor-ordered (see ANCHOR_ORDER). */
-export async function getDocumentFlaggedMoments(
-  documentId: string
-): Promise<FlaggedMomentRow[]> {
+export async function getDocumentFlaggedMoments(documentId: string): Promise<FlaggedMomentRow[]> {
   const rows = await prisma.flaggedMoment.findMany({
     where: { documentId },
     orderBy: [...ANCHOR_ORDER],
@@ -132,16 +130,10 @@ export async function getDocumentFlaggedMoments(
  *  Groups follow the Documents tab's name-asc walk order; flags are
  *  anchor-ordered inside each group. Documents with no flags don't
  *  produce groups. */
-export async function getMatterFlaggedMoments(
-  matterId: string
-): Promise<DocumentFlagGroup[]> {
+export async function getMatterFlaggedMoments(matterId: string): Promise<DocumentFlagGroup[]> {
   const rows = await prisma.flaggedMoment.findMany({
     where: { document: { matterId } },
-    orderBy: [
-      { document: { name: "asc" } },
-      { documentId: "asc" },
-      ...ANCHOR_ORDER,
-    ],
+    orderBy: [{ document: { name: "asc" } }, { documentId: "asc" }, ...ANCHOR_ORDER],
     select: {
       ...FLAG_SELECT,
       document: { select: { name: true, contentType: true } },
@@ -156,10 +148,7 @@ export async function getMatterFlaggedMoments(
       current = {
         documentId: row.documentId,
         documentName: row.document.name,
-        renderer: resolveDocumentRenderer(
-          row.document.contentType,
-          row.document.name
-        ),
+        renderer: resolveDocumentRenderer(row.document.contentType, row.document.name),
         moments: [],
       };
       groups.push(current);

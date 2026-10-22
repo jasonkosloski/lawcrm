@@ -60,13 +60,10 @@ describe("portal page guards", () => {
     expect(names).toContain("portal/auth/verify/page.tsx");
   });
 
-  test.each(pages.map((f) => [rel(f), f] as const))(
-    "%s authenticates itself",
-    (name, file) => {
-      if (EXEMPT.has(name)) return;
-      expect(check(readFileSync(file, "utf8")), name).toBeNull();
-    }
-  );
+  test.each(pages.map((f) => [rel(f), f] as const))("%s authenticates itself", (name, file) => {
+    if (EXEMPT.has(name)) return;
+    expect(check(readFileSync(file, "utf8")), name).toBeNull();
+  });
 
   test("exemptions name pages that exist", () => {
     const names = new Set(pages.map(rel));
@@ -76,11 +73,11 @@ describe("portal page guards", () => {
   test("rejects a query before the guard (self-check)", () => {
     expect(
       check(
-        `export default async function P() {\n  await prisma.x.findMany();\n  await requirePortalIdentity();\n}`
-      )
+        `export default async function P() {\n  await prisma.x.findMany();\n  await requirePortalIdentity();\n}`,
+      ),
     ).toBe("first await is not requirePortalIdentity");
     expect(check(`export default async function P() { await x(); }`)).toBe(
-      "no requirePortalIdentity call"
+      "no requirePortalIdentity call",
     );
   });
 });

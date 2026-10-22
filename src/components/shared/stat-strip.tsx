@@ -37,20 +37,14 @@ const TONE: Record<NonNullable<Stat["tone"]>, string> = {
   muted: "text-ink-4",
 };
 
-export function StatStrip({
-  stats,
-  className,
-}: {
-  stats: Stat[];
-  className?: string;
-}) {
+export function StatStrip({ stats, className }: { stats: Stat[]; className?: string }) {
   if (stats.length === 0) return null;
   return (
     <dl
       className={cn(
         "grid grid-cols-2 rounded-lg border border-line bg-card overflow-hidden",
         COLS[Math.min(stats.length, 5)],
-        className
+        className,
       )}
     >
       {stats.map((stat, i) => {
@@ -60,16 +54,12 @@ export function StatStrip({
             <dd
               className={cn(
                 "mt-1 text-2xl leading-8 font-medium tracking-tight tabular-nums",
-                TONE[stat.tone ?? "default"]
+                TONE[stat.tone ?? "default"],
               )}
             >
               {stat.value}
             </dd>
-            {stat.detail && (
-              <dd className="mt-0.5 text-2xs text-ink-4 truncate">
-                {stat.detail}
-              </dd>
-            )}
+            {stat.detail && <dd className="mt-0.5 text-2xs text-ink-4 truncate">{stat.detail}</dd>}
           </>
         );
         const cell = cn(
@@ -80,9 +70,7 @@ export function StatStrip({
           i % 2 === 1 && "border-l",
           i >= 2 && "border-t sm:border-t-0",
           i > 0 && "sm:border-l",
-          stats.length % 2 === 1 &&
-            i === stats.length - 1 &&
-            "col-span-2 sm:col-span-1"
+          stats.length % 2 === 1 && i === stats.length - 1 && "col-span-2 sm:col-span-1",
         );
         return stat.href ? (
           <Link

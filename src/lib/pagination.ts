@@ -33,12 +33,12 @@ export function parsePageParam(raw: string | string[] | undefined): number {
 export function pageWindow(
   total: number,
   requested: number,
-  pageSize: number
+  pageSize: number,
 ): { page: number; pageCount: number; skip: number; take: number } {
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const page = Math.min(
     Math.max(1, Number.isFinite(requested) ? Math.trunc(requested) : 1),
-    pageCount
+    pageCount,
   );
   return { page, pageCount, skip: (page - 1) * pageSize, take: pageSize };
 }
@@ -49,7 +49,7 @@ export async function paginate<T>(
   requested: number,
   pageSize: number,
   count: () => Promise<number>,
-  fetch: (window: { skip: number; take: number }) => Promise<T[]>
+  fetch: (window: { skip: number; take: number }) => Promise<T[]>,
 ): Promise<Page<T>> {
   const total = await count();
   const w = pageWindow(total, requested, pageSize);
@@ -59,11 +59,7 @@ export async function paginate<T>(
 
 /** Slice an already-sorted in-memory list into a page (for lists that
  *  must be ordered in JS before paging, e.g. derived-field sorts). */
-export function paginateArray<T>(
-  all: readonly T[],
-  requested: number,
-  pageSize: number
-): Page<T> {
+export function paginateArray<T>(all: readonly T[], requested: number, pageSize: number): Page<T> {
   const w = pageWindow(all.length, requested, pageSize);
   return {
     rows: all.slice(w.skip, w.skip + w.take),
@@ -101,7 +97,7 @@ export function withPageParam(href: string, page: number): string {
  *  minus `page` — the base href for a server page's `<Pager>`. */
 export function hrefFromSearchParams(
   path: string,
-  sp: Record<string, string | string[] | undefined>
+  sp: Record<string, string | string[] | undefined>,
 ): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(sp)) {

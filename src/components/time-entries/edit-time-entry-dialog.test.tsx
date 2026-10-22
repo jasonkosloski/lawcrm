@@ -32,10 +32,7 @@ vi.mock("@/app/actions/time-entries", () => ({
 }));
 
 import { updateTimeEntry } from "@/app/actions/time-entries";
-import {
-  EditTimeEntryDialog,
-  type EditableTimeEntry,
-} from "./edit-time-entry-dialog";
+import { EditTimeEntryDialog, type EditableTimeEntry } from "./edit-time-entry-dialog";
 
 const ENTRY: EditableTimeEntry = {
   id: "te1",
@@ -78,9 +75,7 @@ async function save(user: ReturnType<typeof userEvent.setup>) {
 }
 
 function expectClosed() {
-  return waitFor(() =>
-    expect(screen.queryByText("Edit time entry")).not.toBeInTheDocument()
-  );
+  return waitFor(() => expect(screen.queryByText("Edit time entry")).not.toBeInTheDocument());
 }
 
 beforeEach(() => {
@@ -183,9 +178,7 @@ describe("EditTimeEntryDialog — stale errors and reseeding", () => {
     await screen.findByText("Hours required");
 
     await user.click(screen.getByRole("button", { name: /cancel/i }));
-    await waitFor(() =>
-      expect(screen.queryByText("Edit time entry")).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByText("Edit time entry")).not.toBeInTheDocument());
 
     await openDialog(user);
     expect(screen.queryByText("Hours required")).not.toBeInTheDocument();
@@ -200,14 +193,10 @@ describe("EditTimeEntryDialog — stale errors and reseeding", () => {
     await user.clear(activity);
     await user.type(activity, "Something I abandoned");
     await user.click(screen.getByRole("button", { name: /cancel/i }));
-    await waitFor(() =>
-      expect(screen.queryByText("Edit time entry")).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByText("Edit time entry")).not.toBeInTheDocument());
 
     await openDialog(user);
-    expect(screen.getByPlaceholderText(/activity/i)).toHaveValue(
-      "Deposition prep"
-    );
+    expect(screen.getByPlaceholderText(/activity/i)).toHaveValue("Deposition prep");
   });
 });
 
@@ -226,9 +215,7 @@ describe("EditTimeEntryDialog — accessibility and status errors", () => {
     render(<Harness />);
     await openDialog(user);
 
-    const options = within(
-      screen.getByRole("combobox", { name: "Status" })
-    ).getAllByRole("option");
+    const options = within(screen.getByRole("combobox", { name: "Status" })).getAllByRole("option");
     expect(options.map((o) => o.textContent)).not.toContain("Billed");
   });
 
@@ -242,8 +229,6 @@ describe("EditTimeEntryDialog — accessibility and status errors", () => {
     await openDialog(user);
     await save(user);
 
-    expect(
-      await screen.findByText(/marked billed by invoice generation/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/marked billed by invoice generation/i)).toBeInTheDocument();
   });
 });

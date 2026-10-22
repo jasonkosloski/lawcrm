@@ -11,9 +11,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
 vi.mock("@/components/calendar/event-link", () => ({
-  EventLink: ({ children }: { children: React.ReactNode }) => (
-    <a>{children}</a>
-  ),
+  EventLink: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }));
 vi.mock("@/components/calendar/event-notes-section", () => ({
   EventNotesSection: () => null,
@@ -54,7 +52,7 @@ function renderRow(event: MatterEventRow, tz: string) {
       <ul>
         <EventRowExpandable event={event} matterId="m1" matterName="Smith" />
       </ul>
-    </UserTimeZoneProvider>
+    </UserTimeZoneProvider>,
   );
 }
 
@@ -80,7 +78,7 @@ describe("EventRowExpandable — times", () => {
         startTime: new Date("2026-07-11T04:00:00Z"),
         endTime: new Date("2026-07-11T07:00:00Z"),
       },
-      "America/Denver"
+      "America/Denver",
     );
     expect(screen.getByText("Jul 10, 10:00 PM – Jul 11, 1:00 AM")).toBeTruthy();
   });
@@ -104,27 +102,23 @@ describe("EventRowExpandable — times", () => {
     renderRow(
       {
         ...base,
-        timeEntries: [
-          { hours: 0.25 },
-          { hours: 0.5 },
-        ] as MatterEventRow["timeEntries"],
+        timeEntries: [{ hours: 0.25 }, { hours: 0.5 }] as MatterEventRow["timeEntries"],
       },
-      "America/Denver"
+      "America/Denver",
     );
     expect(screen.getByText("0.75h")).toBeTruthy();
   });
 });
 
 describe("notePreview", () => {
-  const preview = (content: string) =>
-    notePreview({ content, authorInitials: "JK" });
+  const preview = (content: string) => notePreview({ content, authorInitials: "JK" });
 
   test("decodes the entities the sanitizer escapes", () => {
     expect(preview("<p>Met w/ Smith &amp; Wesson counsel</p>")).toBe(
-      "JK: Met w/ Smith & Wesson counsel"
+      "JK: Met w/ Smith & Wesson counsel",
     );
     expect(preview("<p>5 &lt; 6 &gt; 4 &quot;ok&quot; it&#39;s</p>")).toBe(
-      `JK: 5 < 6 > 4 "ok" it's`
+      `JK: 5 < 6 > 4 "ok" it's`,
     );
   });
 
@@ -133,9 +127,7 @@ describe("notePreview", () => {
   });
 
   test("still strips tags and collapses whitespace", () => {
-    expect(preview("<p>One</p><p>Two&nbsp;&nbsp;three</p>")).toBe(
-      "JK: One Two three"
-    );
+    expect(preview("<p>One</p><p>Two&nbsp;&nbsp;three</p>")).toBe("JK: One Two three");
   });
 
   test("truncates long previews", () => {

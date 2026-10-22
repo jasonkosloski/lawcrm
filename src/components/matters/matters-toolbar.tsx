@@ -17,11 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { Search, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn, plural } from "@/lib/utils";
 import { BILLING_TYPE_LABEL, type BillingTypeOrLegacy } from "@/lib/billing-type";
 import {
@@ -137,8 +133,7 @@ export function MattersToolbar({
     });
   };
 
-  const statusFlagCount =
-    (filter.includeArchived ? 1 : 0) + (filter.pinnedOnly ? 1 : 0);
+  const statusFlagCount = (filter.includeArchived ? 1 : 0) + (filter.pinnedOnly ? 1 : 0);
 
   const anyActive = isFilterActive(filter);
 
@@ -147,10 +142,7 @@ export function MattersToolbar({
       {/* ── Row 1: search + result count + clear ──────────────────────── */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
-          <Search
-            size={14}
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4"
-          />
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4" />
           <Input
             value={qLocal}
             onChange={(e) => onQChange(e.target.value)}
@@ -312,15 +304,13 @@ function ShowClosedToggle({
         "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium border transition-colors",
         checked
           ? "bg-brand-soft text-brand-700 border-brand-200 hover:border-brand-300"
-          : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700"
+          : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700",
       )}
     >
       <span
         className={cn(
           "inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border shrink-0 transition-colors",
-          checked
-            ? "bg-brand-500 border-brand-500"
-            : "bg-white border-line"
+          checked ? "bg-brand-500 border-brand-500" : "bg-white border-line",
         )}
       >
         {checked && <Check size={10} className="text-white" strokeWidth={3} />}
@@ -348,7 +338,7 @@ function FilterButton({
       size="xs"
       className={cn(
         "font-normal",
-        active && "bg-brand-soft text-brand-700 border-brand-200 hover:bg-brand-50"
+        active && "bg-brand-soft text-brand-700 border-brand-200 hover:bg-brand-50",
       )}
       {...props}
     >
@@ -378,7 +368,7 @@ function MultiSelectFilter({
   onClear: () => void;
 }) {
   const normalized = options.map((o) =>
-    typeof o === "string" ? { value: o, label: o, hint: undefined } : o
+    typeof o === "string" ? { value: o, label: o, hint: undefined } : o,
   );
   const activeLabel =
     selected.length === 1
@@ -390,11 +380,7 @@ function MultiSelectFilter({
       <PopoverTrigger
         render={
           <FilterButton
-            label={
-              activeLabel
-                ? `${label}: ${truncate(activeLabel, 18)}`
-                : label
-            }
+            label={activeLabel ? `${label}: ${truncate(activeLabel, 18)}` : label}
             activeCount={selected.length > 1 ? selected.length : undefined}
             active={selected.length > 0}
           />
@@ -430,19 +416,13 @@ function MultiSelectFilter({
                   <span
                     className={cn(
                       "inline-flex items-center justify-center w-4 h-4 rounded border shrink-0",
-                      on
-                        ? "bg-brand-500 border-brand-500 text-white"
-                        : "border-line"
+                      on ? "bg-brand-500 border-brand-500 text-white" : "border-line",
                     )}
                   >
                     {on && <Check size={11} strokeWidth={3} />}
                   </span>
                   <span className="flex-1 truncate">{o.label}</span>
-                  {o.hint && (
-                    <span className="text-2xs font-mono text-ink-4">
-                      {o.hint}
-                    </span>
-                  )}
+                  {o.hint && <span className="text-2xs font-mono text-ink-4">{o.hint}</span>}
                 </button>
               </li>
             );
@@ -474,10 +454,7 @@ function SingleSelectFilter<T extends string>({
     <Popover>
       <PopoverTrigger
         render={
-          <FilterButton
-            label={active ? `${label}: ${activeLabel}` : label}
-            active={active}
-          />
+          <FilterButton label={active ? `${label}: ${activeLabel}` : label} active={active} />
         }
       />
       <PopoverContent align="start" className="w-56 p-0">
@@ -495,12 +472,10 @@ function SingleSelectFilter<T extends string>({
                   <span
                     className={cn(
                       "inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border shrink-0",
-                      on ? "border-brand-500" : "border-line"
+                      on ? "border-brand-500" : "border-line",
                     )}
                   >
-                    {on && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                    )}
+                    {on && <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />}
                   </span>
                   <span className="flex-1">{o.label}</span>
                 </button>
@@ -534,7 +509,7 @@ function FlagRow({
       <span
         className={cn(
           "inline-flex items-center justify-center w-4 h-4 rounded border shrink-0",
-          checked ? "bg-brand-500 border-brand-500 text-white" : "border-line"
+          checked ? "bg-brand-500 border-brand-500 text-white" : "border-line",
         )}
       >
         {checked && <Check size={11} strokeWidth={3} />}

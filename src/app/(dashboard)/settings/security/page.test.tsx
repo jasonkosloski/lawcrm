@@ -18,11 +18,7 @@ vi.mock("@/lib/current-user-tz", () => ({
 vi.mock("@/lib/staff-auth", () => ({ getStaffAuth: vi.fn() }));
 vi.mock("@/lib/clerk-admin", () => ({ listActiveStaffSessions: vi.fn() }));
 vi.mock("@/components/settings/session-list", () => ({
-  SessionList: ({
-    sessions,
-  }: {
-    sessions: { id: string; browser: string | null }[];
-  }) => (
+  SessionList: ({ sessions }: { sessions: { id: string; browser: string | null }[] }) => (
     <ul data-testid="session-list">
       {sessions.map((s) => (
         <li key={s.id}>{s.browser}</li>
@@ -117,9 +113,7 @@ describe("SecuritySettingsPage", () => {
       error: "Couldn't reach the sign-in service.",
     });
     render(await SecuritySettingsPage());
-    expect(
-      screen.getByText("Couldn't load devices right now.")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Couldn't load devices right now.")).toBeInTheDocument();
     expect(screen.queryByTestId("session-list")).not.toBeInTheDocument();
   });
 

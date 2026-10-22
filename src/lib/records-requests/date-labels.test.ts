@@ -1,9 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  dueCountdownLabel,
-  responsePeriodLabel,
-  sentAgoLabel,
-} from "./date-labels";
+import { dueCountdownLabel, responsePeriodLabel, sentAgoLabel } from "./date-labels";
 
 describe("sentAgoLabel", () => {
   test("today, yesterday, n days ago", () => {
@@ -26,11 +22,7 @@ describe("dueCountdownLabel", () => {
 describe("responsePeriodLabel", () => {
   test("calendar and business days, singular and plural", () => {
     expect(responsePeriodLabel(30, "CALENDAR_DAYS")).toBe("30 days after sending");
-    expect(responsePeriodLabel(3, "BUSINESS_DAYS")).toBe(
-      "3 business days after sending"
-    );
-    expect(responsePeriodLabel(1, "BUSINESS_DAYS")).toBe(
-      "1 business day after sending"
-    );
+    expect(responsePeriodLabel(3, "BUSINESS_DAYS")).toBe("3 business days after sending");
+    expect(responsePeriodLabel(1, "BUSINESS_DAYS")).toBe("1 business day after sending");
   });
 });

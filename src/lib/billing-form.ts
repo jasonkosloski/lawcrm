@@ -44,10 +44,7 @@ export const lineItemEditInitialState: LineItemEditState = { status: "idle" };
 // client-safe home, `src/lib/constants/invoice-status.ts` — the
 // lifecycle LOGIC (transitions, guards, labels) stays here.
 // Re-exported so long-standing importers keep working.
-import {
-  type InvoiceKind,
-  type InvoiceStatus,
-} from "@/lib/constants/invoice-status";
+import { type InvoiceKind, type InvoiceStatus } from "@/lib/constants/invoice-status";
 export {
   INVOICE_KINDS,
   INVOICE_KIND_LABEL,
@@ -83,9 +80,7 @@ const CLIENT_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
   void: [],
 };
 
-const INTERNAL_RECORD_TRANSITIONS: Partial<
-  Record<InvoiceStatus, InvoiceStatus[]>
-> = {
+const INTERNAL_RECORD_TRANSITIONS: Partial<Record<InvoiceStatus, InvoiceStatus[]>> = {
   draft: ["paid", "void"],
   paid: ["void"],
   void: [],
@@ -96,7 +91,7 @@ const INTERNAL_RECORD_TRANSITIONS: Partial<
  *  get an empty transition list. */
 export function invoiceStatusTransitions(
   status: string,
-  kind: InvoiceKind = "client"
+  kind: InvoiceKind = "client",
 ): InvoiceStatus[] {
   const map: Partial<Record<string, InvoiceStatus[]>> =
     kind === "internal_record" ? INTERNAL_RECORD_TRANSITIONS : CLIENT_TRANSITIONS;
@@ -111,7 +106,7 @@ export function invoiceStatusTransitions(
 export function canVoidInvoice(
   status: string,
   paidAmount: number,
-  kind: InvoiceKind = "client"
+  kind: InvoiceKind = "client",
 ): boolean {
   if (kind === "internal_record") {
     return invoiceStatusTransitions(status, kind).includes("void");
@@ -128,7 +123,7 @@ export function canVoidInvoice(
 export function canDeleteInvoice(
   status: string,
   paidAmount: number,
-  kind: InvoiceKind = "client"
+  kind: InvoiceKind = "client",
 ): boolean {
   if (kind !== "client") return false;
   if (paidAmount > 0) return false;
@@ -156,10 +151,7 @@ const STATUS_LABEL_INTERNAL: Partial<Record<InvoiceStatus, string>> = {
  *  underlying status string reads naturally in both contexts.
  *  Accepts any string (DB values arrive untyped) — unknown statuses
  *  fall through unchanged. */
-export function invoiceStatusLabel(
-  status: string,
-  kind: InvoiceKind = "client"
-): string {
+export function invoiceStatusLabel(status: string, kind: InvoiceKind = "client"): string {
   const map: Partial<Record<string, string>> =
     kind === "internal_record" ? STATUS_LABEL_INTERNAL : STATUS_LABEL_CLIENT;
   return map[status] ?? status;
@@ -170,22 +162,12 @@ export function invoiceStatusLabel(
 /// in the same transaction and requires `billing.apply_trust` (the
 /// Record-payment dialog and the Apply-trust dialog only offer it to
 /// users holding that key).
-export const INVOICE_PAYMENT_SOURCES = [
-  "check",
-  "ach",
-  "cash",
-  "card",
-  "other",
-  "trust",
-] as const;
+export const INVOICE_PAYMENT_SOURCES = ["check", "ach", "cash", "card", "other", "trust"] as const;
 export type InvoicePaymentSource = (typeof INVOICE_PAYMENT_SOURCES)[number];
 
 /// Display label for a payment source. Used by both the dialog
 /// dropdown and the invoice preview's "Payments received" rows.
-export const INVOICE_PAYMENT_SOURCE_LABEL: Record<
-  InvoicePaymentSource,
-  string
-> = {
+export const INVOICE_PAYMENT_SOURCE_LABEL: Record<InvoicePaymentSource, string> = {
   check: "Check",
   ach: "ACH / wire",
   cash: "Cash",

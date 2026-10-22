@@ -47,12 +47,7 @@ export function DevSignInList({ users }: { users: DevUser[] }) {
               {u.jobTitle} · {u.email}
             </div>
           </div>
-          <Button
-            type="button"
-            size="sm"
-            disabled={pending !== null}
-            onClick={() => go(u.id)}
-          >
+          <Button type="button" size="sm" disabled={pending !== null} onClick={() => go(u.id)}>
             {pending === u.id ? "Signing in…" : "Sign in"}
           </Button>
         </div>

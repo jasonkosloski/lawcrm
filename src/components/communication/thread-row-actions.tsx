@@ -26,10 +26,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Archive, ArchiveRestore, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  setEmailThreadArchived,
-  setEmailThreadStarred,
-} from "@/app/actions/email-thread-flags";
+import { setEmailThreadArchived, setEmailThreadStarred } from "@/app/actions/email-thread-flags";
 
 export function ThreadRowActions({
   threadId,
@@ -109,7 +106,7 @@ export function ThreadRowActions({
         "focus-within:opacity-100 focus-within:pointer-events-auto",
         // A failed star/archive must stay visible after the pointer
         // leaves, or the user never learns why the star reverted.
-        error && "opacity-100 pointer-events-auto"
+        error && "opacity-100 pointer-events-auto",
       )}
     >
       {error && (
@@ -125,10 +122,7 @@ export function ThreadRowActions({
         title={starred ? "Unstar" : "Star"}
         className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-brand-tint disabled:opacity-50"
       >
-        <Star
-          size={13}
-          className={starred ? "text-warn fill-warn" : "text-ink-3"}
-        />
+        <Star size={13} className={starred ? "text-warn fill-warn" : "text-ink-3"} />
       </button>
       <button
         type="button"

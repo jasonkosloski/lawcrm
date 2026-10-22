@@ -101,11 +101,7 @@ import { canAccessLead } from "@/lib/lead-access";
 import { canAccessDraft } from "@/lib/draft-access";
 import { resolveRecordsUpload } from "@/lib/records-requests/folder";
 import { revalidatePath } from "next/cache";
-import {
-  FileTooLargeError,
-  deleteFile,
-  storeStream,
-} from "@/lib/file-storage";
+import { FileTooLargeError, deleteFile, storeStream } from "@/lib/file-storage";
 import { POST } from "./route";
 
 const mockedAuth = vi.mocked(getStaffAuthFromRequest);
@@ -138,7 +134,6 @@ async function drain(stream: NodeJS.ReadableStream): Promise<number> {
 }
 
 function wireHappyMocks() {
-   
   mockedAuth.mockResolvedValue(OK);
   mockedPerm.mockResolvedValue(true);
   vi.mocked(canAccessMatter).mockResolvedValue(true);
@@ -146,10 +141,7 @@ function wireHappyMocks() {
   mockedMatter.mockResolvedValue({ id: "m1" } as any);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   mockedFolder.mockResolvedValue({ id: "fold1" } as any);
-  mockedStore.mockImplementation((async (
-    stream: NodeJS.ReadableStream,
-    filename: string
-  ) => {
+  mockedStore.mockImplementation((async (stream: NodeJS.ReadableStream, filename: string) => {
     const size = await drain(stream);
     return { key: `key-${filename}`, size, url: `key-${filename}` };
   }) as unknown as typeof storeStream);
@@ -162,13 +154,11 @@ function wireHappyMocks() {
         id: `doc-${args.data.name}`,
         name: args.data.name,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      })) as any
+      })) as any,
   );
   // Array form (matter scope) and interactive form (lead scope: the
   // mock client doubles as the tx client).
-  mockedTxn.mockImplementation((async (
-    ops: Promise<unknown>[] | ((tx: unknown) => unknown)
-  ) =>
+  mockedTxn.mockImplementation((async (ops: Promise<unknown>[] | ((tx: unknown) => unknown)) =>
     typeof ops === "function"
       ? ops(prisma)
       : Promise.all(ops)) as unknown as typeof prisma.$transaction);
@@ -194,7 +184,7 @@ async function makeRequest(fd: FormData): Promise<NextRequest> {
 
 function fdWith(
   fields: Record<string, string>,
-  files: { name: string; content?: string; declaredType?: string }[]
+  files: { name: string; content?: string; declaredType?: string }[],
 ): FormData {
   const fd = new FormData();
   for (const [k, v] of Object.entries(fields)) fd.append(k, v);
@@ -203,7 +193,7 @@ function fdWith(
       "files",
       new File([f.content ?? "file-bytes"], f.name, {
         type: f.declaredType ?? "application/octet-stream",
-      })
+      }),
     );
   }
   return fd;
@@ -229,9 +219,7 @@ describe("POST /api/documents/upload — gates", () => {
   test("403 without documents.upload", async () => {
     mockedAuth.mockResolvedValue(OK);
     mockedPerm.mockResolvedValue(false);
-    const res = await POST(
-      await makeRequest(fdWith({ matterId: "m1" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ matterId: "m1" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(403);
     expect(mockedPerm).toHaveBeenCalledWith("u1", "documents.upload");
     expect(mockedStore).not.toHaveBeenCalled();
@@ -245,7 +233,7 @@ describe("POST /api/documents/upload — gates", () => {
         method: "POST",
         body: JSON.stringify({ nope: true }),
         headers: { "content-type": "application/json" },
-      })
+      }),
     );
     expect(res.status).toBe(400);
   });
@@ -259,8 +247,8 @@ describe("POST /api/documents/upload — happy path + contract", () => {
         fdWith({ matterId: "m1", folderId: "fold1" }, [
           { name: "production-01.pdf", content: "pdf-bytes" },
           { name: "bodycam.mp4", content: "video-bytes" },
-        ])
-      )
+        ]),
+      ),
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -287,16 +275,12 @@ describe("POST /api/documents/upload — happy path + contract", () => {
 
     // ONE audit row per batch.
     expect(logActivity).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(logActivity).mock.calls[0]![0].title).toMatch(
-      /2 documents uploaded/
-    );
+    expect(vi.mocked(logActivity).mock.calls[0]![0].title).toMatch(/2 documents uploaded/);
   });
 
   test("never reads Clerk request state or the session-based resolvers (matcher-excluded route)", async () => {
     wireHappyMocks();
-    const res = await POST(
-      await makeRequest(fdWith({ matterId: "m1" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ matterId: "m1" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(200);
     expect(mockedPerm).toHaveBeenCalledWith("u1", "documents.upload");
     expect(clerkAuth).not.toHaveBeenCalled();
@@ -311,13 +295,11 @@ describe("POST /api/documents/upload — happy path + contract", () => {
         fdWith({ matterId: "m1" }, [
           // Attacker declares text/html on a .pdf — extension wins.
           { name: "innocent.pdf", declaredType: "text/html" },
-        ])
-      )
+        ]),
+      ),
     );
     expect(res.status).toBe(200);
-    expect(mockedCreate.mock.calls[0]![0].data.contentType).toBe(
-      "application/pdf"
-    );
+    expect(mockedCreate.mock.calls[0]![0].data.contentType).toBe("application/pdf");
   });
 
   test("root uploads (no folderId) store folderId null", async () => {
@@ -332,9 +314,7 @@ describe("POST /api/documents/upload — failure semantics", () => {
   test("404 when the matter doesn't exist; nothing stored", async () => {
     wireHappyMocks();
     mockedMatter.mockResolvedValue(null);
-    const res = await POST(
-      await makeRequest(fdWith({ matterId: "ghost" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ matterId: "ghost" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(404);
     expect(mockedTxn).not.toHaveBeenCalled();
   });
@@ -344,10 +324,8 @@ describe("POST /api/documents/upload — failure semantics", () => {
     mockedFolder.mockResolvedValue(null);
     const res = await POST(
       await makeRequest(
-        fdWith({ matterId: "m1", folderId: "other-matter-folder" }, [
-          { name: "a.pdf" },
-        ])
-      )
+        fdWith({ matterId: "m1", folderId: "other-matter-folder" }, [{ name: "a.pdf" }]),
+      ),
     );
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch(/folder/i);
@@ -358,9 +336,7 @@ describe("POST /api/documents/upload — failure semantics", () => {
     wireHappyMocks();
     const res = await POST(await makeRequest(fdWith({ matterId: "m1" }, [])));
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toMatch(
-      /no files/i
-    );
+    expect(((await res.json()) as { error: string }).error).toMatch(/no files/i);
   });
 
   test("413 on a too-large file, and already-stored files are removed (all-or-nothing)", async () => {
@@ -375,17 +351,10 @@ describe("POST /api/documents/upload — failure semantics", () => {
         throw new FileTooLargeError(100);
       });
     const res = await POST(
-      await makeRequest(
-        fdWith({ matterId: "m1" }, [
-          { name: "ok.pdf" },
-          { name: "huge.mp4" },
-        ])
-      )
+      await makeRequest(fdWith({ matterId: "m1" }, [{ name: "ok.pdf" }, { name: "huge.mp4" }])),
     );
     expect(res.status).toBe(413);
-    expect(((await res.json()) as { error: string }).error).toMatch(
-      /too large/i
-    );
+    expect(((await res.json()) as { error: string }).error).toMatch(/too large/i);
     // The batch is all-or-nothing: the first file's bytes are gone.
     expect(mockedDelete).toHaveBeenCalledWith("key-ok.pdf");
     expect(mockedTxn).not.toHaveBeenCalled();
@@ -396,9 +365,7 @@ describe("POST /api/documents/upload — composer fields (category, name)", () =
   test("category is stored on every row; absent means discovery", async () => {
     wireHappyMocks();
     const res = await POST(
-      await makeRequest(
-        fdWith({ matterId: "m1", category: "contract" }, [{ name: "a.pdf" }])
-      )
+      await makeRequest(fdWith({ matterId: "m1", category: "contract" }, [{ name: "a.pdf" }])),
     );
     expect(res.status).toBe(200);
     expect(mockedCreate.mock.calls[0]![0].data.category).toBe("contract");
@@ -408,10 +375,8 @@ describe("POST /api/documents/upload — composer fields (category, name)", () =
     wireHappyMocks();
     const res = await POST(
       await makeRequest(
-        fdWith({ matterId: "m1", category: "not-a-category" }, [
-          { name: "a.pdf" },
-        ])
-      )
+        fdWith({ matterId: "m1", category: "not-a-category" }, [{ name: "a.pdf" }]),
+      ),
     );
     expect(res.status).toBe(400);
     expect(mockedStore).not.toHaveBeenCalled();
@@ -425,8 +390,8 @@ describe("POST /api/documents/upload — composer fields (category, name)", () =
         fdWith({ matterId: "m1", name: "Signed retainer" }, [
           { name: "scan001.pdf" },
           { name: "scan002.pdf" },
-        ])
-      )
+        ]),
+      ),
     );
     expect(mockedCreate.mock.calls[0]![0].data.name).toBe("scan001.pdf");
     expect(mockedCreate.mock.calls[1]![0].data.name).toBe("scan002.pdf");
@@ -436,15 +401,11 @@ describe("POST /api/documents/upload — composer fields (category, name)", () =
     wireHappyMocks();
     await POST(
       await makeRequest(
-        fdWith({ matterId: "m1", name: "Signed retainer" }, [
-          { name: "scan001.pdf" },
-        ])
-      )
+        fdWith({ matterId: "m1", name: "Signed retainer" }, [{ name: "scan001.pdf" }]),
+      ),
     );
     expect(mockedCreate.mock.calls[0]![0].data.name).toBe("Signed retainer");
-    expect(mockedCreate.mock.calls[0]![0].data.contentType).toBe(
-      "application/pdf"
-    );
+    expect(mockedCreate.mock.calls[0]![0].data.contentType).toBe("application/pdf");
   });
 });
 
@@ -464,9 +425,7 @@ describe("POST /api/documents/upload — filenames", () => {
     const stored = mockedCreate.mock.calls[0]![0].data.name;
     expect(stored).toHaveLength(255);
     expect(stored.endsWith(".pdf")).toBe(true);
-    expect(mockedCreate.mock.calls[0]![0].data.contentType).toBe(
-      "application/pdf"
-    );
+    expect(mockedCreate.mock.calls[0]![0].data.contentType).toBe("application/pdf");
   });
 });
 
@@ -492,9 +451,7 @@ describe("POST /api/documents/upload — client abort mid-upload", () => {
     }) as unknown as typeof storeStream);
 
     const encoded = new Response(
-      fdWith({ matterId: "m1" }, [
-        { name: "huge.mp4", content: "v".repeat(200_000) },
-      ])
+      fdWith({ matterId: "m1" }, [{ name: "huge.mp4", content: "v".repeat(200_000) }]),
     );
     const bytes = new Uint8Array(await encoded.arrayBuffer());
     // Send most of the body, then drop the connection.
@@ -535,9 +492,7 @@ describe("POST /api/documents/upload — intake lead scope", () => {
 
   test("a lead upload stores leadId (and no matterId) and revalidates intake paths", async () => {
     wireLead();
-    const res = await POST(
-      await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(200);
     const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
     expect(data.leadId).toBe("l1");
@@ -546,18 +501,14 @@ describe("POST /api/documents/upload — intake lead scope", () => {
     const paths = vi.mocked(revalidatePath).mock.calls.map((c) => c[0]);
     expect(paths).toContain("/intake/l1/documents");
     expect(paths).toContain("/intake/l1");
-    expect(paths.some((p) => p.includes("null") || p.includes("undefined"))).toBe(
-      false
-    );
+    expect(paths.some((p) => p.includes("null") || p.includes("undefined"))).toBe(false);
     expect(vi.mocked(logActivity).mock.calls[0]![0].matterId).toBeNull();
   });
 
   test("a restricted lead the uploader isn't on -> 404 before any byte is stored (ADR-049)", async () => {
     wireLead();
     vi.mocked(canAccessLead).mockResolvedValueOnce(false);
-    const res = await POST(
-      await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(404);
     expect(mockedStore).not.toHaveBeenCalled();
     expect(mockedCreate).not.toHaveBeenCalled();
@@ -565,11 +516,7 @@ describe("POST /api/documents/upload — intake lead scope", () => {
 
   test("a lead folder is looked up scoped by leadId", async () => {
     wireLead();
-    await POST(
-      await makeRequest(
-        fdWith({ leadId: "l1", folderId: "fold1" }, [{ name: "a.pdf" }])
-      )
-    );
+    await POST(await makeRequest(fdWith({ leadId: "l1", folderId: "fold1" }, [{ name: "a.pdf" }])));
     expect(mockedFolder).toHaveBeenCalledWith({
       where: { id: "fold1", leadId: "l1" },
       select: { id: true },
@@ -579,14 +526,10 @@ describe("POST /api/documents/upload — intake lead scope", () => {
   test("both ids -> 400, nothing stored", async () => {
     wireLead();
     const res = await POST(
-      await makeRequest(
-        fdWith({ matterId: "m1", leadId: "l1" }, [{ name: "a.pdf" }])
-      )
+      await makeRequest(fdWith({ matterId: "m1", leadId: "l1" }, [{ name: "a.pdf" }])),
     );
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe(
-      BOTH_OR_NEITHER
-    );
+    expect(((await res.json()) as { error: string }).error).toBe(BOTH_OR_NEITHER);
     expect(mockedStore).not.toHaveBeenCalled();
   });
 
@@ -594,9 +537,7 @@ describe("POST /api/documents/upload — intake lead scope", () => {
     wireLead();
     const res = await POST(await makeRequest(fdWith({}, [{ name: "a.pdf" }])));
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe(
-      BOTH_OR_NEITHER
-    );
+    expect(((await res.json()) as { error: string }).error).toBe(BOTH_OR_NEITHER);
     expect(mockedStore).not.toHaveBeenCalled();
   });
 
@@ -604,13 +545,11 @@ describe("POST /api/documents/upload — intake lead scope", () => {
     wireLead();
     mockedFolder.mockResolvedValue(null); // scoped lookup misses
     const res = await POST(
-      await makeRequest(
-        fdWith({ leadId: "l1", folderId: "matter-folder" }, [{ name: "a.pdf" }])
-      )
+      await makeRequest(fdWith({ leadId: "l1", folderId: "matter-folder" }, [{ name: "a.pdf" }])),
     );
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toBe(
-      "Folder not found in this matter or intake."
+      "Folder not found in this matter or intake.",
     );
     expect(mockedStore).not.toHaveBeenCalled();
     expect(mockedTxn).not.toHaveBeenCalled();
@@ -642,9 +581,7 @@ describe("POST /api/documents/upload — intake lead scope", () => {
   test("lead converted during the upload: files onto the converted matter, bytes kept", async () => {
     wireConvertedDuringUpload("m9");
     const res = await POST(
-      await makeRequest(
-        fdWith({ leadId: "l1", folderId: "fold1" }, [{ name: "a.pdf" }])
-      )
+      await makeRequest(fdWith({ leadId: "l1", folderId: "fold1" }, [{ name: "a.pdf" }])),
     );
     expect(res.status).toBe(200);
     const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
@@ -667,9 +604,7 @@ describe("POST /api/documents/upload — intake lead scope", () => {
       .mockResolvedValueOnce({ id: "fold1" } as never) // resolveTarget
       .mockResolvedValue(null); // under the matter scope
     const res = await POST(
-      await makeRequest(
-        fdWith({ leadId: "l1", folderId: "fold1" }, [{ name: "a.pdf" }])
-      )
+      await makeRequest(fdWith({ leadId: "l1", folderId: "fold1" }, [{ name: "a.pdf" }])),
     );
     expect(res.status).toBe(200);
     const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
@@ -680,9 +615,7 @@ describe("POST /api/documents/upload — intake lead scope", () => {
   test("converted during the upload, uploader cannot access the matter: fail closed, bytes removed", async () => {
     wireConvertedDuringUpload("m9");
     vi.mocked(canAccessMatter).mockResolvedValue(false);
-    const res = await POST(
-      await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }])));
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(mockedCreate).not.toHaveBeenCalled();
     expect(mockedDelete).toHaveBeenCalledWith("key-a.pdf");
@@ -693,9 +626,7 @@ describe("POST /api/documents/upload — intake lead scope", () => {
     mockedLead.mockResolvedValueOnce({ id: "l1", stage: "new" } as never);
     mockedLead.mockResolvedValueOnce({ id: "l1", stage: "new" } as never);
     mockedLead.mockResolvedValue(null);
-    const res = await POST(
-      await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(404);
     expect(mockedCreate).not.toHaveBeenCalled();
     expect(mockedDelete).toHaveBeenCalledWith("key-a.pdf");
@@ -703,26 +634,18 @@ describe("POST /api/documents/upload — intake lead scope", () => {
 
   test("a converted lead -> 409, nothing stored", async () => {
     wireLead("converted");
-    const res = await POST(
-      await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ leadId: "l1" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(409);
-    expect(((await res.json()) as { error: string }).error).toMatch(
-      /already converted/
-    );
+    expect(((await res.json()) as { error: string }).error).toMatch(/already converted/);
     expect(mockedStore).not.toHaveBeenCalled();
   });
 
   test("an unknown lead -> 404 Lead not found.", async () => {
     wireLead();
     mockedLead.mockResolvedValue(null);
-    const res = await POST(
-      await makeRequest(fdWith({ leadId: "ghost" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ leadId: "ghost" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(404);
-    expect(((await res.json()) as { error: string }).error).toBe(
-      "Lead not found."
-    );
+    expect(((await res.json()) as { error: string }).error).toBe("Lead not found.");
     expect(mockedStore).not.toHaveBeenCalled();
   });
 });
@@ -742,9 +665,7 @@ describe("POST /api/documents/upload — records requests", () => {
     mockedReq.mockResolvedValue({ id: "rr1" } as never);
     mockedResolve.mockResolvedValue(TAGGED);
     const res = await POST(
-      await makeRequest(
-        fdWith({ matterId: "m1", recordsRequestId: "rr1" }, [{ name: "a.pdf" }])
-      )
+      await makeRequest(fdWith({ matterId: "m1", recordsRequestId: "rr1" }, [{ name: "a.pdf" }])),
     );
     expect(res.status).toBe(200);
     expect(mockedReq).toHaveBeenCalledWith({
@@ -756,7 +677,7 @@ describe("POST /api/documents/upload — records requests", () => {
       "rr1",
       { kind: "matter", matterId: "m1" },
       null,
-      "received_records"
+      "received_records",
     );
     const data = mockedCreate.mock.calls[0]![0].data as Record<string, unknown>;
     expect(data.recordsRequestId).toBe("rr1");
@@ -768,9 +689,7 @@ describe("POST /api/documents/upload — records requests", () => {
     wireHappyMocks();
     mockedReq.mockResolvedValue(null);
     const res = await POST(
-      await makeRequest(
-        fdWith({ matterId: "m1", recordsRequestId: "other" }, [{ name: "a.pdf" }])
-      )
+      await makeRequest(fdWith({ matterId: "m1", recordsRequestId: "other" }, [{ name: "a.pdf" }])),
     );
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toBe(REQ_ERROR);
@@ -783,9 +702,7 @@ describe("POST /api/documents/upload — records requests", () => {
     mockedPerm.mockImplementation(async (_u, k) => k !== "records.edit");
     mockedReq.mockResolvedValue({ id: "rr1" } as never);
     const res = await POST(
-      await makeRequest(
-        fdWith({ matterId: "m1", recordsRequestId: "rr1" }, [{ name: "a.pdf" }])
-      )
+      await makeRequest(fdWith({ matterId: "m1", recordsRequestId: "rr1" }, [{ name: "a.pdf" }])),
     );
     expect(res.status).toBe(403);
     expect(mockedStore).not.toHaveBeenCalled();
@@ -797,10 +714,8 @@ describe("POST /api/documents/upload — records requests", () => {
     mockedResolve.mockResolvedValue({ ...TAGGED, folderId: "fold1" });
     await POST(
       await makeRequest(
-        fdWith({ matterId: "m1", recordsRequestId: "rr1", folderId: "fold1" }, [
-          { name: "a.pdf" },
-        ])
-      )
+        fdWith({ matterId: "m1", recordsRequestId: "rr1", folderId: "fold1" }, [{ name: "a.pdf" }]),
+      ),
     );
     expect(mockedResolve.mock.calls[0]![3]).toBe("fold1");
   });
@@ -826,9 +741,7 @@ describe("POST /api/documents/upload — records requests", () => {
     mockedReq.mockResolvedValue({ id: "rr1" } as never);
     mockedResolve.mockResolvedValue(TAGGED);
     const res = await POST(
-      await makeRequest(
-        fdWith({ leadId: "l1", recordsRequestId: "rr1" }, [{ name: "a.pdf" }])
-      )
+      await makeRequest(fdWith({ leadId: "l1", recordsRequestId: "rr1" }, [{ name: "a.pdf" }])),
     );
     expect(res.status).toBe(200);
     expect(mockedResolve.mock.calls[0]![2]).toEqual({
@@ -852,9 +765,7 @@ describe("POST /api/documents/upload — records requests", () => {
     mockedReq.mockResolvedValue({ id: "rr1" } as never);
     mockedResolve.mockResolvedValue(null);
     const res = await POST(
-      await makeRequest(
-        fdWith({ leadId: "l1", recordsRequestId: "rr1" }, [{ name: "a.pdf" }])
-      )
+      await makeRequest(fdWith({ leadId: "l1", recordsRequestId: "rr1" }, [{ name: "a.pdf" }])),
     );
     expect(res.status).toBe(200);
     expect(mockedDelete).not.toHaveBeenCalled();
@@ -874,7 +785,7 @@ describe("POST /api/documents/upload — records requests", () => {
     const res = await POST(await makeRequest(fd));
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toBe(
-      "recordsRequestId must precede file parts in the form data."
+      "recordsRequestId must precede file parts in the form data.",
     );
     expect(mockedCreate).not.toHaveBeenCalled();
     // Either never stored, or stored and cleaned up.
@@ -889,8 +800,8 @@ describe("POST /api/documents/upload — records requests", () => {
       await makeRequest(
         fdWith({ matterId: "m1", recordsRequestId: "rr1", recordsRole: "request_letter" }, [
           { name: "a.pdf" },
-        ])
-      )
+        ]),
+      ),
     );
     expect(res.status).toBe(200);
     expect(mockedResolve.mock.calls[0]![4]).toBe("request_letter");
@@ -905,13 +816,11 @@ describe("POST /api/documents/upload — records requests", () => {
       await makeRequest(
         fdWith({ matterId: "m1", recordsRequestId: "rr1", recordsRole: "bogus" }, [
           { name: "a.pdf" },
-        ])
-      )
+        ]),
+      ),
     );
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe(
-      "Invalid records document kind."
-    );
+    expect(((await res.json()) as { error: string }).error).toBe("Invalid records document kind.");
     expect(mockedStore).not.toHaveBeenCalled();
     expect(mockedCreate).not.toHaveBeenCalled();
   });
@@ -921,9 +830,7 @@ describe("POST /api/documents/upload — records requests", () => {
     mockedReq.mockResolvedValue({ id: "rr1" } as never);
     mockedResolve.mockResolvedValue(TAGGED);
     await POST(
-      await makeRequest(
-        fdWith({ matterId: "m1", recordsRequestId: "rr1" }, [{ name: "a.pdf" }])
-      )
+      await makeRequest(fdWith({ matterId: "m1", recordsRequestId: "rr1" }, [{ name: "a.pdf" }])),
     );
     expect(mockedResolve.mock.calls[0]![4]).toBe("received_records");
   });
@@ -939,7 +846,7 @@ describe("POST /api/documents/upload — records requests", () => {
     const res = await POST(await makeRequest(fd));
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toBe(
-      "recordsRole must precede file parts in the form data."
+      "recordsRole must precede file parts in the form data.",
     );
     expect(mockedCreate).not.toHaveBeenCalled();
     expect(mockedDelete.mock.calls.length).toBe(mockedStore.mock.calls.length);
@@ -966,9 +873,7 @@ describe("POST /api/documents/upload — draft target", () => {
   test("writes draft-file rows (no Document) and returns their ids", async () => {
     wireDraft();
     const res = await POST(
-      await makeRequest(
-        fdWith({ draftId: "d1" }, [{ name: "agreement.pdf" }, { name: "b.pdf" }])
-      )
+      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "agreement.pdf" }, { name: "b.pdf" }])),
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { documents: { id: string; name: string }[] };
@@ -989,7 +894,7 @@ describe("POST /api/documents/upload — draft target", () => {
         matterId: null,
         type: "filing",
         title: "File attached to a matter draft",
-      })
+      }),
     );
     expect(JSON.stringify(vi.mocked(logActivity).mock.calls)).not.toContain("agreement.pdf");
   });
@@ -1004,7 +909,7 @@ describe("POST /api/documents/upload — draft target", () => {
     for (const extra of extras) {
       wireDraft();
       const res = await POST(
-        await makeRequest(fdWith({ draftId: "d1", ...extra }, [{ name: "a.pdf" }]))
+        await makeRequest(fdWith({ draftId: "d1", ...extra }, [{ name: "a.pdf" }])),
       );
       expect(res.status, JSON.stringify(extra)).toBe(400);
       expect(mockedStore).not.toHaveBeenCalled();
@@ -1012,19 +917,15 @@ describe("POST /api/documents/upload — draft target", () => {
     }
     wireDraft();
     const res = await POST(
-      await makeRequest(fdWith({ draftId: "d1", matterId: "m1" }, [{ name: "a.pdf" }]))
+      await makeRequest(fdWith({ draftId: "d1", matterId: "m1" }, [{ name: "a.pdf" }])),
     );
-    expect((await res.json()).error).toBe(
-      "Choose exactly one of a matter, a lead or a draft."
-    );
+    expect((await res.json()).error).toBe("Choose exactly one of a matter, a lead or a draft.");
   });
 
   test("no draft access -> 404 before any byte is stored", async () => {
     wireDraft();
     vi.mocked(canAccessDraft).mockResolvedValue(false);
-    const res = await POST(
-      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(404);
     expect(mockedStore).not.toHaveBeenCalled();
   });
@@ -1032,9 +933,7 @@ describe("POST /api/documents/upload — draft target", () => {
   test("403 without documents.upload", async () => {
     wireDraft();
     mockedPerm.mockResolvedValue(false);
-    const res = await POST(
-      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(403);
   });
 
@@ -1043,15 +942,13 @@ describe("POST /api/documents/upload — draft target", () => {
     mockedStore.mockImplementation((async (
       stream: NodeJS.ReadableStream,
       _f: string,
-      cap: number
+      cap: number,
     ) => {
       await drain(stream);
       if (cap === 50 * 1024 * 1024) throw new FileTooLargeError(cap);
       return { key: "k", size: 1, url: "k" };
     }) as unknown as typeof storeStream);
-    const res = await POST(
-      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe("Draft files are limited to 50 MB each.");
     expect(prisma.matterDraftFile.create).not.toHaveBeenCalled();
@@ -1060,9 +957,7 @@ describe("POST /api/documents/upload — draft target", () => {
   test("existing rows + this batch over 20 -> 400, nothing written", async () => {
     wireDraft(19);
     const res = await POST(
-      await makeRequest(
-        fdWith({ draftId: "d1" }, [{ name: "a.pdf" }, { name: "b.pdf" }])
-      )
+      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }, { name: "b.pdf" }])),
     );
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe("A draft can hold up to 20 files.");
@@ -1073,11 +968,9 @@ describe("POST /api/documents/upload — draft target", () => {
   test("draft claimed during the insert (P2003) -> 404 and files removed", async () => {
     wireDraft();
     vi.mocked(prisma.matterDraftFile.create).mockRejectedValue(
-      Object.assign(new Error("fk"), { code: "P2003" })
+      Object.assign(new Error("fk"), { code: "P2003" }),
     );
-    const res = await POST(
-      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(404);
     expect(mockedDelete).toHaveBeenCalledWith("key-a.pdf");
   });
@@ -1086,9 +979,7 @@ describe("POST /api/documents/upload — draft target", () => {
     wireDraft();
     vi.mocked(prisma.matterDraft.findUnique).mockResolvedValue(null);
     vi.mocked(prisma.document.findFirst).mockResolvedValue({ id: "doc1" } as never);
-    const res = await POST(
-      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(404);
     expect(mockedDelete).not.toHaveBeenCalledWith("key-a.pdf");
     vi.mocked(prisma.document.findFirst).mockReset();
@@ -1097,9 +988,7 @@ describe("POST /api/documents/upload — draft target", () => {
   test("draft deleted while the bytes streamed -> 404 and files removed", async () => {
     wireDraft();
     vi.mocked(prisma.matterDraft.findUnique).mockResolvedValue(null);
-    const res = await POST(
-      await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }]))
-    );
+    const res = await POST(await makeRequest(fdWith({ draftId: "d1" }, [{ name: "a.pdf" }])));
     expect(res.status).toBe(404);
     expect(mockedDelete).toHaveBeenCalledWith("key-a.pdf");
     expect(prisma.matterDraftFile.create).not.toHaveBeenCalled();

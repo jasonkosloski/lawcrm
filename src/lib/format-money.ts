@@ -25,10 +25,7 @@ const WHOLE_DOLLARS = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
-export function formatMoney(
-  n: number,
-  opts: { cents?: boolean } = {}
-): string {
+export function formatMoney(n: number, opts: { cents?: boolean } = {}): string {
   const formatter = opts.cents === false ? WHOLE_DOLLARS : WITH_CENTS;
   // Intl renders -0 as "-$0.00"; normalize so a zeroed balance never
   // shows a sign.

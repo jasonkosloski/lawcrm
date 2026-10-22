@@ -30,10 +30,7 @@ export default async function PortalVerifyPage({
 
   if (!token) {
     return (
-      <AuthPanel
-        title="Link expired"
-        description="This link has expired or was already used."
-      >
+      <AuthPanel title="Link expired" description="This link has expired or was already used.">
         <LoginForm submitLabel="Send a new link" />
       </AuthPanel>
     );

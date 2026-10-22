@@ -43,10 +43,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  findMatterCreateEntry,
-  type MatterCreateEntry,
-} from "@/lib/matter-create-types";
+import { findMatterCreateEntry, type MatterCreateEntry } from "@/lib/matter-create-types";
 import { useCreateStack, type CreatePanel } from "./create-stack-provider";
 import { Button } from "@/components/ui/button";
 
@@ -60,18 +57,12 @@ const PanelLoading = () => (
   </div>
 );
 const NotePanelBody = dynamic(
-  () =>
-    import("@/components/matters/notes/note-panel-body").then(
-      (m) => m.NotePanelBody
-    ),
-  { loading: PanelLoading }
+  () => import("@/components/matters/notes/note-panel-body").then((m) => m.NotePanelBody),
+  { loading: PanelLoading },
 );
 const NewEventComposer = dynamic(
-  () =>
-    import("@/components/calendar/new-event-composer").then(
-      (m) => m.NewEventComposer
-    ),
-  { loading: PanelLoading }
+  () => import("@/components/calendar/new-event-composer").then((m) => m.NewEventComposer),
+  { loading: PanelLoading },
 );
 
 const ICON_MAP: Record<MatterCreateEntry["icon"], LucideIcon> = {
@@ -88,10 +79,7 @@ const ICON_MAP: Record<MatterCreateEntry["icon"], LucideIcon> = {
 /** Matter tab (route slug + label) that already hosts a working inline
  *  form for each create type. Types with no real dock form send the
  *  user there instead of showing a dead form with a disabled Save. */
-const TAB_FOR_TYPE: Record<
-  MatterCreateEntry["type"],
-  { slug: string; label: string }
-> = {
+const TAB_FOR_TYPE: Record<MatterCreateEntry["type"], { slug: string; label: string }> = {
   time: { slug: "time", label: "Time & expenses" },
   note: { slug: "notes", label: "Notes" },
   task: { slug: "tasks", label: "Tasks" },
@@ -110,13 +98,10 @@ const FOCUSABLE =
  *  each body owns its own form state. */
 function bodyHasDraft(body: Element | null): boolean {
   if (!body) return false;
-  const fields = body.querySelectorAll<HTMLElement>(
-    "textarea, input, [contenteditable='true']"
-  );
+  const fields = body.querySelectorAll<HTMLElement>("textarea, input, [contenteditable='true']");
   for (const el of fields) {
     if (el instanceof HTMLInputElement) {
-      if (["checkbox", "radio", "hidden", "button", "submit"].includes(el.type))
-        continue;
+      if (["checkbox", "radio", "hidden", "button", "submit"].includes(el.type)) continue;
       if (el.value.trim()) return true;
     } else if (el instanceof HTMLTextAreaElement) {
       if (el.value.trim()) return true;
@@ -128,8 +113,7 @@ function bodyHasDraft(body: Element | null): boolean {
 }
 
 export function CreateDock() {
-  const { panels, focusedId, context, close, focus, setExpanded } =
-    useCreateStack();
+  const { panels, focusedId, context, close, focus, setExpanded } = useCreateStack();
 
   const focused = panels.find((p) => p.id === focusedId) ?? null;
   const minimized = panels.filter((p) => p.id !== focusedId);
@@ -156,9 +140,9 @@ export function CreateDock() {
 
     if (e.key === "Tab" && focused.expanded) {
       // Trap focus inside the expanded modal.
-      const items = Array.from(
-        e.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)
-      ).filter((el) => el.closest(".hidden") === null);
+      const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => el.closest(".hidden") === null,
+      );
       if (items.length === 0) return;
       const first = items[0];
       const last = items[items.length - 1];
@@ -184,18 +168,14 @@ export function CreateDock() {
     }
     // Docked: close only a panel with nothing typed in it. A draft is
     // closed deliberately (the X), never by a stray Escape.
-    const body = e.currentTarget.querySelector(
-      `[data-panel-id="${focused.id}"]`
-    );
+    const body = e.currentTarget.querySelector(`[data-panel-id="${focused.id}"]`);
     if (!bodyHasDraft(body)) close(focused.id);
   };
 
   if (panels.length === 0) return null;
 
   const expanded = !!focused?.expanded;
-  const entryLabel = focused
-    ? (findMatterCreateEntry(focused.type)?.label ?? focused.type)
-    : "";
+  const entryLabel = focused ? (findMatterCreateEntry(focused.type)?.label ?? focused.type) : "";
 
   // ONE shell for both modes. Docked and expanded used to be two
   // different JSX branches, so toggling expand unmounted the whole
@@ -304,12 +284,8 @@ function PanelChrome({
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
         <div className="flex flex-col min-w-0">
-          <span className="text-2xs font-medium text-ink-3">
-            Create
-          </span>
-          <h2 className="text-sm font-display font-medium text-ink">
-            {entry.label}
-          </h2>
+          <span className="text-2xs font-medium text-ink-3">Create</span>
+          <h2 className="text-sm font-display font-medium text-ink">{entry.label}</h2>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -340,13 +316,9 @@ function PanelChrome({
             className="w-1.5 h-1.5 rounded-full shrink-0"
             style={{ background: contextBadge.color }}
           />
-          <span className="text-xs font-medium text-ink-2 truncate">
-            {contextBadge.label}
-          </span>
+          <span className="text-xs font-medium text-ink-2 truncate">{contextBadge.label}</span>
           {contextBadge.sublabel && (
-            <span className="text-2xs font-mono text-ink-4 shrink-0">
-              {contextBadge.sublabel}
-            </span>
+            <span className="text-2xs font-mono text-ink-4 shrink-0">{contextBadge.sublabel}</span>
           )}
         </div>
       )}
@@ -354,9 +326,7 @@ function PanelChrome({
       {/* Minimized-panel chips */}
       {minimized.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap px-3 py-2 border-b border-line shrink-0 bg-paper-2/30">
-          <span className="text-2xs font-medium text-ink-3 mr-1">
-            Also open
-          </span>
+          <span className="text-2xs font-medium text-ink-3 mr-1">Also open</span>
           {minimized.map((m) => (
             <InlineChip
               key={m.id}
@@ -416,10 +386,7 @@ function PanelBody({
   const tab = TAB_FOR_TYPE[entry.type];
 
   return (
-    <div
-      data-panel-id={panel.id}
-      className={visible ? "flex flex-1 min-h-0 flex-col" : "hidden"}
-    >
+    <div data-panel-id={panel.id} className={visible ? "flex flex-1 min-h-0 flex-col" : "hidden"}>
       {isNote && matterId ? (
         <NotePanelBody panelId={panel.id} matterId={matterId} />
       ) : isStandaloneEvent ? (
@@ -430,9 +397,7 @@ function PanelBody({
         <>
           <div className="flex-1 overflow-y-auto p-4">
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-ink-3 leading-relaxed">
-                {entry.description}
-              </p>
+              <p className="text-xs text-ink-3 leading-relaxed">{entry.description}</p>
               <p className="text-xs text-ink-2 leading-relaxed">
                 {matterId
                   ? `There is no quick form for this yet — the ${tab.label} tab has the full form.`
@@ -442,20 +407,13 @@ function PanelBody({
           </div>
 
           <footer className="flex items-center justify-end gap-2 px-4 py-3 border-t border-line shrink-0 bg-paper-2/30">
-            <Button
-              variant="outline"
-              size="xs"
-              type="button"
-              onClick={onClose}
-            >
+            <Button variant="outline" size="xs" type="button" onClick={onClose}>
               Cancel
             </Button>
             {matterId && (
               <Button
                 size="xs"
-                render={
-                  <Link href={`/matters/${matterId}/${tab.slug}`} onClick={onClose} />
-                }
+                render={<Link href={`/matters/${matterId}/${tab.slug}`} onClick={onClose} />}
               >
                 Go to {tab.label}
               </Button>
@@ -486,7 +444,7 @@ function InlineChip({
       className={cn(
         "inline-flex items-center gap-1 h-6 pl-1.5 pr-0.5 rounded-full",
         "bg-white border border-line text-2xs text-ink-2",
-        "hover:border-brand-300"
+        "hover:border-brand-300",
       )}
     >
       <button

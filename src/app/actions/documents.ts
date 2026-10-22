@@ -44,7 +44,6 @@ import { deleteFile } from "@/lib/file-storage";
 import { isStoredFileReferenced } from "@/lib/stored-file-refs";
 import { extractEmailAttachments } from "@/lib/email-attachment-extract";
 
-
 /** What to do with an email's attachments that have no copy anywhere
  *  else when the email is deleted (a copy made with "Copy to…" is its
  *  own document and always stays). */
@@ -52,7 +51,7 @@ export type AttachmentChoice = "delete" | "keep";
 
 export async function deleteDocument(
   documentId: string,
-  opts: { attachments?: AttachmentChoice } = {}
+  opts: { attachments?: AttachmentChoice } = {},
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await getCurrentUserId();
   await assertChildMatterAccess("document", documentId);
@@ -92,9 +91,7 @@ export async function deleteDocument(
   // (admin always does). Defense against accidental deletion by
   // other team members; the override stays an explicit, gated
   // capability rather than an implicit admin-bypass.
-  const canOverride = await currentUserHasPermission(
-    "documents.delete_any"
-  );
+  const canOverride = await currentUserHasPermission("documents.delete_any");
   if (!canOverride && doc.uploadedBy !== userId) {
     return {
       ok: false,
@@ -114,9 +111,7 @@ export async function deleteDocument(
     }),
   ]);
   if (otherFlags > 0) {
-    const canDeleteFlags = await currentUserHasPermission(
-      "evidence.flag.delete_any"
-    );
+    const canDeleteFlags = await currentUserHasPermission("evidence.flag.delete_any");
     if (!canDeleteFlags) {
       return {
         ok: false,
@@ -197,7 +192,7 @@ export async function deleteDocument(
 /** "Add attachments to documents" on an email uploaded before
  *  extraction existed (or whose extraction failed). */
 export async function extractAttachments(
-  documentId: string
+  documentId: string,
 ): Promise<{ ok: boolean; error?: string; created?: number }> {
   const userId = await requirePermission("documents.upload");
   await assertChildMatterAccess("document", documentId);
@@ -216,7 +211,7 @@ export async function extractAttachments(
  *  file. Copies share bytes, so the file key identifies them. */
 async function savedAttachmentIds(
   emailId: string,
-  attachments: { id: string; fileUrl: string | null }[]
+  attachments: { id: string; fileUrl: string | null }[],
 ): Promise<Set<string>> {
   const keys = attachments.map((a) => a.fileUrl).filter((k): k is string => !!k);
   if (keys.length === 0) return new Set();
@@ -229,7 +224,9 @@ async function savedAttachmentIds(
     select: { fileUrl: true },
   });
   const copiedKeys = new Set(others.map((o) => o.fileUrl));
-  return new Set(attachments.filter((a) => a.fileUrl && copiedKeys.has(a.fileUrl)).map((a) => a.id));
+  return new Set(
+    attachments.filter((a) => a.fileUrl && copiedKeys.has(a.fileUrl)).map((a) => a.id),
+  );
 }
 
 // ── Copy to… ──────────────────────────────────────────────────────────
@@ -244,7 +241,7 @@ async function savedAttachmentIds(
  */
 export async function copyDocumentToFolder(
   documentId: string,
-  folderId: string | null
+  folderId: string | null,
 ): Promise<{ ok: boolean; error?: string; id?: string }> {
   const userId = await requirePermission("documents.organize");
   await assertChildMatterAccess("document", documentId);
@@ -363,7 +360,7 @@ export async function copyDocumentToFolder(
  */
 export async function updateDocumentMetadata(
   documentId: string,
-  input: { name: string; category: string }
+  input: { name: string; category: string },
 ): Promise<{ ok: boolean; error?: string; changed?: boolean }> {
   const userId = await requirePermission("documents.edit");
   await assertChildMatterAccess("document", documentId);
@@ -374,10 +371,7 @@ export async function updateDocumentMetadata(
   });
   if (!doc) return { ok: false, error: "Document not found." };
 
-  const name = keepExtension(
-    typeof input.name === "string" ? input.name.trim() : "",
-    doc.name
-  );
+  const name = keepExtension(typeof input.name === "string" ? input.name.trim() : "", doc.name);
   if (!name) return { ok: false, error: "Name can't be empty." };
   if (name.length > MAX_DOCUMENT_NAME_LENGTH) {
     return {
@@ -388,10 +382,7 @@ export async function updateDocumentMetadata(
   // An unchanged legacy category is kept, so such a file can still be
   // renamed; changing TO an unknown category is refused.
   const category = input.category;
-  if (
-    category !== doc.category &&
-    !(DOCUMENT_CATEGORIES as readonly string[]).includes(category)
-  ) {
+  if (category !== doc.category && !(DOCUMENT_CATEGORIES as readonly string[]).includes(category)) {
     return { ok: false, error: "Pick a valid category." };
   }
 

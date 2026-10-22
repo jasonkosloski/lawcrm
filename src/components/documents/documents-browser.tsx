@@ -48,19 +48,16 @@ import {
   flattenFolderTree,
   folderDepth,
 } from "@/lib/folder-tree";
-import {
-  getFolderDocumentCounts,
-  getDocumentFolders,
-} from "@/lib/queries/matter-detail";
-import {
-  documentCategoryLabel,
-  documentStatusMeta,
-  formatFileSize,
-} from "@/lib/document-display";
+import { getFolderDocumentCounts, getDocumentFolders } from "@/lib/queries/matter-detail";
+import { documentCategoryLabel, documentStatusMeta, formatFileSize } from "@/lib/document-display";
 import { docKey, folderKey } from "@/lib/document-selection";
 import { scopeBasePath, type RecordScope } from "@/lib/record-scope";
 import { ClientShareBadge } from "@/components/documents/client-share-badge";
-import { isEffectivelyShared, shareReason, sharedFolderIds } from "@/lib/portal/document-visibility";
+import {
+  isEffectivelyShared,
+  shareReason,
+  sharedFolderIds,
+} from "@/lib/portal/document-visibility";
 import { matterHasLivePortalAccess } from "@/lib/queries/document-requests";
 import { DocumentsWorkspace } from "@/components/documents/documents-workspace";
 import type { DocRowData, FolderRowData, RowData } from "@/components/documents/documents-table";
@@ -136,8 +133,7 @@ export async function DocumentsBrowser({
   const sharedFolders = sharedFolderIds(folders);
 
   // Unknown / stale folder id → root, never a 404.
-  const selectedId =
-    rawFolder && folders.some((f) => f.id === rawFolder) ? rawFolder : null;
+  const selectedId = rawFolder && folders.some((f) => f.id === rawFolder) ? rawFolder : null;
   // Second round trip on purpose: the file list must be scoped to the
   // VALIDATED folder id, which needs the folder rows first.
   const listing = await getFolderListing(scope, selectedId);
@@ -222,7 +218,9 @@ export async function DocumentsBrowser({
       },
       extras: (
         <>
-          {showShareState && d.status !== "archived" && <ClientShareBadge reason={shareReason(d, folders)} />}
+          {showShareState && d.status !== "archived" && (
+            <ClientShareBadge reason={shareReason(d, folders)} />
+          )}
           {d.portalUploaderName && (
             <div className="text-2xs font-normal text-ink-3 mt-0.5">
               From {d.portalUploaderName}
@@ -247,7 +245,10 @@ export async function DocumentsBrowser({
 
   const rows: RowData[] = [
     ...folderRows,
-    ...listing.documents.flatMap((d) => [docRow(d, d.attachments), ...d.attachments.map((a) => docRow(a))]),
+    ...listing.documents.flatMap((d) => [
+      docRow(d, d.attachments),
+      ...d.attachments.map((a) => docRow(a)),
+    ]),
   ];
 
   return (
@@ -275,9 +276,7 @@ export async function DocumentsBrowser({
       visibilityWarnings={isMatter}
       toolbarNote={
         noPortalAccess && (
-          <span className="text-2xs text-ink-4">
-            No one has portal access on this matter yet.
-          </span>
+          <span className="text-2xs text-ink-4">No one has portal access on this matter yet.</span>
         )
       }
       empty={
@@ -285,9 +284,7 @@ export async function DocumentsBrowser({
           <CardContent className="p-8 text-center flex flex-col items-center gap-3">
             <div>
               <div className="text-sm font-semibold text-ink mb-1">
-                {selectedId === null
-                  ? "No documents yet"
-                  : "This folder is empty"}
+                {selectedId === null ? "No documents yet" : "This folder is empty"}
               </div>
               <div className="text-xs text-ink-3">
                 {selectedId === null
@@ -342,19 +339,12 @@ function DocumentComposerRow({
           redirect to / and throw away the typed form. */}
       {canUpload && (
         <div className="flex-1 min-w-64">
-          <UploadDocumentForm
-            scope={scope}
-            storageDriver={storageDriver}
-          />
+          <UploadDocumentForm scope={scope} storageDriver={storageDriver} />
         </div>
       )}
       {/* Preview shares generate's documents.upload key. */}
       {canUpload && (
-        <GenerateFromTemplateDialog
-          scope={scope}
-          templates={templates}
-          canUpload={canUpload}
-        />
+        <GenerateFromTemplateDialog scope={scope} templates={templates} canUpload={canUpload} />
       )}
     </div>
   );

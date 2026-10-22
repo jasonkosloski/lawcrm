@@ -16,14 +16,8 @@ vi.mock("@/app/actions/conversions", () => ({
   convertTaskToDeadline: vi.fn(),
 }));
 
-import {
-  convertNoteToTask,
-  convertTaskToDeadline,
-} from "@/app/actions/conversions";
-import {
-  ConvertNoteToTaskDialog,
-  ConvertTaskToDeadlineDialog,
-} from "./convert-dialogs";
+import { convertNoteToTask, convertTaskToDeadline } from "@/app/actions/conversions";
+import { ConvertNoteToTaskDialog, ConvertTaskToDeadlineDialog } from "./convert-dialogs";
 
 const mockedNote = vi.mocked(convertNoteToTask);
 const mockedTask = vi.mocked(convertTaskToDeadline);
@@ -81,9 +75,7 @@ describe("ConvertNoteToTaskDialog", () => {
 
     await openIt(user);
     expect(screen.getByPlaceholderText("Task title")).toHaveValue("Call counsel");
-    expect(screen.getByPlaceholderText("Description (optional)")).toHaveValue(
-      "About discovery"
-    );
+    expect(screen.getByPlaceholderText("Description (optional)")).toHaveValue("About discovery");
   });
 
   test("a server error shows its message and keeps the typed title", async () => {
@@ -110,7 +102,7 @@ describe("ConvertNoteToTaskDialog", () => {
       await openIt(user);
       await user.click(screen.getByRole("button", { name: /convert to task/i }));
       await waitFor(() =>
-        expect(screen.queryByPlaceholderText("Task title")).not.toBeInTheDocument()
+        expect(screen.queryByPlaceholderText("Task title")).not.toBeInTheDocument(),
       );
     }
     expect(mockedNote).toHaveBeenCalledTimes(2);
@@ -138,13 +130,9 @@ describe("ConvertTaskToDeadlineDialog", () => {
     render(<TaskHarness />);
     for (let i = 0; i < 2; i++) {
       await openIt(user);
-      await user.click(
-        screen.getByRole("button", { name: /convert to deadline/i })
-      );
+      await user.click(screen.getByRole("button", { name: /convert to deadline/i }));
       await waitFor(() =>
-        expect(
-          screen.queryByPlaceholderText("Deadline title")
-        ).not.toBeInTheDocument()
+        expect(screen.queryByPlaceholderText("Deadline title")).not.toBeInTheDocument(),
       );
     }
     expect(mockedTask).toHaveBeenCalledTimes(2);
@@ -163,8 +151,6 @@ describe("ConvertTaskToDeadlineDialog", () => {
     await user.type(title, "Typed deadline");
     await user.click(screen.getByRole("button", { name: /convert to deadline/i }));
     expect(await screen.findByText("Invalid due date")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Deadline title")).toHaveValue(
-      "Typed deadline"
-    );
+    expect(screen.getByPlaceholderText("Deadline title")).toHaveValue("Typed deadline");
   });
 });

@@ -17,10 +17,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { roundMoney } from "@/lib/money";
 import {
   feeMakesExpense,
@@ -99,7 +96,7 @@ function dateField(
   value: string | undefined,
   key: string,
   label: string,
-  errors: Errors
+  errors: Errors,
 ): Date | null | undefined {
   if (value === undefined) return undefined;
   if (value === "") return null;
@@ -110,10 +107,7 @@ function dateField(
 
 /** Cross-field checks shared by create and update. Returns the
  *  resolved type name for ad hoc / typed requests. */
-async function validateCommon(
-  p: Parsed,
-  errors: Errors
-): Promise<void> {
+async function validateCommon(p: Parsed, errors: Errors): Promise<void> {
   const custodian = await prisma.contact.findUnique({
     where: { id: p.custodianContactId },
     select: { id: true },
@@ -133,7 +127,7 @@ async function validateCommon(
 export async function createRecordsRequest(
   scope: RecordScope,
   _prev: RecordsRequestFormState,
-  fd: FormData
+  fd: FormData,
 ): Promise<RecordsRequestFormState> {
   await requirePermission("records.create");
   const userId = await assertScopeAccess(scope);
@@ -173,9 +167,7 @@ export async function createRecordsRequest(
 
   await prisma.recordsRequest.create({
     data: {
-      ...(scope.kind === "matter"
-        ? { matterId: scope.matterId }
-        : { leadId: scope.leadId }),
+      ...(scope.kind === "matter" ? { matterId: scope.matterId } : { leadId: scope.leadId }),
       custodianContactId: p.custodianContactId,
       typeId: p.typeId || null,
       adHocTypeName: p.typeId ? null : p.adHocTypeName!.trim(),
@@ -205,7 +197,7 @@ export async function createRecordsRequest(
 export async function updateRecordsRequest(
   id: string,
   _prev: RecordsRequestFormState,
-  fd: FormData
+  fd: FormData,
 ): Promise<RecordsRequestFormState> {
   await requirePermission("records.edit");
   const values = rawValues(fd);
@@ -233,8 +225,7 @@ export async function updateRecordsRequest(
   const expected = p.expectedUpdatedAt ? new Date(p.expectedUpdatedAt) : null;
   if (
     expected &&
-    (Number.isNaN(expected.getTime()) ||
-      expected.getTime() !== row.updatedAt.getTime())
+    (Number.isNaN(expected.getTime()) || expected.getTime() !== row.updatedAt.getTime())
   ) {
     revalidateForScope(scope);
     return { status: "error", errors: { _form: [STALE_MESSAGE] }, values };
@@ -246,19 +237,13 @@ export async function updateRecordsRequest(
   const rangeEnd = dateField(p.dateRangeEnd, "dateRangeEnd", "end date", errors);
   const sentAt = dateField(p.sentAt, "sentAt", "sent date", errors);
   const dueDate = dateField(p.responseDueDate, "responseDueDate", "due date", errors);
-  const nextFollowUp = dateField(
-    p.nextFollowUpDate,
-    "nextFollowUpDate",
-    "follow-up date",
-    errors
-  );
+  const nextFollowUp = dateField(p.nextFollowUpDate, "nextFollowUpDate", "follow-up date", errors);
   const start = rangeStart === undefined ? row.dateRangeStart : rangeStart;
   const end = rangeEnd === undefined ? row.dateRangeEnd : rangeEnd;
   if (start && end && end < start) {
     errors.dateRangeEnd = ["End date is before the start date"];
   }
-  const nextOwner =
-    p.ownerId === undefined ? undefined : p.ownerId === "" ? null : p.ownerId;
+  const nextOwner = p.ownerId === undefined ? undefined : p.ownerId === "" ? null : p.ownerId;
   const ownerChanged = nextOwner !== undefined && nextOwner !== row.ownerId;
   if (ownerChanged && nextOwner && !(await isAssignableUser(nextOwner))) {
     errors.ownerId = ["Owner not found or inactive"];
@@ -318,7 +303,7 @@ export async function updateRecordsRequest(
 export async function markRecordsRequestSent(
   id: string,
   _prev: RecordsRequestFormState,
-  fd: FormData
+  fd: FormData,
 ): Promise<RecordsRequestFormState> {
   await requirePermission("records.edit");
   const values = rawValues(fd);
@@ -341,60 +326,53 @@ export async function markRecordsRequestSent(
   const todayKeyStr = todayKey(await getCurrentUserTimeZone());
   const sentAt = parseDateOnly(values.sentAt || todayKeyStr);
   if (!sentAt) return fail("Invalid sent date", "sentAt");
-  const postedDue = dateField(
-    values.responseDueDate,
-    "responseDueDate",
-    "due date",
-    errors
-  );
+  const postedDue = dateField(values.responseDueDate, "responseDueDate", "due date", errors);
   if (Object.keys(errors).length > 0) {
     return { status: "error", errors, values };
   }
 
-  const result = await prisma.$transaction(
-    async (tx): Promise<string | null> => {
-      await lockRecordsRequest(tx, id);
-      const cur = await tx.recordsRequest.findUnique({
-        where: { id },
-        select: {
-          status: true,
-          type: {
-            select: {
-              followUpDays: true,
-              responseAmount: true,
-              responseUnit: true,
-            },
+  const result = await prisma.$transaction(async (tx): Promise<string | null> => {
+    await lockRecordsRequest(tx, id);
+    const cur = await tx.recordsRequest.findUnique({
+      where: { id },
+      select: {
+        status: true,
+        type: {
+          select: {
+            followUpDays: true,
+            responseAmount: true,
+            responseUnit: true,
           },
         },
-      });
-      if (!cur) return "Request no longer exists";
-      if (cur.status !== "draft") {
-        return "Only a draft request can be marked sent.";
-      }
-      const t = cur.type;
-      const dueDate =
-        t?.responseAmount != null && t.responseUnit
-          ? computeResponseDue(sentAt, t.responseAmount, t.responseUnit)
-          : (postedDue ?? null);
-      await tx.recordsRequest.update({
-        where: { id },
-        data: {
-          status: "sent",
-          sentAt,
-          responseDueDate: dueDate,
-          nextFollowUpDate: addCalendarDays(sentAt, t?.followUpDays ?? 7),
-        },
-      });
-      const nextFollowUpDate = addCalendarDays(sentAt, t?.followUpDays ?? 7);
-      await openFollowUpTask(tx, id);
-      // Defensive: a task that already existed keeps the new chase date.
-      await tx.task.updateMany({
-        where: { recordsRequestId: id, status: { in: ["open", "in_progress"] } },
-        data: { dueDate: nextFollowUpDate },
-      });
-      return null;
+      },
+    });
+    if (!cur) return "Request no longer exists";
+    if (cur.status !== "draft") {
+      return "Only a draft request can be marked sent.";
     }
-  );
+    const t = cur.type;
+    const dueDate =
+      t?.responseAmount != null && t.responseUnit
+        ? computeResponseDue(sentAt, t.responseAmount, t.responseUnit)
+        : (postedDue ?? null);
+    await tx.recordsRequest.update({
+      where: { id },
+      data: {
+        status: "sent",
+        sentAt,
+        responseDueDate: dueDate,
+        nextFollowUpDate: addCalendarDays(sentAt, t?.followUpDays ?? 7),
+      },
+    });
+    const nextFollowUpDate = addCalendarDays(sentAt, t?.followUpDays ?? 7);
+    await openFollowUpTask(tx, id);
+    // Defensive: a task that already existed keeps the new chase date.
+    await tx.task.updateMany({
+      where: { recordsRequestId: id, status: { in: ["open", "in_progress"] } },
+      data: { dueDate: nextFollowUpDate },
+    });
+    return null;
+  });
   if (result) return fail(result);
 
   await logActivity({
@@ -413,7 +391,7 @@ export async function markRecordsRequestSent(
 export async function logRecordsFollowUp(
   id: string,
   _prev: RecordsRequestFormState,
-  fd: FormData
+  fd: FormData,
 ): Promise<RecordsRequestFormState> {
   await requirePermission("records.edit");
   const values = rawValues(fd);
@@ -438,7 +416,7 @@ export async function logRecordsFollowUp(
 
   const today = todayKey(await getCurrentUserTimeZone());
   const rolled = await prisma.$transaction((tx) =>
-    rollFollowUp(tx, id, { actorId: userId, note, today })
+    rollFollowUp(tx, id, { actorId: userId, note, today }),
   );
   if (!rolled) return fail("This request is not open.");
 
@@ -458,7 +436,7 @@ export async function logRecordsFollowUp(
 function reopenRefusal(
   from: RecordsRequestStatus,
   to: RecordsRequestStatus,
-  hasSentAt: boolean
+  hasSentAt: boolean,
 ): string {
   const fromClosed = (RECORDS_TERMINAL_STATUSES as readonly string[]).includes(from);
   const toClosed = (RECORDS_TERMINAL_STATUSES as readonly string[]).includes(to);
@@ -472,7 +450,7 @@ function reopenRefusal(
 
 export async function setRecordsRequestStatus(
   id: string,
-  status: RecordsRequestStatus
+  status: RecordsRequestStatus,
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("records.edit");
   if (!(RECORDS_REQUEST_STATUSES as readonly string[]).includes(status)) {
@@ -486,17 +464,14 @@ export async function setRecordsRequestStatus(
   const scope = scopeOf(row);
   const userId = await assertScopeAccess(scope);
 
-  const toTerminal = (RECORDS_TERMINAL_STATUSES as readonly string[]).includes(
-    status
-  );
+  const toTerminal = (RECORDS_TERMINAL_STATUSES as readonly string[]).includes(status);
   const today = parseDateOnly(todayKey(await getCurrentUserTimeZone()));
 
   const result = await prisma.$transaction(
     async (
-      tx
+      tx,
     ): Promise<
-      | { ok: true; from: RecordsRequestStatus; reopen: boolean }
-      | { ok: false; error: string }
+      { ok: true; from: RecordsRequestStatus; reopen: boolean } | { ok: false; error: string }
     > => {
       await lockRecordsRequest(tx, id);
       const cur = await tx.recordsRequest.findUnique({
@@ -534,10 +509,7 @@ export async function setRecordsRequestStatus(
           // A reopened request was cleared at close; restart the chase.
           ...(t.reopen && today && status !== "draft"
             ? {
-                nextFollowUpDate: addCalendarDays(
-                  today,
-                  cur.type?.followUpDays ?? 7
-                ),
+                nextFollowUpDate: addCalendarDays(today, cur.type?.followUpDays ?? 7),
               }
             : {}),
         },
@@ -545,14 +517,13 @@ export async function setRecordsRequestStatus(
       if (write.count === 0) {
         return {
           ok: false,
-          error:
-            "This request changed while you were updating it. Reload and try again.",
+          error: "This request changed while you were updating it. Reload and try again.",
         };
       }
       if (toTerminal) await cancelFollowUpTasks(tx, id);
       else if (t.reopen && status !== "draft") await openFollowUpTask(tx, id);
       return { ok: true, from, reopen: t.reopen };
-    }
+    },
   );
   if (!result.ok) return result;
 
@@ -561,18 +532,14 @@ export async function setRecordsRequestStatus(
     leadId: row.leadId,
     userId,
     type: "records",
-    title: result.reopen
-      ? "Records request reopened"
-      : "Records request status changed",
+    title: result.reopen ? "Records request reopened" : "Records request status changed",
     detail: `${row.subject}: ${result.from} → ${status}`,
   });
   revalidateForScope(scope);
   return { ok: true };
 }
 
-export async function deleteRecordsRequest(
-  id: string
-): Promise<{ ok: boolean; error?: string }> {
+export async function deleteRecordsRequest(id: string): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("records.delete");
   const row = await prisma.recordsRequest.findUnique({
     where: { id },
@@ -615,11 +582,7 @@ export async function deleteRecordsRequest(
 const MONEY_RE = /^\d+(\.\d{1,2})?$/;
 
 /** Blank = null; otherwise a non-negative amount with at most 2 decimals. */
-function moneyField(
-  value: string | undefined,
-  key: string,
-  errors: Errors
-): Prisma.Decimal | null {
+function moneyField(value: string | undefined, key: string, errors: Errors): Prisma.Decimal | null {
   const v = (value ?? "").trim().replace(/[$,]/g, "");
   if (!v) return null;
   if (!MONEY_RE.test(v)) {
@@ -635,7 +598,7 @@ function moneyField(
 export async function saveRecordsFee(
   id: string,
   _prev: RecordsRequestFormState,
-  fd: FormData
+  fd: FormData,
 ): Promise<RecordsRequestFormState> {
   await requirePermission("records.edit");
   const values = rawValues(fd);
@@ -685,14 +648,10 @@ export async function saveRecordsFee(
       if (!cur) return { error: "Request no longer exists", matterId: null };
       const curScope = scopeOf(cur);
       if (curScope.kind !== scope.kind) await assertScopeAccess(curScope);
-      if (
-        curScope.kind === "matter" &&
-        !(await currentUserHasPermission("matters.expense.view"))
-      ) {
+      if (curScope.kind === "matter" && !(await currentUserHasPermission("matters.expense.view"))) {
         return fail2("You don't have permission to view expenses.");
       }
-      const makesExpense =
-        curScope.kind === "matter" && feeMakesExpense(feeAmount, feePaidAt);
+      const makesExpense = curScope.kind === "matter" && feeMakesExpense(feeAmount, feePaidAt);
 
       let expenseId = cur.expenseId;
       const linked = expenseId
@@ -702,7 +661,9 @@ export async function saveRecordsFee(
           })
         : null;
       if (linked && !makesExpense) {
-        return fail2("This fee is recorded as an expense on the matter \u2014 edit or delete it on the Time & expenses tab.");
+        return fail2(
+          "This fee is recorded as an expense on the matter \u2014 edit or delete it on the Time & expenses tab.",
+        );
       }
       if (makesExpense) {
         const description = recordsFeeDescription({
@@ -756,7 +717,7 @@ export async function saveRecordsFee(
         data: { feeEstimate, feeAmount, feePaidAt, expenseId },
       });
       return { error: null, matterId: cur.matterId };
-    }
+    },
   );
   if (result.error) return fail(result.error);
 
@@ -794,7 +755,7 @@ function revalidateRecordsAndDocuments(scope: RecordScope): void {
 export async function linkRecordsDocuments(
   id: string,
   documentIds: string[],
-  role: RecordsDocRole
+  role: RecordsDocRole,
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("records.edit");
   if (!isRecordsDocRole(role)) {
@@ -817,52 +778,54 @@ export async function linkRecordsDocuments(
 
   // Scope check and write in one transaction, so a document cannot be
   // claimed by another request (or moved) between the two.
-  const outcome = await prisma.$transaction(async (tx) => {
-    await lockRecordsRequest(tx, id);
-    const docs = await tx.document.findMany({
-      where: { id: { in: ids } },
-      select: {
-        id: true,
-        matterId: true,
-        leadId: true,
-        recordsRequestId: true,
-        recordsRequestRole: true,
-      },
+  const outcome = await prisma
+    .$transaction(async (tx) => {
+      await lockRecordsRequest(tx, id);
+      const docs = await tx.document.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          matterId: true,
+          leadId: true,
+          recordsRequestId: true,
+          recordsRequestRole: true,
+        },
+      });
+      if (docs.length !== ids.length) {
+        return { ok: false as const, error: "Document not found" };
+      }
+      const sameScope = (d: { matterId: string | null; leadId: string | null }) =>
+        scope.kind === "matter"
+          ? d.matterId === scope.matterId && d.leadId === null
+          : d.leadId === scope.leadId && d.matterId === null;
+      if (!docs.every(sameScope)) {
+        return { ok: false as const, error: SAME_SCOPE_ERROR };
+      }
+      // Already this request's own document with this role needs no
+      // write; documents held by a different request are never stolen.
+      const toTag = docs
+        .filter((d) => !(d.recordsRequestId === id && d.recordsRequestRole === role))
+        .map((d) => d.id);
+      const written = await tx.document.updateMany({
+        where: {
+          id: { in: toTag },
+          ...scopeWhere(scope),
+          OR: [{ recordsRequestId: null }, { recordsRequestId: id }],
+        },
+        data: { recordsRequestId: id, recordsRequestRole: role },
+      });
+      if (written.count !== toTag.length) {
+        // Roll back: nothing is tagged on a partial claim.
+        throw new LinkConflictError();
+      }
+      return { ok: true as const };
+    })
+    .catch((err: unknown) => {
+      if (err instanceof LinkConflictError) {
+        return { ok: false as const, error: LINK_CONFLICT_ERROR };
+      }
+      throw err;
     });
-    if (docs.length !== ids.length) {
-      return { ok: false as const, error: "Document not found" };
-    }
-    const sameScope = (d: { matterId: string | null; leadId: string | null }) =>
-      scope.kind === "matter"
-        ? d.matterId === scope.matterId && d.leadId === null
-        : d.leadId === scope.leadId && d.matterId === null;
-    if (!docs.every(sameScope)) {
-      return { ok: false as const, error: SAME_SCOPE_ERROR };
-    }
-    // Already this request's own document with this role needs no
-    // write; documents held by a different request are never stolen.
-    const toTag = docs
-      .filter((d) => !(d.recordsRequestId === id && d.recordsRequestRole === role))
-      .map((d) => d.id);
-    const written = await tx.document.updateMany({
-      where: {
-        id: { in: toTag },
-        ...scopeWhere(scope),
-        OR: [{ recordsRequestId: null }, { recordsRequestId: id }],
-      },
-      data: { recordsRequestId: id, recordsRequestRole: role },
-    });
-    if (written.count !== toTag.length) {
-      // Roll back: nothing is tagged on a partial claim.
-      throw new LinkConflictError();
-    }
-    return { ok: true as const };
-  }).catch((err: unknown) => {
-    if (err instanceof LinkConflictError) {
-      return { ok: false as const, error: LINK_CONFLICT_ERROR };
-    }
-    throw err;
-  });
   if (!outcome.ok) return { ok: false, error: outcome.error };
 
   await logActivity({
@@ -878,9 +841,7 @@ export async function linkRecordsDocuments(
 }
 
 /** Detach a document from its request. Never deletes the document. */
-export async function unlinkRecordsDocument(
-  documentId: string
-): Promise<{ ok: boolean }> {
+export async function unlinkRecordsDocument(documentId: string): Promise<{ ok: boolean }> {
   await requirePermission("records.edit");
   const doc = await prisma.document.findUnique({
     where: { id: documentId },
@@ -916,10 +877,8 @@ const CUSTODIAN_QUICK_TYPES = ["medical_provider", "government"] as const;
  *  Needs both `records.create` and `contacts.create`. */
 export async function createCustodianContact(
   name: string,
-  type: string
-): Promise<
-  { ok: true; id: string; name: string } | { ok: false; error: string }
-> {
+  type: string,
+): Promise<{ ok: true; id: string; name: string } | { ok: false; error: string }> {
   await requirePermission("records.create");
   await requirePermission("contacts.create");
   const trimmed = typeof name === "string" ? name.trim() : "";

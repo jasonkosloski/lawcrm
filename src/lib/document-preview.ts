@@ -66,9 +66,7 @@ const TOO_BIG_REASON =
  *
  * Pure function — unit-tested directly.
  */
-export function checkZipBounds(
-  buf: Buffer
-): { ok: true } | { ok: false; reason: string } {
+export function checkZipBounds(buf: Buffer): { ok: true } | { ok: false; reason: string } {
   // End-of-central-directory record: signature 0x06054b50, within the
   // last 22 + 65535 bytes (variable-length trailing comment).
   const EOCD_MIN = 22;
@@ -119,9 +117,7 @@ export function checkZipBounds(
   return { ok: true };
 }
 
-export type DocxPreviewResult =
-  | { ok: true; html: string }
-  | { ok: false; reason: string };
+export type DocxPreviewResult = { ok: true; html: string } | { ok: false; reason: string };
 
 /** Buffer a stored file into memory, bounded by `maxBytes` (bytes
  *  past the cap are never read). Works on both drivers — blob keys
@@ -131,7 +127,7 @@ export async function readStoredBytes(
   maxBytes: number,
   /** Size already probed by the caller — skips a second stat (one
    *  `head()` round trip on the blob driver). */
-  knownStat?: { size: number }
+  knownStat?: { size: number },
 ): Promise<{ buffer: Buffer; truncated: boolean } | null> {
   const stat = knownStat ?? (await statFile(key));
   if (!stat) return null;
@@ -152,9 +148,7 @@ export async function readStoredBytes(
  *  - converts to nothing visible → reason (empty preview is worse
  *    than an honest card)
  */
-export async function renderStoredDocxToSafeHtml(
-  key: string
-): Promise<DocxPreviewResult> {
+export async function renderStoredDocxToSafeHtml(key: string): Promise<DocxPreviewResult> {
   // Size gate before any read — a truncated zip is garbage to
   // mammoth, so there is no point buffering the capped prefix.
   let stat: Awaited<ReturnType<typeof statFile>>;
@@ -215,16 +209,13 @@ export async function renderStoredDocxToSafeHtml(
 }
 
 export type TextPreviewResult =
-  | { ok: true; text: string; truncated: boolean }
-  | { ok: false; reason: string };
+  { ok: true; text: string; truncated: boolean } | { ok: false; reason: string };
 
 /** Read a stored text file for preview, capped at
  *  `TEXT_PREVIEW_MAX_BYTES`. The caller renders `text` inside a
  *  React-escaped `<pre>`/table — no sanitization needed because the
  *  content is never interpreted as HTML. */
-export async function readStoredTextPreview(
-  key: string
-): Promise<TextPreviewResult> {
+export async function readStoredTextPreview(key: string): Promise<TextPreviewResult> {
   let read: Awaited<ReturnType<typeof readStoredBytes>>;
   try {
     read = await readStoredBytes(key, TEXT_PREVIEW_MAX_BYTES);

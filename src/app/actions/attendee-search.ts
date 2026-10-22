@@ -19,10 +19,7 @@
 
 import { z } from "zod";
 import { getCurrentUserId } from "@/lib/current-user";
-import {
-  searchAttendees,
-  type AttendeeSearchResult,
-} from "@/lib/queries/attendee-search";
+import { searchAttendees, type AttendeeSearchResult } from "@/lib/queries/attendee-search";
 
 const searchInputSchema = z.object({
   query: z.string().max(100),
@@ -33,7 +30,7 @@ const searchInputSchema = z.object({
 export async function searchAttendeesAction(
   query: string,
   excludeUserIds: string[],
-  excludeContactIds: string[]
+  excludeContactIds: string[],
 ): Promise<AttendeeSearchResult[]> {
   // Forces a session check; the picker is editor-only on the
   // client side too. Runs before anything else.

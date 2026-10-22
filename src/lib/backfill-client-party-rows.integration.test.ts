@@ -63,9 +63,7 @@ describe("backfillClientPartyRows", () => {
       select: { contactId: true, category: true },
     });
     expect(rows).toEqual([{ contactId: client.contactId, category: "client" }]);
-    expect(
-      await prisma.matterContact.count({ where: { matterId: noClient.matterId } })
-    ).toBe(0);
+    expect(await prisma.matterContact.count({ where: { matterId: noClient.matterId } })).toBe(0);
 
     const again = await backfillClientPartyRows(prisma);
     expect(again).toEqual({ missing: 0, created: 0 });

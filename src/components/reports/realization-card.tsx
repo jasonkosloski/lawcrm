@@ -22,9 +22,7 @@ export function RealizationCard({ months }: { months: RealizationMonth[] }) {
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
           Realization
-          <span className="text-2xs font-mono font-normal text-ink-4">
-            trailing 3 months
-          </span>
+          <span className="text-2xs font-mono font-normal text-ink-4">trailing 3 months</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-4 flex flex-col gap-3">
@@ -51,18 +49,13 @@ export function RealizationCard({ months }: { months: RealizationMonth[] }) {
               </div>
               <span className="w-32 shrink-0 text-right text-2xs font-mono text-ink">
                 {m.billedHours.toFixed(1)}h
-                <span className="text-ink-4">
-                  {" "}
-                  · {m.billedPctOfWorked.toFixed(0)}%
-                </span>
+                <span className="text-ink-4"> · {m.billedPctOfWorked.toFixed(0)}%</span>
               </span>
             </div>
 
             {/* Collected as % of billed dollars */}
             <div className="flex items-center gap-2">
-              <span className="w-16 shrink-0 text-2xs text-ink-3">
-                Collected
-              </span>
+              <span className="w-16 shrink-0 text-2xs text-ink-3">Collected</span>
               <div className="flex-1 h-1.5 bg-paper-2 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-ok rounded-full"
@@ -71,10 +64,7 @@ export function RealizationCard({ months }: { months: RealizationMonth[] }) {
               </div>
               <span className="w-32 shrink-0 text-right text-2xs font-mono text-ink">
                 {formatMoney(m.collectedAmount, { cents: false })}
-                <span className="text-ink-4">
-                  {" "}
-                  · {m.collectedPctOfBilled.toFixed(0)}%
-                </span>
+                <span className="text-ink-4"> · {m.collectedPctOfBilled.toFixed(0)}%</span>
               </span>
             </div>
           </div>

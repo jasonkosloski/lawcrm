@@ -30,9 +30,7 @@ export function RecordsCard({ items }: { items: RecordsChaseItem[] }) {
             {r.label.endsWith("overdue") ? (
               <LatePill tone="danger">{r.label}</LatePill>
             ) : (
-              <span className="shrink-0 text-2xs tabular-nums text-ink-4">
-                {r.label}
-              </span>
+              <span className="shrink-0 text-2xs tabular-nums text-ink-4">{r.label}</span>
             )}
           </DashboardRow>
         ))}

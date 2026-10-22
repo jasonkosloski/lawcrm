@@ -102,7 +102,7 @@ describe("outsider (not on the matter team) is walled off", () => {
 
   test("createNote -> not found, no row", async () => {
     await expect(
-      createNote(matterId, noteInitialState, fd({ content: "<p>hi</p>", type: "note" }))
+      createNote(matterId, noteInitialState, fd({ content: "<p>hi</p>", type: "note" })),
     ).rejects.toThrow("NEXT_NOT_FOUND");
     expect(await prisma.note.count()).toBe(0);
   });
@@ -112,8 +112,8 @@ describe("outsider (not on the matter team) is walled off", () => {
       createTimeEntry(
         matterId,
         { status: "idle" } as never,
-        fd({ date: "2026-04-01", hours: "1", activity: "Drafting", billable: "on" })
-      )
+        fd({ date: "2026-04-01", hours: "1", activity: "Drafting", billable: "on" }),
+      ),
     ).rejects.toThrow("NEXT_NOT_FOUND");
     expect(await prisma.timeEntry.count()).toBe(0);
   });
@@ -123,19 +123,15 @@ describe("outsider (not on the matter team) is walled off", () => {
       createExpense(
         matterId,
         { status: "idle" } as never,
-        fd({ date: "2026-04-01", amount: "10", description: "Filing fee", category: "filing" })
-      )
+        fd({ date: "2026-04-01", amount: "10", description: "Filing fee", category: "filing" }),
+      ),
     ).rejects.toThrow("NEXT_NOT_FOUND");
     expect(await prisma.expense.count()).toBe(0);
   });
 
   test("createTaskWithCaptures -> not found, no row", async () => {
     await expect(
-      createTaskWithCaptures(
-        matterId,
-        captureInitialState as never,
-        fd({ title: "Sneaky task" })
-      )
+      createTaskWithCaptures(matterId, captureInitialState as never, fd({ title: "Sneaky task" })),
     ).rejects.toThrow("NEXT_NOT_FOUND");
     expect(await prisma.task.count()).toBe(0);
   });
@@ -168,11 +164,9 @@ describe("outsider (not on the matter team) is walled off", () => {
     const { documentId } = await seedDocument({ matterId, uploadedBy: member });
     await expect(deleteDocument(documentId)).rejects.toThrow("NEXT_NOT_FOUND");
     await expect(createFolder({ kind: "matter", matterId }, null, "Wall")).rejects.toThrow(
-      "NEXT_NOT_FOUND"
+      "NEXT_NOT_FOUND",
     );
-    await expect(moveDocuments([documentId], null)).rejects.toThrow(
-      "NEXT_NOT_FOUND"
-    );
+    await expect(moveDocuments([documentId], null)).rejects.toThrow("NEXT_NOT_FOUND");
     expect(await prisma.document.count()).toBe(1);
     expect(await prisma.documentFolder.count()).toBe(0);
   });
@@ -189,7 +183,7 @@ describe("team member (and FIRM-mode firms) keep working", () => {
     const note = await createNote(
       matterId,
       noteInitialState,
-      fd({ content: "<p>hello</p>", type: "note" })
+      fd({ content: "<p>hello</p>", type: "note" }),
     );
     expect(note.status).toBe("ok");
     expect(await prisma.note.count()).toBe(1);
@@ -197,7 +191,7 @@ describe("team member (and FIRM-mode firms) keep working", () => {
     const te = await createTimeEntry(
       matterId,
       { status: "idle" } as never,
-      fd({ date: "2026-04-01", hours: "1", activity: "Drafting", billable: "on" })
+      fd({ date: "2026-04-01", hours: "1", activity: "Drafting", billable: "on" }),
     );
     expect(te.status).toBe("ok");
     expect(await prisma.timeEntry.count()).toBe(1);
@@ -212,7 +206,7 @@ describe("team member (and FIRM-mode firms) keep working", () => {
     const note = await createNote(
       matterId,
       noteInitialState,
-      fd({ content: "<p>open firm</p>", type: "note" })
+      fd({ content: "<p>open firm</p>", type: "note" }),
     );
     expect(note.status).toBe("ok");
   });
@@ -226,7 +220,7 @@ describe("team member (and FIRM-mode firms) keep working", () => {
     const note = await createNote(
       matterId,
       noteInitialState,
-      fd({ content: "<p>view all</p>", type: "note" })
+      fd({ content: "<p>view all</p>", type: "note" }),
     );
     expect(note.status).toBe("ok");
   });

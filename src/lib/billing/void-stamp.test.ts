@@ -102,9 +102,7 @@ async function extractText(buf: Buffer): Promise<string> {
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
-    parts.push(
-      content.items.map((it) => ("str" in it ? it.str : "")).join(" ")
-    );
+    parts.push(content.items.map((it) => ("str" in it ? it.str : "")).join(" "));
   }
   return parts.join("\n");
 }

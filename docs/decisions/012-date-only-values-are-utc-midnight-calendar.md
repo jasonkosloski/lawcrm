@@ -8,6 +8,7 @@
 The original decision stored date-only values at **server-local** midnight and displayed them on the server's day grid. That frame only exists on the server: production runs in UTC, developers' laptops in Denver, and browsers wherever the user is. The 2026-10-16 review found it at the root of a whole class of production bugs — client components read the UTC-midnight values with browser-local getters (edit dialogs prefilled the day before, so every save moved deadlines, tasks, time entries and invoice lines a day earlier), calendar and dashboard views bucketed due dates as instants, "overdue" fired on the due date, and `datetime-local` values were parsed in the server's zone, storing events and calls 6–7 hours off. The suite passed in every zone because tests never separate the server's frame from the browser's.
 
 **Decision:**
+
 - **Date-only values** (Task/Deadline `dueDate`; TimeEntry / Expense / TrustTransaction / InvoicePayment `date`; Firm `establishedAt`; Matter `incidentDate` / `statuteOfLimitationsDate`; all-day event bounds; automation-generated `dueDate`s) are calendar dates, **stored at UTC midnight** and **always read in UTC**. No time zone — the viewer's, the browser's or the server's — is ever applied to them. Helpers in `src/lib/format-date.ts`:
   - write: `parseDateOnly("YYYY-MM-DD")` (null on malformed or impossible dates → field error, never an Invalid Date 500)
   - read: `dateOnlyKey(d)` → `"YYYY-MM-DD"`; display: `formatDateOnly(d, variant)` — identical on server and client; never the zone-less `formatDate`
@@ -28,6 +29,7 @@ The original decision stored date-only values at **server-local** midnight and d
 **Testing:** run date work in both zones — `npm test` (developer's zone) and `npm run test:utc` (production's). A client-component test that renders a UTC-midnight value catches browser-local reads when run west of UTC.
 
 **Trade-offs:**
+
 - (+) One frame per kind of value, identical on every machine; parse and display can no longer disagree
 - (+) The Matter incident/SOL dates' UTC convention (previously an exception) is now the rule
 - (-) Date-only values are still `DateTime` columns; a true `DATE` column would express intent better (revisit with a migration)

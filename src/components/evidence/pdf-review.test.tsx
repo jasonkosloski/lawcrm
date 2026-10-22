@@ -26,7 +26,7 @@ const handle = {
   currentPage: vi.fn(() => 2),
   pageTextLayer: vi.fn(async (page: number) => layerOf(page)),
   pageTextLayers: vi.fn(async (from: number, to: number) =>
-    Array.from({ length: to - from + 1 }, (_, i) => layerOf(from + i))
+    Array.from({ length: to - from + 1 }, (_, i) => layerOf(from + i)),
   ),
 };
 const layerOf = (page: number) =>
@@ -34,7 +34,12 @@ const layerOf = (page: number) =>
 
 const PAGES: Record<number, string[]> = {
   1: ["Deposition of Officer Smith", "Where were you that night?"],
-  2: ["Exhibit 4: bodycam footage", "The light was red.", "The light was red.", "Q. And then the driver"],
+  2: [
+    "Exhibit 4: bodycam footage",
+    "The light was red.",
+    "The light was red.",
+    "Q. And then the driver",
+  ],
   3: ["accelerated through the intersection?", "A. Yes."],
 };
 
@@ -163,7 +168,7 @@ describe("PdfReview — capture", () => {
         pageNumber: 2,
         quote: "Exhibit 4: bodycam footage",
         hint: undefined,
-      })
+      }),
     );
   });
 
@@ -183,7 +188,9 @@ describe("PdfReview — capture", () => {
     fireEvent.click(screen.getByRole("button", { name: "Flag selection" }));
     await waitFor(() => expect(lastAnchor?.kind).toBe("page"));
     expect(lastAnchor).toMatchObject({ pageNumber: 2, quote: "The light was red." });
-    expect(lastAnchor && "hint" in lastAnchor && lastAnchor.hint).toMatch(/appears 2 times on page 2/);
+    expect(lastAnchor && "hint" in lastAnchor && lastAnchor.hint).toMatch(
+      /appears 2 times on page 2/,
+    );
     expect(lastAnchor).not.toHaveProperty("endPageNumber");
   });
 
@@ -203,7 +210,10 @@ describe("PdfReview — capture", () => {
 describe("PdfReview — navigate", () => {
   test("a passage flag scrolls to and highlights its text on its page", async () => {
     render(
-      <PdfReview {...BASE} moments={[moment({ id: "p", pageNumber: 2, quote: "bodycam footage" })]} />
+      <PdfReview
+        {...BASE}
+        moments={[moment({ id: "p", pageNumber: 2, quote: "bodycam footage" })]}
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: "go p" }));
     await waitFor(() => expect(scrollSpy).toHaveBeenCalled());
@@ -215,8 +225,15 @@ describe("PdfReview — navigate", () => {
     render(
       <PdfReview
         {...BASE}
-        moments={[moment({ id: "x", pageNumber: 2, endPageNumber: 3, quote: "the driver accelerated through" })]}
-      />
+        moments={[
+          moment({
+            id: "x",
+            pageNumber: 2,
+            endPageNumber: 3,
+            quote: "the driver accelerated through",
+          }),
+        ]}
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: "go x" }));
     await waitFor(() => expect(scrollSpy).toHaveBeenCalled());
@@ -226,7 +243,10 @@ describe("PdfReview — navigate", () => {
 
   test("a passage that no longer matches lands on the page and says so", async () => {
     render(
-      <PdfReview {...BASE} moments={[moment({ id: "gone", pageNumber: 1, quote: "bodycam footage" })]} />
+      <PdfReview
+        {...BASE}
+        moments={[moment({ id: "gone", pageNumber: 1, quote: "bodycam footage" })]}
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: "go gone" }));
     expect(await screen.findByRole("status")).toHaveTextContent(/not found on page 1/i);
@@ -241,7 +261,15 @@ describe("PdfReview — navigate", () => {
   });
 
   test("a ?flag= deep link focuses its passage once the PDF is ready", async () => {
-    render(<PdfReview {...BASE} initialPage={2} initialEndPage={3} initialQuote="driver accelerated" moments={[]} />);
+    render(
+      <PdfReview
+        {...BASE}
+        initialPage={2}
+        initialEndPage={3}
+        initialQuote="driver accelerated"
+        moments={[]}
+      />,
+    );
     await waitFor(() => expect(scrollSpy).toHaveBeenCalled());
     expect(handle.pageTextLayers).toHaveBeenCalledWith(2, 3);
   });

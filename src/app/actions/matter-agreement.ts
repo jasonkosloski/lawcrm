@@ -30,7 +30,7 @@ const STATUS_LABEL: Record<string, string> = {
 export async function updateMatterAgreement(
   matterId: string,
   _prev: AgreementFormState,
-  fd: FormData
+  fd: FormData,
 ): Promise<AgreementFormState> {
   const userId = await requirePermission("matters.agreement.edit");
   await assertMatterAccess(matterId);
@@ -75,15 +75,14 @@ export async function updateMatterAgreement(
   // is being set to) signed: a signed record can't regress, but an
   // unsigned or missing one may record any status (e.g. "Sent").
   const switchOn = user?.firm?.requireOriginatingDoc ?? false;
-  const gateApplies =
-    switchOn && (matter.agreement?.status === "signed" || status === "signed");
+  const gateApplies = switchOn && (matter.agreement?.status === "signed" || status === "signed");
   const gate = agreementGateErrors(
     { status, signedDate, hasOriginatingFile: documentId !== "" },
     {
       required: gateApplies,
       label,
       today: dateOnlyKey(await todayDateOnly()),
-    }
+    },
   );
   if (Object.keys(gate).length > 0) {
     const errors: Record<string, string[]> = {};
@@ -113,7 +112,7 @@ export async function updateMatterAgreement(
   const parts: string[] = [];
   if ((old?.status ?? "not_sent") !== newStatus) {
     parts.push(
-      `Status ${STATUS_LABEL[old?.status ?? "not_sent"] ?? old?.status} → ${STATUS_LABEL[newStatus]}`
+      `Status ${STATUS_LABEL[old?.status ?? "not_sent"] ?? old?.status} → ${STATUS_LABEL[newStatus]}`,
     );
   }
   if (oldSigned !== signedDate) {

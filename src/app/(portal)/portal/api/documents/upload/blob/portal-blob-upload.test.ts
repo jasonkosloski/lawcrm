@@ -61,7 +61,7 @@ function payload(over: Record<string, unknown> = {}) {
 async function tokenError(pathname: string, clientPayload: string | null) {
   const err = await onBeforeGenerateToken(pathname, clientPayload, false).then(
     () => null,
-    (e: unknown) => e
+    (e: unknown) => e,
   );
   expect(err).toBeInstanceOf(PortalUploadError);
   return err as PortalUploadError;
@@ -83,11 +83,22 @@ beforeEach(async () => {
   ({ userId } = await seedUser({ firmId }));
   const { stageId, areaId } = await seedPracticeArea();
   ({ matterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId }));
-  ({ matterId: otherMatterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name: "Other" }));
+  ({ matterId: otherMatterId } = await seedMatter({
+    practiceAreaId: areaId,
+    stageId,
+    leadUserId: userId,
+    name: "Other",
+  }));
   const { contactId } = await seedContact({ name: "Pat Client", email: "pat@example.com" });
-  identityId = (await prisma.portalIdentity.create({ data: { contactId, email: "pat@example.com" } })).id;
+  identityId = (
+    await prisma.portalIdentity.create({ data: { contactId, email: "pat@example.com" } })
+  ).id;
   await prisma.portalMatterAccess.create({ data: { identityId, matterId, invitedById: userId } });
-  vi.mocked(getPortalIdentity).mockResolvedValue({ identityId, contactId, email: "pat@example.com" });
+  vi.mocked(getPortalIdentity).mockResolvedValue({
+    identityId,
+    contactId,
+    email: "pat@example.com",
+  });
 });
 
 afterEach(() => {
@@ -143,11 +154,18 @@ describe("onBeforeGenerateToken: gates", () => {
         documentRequestId: requestId,
       },
     });
-    await prisma.documentRequest.update({ where: { id: requestId }, data: { returnNote: "Wrong year" } });
+    await prisma.documentRequest.update({
+      where: { id: requestId },
+      data: { returnNote: "Wrong year" },
+    });
     expect((await tokenError(KEY, payload({ requestId }))).status).toBe(409);
     // A new batch may resubmit it.
     await expect(
-      onBeforeGenerateToken(KEY, payload({ requestId, batchId: "33333333-3333-4333-8333-333333333333" }), false)
+      onBeforeGenerateToken(
+        KEY,
+        payload({ requestId, batchId: "33333333-3333-4333-8333-333333333333" }),
+        false,
+      ),
     ).resolves.toBeTruthy();
   });
 
@@ -155,7 +173,7 @@ describe("onBeforeGenerateToken: gates", () => {
     const err = await tokenError("AAAAAAAAAAAAAAAA__archive.zip", payload({ name: "archive.zip" }));
     expect(err.status).toBe(400);
     expect(err.message).toBe(
-      "We can't accept .zip files. Please send PDFs, photos or Office documents."
+      "We can't accept .zip files. Please send PDFs, photos or Office documents.",
     );
   });
 
@@ -202,7 +220,7 @@ describe("onBeforeGenerateToken: token contract", () => {
     const r = await onBeforeGenerateToken(
       KEY,
       payload({ requestId, note: "  signed copy ", identityId: "attacker" }),
-      false
+      false,
     );
     expect(r).toMatchObject({
       allowedContentTypes: ["application/pdf"],
@@ -227,7 +245,7 @@ describe("onBeforeGenerateToken: token contract", () => {
     const r = await onBeforeGenerateToken(
       "AAAAAAAAAAAAAAAA__clip.mov",
       payload({ name: "clip.MOV" }),
-      false
+      false,
     );
     expect(r.allowedContentTypes).toEqual(["video/quicktime"]);
     expect(r.maximumSizeInBytes).toBe(MAX_MEDIA_UPLOAD_BYTES);
@@ -247,10 +265,9 @@ describe("callback URL (the completion webhook must reach the PUBLIC portal path
     vi.stubEnv("VERCEL", "1");
     vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "app.example.com");
-    const internal = new Request(
-      "https://portal.example.com/portal/api/documents/upload/blob",
-      { method: "POST" }
-    );
+    const internal = new Request("https://portal.example.com/portal/api/documents/upload/blob", {
+      method: "POST",
+    });
     const res = await handleUpload({
       body: {
         type: "blob.generate-client-token",
@@ -265,18 +282,21 @@ describe("callback URL (the completion webhook must reach the PUBLIC portal path
       onUploadCompleted?: { callbackUrl: string };
     };
     expect(signed.onUploadCompleted?.callbackUrl).toBe(
-      "https://portal.example.com/api/documents/upload/blob"
+      "https://portal.example.com/api/documents/upload/blob",
     );
   });
 
   test("the proxy rewrites that public path into this route on the portal host", async () => {
-    const req = new NextRequest(new URL(PORTAL_UPLOAD_CALLBACK_PATH, "https://portal.example.com"), {
-      method: "POST",
-      headers: { host: "portal.example.com" },
-    });
+    const req = new NextRequest(
+      new URL(PORTAL_UPLOAD_CALLBACK_PATH, "https://portal.example.com"),
+      {
+        method: "POST",
+        headers: { host: "portal.example.com" },
+      },
+    );
     const res = (await proxy(req, {} as NextFetchEvent)) as Response;
     expect(new URL(res.headers.get("x-middleware-rewrite")!).pathname).toBe(
-      "/portal/api/documents/upload/blob"
+      "/portal/api/documents/upload/blob",
     );
   });
 });
@@ -320,7 +340,9 @@ describe("onUploadCompleted (signed webhook: no portal cookie)", () => {
       name: "lease.pdf",
       portalBatchId: BATCH,
     });
-    expect((await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } })).status).toBe("submitted");
+    expect(
+      (await prisma.documentRequest.findUniqueOrThrow({ where: { id: requestId } })).status,
+    ).toBe("submitted");
   });
 
   test("access revoked mid-upload: no row, blob deleted, callback succeeds", async () => {
@@ -363,7 +385,15 @@ describe("onUploadCompleted (signed webhook: no portal cookie)", () => {
     await expect(complete(null)).rejects.toThrow();
     await expect(complete("{")).rejects.toThrow();
     await expect(
-      complete(JSON.stringify({ matterId, folderId: null, name: "x.pdf", userId, contentType: "application/pdf" }))
+      complete(
+        JSON.stringify({
+          matterId,
+          folderId: null,
+          name: "x.pdf",
+          userId,
+          contentType: "application/pdf",
+        }),
+      ),
     ).rejects.toThrow();
     expect(await prisma.document.count()).toBe(0);
   });
@@ -396,7 +426,9 @@ describe("onUploadCompleted (signed webhook: no portal cookie)", () => {
       tokenPayload: tp,
     } as Parameters<typeof onUploadCompleted>[0]);
     expect(await prisma.document.count()).toBe(0);
-    expect(del).toHaveBeenCalledWith("https://store.public.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__x.exe");
+    expect(del).toHaveBeenCalledWith(
+      "https://store.public.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__x.exe",
+    );
   });
 
   test("a disallowed type in a payload is refused at completion too", async () => {

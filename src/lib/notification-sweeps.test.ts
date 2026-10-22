@@ -26,15 +26,7 @@
  * throttle on the dashboard entry point.
  */
 
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 import { revalidatePath } from "next/cache";
@@ -122,9 +114,7 @@ const seedDeadline = async (over?: {
 };
 
 const sweepAt = (isoOrDate: string | Date) =>
-  runDeadlineNotificationSweep(
-    typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate
-  );
+  runDeadlineNotificationSweep(typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate);
 
 describe("bucketForDaysUntil", () => {
   test.each<[number, string | null]>([
@@ -151,11 +141,9 @@ describe("runDeadlineNotificationSweep — buckets (calendar days)", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.userId).toBe(ownerId);
     expect(rows[0]!.type).toBe("deadline_approaching");
-    expect(rows[0]!.title).toContain(
-      `within ${DEADLINE_SOON_THRESHOLD_DAYS} days`
-    );
+    expect(rows[0]!.title).toContain(`within ${DEADLINE_SOON_THRESHOLD_DAYS} days`);
     expect(rows[0]!.link).toBe(
-      `/matters/${matterId}/deadlines?deadline=${deadlineId}&due=7d&on=2026-07-12`
+      `/matters/${matterId}/deadlines?deadline=${deadlineId}&due=7d&on=2026-07-12`,
     );
     expect(rows[0]!.matterId).toBe(matterId);
   });
@@ -168,9 +156,7 @@ describe("runDeadlineNotificationSweep — buckets (calendar days)", () => {
     const rows = await prisma.notification.findMany();
     expect(rows).toHaveLength(1);
     expect(rows[0]!.type).toBe("deadline_approaching");
-    expect(rows[0]!.title).toContain(
-      `within ${DEADLINE_IMMINENT_THRESHOLD_DAYS} day`
-    );
+    expect(rows[0]!.title).toContain(`within ${DEADLINE_IMMINENT_THRESHOLD_DAYS} day`);
     expect(rows[0]!.link).toContain("due=1d");
   });
 
@@ -195,9 +181,7 @@ describe("runDeadlineNotificationSweep — buckets (calendar days)", () => {
     await runDeadlineNotificationSweep(new Date("2026-07-08T02:00:00Z"));
 
     const rows = await prisma.notification.findMany();
-    const byTitle = Object.fromEntries(
-      rows.map((r) => [r.title, r.link ?? ""])
-    );
+    const byTitle = Object.fromEntries(rows.map((r) => [r.title, r.link ?? ""]));
     expect(rows.every((r) => r.type === "deadline_approaching")).toBe(true);
     expect(byTitle["Deadline due today: Due Jul 7"]).toContain("due=today");
     expect(byTitle["Deadline due within 1 day: Due Jul 8"]).toContain("due=1d");
@@ -207,9 +191,7 @@ describe("runDeadlineNotificationSweep — buckets (calendar days)", () => {
     await seedDeadline({ dueDate: dueIn(0) });
     // 2026-07-08T05:00Z is still Jul 7 at 11 PM in Denver: a Jul 7
     // deadline is not overdue yet.
-    expect(
-      (await sweepAt("2026-07-08T05:00:00Z")).created
-    ).toBe(1);
+    expect((await sweepAt("2026-07-08T05:00:00Z")).created).toBe(1);
     expect(await prisma.notification.count({ where: { type: "deadline_overdue" } })).toBe(0);
 
     // Denver midnight has passed: now it's overdue.
@@ -362,9 +344,7 @@ describe("runDeadlineNotificationSweep — recipients", () => {
     expect(result.created).toBe(2);
 
     const rows = await prisma.notification.findMany();
-    expect(new Set(rows.map((r) => r.userId))).toEqual(
-      new Set([ownerId, teammateId])
-    );
+    expect(new Set(rows.map((r) => r.userId))).toEqual(new Set([ownerId, teammateId]));
   });
 
   test("owned deadline notifies only the owner", async () => {
@@ -400,9 +380,7 @@ describe("runDeadlineNotificationSweep — recipients", () => {
     const rows = await prisma.notification.findMany();
     // Team = owner(lead) + another; the deactivated teammate and the
     // deactivated owner are skipped.
-    expect(new Set(rows.map((r) => r.userId))).toEqual(
-      new Set([ownerId, another.userId])
-    );
+    expect(new Set(rows.map((r) => r.userId))).toEqual(new Set([ownerId, another.userId]));
   });
 
   test("deactivated team members are skipped on ownerless deadlines", async () => {
@@ -437,12 +415,12 @@ describe("maybeRunDeadlineNotificationSweep — hourly throttle", () => {
     expect(first.created).toBe(1);
 
     const second = await maybeRunDeadlineNotificationSweep(
-      new Date(NOW.getTime() + SWEEP_MIN_INTERVAL_MS - 1)
+      new Date(NOW.getTime() + SWEEP_MIN_INTERVAL_MS - 1),
     );
     expect(second.ran).toBe(false);
 
     const third = await maybeRunDeadlineNotificationSweep(
-      new Date(NOW.getTime() + SWEEP_MIN_INTERVAL_MS + 1)
+      new Date(NOW.getTime() + SWEEP_MIN_INTERVAL_MS + 1),
     );
     expect(third.ran).toBe(true);
     // Idempotency still holds across the throttle boundary.
@@ -451,9 +429,7 @@ describe("maybeRunDeadlineNotificationSweep — hourly throttle", () => {
 
   test("never throws — sweep failures are swallowed with a warn", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const spy = vi
-      .spyOn(prisma, "$transaction")
-      .mockRejectedValueOnce(new Error("boom"));
+    const spy = vi.spyOn(prisma, "$transaction").mockRejectedValueOnce(new Error("boom"));
     const result = await maybeRunDeadlineNotificationSweep(NOW);
     expect(result.ran).toBe(true);
     expect(result.created).toBe(0);

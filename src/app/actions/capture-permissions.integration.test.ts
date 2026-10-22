@@ -43,12 +43,7 @@ import {
   createTaskWithCaptures,
   createTimeEntryWithCaptures,
 } from "@/app/actions/captures";
-import {
-  createNote,
-  deleteNote,
-  toggleNotePin,
-  updateNote,
-} from "@/app/actions/notes";
+import { createNote, deleteNote, toggleNotePin, updateNote } from "@/app/actions/notes";
 import { addCapturesToNoteBulk } from "@/app/actions/note-attachments";
 import { captureInitialState } from "@/lib/capture-schemas";
 import { noteInitialState } from "@/lib/note-constants";
@@ -209,11 +204,7 @@ describe("primary captures — siblings need their own create key", () => {
     await actAs(["tasks.create"]);
     for (const cap of [TIME_CAP, DEADLINE_CAP, EVENT_CAP, PINNED_NOTE_CAP]) {
       await expect(
-        createTaskWithCaptures(
-          matterId,
-          captureInitialState,
-          primaryTaskForm([cap])
-        )
+        createTaskWithCaptures(matterId, captureInitialState, primaryTaskForm([cap])),
       ).rejects.toThrow(REDIRECT);
     }
     // Atomic: not even the primary task was written.
@@ -223,36 +214,20 @@ describe("primary captures — siblings need their own create key", () => {
   test("events.create alone cannot attach a task / time entry; deadlines.create alone cannot attach time; time_entries.create alone cannot attach a task", async () => {
     await actAs(["events.create"]);
     await expect(
-      createEventWithCaptures(
-        matterId,
-        captureInitialState,
-        primaryEventForm([TIME_CAP])
-      )
+      createEventWithCaptures(matterId, captureInitialState, primaryEventForm([TIME_CAP])),
     ).rejects.toThrow(REDIRECT);
     await expect(
-      createEventWithCaptures(
-        matterId,
-        captureInitialState,
-        primaryEventForm([TASK_CAP])
-      )
+      createEventWithCaptures(matterId, captureInitialState, primaryEventForm([TASK_CAP])),
     ).rejects.toThrow(REDIRECT);
 
     await actAs(["deadlines.create"], "dl@example.com");
     await expect(
-      createDeadlineWithCaptures(
-        matterId,
-        captureInitialState,
-        primaryDeadlineForm([TIME_CAP])
-      )
+      createDeadlineWithCaptures(matterId, captureInitialState, primaryDeadlineForm([TIME_CAP])),
     ).rejects.toThrow(REDIRECT);
 
     await actAs(["time_entries.create"], "te@example.com");
     await expect(
-      createTimeEntryWithCaptures(
-        matterId,
-        captureInitialState,
-        primaryTimeForm([TASK_CAP])
-      )
+      createTimeEntryWithCaptures(matterId, captureInitialState, primaryTimeForm([TASK_CAP])),
     ).rejects.toThrow(REDIRECT);
 
     expect(await rowCounts()).toEqual(ZERO);
@@ -261,11 +236,7 @@ describe("primary captures — siblings need their own create key", () => {
   test("a pinned sibling note needs notes.pin on top of notes.create", async () => {
     await actAs(["tasks.create", "notes.create"]);
     await expect(
-      createTaskWithCaptures(
-        matterId,
-        captureInitialState,
-        primaryTaskForm([PINNED_NOTE_CAP])
-      )
+      createTaskWithCaptures(matterId, captureInitialState, primaryTaskForm([PINNED_NOTE_CAP])),
     ).rejects.toThrow(REDIRECT);
     expect(await rowCounts()).toEqual(ZERO);
 
@@ -273,7 +244,7 @@ describe("primary captures — siblings need their own create key", () => {
     const res = await createTaskWithCaptures(
       matterId,
       captureInitialState,
-      primaryTaskForm([{ ...PINNED_NOTE_CAP, isPinned: false }])
+      primaryTaskForm([{ ...PINNED_NOTE_CAP, isPinned: false }]),
     );
     expect(res.status).toBe("ok");
     expect(await prisma.note.count()).toBe(1);
@@ -291,7 +262,7 @@ describe("primary captures — siblings need their own create key", () => {
     const res = await createTaskWithCaptures(
       matterId,
       captureInitialState,
-      primaryTaskForm([TIME_CAP, DEADLINE_CAP, EVENT_CAP, PINNED_NOTE_CAP])
+      primaryTaskForm([TIME_CAP, DEADLINE_CAP, EVENT_CAP, PINNED_NOTE_CAP]),
     );
     expect(res.status).toBe("ok");
     expect(await rowCounts()).toEqual({
@@ -309,7 +280,7 @@ describe("primary captures — siblings need their own create key", () => {
     const res = await createTimeEntryWithCaptures(
       matterId,
       captureInitialState,
-      primaryTimeForm([TASK_CAP, DEADLINE_CAP, PINNED_NOTE_CAP])
+      primaryTimeForm([TASK_CAP, DEADLINE_CAP, PINNED_NOTE_CAP]),
     );
     expect(res.status).toBe("ok");
     expect((await rowCounts()).time).toBe(1);
@@ -337,18 +308,10 @@ describe("createNote — captures and pinning need their own keys", () => {
 
   test("notes.create alone cannot create a pinned note or a pinned sibling", async () => {
     await actAs(["notes.create"]);
-    const pinned = await createNote(
-      matterId,
-      noteInitialState,
-      noteForm([], { isPinned: "on" })
-    );
+    const pinned = await createNote(matterId, noteInitialState, noteForm([], { isPinned: "on" }));
     expect(pinned.status).toBe("error");
     expect(pinned.errors?.content?.[0]).toMatch(/pin notes/i);
-    const sibling = await createNote(
-      matterId,
-      noteInitialState,
-      noteForm([PINNED_NOTE_CAP])
-    );
+    const sibling = await createNote(matterId, noteInitialState, noteForm([PINNED_NOTE_CAP]));
     expect(sibling.status).toBe("error");
     expect(sibling.errors?.content?.[0]).toMatch(/pin notes/i);
     expect(await rowCounts()).toEqual(ZERO);
@@ -356,11 +319,7 @@ describe("createNote — captures and pinning need their own keys", () => {
 
   test("notes.create + notes.pin can pin; notes.create alone can write an unpinned note", async () => {
     await actAs(["notes.create", "notes.pin"]);
-    const pinned = await createNote(
-      matterId,
-      noteInitialState,
-      noteForm([], { isPinned: "on" })
-    );
+    const pinned = await createNote(matterId, noteInitialState, noteForm([], { isPinned: "on" }));
     expect(pinned.status).toBe("ok");
     expect((await prisma.note.findFirstOrThrow()).isPinned).toBe(true);
 
@@ -372,11 +331,7 @@ describe("createNote — captures and pinning need their own keys", () => {
 
   test("holding each capture key lets the capture through", async () => {
     await actAs(["notes.create", "tasks.create", "time_entries.create"]);
-    const res = await createNote(
-      matterId,
-      noteInitialState,
-      noteForm([TASK_CAP, TIME_CAP])
-    );
+    const res = await createNote(matterId, noteInitialState, noteForm([TASK_CAP, TIME_CAP]));
     expect(res.status).toBe("ok");
     expect(await prisma.task.count()).toBe(1);
     expect(await prisma.timeEntry.count()).toBe(1);
@@ -508,9 +463,7 @@ describe("toggleNotePin / updateNote — activity log", () => {
     });
     await toggleNotePin(n.id);
     await toggleNotePin(n.id);
-    const titles = (await prisma.activityLog.findMany())
-      .map((l) => l.title)
-      .sort();
+    const titles = (await prisma.activityLog.findMany()).map((l) => l.title).sort();
     expect(titles).toEqual(["Note pinned", "Note unpinned"]);
   });
 
@@ -537,11 +490,7 @@ describe("toggleNotePin / updateNote — activity log", () => {
 describe("capture-created events — creator, attendees, Google push", () => {
   test("Events composer pushes the new event to Google after commit", async () => {
     const userId = await actAs(["events.create"]);
-    const res = await createEventWithCaptures(
-      matterId,
-      captureInitialState,
-      primaryEventForm([])
-    );
+    const res = await createEventWithCaptures(matterId, captureInitialState, primaryEventForm([]));
     expect(res.status).toBe("ok");
     const ev = await prisma.calendarEvent.findFirstOrThrow();
     expect(ev.createdById).toBe(userId);
@@ -554,7 +503,7 @@ describe("capture-created events — creator, attendees, Google push", () => {
     const res = await createTaskWithCaptures(
       matterId,
       captureInitialState,
-      primaryTaskForm([EVENT_CAP])
+      primaryTaskForm([EVENT_CAP]),
     );
     expect(res.status).toBe("ok");
     const ev = await prisma.calendarEvent.findFirstOrThrow({
@@ -571,11 +520,7 @@ describe("capture-created events — creator, attendees, Google push", () => {
       where: { email: "lead@example.com" },
     });
     // seedMatter put the lead on the matter team.
-    const res = await createNote(
-      matterId,
-      noteInitialState,
-      noteForm([EVENT_CAP])
-    );
+    const res = await createNote(matterId, noteInitialState, noteForm([EVENT_CAP]));
     expect(res.status).toBe("ok");
     const ev = await prisma.calendarEvent.findFirstOrThrow({
       include: { attendees: true },

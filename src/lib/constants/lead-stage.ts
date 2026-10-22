@@ -35,10 +35,7 @@ export const LEAD_STAGE_ORDER = [
 
 /// Stages that mean the lead left the pipeline — done, one way or
 /// the other. Everything else counts as the open pipeline.
-export const LEAD_CLOSED_STAGES = [
-  "converted",
-  "declined",
-] as const satisfies readonly LeadStage[];
+export const LEAD_CLOSED_STAGES = ["converted", "declined"] as const satisfies readonly LeadStage[];
 
 /// Open-pipeline stages, in funnel order. The reports funnel iterates
 /// this so a new stage shows up there automatically.
@@ -61,13 +58,7 @@ export const LEAD_STAGE_LABEL: Record<LeadStage, string> = {
 };
 
 /** Where an inquiry came from — Lead.source vocabulary. */
-export const LEAD_SOURCES = [
-  "phone",
-  "web",
-  "referral",
-  "walk_in",
-  "court_appointment",
-] as const;
+export const LEAD_SOURCES = ["phone", "web", "referral", "walk_in", "court_appointment"] as const;
 export type LeadSource = (typeof LEAD_SOURCES)[number];
 
 export const LEAD_SOURCE_LABEL: Record<string, string> = {

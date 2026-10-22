@@ -22,10 +22,7 @@ vi.mock("@/app/actions/conflict-check", () => ({
   overrideLeadConflictCheck: vi.fn(),
 }));
 
-import {
-  overrideLeadConflictCheck,
-  runLeadConflictCheck,
-} from "@/app/actions/conflict-check";
+import { overrideLeadConflictCheck, runLeadConflictCheck } from "@/app/actions/conflict-check";
 import { ConflictCheckCard } from "./conflict-check-card";
 
 const mockedRun = vi.mocked(runLeadConflictCheck);
@@ -61,7 +58,7 @@ describe("ConflictCheckCard — status pill mapping", () => {
         matches={NO_MATCHES}
         canRun={false}
         canOverride={false}
-      />
+      />,
     );
     expect(screen.getByText(label)).toBeInTheDocument();
   });
@@ -78,11 +75,9 @@ describe("ConflictCheckCard — Run button visibility", () => {
         matches={NO_MATCHES}
         canRun={false}
         canOverride={false}
-      />
+      />,
     );
-    expect(
-      screen.queryByRole("button", { name: /run conflict check/i })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /run conflict check/i })).not.toBeInTheDocument();
   });
 
   test("'Run conflict check' renders on first-load (no checkedAt)", () => {
@@ -95,11 +90,9 @@ describe("ConflictCheckCard — Run button visibility", () => {
         matches={NO_MATCHES}
         canRun
         canOverride={false}
-      />
+      />,
     );
-    expect(
-      screen.getByRole("button", { name: /run conflict check/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /run conflict check/i })).toBeInTheDocument();
   });
 
   test("'Re-run' label when checkedAt is already set", () => {
@@ -112,7 +105,7 @@ describe("ConflictCheckCard — Run button visibility", () => {
         matches={NO_MATCHES}
         canRun
         canOverride={false}
-      />
+      />,
     );
     expect(screen.getByRole("button", { name: /re-run/i })).toBeInTheDocument();
   });
@@ -128,11 +121,9 @@ describe("ConflictCheckCard — Run button visibility", () => {
         matches={NO_MATCHES}
         canRun
         canOverride={false}
-      />
+      />,
     );
-    await user.click(
-      screen.getByRole("button", { name: /run conflict check/i })
-    );
+    await user.click(screen.getByRole("button", { name: /run conflict check/i }));
     expect(mockedRun).toHaveBeenCalledTimes(1);
     expect(mockedRun).toHaveBeenCalledWith("lead1");
   });
@@ -150,11 +141,9 @@ describe("ConflictCheckCard — Override workflow", () => {
         matches={NO_MATCHES}
         canRun
         canOverride
-      />
+      />,
     );
-    expect(
-      screen.queryByRole("button", { name: /^override/i })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^override/i })).not.toBeInTheDocument();
   });
 
   test("warn status + canOverride shows the Override button", () => {
@@ -174,11 +163,9 @@ describe("ConflictCheckCard — Override workflow", () => {
         ]}
         canRun
         canOverride
-      />
+      />,
     );
-    expect(
-      screen.getByRole("button", { name: /^override/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^override/i })).toBeInTheDocument();
   });
 
   test("clicking Override opens the textarea composer", async () => {
@@ -199,12 +186,10 @@ describe("ConflictCheckCard — Override workflow", () => {
         ]}
         canRun
         canOverride
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: /^override/i }));
-    expect(
-      screen.getByPlaceholderText(/justification/i)
-    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/justification/i)).toBeInTheDocument();
   });
 
   test("Override + clear is disabled until 5+ characters typed", async () => {
@@ -225,17 +210,14 @@ describe("ConflictCheckCard — Override workflow", () => {
         ]}
         canRun
         canOverride
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: /^override/i }));
     const submitBtn = screen.getByRole("button", {
       name: /override \+ clear/i,
     });
     expect(submitBtn).toBeDisabled();
-    await user.type(
-      screen.getByPlaceholderText(/justification/i),
-      "five!"
-    );
+    await user.type(screen.getByPlaceholderText(/justification/i), "five!");
     expect(submitBtn).toBeEnabled();
   });
 
@@ -257,23 +239,19 @@ describe("ConflictCheckCard — Override workflow", () => {
         ]}
         canRun
         canOverride
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: /^override/i }));
     await user.type(
       screen.getByPlaceholderText(/justification/i),
-      "former client, no substantial relationship"
+      "former client, no substantial relationship",
     );
-    await user.click(
-      screen.getByRole("button", { name: /override \+ clear/i })
-    );
+    await user.click(screen.getByRole("button", { name: /override \+ clear/i }));
 
     expect(mockedOverride).toHaveBeenCalledTimes(1);
     const [leadId, fd] = mockedOverride.mock.calls[0]!;
     expect(leadId).toBe("lead1");
-    expect(fd.get("notes")).toBe(
-      "former client, no substantial relationship"
-    );
+    expect(fd.get("notes")).toBe("former client, no substantial relationship");
   });
 
   test("server error reverts the override flow", async () => {
@@ -298,19 +276,12 @@ describe("ConflictCheckCard — Override workflow", () => {
         ]}
         canRun
         canOverride
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: /^override/i }));
-    await user.type(
-      screen.getByPlaceholderText(/justification/i),
-      "valid justification"
-    );
-    await user.click(
-      screen.getByRole("button", { name: /override \+ clear/i })
-    );
-    expect(
-      await screen.findByText(/Override only applies/)
-    ).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText(/justification/i), "valid justification");
+    await user.click(screen.getByRole("button", { name: /override \+ clear/i }));
+    expect(await screen.findByText(/Override only applies/)).toBeInTheDocument();
   });
 
   test("saved override rationale renders read-only when status='override'", () => {
@@ -323,12 +294,10 @@ describe("ConflictCheckCard — Override workflow", () => {
         matches={[]}
         canRun
         canOverride
-      />
+      />,
     );
     expect(screen.getByText(/Override rationale/)).toBeInTheDocument();
-    expect(
-      screen.getByText("Informed-consent waiver signed.")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Informed-consent waiver signed.")).toBeInTheDocument();
   });
 });
 
@@ -358,16 +327,12 @@ describe("ConflictCheckCard — matches list", () => {
         ]}
         canRun
         canOverride={false}
-      />
+      />,
     );
     expect(screen.getByText("Conflict")).toBeInTheDocument();
     expect(screen.getByText("Warn")).toBeInTheDocument();
-    expect(
-      screen.getByText("John Doe — same email on opposing side")
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Jane Doe — same name in directory")
-    ).toBeInTheDocument();
+    expect(screen.getByText("John Doe — same email on opposing side")).toBeInTheDocument();
+    expect(screen.getByText("Jane Doe — same name in directory")).toBeInTheDocument();
   });
 
   test("contact deep-link renders when contactId is present", () => {
@@ -388,7 +353,7 @@ describe("ConflictCheckCard — matches list", () => {
         ]}
         canRun={false}
         canOverride={false}
-      />
+      />,
     );
     const link = screen.getByRole("link", { name: /Contact/ });
     expect(link).toHaveAttribute("href", "/contacts/c123");
@@ -412,7 +377,7 @@ describe("ConflictCheckCard — matches list", () => {
         ]}
         canRun={false}
         canOverride={false}
-      />
+      />,
     );
     const link = screen.getByRole("link", { name: /Matter/ });
     expect(link).toHaveAttribute("href", "/matters/m456");
@@ -448,13 +413,11 @@ describe("ConflictCheckCard — list keys", () => {
         ]}
         canRun={false}
         canOverride={false}
-      />
+      />,
     );
     expect(screen.getByText(/matter A/)).toBeInTheDocument();
     expect(screen.getByText(/matter B/)).toBeInTheDocument();
-    const dupKey = errorSpy.mock.calls.some((c) =>
-      String(c[0]).includes("same key")
-    );
+    const dupKey = errorSpy.mock.calls.some((c) => String(c[0]).includes("same key"));
     expect(dupKey).toBe(false);
   });
 });
@@ -518,7 +481,7 @@ describe("ConflictCheckCard — closed leads (matches not live)", () => {
         canRun={false}
         canOverride={false}
         matchesNotLive
-      />
+      />,
     );
     expect(screen.getByText(/live matching is not re-run/i)).toBeInTheDocument();
     expect(screen.queryByText(/^No matches/)).not.toBeInTheDocument();
@@ -534,7 +497,7 @@ describe("ConflictCheckCard — closed leads (matches not live)", () => {
         matches={NO_MATCHES}
         canRun={false}
         canOverride={false}
-      />
+      />,
     );
     expect(screen.getByText(/^No matches/)).toBeInTheDocument();
   });

@@ -22,11 +22,7 @@ export function UploadsSection({
       <h2 id="uploads-heading" className="text-sm font-semibold text-ink-2">
         Your uploads
       </h2>
-      <PortalUploader
-        matterId={matterId}
-        storageDriver={storageDriver}
-        label="Upload files"
-      />
+      <PortalUploader matterId={matterId} storageDriver={storageDriver} label="Upload files" />
       {uploads.length === 0 ? (
         <EmptyState
           framed
@@ -42,9 +38,7 @@ export function UploadsSection({
                 href={`/api/documents/${u.id}/download`}
                 className="flex min-h-16 flex-col justify-center px-5 py-3 outline-none hover:bg-brand-tint focus-visible:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:ring-inset"
               >
-                <span className="truncate text-sm font-medium text-ink">
-                  {u.name}
-                </span>
+                <span className="truncate text-sm font-medium text-ink">{u.name}</span>
                 <span className="text-xs text-ink-3">
                   {[
                     u.requestTitle ? `For: ${u.requestTitle}` : null,

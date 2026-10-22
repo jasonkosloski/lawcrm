@@ -35,7 +35,7 @@ const MAX_TITLE = 200;
 const MAX_TEXT = 5000;
 
 function parseInput(
-  input: Input
+  input: Input,
 ):
   | { ok: true; title: string; instructions: string | null; dueDate: Date | null }
   | { ok: false; error: string } {
@@ -59,10 +59,7 @@ function done(matterId: string): Result {
   return { ok: true };
 }
 
-export async function createDocumentRequest(
-  matterId: string,
-  input: Input
-): Promise<Result> {
+export async function createDocumentRequest(matterId: string, input: Input): Promise<Result> {
   const gate = await requirePermissionResult("portal.add_requests");
   if (!gate.ok) return { ok: false, error: gate.error };
   await assertMatterAccess(matterId);
@@ -82,10 +79,7 @@ export async function createDocumentRequest(
 
   let emailFailed = false;
   try {
-    const res = await emailLivePortalUsers(
-      matterId,
-      documentRequestEmail(portalHomeUrl())
-    );
+    const res = await emailLivePortalUsers(matterId, documentRequestEmail(portalHomeUrl()));
     emailFailed = res.failed > 0;
   } catch (err) {
     console.warn("[portal-documents] request email failed", err);
@@ -108,10 +102,7 @@ async function loadRequest(id: string) {
   });
 }
 
-export async function updateDocumentRequest(
-  id: string,
-  input: Input
-): Promise<Result> {
+export async function updateDocumentRequest(id: string, input: Input): Promise<Result> {
   const gate = await requirePermissionResult("portal.edit_requests");
   if (!gate.ok) return { ok: false, error: gate.error };
   const req = await loadRequest(id);
@@ -148,7 +139,7 @@ async function transition(
   from: string[],
   data: Record<string, unknown>,
   title: (t: string) => string,
-  detail?: string
+  detail?: string,
 ): Promise<Result> {
   const gate = await requirePermissionResult("portal.edit_requests");
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -180,14 +171,11 @@ export async function acceptDocumentRequest(id: string): Promise<Result> {
     id,
     ["submitted"],
     { status: "complete", completedAt: new Date() },
-    (t) => `Accepted client documents: ${t}`
+    (t) => `Accepted client documents: ${t}`,
   );
 }
 
-export async function sendBackDocumentRequest(
-  id: string,
-  note: string
-): Promise<Result> {
+export async function sendBackDocumentRequest(id: string, note: string): Promise<Result> {
   const trimmed = (note ?? "").trim();
   if (!trimmed) return { ok: false, error: "Enter a note for the client." };
   if (trimmed.length > MAX_TEXT) return { ok: false, error: "That note is too long." };
@@ -195,7 +183,7 @@ export async function sendBackDocumentRequest(
     id,
     ["submitted"],
     { status: "open", returnNote: trimmed },
-    (t) => `Sent back document request: ${t}`
+    (t) => `Sent back document request: ${t}`,
   );
 }
 
@@ -204,7 +192,7 @@ export async function cancelDocumentRequest(id: string): Promise<Result> {
     id,
     ["open", "submitted"],
     { status: "cancelled" },
-    (t) => `Cancelled document request: ${t}`
+    (t) => `Cancelled document request: ${t}`,
   );
 }
 
@@ -245,10 +233,7 @@ const LEAD_REFUSED = "Lead documents can't be shared with clients.";
 /** Emails live portal users; true when delivery failed. Never throws. */
 async function notifyShared(matterId: string): Promise<boolean> {
   try {
-    const res = await emailLivePortalUsers(
-      matterId,
-      documentsSharedEmail(portalHomeUrl())
-    );
+    const res = await emailLivePortalUsers(matterId, documentsSharedEmail(portalHomeUrl()));
     return res.failed > 0;
   } catch (err) {
     console.warn("[portal-documents] shared email failed", err);
@@ -258,7 +243,7 @@ async function notifyShared(matterId: string): Promise<boolean> {
 
 export async function setDocumentsClientShare(
   documentIds: string[],
-  shared: boolean
+  shared: boolean,
 ): Promise<Result> {
   const gate = await requirePermissionResult("portal.share_documents");
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -301,17 +286,21 @@ export async function setDocumentsClientShare(
   const sharedFolders = sharedFolderIds(folders);
   // Archived files never reach the portal, so sharing them emails no one.
   const becameVisible =
-    shared &&
-    docs.some((d) => d.status !== "archived" && !isEffectivelyShared(d, sharedFolders));
+    shared && docs.some((d) => d.status !== "archived" && !isEffectivelyShared(d, sharedFolders));
 
   await prisma.$transaction(async (tx) => {
     if (shared) {
       await tx.document.updateMany({ where: { id: { in: ids } }, data: { clientShare: "shared" } });
     } else {
       const hide = docs.filter((d) => d.folderId && sharedFolders.has(d.folderId)).map((d) => d.id);
-      const clear = docs.filter((d) => !(d.folderId && sharedFolders.has(d.folderId))).map((d) => d.id);
+      const clear = docs
+        .filter((d) => !(d.folderId && sharedFolders.has(d.folderId)))
+        .map((d) => d.id);
       if (hide.length) {
-        await tx.document.updateMany({ where: { id: { in: hide } }, data: { clientShare: "hidden" } });
+        await tx.document.updateMany({
+          where: { id: { in: hide } },
+          data: { clientShare: "hidden" },
+        });
       }
       if (clear.length) {
         await tx.document.updateMany({ where: { id: { in: clear } }, data: { clientShare: null } });
@@ -331,10 +320,7 @@ export async function setDocumentsClientShare(
   return done(matterId);
 }
 
-export async function setFolderClientShared(
-  folderId: string,
-  shared: boolean
-): Promise<Result> {
+export async function setFolderClientShared(folderId: string, shared: boolean): Promise<Result> {
   const gate = await requirePermissionResult("portal.share_documents");
   if (!gate.ok) return { ok: false, error: gate.error };
   const folder = await prisma.documentFolder.findUnique({
@@ -368,11 +354,10 @@ export async function setFolderClientShared(
   ]);
   const before = sharedFolderIds(folders);
   const after = sharedFolderIds(
-    folders.map((f) => (f.id === folderId ? { ...f, clientShared: shared } : f))
+    folders.map((f) => (f.id === folderId ? { ...f, clientShared: shared } : f)),
   );
   const becameVisible =
-    shared &&
-    docs.some((d) => !isEffectivelyShared(d, before) && isEffectivelyShared(d, after));
+    shared && docs.some((d) => !isEffectivelyShared(d, before) && isEffectivelyShared(d, after));
 
   await prisma.documentFolder.update({
     where: { id: folderId },
@@ -399,7 +384,7 @@ export async function setFolderClientShared(
  */
 export async function previewFolderMoveVisibility(
   folderId: string,
-  targetFolderId: string | null
+  targetFolderId: string | null,
 ): Promise<{ becomesVisible: number; becomesHidden: number }> {
   const none = { becomesVisible: 0, becomesHidden: 0 };
   const folder = await prisma.documentFolder.findUnique({
@@ -428,7 +413,7 @@ export async function previewFolderMoveVisibility(
   });
   const before = sharedFolderIds(folders);
   const after = sharedFolderIds(
-    folders.map((f) => (f.id === folderId ? { ...f, parentId: targetFolderId } : f))
+    folders.map((f) => (f.id === folderId ? { ...f, parentId: targetFolderId } : f)),
   );
   let becomesVisible = 0;
   let becomesHidden = 0;

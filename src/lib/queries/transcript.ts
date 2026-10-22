@@ -35,9 +35,7 @@ export type TranscriptView = {
   segments: TranscriptSegmentView[];
 };
 
-export async function getDocumentTranscript(
-  documentId: string,
-): Promise<TranscriptView | null> {
+export async function getDocumentTranscript(documentId: string): Promise<TranscriptView | null> {
   await assertChildMatterAccess("document", documentId);
   const t = await prisma.transcript.findUnique({
     where: { documentId },

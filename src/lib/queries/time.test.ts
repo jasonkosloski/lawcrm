@@ -133,10 +133,7 @@ describe("getMyWeekTime", () => {
     expect(mon.dayKey).toBe("2026-06-15");
     expect(mon.totalHours).toBe(4.5);
     expect(mon.billableHours).toBe(4);
-    expect(mon.segments.map((s) => s.matterName)).toEqual([
-      "Matter B",
-      "Matter A",
-    ]);
+    expect(mon.segments.map((s) => s.matterName)).toEqual(["Matter B", "Matter A"]);
     expect(mon.segments[1]).toMatchObject({
       matterId: matterAId,
       matterColor: "#cc0000",

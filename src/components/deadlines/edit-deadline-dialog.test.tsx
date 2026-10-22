@@ -23,10 +23,7 @@ vi.mock("@/app/actions/deadlines", () => ({
 }));
 
 import { updateDeadline } from "@/app/actions/deadlines";
-import {
-  EditDeadlineDialog,
-  type EditableDeadline,
-} from "./edit-deadline-dialog";
+import { EditDeadlineDialog, type EditableDeadline } from "./edit-deadline-dialog";
 
 const mockedAction = vi.mocked(updateDeadline);
 
@@ -60,13 +57,7 @@ describe("EditDeadlineDialog — close on success", () => {
   test("closes the dialog after a successful save", async () => {
     const user = setupUser();
     const onOpenChange = vi.fn();
-    render(
-      <EditDeadlineDialog
-        open
-        onOpenChange={onOpenChange}
-        deadline={deadline}
-      />
-    );
+    render(<EditDeadlineDialog open onOpenChange={onOpenChange} deadline={deadline} />);
 
     // Fields are prefilled from the deadline, so the form is
     // submittable as-is.
@@ -115,9 +106,7 @@ describe("EditDeadlineDialog — close on success", () => {
     await user.click(screen.getByRole("button", { name: /^save$/i }));
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: /^save$/i })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: /^save$/i })).not.toBeInTheDocument(),
     );
 
     // Round two: reopen and save again. With the effect keyed on
@@ -138,13 +127,7 @@ describe("EditDeadlineDialog — close on success", () => {
     }));
     const user = setupUser();
     const onOpenChange = vi.fn();
-    render(
-      <EditDeadlineDialog
-        open
-        onOpenChange={onOpenChange}
-        deadline={deadline}
-      />
-    );
+    render(<EditDeadlineDialog open onOpenChange={onOpenChange} deadline={deadline} />);
 
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
@@ -162,13 +145,7 @@ describe("EditDeadlineDialog — auto-managed SOL row", () => {
   };
 
   test("renders the date read-only and only offers the status", () => {
-    render(
-      <EditDeadlineDialog
-        open
-        onOpenChange={vi.fn()}
-        deadline={solDeadline}
-      />
-    );
+    render(<EditDeadlineDialog open onOpenChange={vi.fn()} deadline={solDeadline} />);
     expect(screen.getByText(/managed on the matter edit page/i)).toBeInTheDocument();
     // No editable title / due date / description inputs.
     expect(screen.queryByPlaceholderText("Deadline title")).toBeNull();
@@ -190,7 +167,7 @@ describe("EditDeadlineDialog - date-only due date (ADR-012)", () => {
         open
         onOpenChange={vi.fn()}
         deadline={{ ...deadline, dueDateKey: "2026-10-16" }}
-      />
+      />,
     );
     const input = screen.getByLabelText("Due date") as HTMLInputElement;
     expect(input.value).toBe("2026-10-16");
@@ -203,9 +180,7 @@ describe("EditDeadlineDialog - date-only due date (ADR-012)", () => {
 
   test("posts the row version it was seeded from", async () => {
     const user = setupUser();
-    render(
-      <EditDeadlineDialog open onOpenChange={vi.fn()} deadline={deadline} />
-    );
+    render(<EditDeadlineDialog open onOpenChange={vi.fn()} deadline={deadline} />);
     await user.click(screen.getByRole("button", { name: /^save$/i }));
     await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
     const fd = mockedAction.mock.calls[0][2] as FormData;
@@ -222,18 +197,16 @@ describe("EditDeadlineDialog - keeps what the user typed", () => {
       errors: { dueDate: ["Invalid due date"] },
     }));
     const user = setupUser();
-    render(
-      <EditDeadlineDialog open onOpenChange={vi.fn()} deadline={deadline} />
-    );
+    render(<EditDeadlineDialog open onOpenChange={vi.fn()} deadline={deadline} />);
     const title = screen.getByPlaceholderText("Deadline title");
     await user.clear(title);
     await user.type(title, "Edited title");
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
     expect(await screen.findByText("Invalid due date")).toBeInTheDocument();
-    expect(
-      (screen.getByPlaceholderText("Deadline title") as HTMLInputElement).value
-    ).toBe("Edited title");
+    expect((screen.getByPlaceholderText("Deadline title") as HTMLInputElement).value).toBe(
+      "Edited title",
+    );
   });
 
   test("a prop refresh while open does not reseed the form", async () => {
@@ -241,22 +214,16 @@ describe("EditDeadlineDialog - keeps what the user typed", () => {
     // [open, deadline] effect reset the working copy mid-edit.
     const user = setupUser();
     const { rerender } = render(
-      <EditDeadlineDialog open onOpenChange={vi.fn()} deadline={deadline} />
+      <EditDeadlineDialog open onOpenChange={vi.fn()} deadline={deadline} />,
     );
     const title = screen.getByPlaceholderText("Deadline title");
     await user.clear(title);
     await user.type(title, "Half-typed");
 
-    rerender(
-      <EditDeadlineDialog
-        open
-        onOpenChange={vi.fn()}
-        deadline={{ ...deadline }}
-      />
+    rerender(<EditDeadlineDialog open onOpenChange={vi.fn()} deadline={{ ...deadline }} />);
+    expect((screen.getByPlaceholderText("Deadline title") as HTMLInputElement).value).toBe(
+      "Half-typed",
     );
-    expect(
-      (screen.getByPlaceholderText("Deadline title") as HTMLInputElement).value
-    ).toBe("Half-typed");
   });
 
   test("shows a stale-version error from the server", async () => {
@@ -265,12 +232,8 @@ describe("EditDeadlineDialog - keeps what the user typed", () => {
       errors: { _form: ["This deadline was changed by someone else."] },
     }));
     const user = setupUser();
-    render(
-      <EditDeadlineDialog open onOpenChange={vi.fn()} deadline={deadline} />
-    );
+    render(<EditDeadlineDialog open onOpenChange={vi.fn()} deadline={deadline} />);
     await user.click(screen.getByRole("button", { name: /^save$/i }));
-    expect(
-      await screen.findByText(/changed by someone else/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/changed by someone else/i)).toBeInTheDocument();
   });
 });

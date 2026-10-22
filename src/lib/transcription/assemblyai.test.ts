@@ -87,13 +87,9 @@ describe("submitJob", () => {
 
 describe("fetchJob", () => {
   it("maps provider errors", async () => {
-    fetchMock.mockResolvedValue(
-      res(200, { id: "j", status: "error", error: "no audio" }),
-    );
+    fetchMock.mockResolvedValue(res(200, { id: "j", status: "error", error: "no audio" }));
     expect(await fetchJob("j")).toEqual({ status: "error", error: "no audio" });
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      "https://api.assemblyai.com/v2/transcript/j",
-    );
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.assemblyai.com/v2/transcript/j");
   });
 
   it("returns raw for completed", async () => {

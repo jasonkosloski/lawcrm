@@ -75,9 +75,7 @@ describe("updateMatterVisibilityAction", () => {
 
   test("a non-admin is bounced and nothing changes", async () => {
     mockedUser.mockResolvedValue(member);
-    await expect(
-      updateMatterVisibilityAction(idle, form("TEAM"))
-    ).rejects.toThrow("NEXT_REDIRECT");
+    await expect(updateMatterVisibilityAction(idle, form("TEAM"))).rejects.toThrow("NEXT_REDIRECT");
     const firm = await prisma.firm.findUniqueOrThrow({ where: { id: firmId } });
     expect(firm.matterVisibility).toBe("FIRM");
   });

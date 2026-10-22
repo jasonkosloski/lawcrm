@@ -54,10 +54,10 @@ export function EditPracticeAreaForm({
   };
 }) {
   const boundAction = updatePracticeArea.bind(null, area.id);
-  const [state, formAction, isPending] = useActionState<
-    PracticeAreaFormState,
-    FormData
-  >(boundAction, practiceAreaInitialState);
+  const [state, formAction, isPending] = useActionState<PracticeAreaFormState, FormData>(
+    boundAction,
+    practiceAreaInitialState,
+  );
 
   const errs = state.errors ?? {};
 
@@ -80,23 +80,15 @@ export function EditPracticeAreaForm({
   const [color, setColor] = useState<string>(area.color);
   const [hasSol, setHasSol] = useState(area.hasStatuteOfLimitations);
   const [amount, setAmount] = useState(
-    area.statutePeriodAmount ? String(area.statutePeriodAmount) : ""
+    area.statutePeriodAmount ? String(area.statutePeriodAmount) : "",
   );
   const [unit, setUnit] = useState<string>(area.statutePeriodUnit ?? "YEARS");
   const [citation, setCitation] = useState(area.statuteSourceCitation ?? "");
-  const [allowedTypes, setAllowedTypes] = useState<string[]>(
-    area.allowedBillingTypes
-  );
-  const [defaultType, setDefaultType] = useState<string>(
-    area.defaultBillingType
-  );
-  const allowedOptions = BILLING_TYPE_OPTIONS.filter((o) =>
-    allowedTypes.includes(o.value)
-  );
+  const [allowedTypes, setAllowedTypes] = useState<string[]>(area.allowedBillingTypes);
+  const [defaultType, setDefaultType] = useState<string>(area.defaultBillingType);
+  const allowedOptions = BILLING_TYPE_OPTIONS.filter((o) => allowedTypes.includes(o.value));
   const toggleType = (value: string, checked: boolean) => {
-    const next = checked
-      ? [...allowedTypes, value]
-      : allowedTypes.filter((t) => t !== value);
+    const next = checked ? [...allowedTypes, value] : allowedTypes.filter((t) => t !== value);
     setAllowedTypes(next);
     if (!next.includes(defaultType)) {
       const first = BILLING_TYPE_OPTIONS.find((o) => next.includes(o.value));
@@ -161,16 +153,12 @@ export function EditPracticeAreaForm({
           className="w-3.5 h-3.5 rounded border-line mt-0.5"
         />
         <div className="flex flex-col gap-0.5">
-          <span className="text-xs font-medium text-ink-2">
-            Track statute of limitations
-          </span>
+          <span className="text-xs font-medium text-ink-2">Track statute of limitations</span>
           <span className="text-2xs text-ink-4 leading-relaxed">
-            When on, matters in this area get an SOL date + satisfied
-            flag on the matter forms and a prominent countdown card on
-            the Overview tab. Turning it off only stops new SOL dates
-            from being computed: existing matters keep their SOL dates
-            and SOL deadlines, and this area keeps its saved period and
-            citation in case you turn tracking back on.
+            When on, matters in this area get an SOL date + satisfied flag on the matter forms and a
+            prominent countdown card on the Overview tab. Turning it off only stops new SOL dates
+            from being computed: existing matters keep their SOL dates and SOL deadlines, and this
+            area keeps its saved period and citation in case you turn tracking back on.
           </span>
         </div>
       </label>
@@ -184,11 +172,7 @@ export function EditPracticeAreaForm({
           Statute period (auto-computes Matter SOL date from incident)
         </legend>
         <div className="grid grid-cols-2 gap-2">
-          <Field
-            label="Amount"
-            htmlFor="statutePeriodAmount"
-            error={errs.statutePeriodAmount}
-          >
+          <Field label="Amount" htmlFor="statutePeriodAmount" error={errs.statutePeriodAmount}>
             <input
               id="statutePeriodAmount"
               type="number"
@@ -200,11 +184,7 @@ export function EditPracticeAreaForm({
               className={inputClass(!!errs.statutePeriodAmount)}
             />
           </Field>
-          <Field
-            label="Unit"
-            htmlFor="statutePeriodUnit"
-            error={errs.statutePeriodUnit}
-          >
+          <Field label="Unit" htmlFor="statutePeriodUnit" error={errs.statutePeriodUnit}>
             <NativeSelect
               id="statutePeriodUnit"
               name="statutePeriodUnit"
@@ -237,12 +217,10 @@ export function EditPracticeAreaForm({
           />
         </Field>
         <p className="text-2xs text-ink-4 leading-relaxed">
-          The SOL date is the incident date plus this period on the
-          calendar (&ldquo;2 years&rdquo; from March 3 is March 3 two
-          years later). When the target month is shorter, the date
-          lands on its last day (Feb 29 plus 1 year is Feb 28). Verify
-          the computed date against the statute and override it on the
-          matter when it differs.
+          The SOL date is the incident date plus this period on the calendar (&ldquo;2 years&rdquo;
+          from March 3 is March 3 two years later). When the target month is shorter, the date lands
+          on its last day (Feb 29 plus 1 year is Feb 28). Verify the computed date against the
+          statute and override it on the matter when it differs.
         </p>
       </fieldset>
 
@@ -250,9 +228,7 @@ export function EditPracticeAreaForm({
           matters. The marker lets the action tell "unchecked all" from
           "field absent". */}
       <fieldset className="flex flex-col gap-2 px-3 py-2.5 rounded-md border border-line bg-paper-2/30">
-        <legend className="px-1 text-2xs font-medium text-ink-3">
-          Billing types
-        </legend>
+        <legend className="px-1 text-2xs font-medium text-ink-3">Billing types</legend>
         <input type="hidden" name="allowedBillingTypesPresent" value="1" />
         <div className="flex flex-wrap gap-x-4 gap-y-1.5">
           {BILLING_TYPE_OPTIONS.map((o) => (
@@ -273,9 +249,7 @@ export function EditPracticeAreaForm({
           ))}
         </div>
         {errs.allowedBillingTypes && (
-          <p className="text-2xs text-warn">
-            {errs.allowedBillingTypes.join(" ")}
-          </p>
+          <p className="text-2xs text-warn">{errs.allowedBillingTypes.join(" ")}</p>
         )}
         <Field
           label="Default"
@@ -320,15 +294,8 @@ export function EditPracticeAreaForm({
       />
 
       <div className="flex items-center justify-end gap-2">
-        {state.status === "ok" && (
-          <span className="text-2xs text-ok font-medium">Saved.</span>
-        )}
-        <Button
-          size="sm"
-          type="submit"
-          disabled={isPending}
-          className="hover:bg-brand-600"
-        >
+        {state.status === "ok" && <span className="text-2xs text-ok font-medium">Saved.</span>}
+        <Button size="sm" type="submit" disabled={isPending} className="hover:bg-brand-600">
           {isPending ? "Saving…" : "Save"}
         </Button>
       </div>

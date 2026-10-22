@@ -12,21 +12,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
 // cmdk, the dialog and ~20 icons are only needed once the palette is
 // first opened — keep them out of every page's initial bundle.
-const CommandPalette = dynamic(
-  () => import("./command-palette").then((m) => m.CommandPalette),
-  { ssr: false }
-);
+const CommandPalette = dynamic(() => import("./command-palette").then((m) => m.CommandPalette), {
+  ssr: false,
+});
 
 type PaletteContextValue = {
   open: boolean;
@@ -50,8 +42,7 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const isCmdK =
-        (e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K");
+      const isCmdK = (e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K");
       if (isCmdK) {
         e.preventDefault();
         togglePalette();
@@ -62,9 +53,7 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
   }, [togglePalette]);
 
   return (
-    <PaletteContext.Provider
-      value={{ open, openPalette, closePalette, togglePalette }}
-    >
+    <PaletteContext.Provider value={{ open, openPalette, closePalette, togglePalette }}>
       {children}
       {everOpened && <CommandPalette open={open} onOpenChange={setOpen} />}
     </PaletteContext.Provider>
@@ -79,9 +68,7 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
 export function useCommandPalette(): PaletteContextValue {
   const ctx = useContext(PaletteContext);
   if (!ctx) {
-    throw new Error(
-      "useCommandPalette must be used within CommandPaletteProvider"
-    );
+    throw new Error("useCommandPalette must be used within CommandPaletteProvider");
   }
   return ctx;
 }

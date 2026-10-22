@@ -23,10 +23,7 @@ import { useCallback, useId, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Archive } from "lucide-react";
 import { bundleAsInternalRecord } from "@/app/actions/billing";
-import {
-  billingInitialState,
-  type BillingFormState,
-} from "@/lib/billing-form";
+import { billingInitialState, type BillingFormState } from "@/lib/billing-form";
 import { bundleCountLabel, bundleTotal } from "./bundle-summary";
 import { formatMoney } from "@/lib/format-money";
 import { inputClass, FormErrorBanner } from "@/components/ui/field";
@@ -60,15 +57,16 @@ export function BundleInternalRecordForm({
       if (res.status === "ok") setExpanded(false);
       return res;
     },
-    [matterId]
+    [matterId],
   );
   // Wrapped useActionState: masks state left over from a previous
   // expand, so a failed attempt's error banner doesn't reappear when
   // the form is re-expanded. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    BillingFormState,
-    FormData
-  >(action, billingInitialState, expanded);
+  const [state, formAction, isPending] = useDialogActionState<BillingFormState, FormData>(
+    action,
+    billingInitialState,
+    expanded,
+  );
   // Dispatch via onSubmit + startTransition instead of
   // <form action={formAction}>: React 19 resets every form-action
   // form after the action settles — error or not — which wipes the
@@ -109,19 +107,14 @@ export function BundleInternalRecordForm({
       className="flex flex-col gap-3 p-3 rounded-md border border-line bg-paper-2/40"
     >
       <div className="text-xs text-ink">
-        Close out{" "}
-        <strong>{bundleCountLabel(entryCount, expenseCount)}</strong>{" "}
-        totaling <strong>{formatMoney(bundleTotal(amountTotal, expenseTotal))}</strong>{" "}
-        as an internal record. No invoice goes to the client; the
-        entries leave WIP and the doc files into the matter for
-        tracking.
+        Close out <strong>{bundleCountLabel(entryCount, expenseCount)}</strong> totaling{" "}
+        <strong>{formatMoney(bundleTotal(amountTotal, expenseTotal))}</strong> as an internal
+        record. No invoice goes to the client; the entries leave WIP and the doc files into the
+        matter for tracking.
       </div>
 
       <div className="flex flex-col gap-1">
-        <label
-          htmlFor={`${ids}-notes`}
-          className="text-2xs font-medium text-ink-3"
-        >
+        <label htmlFor={`${ids}-notes`} className="text-2xs font-medium text-ink-3">
           Reason <span className="text-warn">*</span>
         </label>
         <input
@@ -134,9 +127,7 @@ export function BundleInternalRecordForm({
           placeholder="e.g. Settled — fees came out of settlement; pro-bono case completed; fee award collected separately"
           className={inputClass(!!errs.notes)}
         />
-        {errs.notes && (
-          <span className="text-2xs text-warn">{errs.notes[0]}</span>
-        )}
+        {errs.notes && <span className="text-2xs text-warn">{errs.notes[0]}</span>}
       </div>
 
       {state.status === "error" && state.error && <FormErrorBanner message={state.error} />}
@@ -149,12 +140,7 @@ export function BundleInternalRecordForm({
         >
           Cancel
         </button>
-        <Button
-          variant="outline"
-          size="sm"
-          type="submit"
-          disabled={isPending}
-        >
+        <Button variant="outline" size="sm" type="submit" disabled={isPending}>
           {isPending ? "Bundling…" : "Record without billing"}
         </Button>
       </div>

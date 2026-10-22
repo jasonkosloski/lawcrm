@@ -27,11 +27,7 @@ import { SharedSection } from "./shared-section";
 import { StatusSection } from "./status-section";
 import { UploadsSection } from "./uploads-section";
 
-export default async function PortalMatterPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function PortalMatterPage({ params }: { params: Promise<{ id: string }> }) {
   const { identityId } = await requirePortalIdentity();
   const { id } = await params;
   await assertPortalMatterAccess(identityId, id);
@@ -84,17 +80,9 @@ export default async function PortalMatterPage({
       {invoices.length > 0 || trust ? (
         <BillingSection matterId={matter.id} invoices={invoices} trust={trust} />
       ) : null}
-      <RequestsSection
-        requests={requests}
-        matterId={matter.id}
-        storageDriver={storageDriver}
-      />
+      <RequestsSection requests={requests} matterId={matter.id} storageDriver={storageDriver} />
       <SharedSection documents={shared} />
-      <UploadsSection
-        uploads={uploads}
-        matterId={matter.id}
-        storageDriver={storageDriver}
-      />
+      <UploadsSection uploads={uploads} matterId={matter.id} storageDriver={storageDriver} />
     </div>
   );
 }

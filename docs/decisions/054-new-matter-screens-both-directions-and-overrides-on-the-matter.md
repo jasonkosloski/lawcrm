@@ -6,6 +6,7 @@
 **Context:** Lead conversion re-runs the conflict check (ADR-050), but `/matters/new` created matters with no check at all. A matter made by hand also has no lead to hold an override. And the existing matcher only screens one direction: the prospective client against adverse parties on other matters. It never asked whether the party we'd be adverse to is one of the firm's own clients (Rule 1.7), which is the conflict a new matter is most likely to create.
 
 **Decision:**
+
 - One gate (`src/lib/matter-conflict-gate.ts`: `screenMatter`, `evaluateConflictGate`, `conflictGateLogEntry`) runs before every write that puts a client or adverse party on a matter: a client through `runConflictMatcher`, adverse names through the new `runAdverseConflictMatcher`. Callers:
   - `createMatter`: the client (picked or inline-new) and the opposing party / firm.
   - `updateMatter`: only what the save changes (a new client; an opposing party / firm that differs after normalizing), so routine saves never ask.
@@ -17,6 +18,7 @@
 - The forms show the match list, redacted per viewer (`redactConflictResultForViewer`), unlike conversion's counts-only prompt. The edit form keeps an acknowledged prompt through its deadline-cascade confirm (ADR-040), so that resubmit still carries the acknowledgement.
 
 **Trade-offs:**
+
 - (+) No path puts a client or adverse party on a matter unscreened, and suing a current client is caught at the door
 - (+) A tick or override never covers matches the user didn't see; the override's timeline row is written in the create transaction
 - (-) Exact (normalized) name equality only, as in the client path: "Acme Inc." vs "Acme, Inc." is missed

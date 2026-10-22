@@ -43,10 +43,7 @@ async function userWith(permissions: string[]) {
   return (await seedUser({ firmId, name: "Staff", roleIds: [role.id] })).userId;
 }
 
-async function seedIdentity(
-  email: string,
-  opts: { revoked?: boolean; disabled?: boolean } = {}
-) {
+async function seedIdentity(email: string, opts: { revoked?: boolean; disabled?: boolean } = {}) {
   const { contactId } = await seedContact({ name: `C ${email}` });
   const identity = await prisma.portalIdentity.create({
     data: { contactId, email, disabledAt: opts.disabled ? new Date() : null },
@@ -123,7 +120,7 @@ describe("sendStaffPortalMessage", () => {
     expect(
       await prisma.activityLog.count({
         where: { matterId, userId: admin, type: "note", title: "Sent a client portal message" },
-      })
+      }),
     ).toBe(1);
     const rs = await prisma.portalReadState.findFirstOrThrow({ where: { userId: admin } });
     expect(rs.lastReadAt.getTime()).toBe(msg.createdAt.getTime());
@@ -191,7 +188,10 @@ describe("markStaffPortalThreadRead", () => {
   test("marks the caller's unread portal_message notifications for the matter read", async () => {
     await sendStaffPortalMessage(matterId, "hi");
     const thread = await prisma.portalThread.findFirstOrThrow();
-    await prisma.portalReadState.updateMany({ where: { userId: admin }, data: { lastReadAt: new Date(0) } });
+    await prisma.portalReadState.updateMany({
+      where: { userId: admin },
+      data: { lastReadAt: new Date(0) },
+    });
     const mk = (userId: string, mId: string | null) =>
       prisma.notification.create({
         data: { userId, matterId: mId, type: "portal_message", title: "t" },

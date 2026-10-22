@@ -23,14 +23,7 @@
 
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -42,16 +35,12 @@ type MailboxDrawerContextValue = {
   close: () => void;
 };
 
-const MailboxDrawerContext = createContext<MailboxDrawerContextValue | null>(
-  null
-);
+const MailboxDrawerContext = createContext<MailboxDrawerContextValue | null>(null);
 
 function useMailboxDrawer(): MailboxDrawerContextValue {
   const ctx = useContext(MailboxDrawerContext);
   if (!ctx) {
-    throw new Error(
-      "MailboxDrawer components must be used inside MailboxDrawerProvider"
-    );
+    throw new Error("MailboxDrawer components must be used inside MailboxDrawerProvider");
   }
   return ctx;
 }
@@ -134,9 +123,7 @@ export function MailboxDrawer({ children }: { children: ReactNode }) {
       <div
         className={cn(
           "fixed inset-0 z-30 bg-ink/40 transition-opacity lg:hidden",
-          open
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
+          open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
         )}
         aria-hidden={!open}
         onClick={close}
@@ -156,7 +143,7 @@ export function MailboxDrawer({ children }: { children: ReactNode }) {
           "fixed inset-y-0 left-0 z-40 flex flex-col transition-transform lg:transition-none",
           open ? "translate-x-0" : "-translate-x-full",
           "lg:static lg:translate-x-0 lg:z-auto",
-          "bg-card lg:bg-transparent shadow-2xl lg:shadow-none"
+          "bg-card lg:bg-transparent shadow-2xl lg:shadow-none",
         )}
         // Closed on mobile = translated off-canvas but still in the
         // DOM, so `inert` pulls its links out of the tab order and

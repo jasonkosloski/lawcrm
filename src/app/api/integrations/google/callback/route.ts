@@ -46,17 +46,11 @@ export const dynamic = "force-dynamic";
 
 /** Machine error codes the integrations page maps to readable copy. */
 export type GoogleCallbackError =
-  | "denied"
-  | "state"
-  | "exchange"
-  | "userinfo"
-  | "scope"
-  | "save"
-  | "not_configured";
+  "denied" | "state" | "exchange" | "userinfo" | "scope" | "save" | "not_configured";
 
 function redirectToSettings(
   origin: string,
-  result: { connected: true } | { error: GoogleCallbackError }
+  result: { connected: true } | { error: GoogleCallbackError },
 ): NextResponse {
   const url = new URL("/settings/integrations", origin);
   if ("connected" in result) url.searchParams.set("connected", "1");
@@ -108,16 +102,13 @@ export async function GET(request: NextRequest): Promise<Response> {
   // leg's — both derive from the same resolver, so it does.
   let tokens;
   try {
-    tokens = await exchangeCodeForTokens(
-      code,
-      resolveGoogleRedirectUri(request.nextUrl)
-    );
+    tokens = await exchangeCodeForTokens(code, resolveGoogleRedirectUri(request.nextUrl));
   } catch (err) {
     // Log the class of failure only — GoogleOAuthError messages are
     // token-free by construction, but stay conservative anyway.
     console.error(
       `[google-oauth] code exchange failed at ${GOOGLE_CALLBACK_PATH}:`,
-      err instanceof Error ? err.message : "unknown error"
+      err instanceof Error ? err.message : "unknown error",
     );
     return redirectToSettings(origin, { error: "exchange" });
   }
@@ -129,7 +120,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   } catch (err) {
     console.error(
       "[google-oauth] userinfo fetch failed:",
-      err instanceof Error ? err.message : "unknown error"
+      err instanceof Error ? err.message : "unknown error",
     );
     return redirectToSettings(origin, { error: "userinfo" });
   }
@@ -151,10 +142,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   // anyway — an account row without one can't survive first expiry,
   // EXCEPT on reconnect where the stored one keeps working.
   const emailAddress = email.toLowerCase();
-  const accessToken = serializeAccessToken(
-    tokens.access_token,
-    tokens.expires_in
-  );
+  const accessToken = serializeAccessToken(tokens.access_token, tokens.expires_in);
 
   // Tokens are encrypted at rest by the ADR-011 Prisma extension —
   // this top-level emailAccount.upsert is exactly the interception
@@ -196,9 +184,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       update: {
         provider: "gmail",
         accessToken,
-        ...(tokens.refresh_token
-          ? { refreshToken: tokens.refresh_token }
-          : {}),
+        ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
         ...(tokens.scope ? { grantedScopes: tokens.scope } : {}),
         syncStatus: "connected",
         syncError: null,
@@ -207,7 +193,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   } catch (err) {
     console.error(
       "[google-oauth] saving the connected account failed:",
-      err instanceof Error ? err.name : "unknown error"
+      err instanceof Error ? err.name : "unknown error",
     );
     return redirectToSettings(origin, { error: "save" });
   }

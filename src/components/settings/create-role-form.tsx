@@ -16,18 +16,21 @@ import { useActionState, useState, useTransition } from "react";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createRoleAction } from "@/app/actions/roles";
+import { roleInitialState, type RoleFormState } from "@/lib/role-form";
 import {
-  roleInitialState,
-  type RoleFormState,
-} from "@/lib/role-form";
-import { Field, FormErrorBanner, formErrorMessage, inputClass, textareaClass } from "@/components/ui/field";
+  Field,
+  FormErrorBanner,
+  formErrorMessage,
+  inputClass,
+  textareaClass,
+} from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 
 export function CreateRoleForm() {
-  const [state, formAction, isPending] = useActionState<
-    RoleFormState,
-    FormData
-  >(createRoleAction, roleInitialState);
+  const [state, formAction, isPending] = useActionState<RoleFormState, FormData>(
+    createRoleAction,
+    roleInitialState,
+  );
   const [, startTransition] = useTransition();
   const [expanded, setExpanded] = useState(false);
   // The action returns a fresh object on every call, so comparing the
@@ -97,10 +100,7 @@ export function CreateRoleForm() {
       </Field>
 
       <FormErrorBanner
-        message={formErrorMessage(
-          state,
-          "Couldn’t create — check the highlighted fields."
-        )}
+        message={formErrorMessage(state, "Couldn’t create — check the highlighted fields.")}
       />
 
       <div className="flex items-center justify-end gap-2">
@@ -111,11 +111,7 @@ export function CreateRoleForm() {
         >
           Cancel
         </button>
-        <Button
-          size="sm"
-          type="submit"
-          disabled={isPending}
-        >
+        <Button size="sm" type="submit" disabled={isPending}>
           {isPending ? "Creating…" : "Create role"}
         </Button>
       </div>

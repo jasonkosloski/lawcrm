@@ -18,11 +18,7 @@ import {
 // components can import them without pulling Prisma into the browser
 // bundle. Re-exported here for back-compat with any server callers
 // that already import from this module.
-export {
-  CONTACT_TYPES,
-  CONTACT_TYPE_LABEL,
-  type ContactType,
-} from "@/lib/contact-constants";
+export { CONTACT_TYPES, CONTACT_TYPE_LABEL, type ContactType } from "@/lib/contact-constants";
 
 export type ContactListRow = {
   id: string;
@@ -339,10 +335,7 @@ export async function listContactPickerOptions(opts?: {
     opts?.priorityMatterId &&
     // A matter behind the wall must not leak its people via the
     // "priority" ordering.
-    (await canAccessMatter(
-      await getCurrentUserId(),
-      opts.priorityMatterId
-    ))
+    (await canAccessMatter(await getCurrentUserId(), opts.priorityMatterId))
   ) {
     const [parties, matter] = await Promise.all([
       prisma.matterContact.findMany({
@@ -377,10 +370,7 @@ export async function listContactPickerOptions(opts?: {
   const first = priority.map(toPickerOption);
   const taken = new Set(first.map((c) => c.id));
   // Stable partition — matter people first, both halves still A→Z.
-  return [
-    ...first,
-    ...contacts.filter((c) => !taken.has(c.id)).map(toPickerOption),
-  ];
+  return [...first, ...contacts.filter((c) => !taken.has(c.id)).map(toPickerOption)];
 }
 
 /** Merge-target option: a picker row plus the email, so two

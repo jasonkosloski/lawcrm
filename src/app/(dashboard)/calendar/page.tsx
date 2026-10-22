@@ -33,10 +33,7 @@ import {
   toDateParam,
 } from "@/lib/calendar-utils";
 import { currentUserHasPermission } from "@/lib/permission-check";
-import {
-  calendarMonthGridInTz,
-  calendarWeekInTz,
-} from "@/lib/format-date";
+import { calendarMonthGridInTz, calendarWeekInTz } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import {
   getCalendarEventById,
@@ -49,9 +46,7 @@ import { getEditableEventIds } from "@/lib/queries/calendar-edit-flags";
 import { requireUser } from "@/lib/current-user";
 import { firstParam } from "@/lib/search-params";
 
-export default async function CalendarPage({
-  searchParams,
-}: PageProps<"/calendar">) {
+export default async function CalendarPage({ searchParams }: PageProps<"/calendar">) {
   const userId = await requireUser();
   const sp = await searchParams;
 
@@ -69,8 +64,7 @@ export default async function CalendarPage({
   const week = calendarWeekInTz(focal, userTz);
   const monthGrid = calendarMonthGridInTz(focal, userTz);
   const dayRange = calendarDayInTz(focal, userTz);
-  const range =
-    view === "week" ? week : view === "month" ? monthGrid : dayRange;
+  const range = view === "week" ? week : view === "month" ? monthGrid : dayRange;
 
   // Event-detail modal is URL-driven via ?event=<id> so refresh +
   // back-button both work. The modal's queries live in a separate
@@ -91,9 +85,7 @@ export default async function CalendarPage({
   // server-side regardless.
   const editableEventIds = [
     ...(await getEditableEventIds(
-      items
-        .filter((i) => i.kind === "event" && i.viewerCanSeeDetails)
-        .map((i) => i.id)
+      items.filter((i) => i.kind === "event" && i.viewerCanSeeDetails).map((i) => i.id),
     )),
   ];
   const canEditEvents = editableEventIds.length > 0;
@@ -104,7 +96,7 @@ export default async function CalendarPage({
   const eventCount = items.filter((i) => i.kind === "event").length;
   const deadlineItems = items.filter((i) => i.kind === "deadline");
   const criticalCount = deadlineItems.filter(
-    (i) => i.kind === "deadline" && i.deadlineKind === "critical"
+    (i) => i.kind === "deadline" && i.deadlineKind === "critical",
   ).length;
 
   // `?show=deadlines` filters at render — the fetch above is the
@@ -121,11 +113,7 @@ export default async function CalendarPage({
 
   return (
     <CreateStackProvider>
-      <TopBar
-        title="Calendar"
-        crumbs={crumbBits.join(" · ")}
-        actions={<NewEventButton />}
-      />
+      <TopBar title="Calendar" crumbs={crumbBits.join(" · ")} actions={<NewEventButton />} />
 
       <div className="flex-1 flex flex-col min-h-0 animate-page-enter">
         <CalendarToolbar view={view} focal={focal} show={show} />
@@ -182,11 +170,7 @@ export default async function CalendarPage({
           moment its queries resolve. */}
       {eventId && (
         <Suspense fallback={null}>
-          <EventDetailLoader
-            eventId={eventId}
-            viewerId={userId}
-            userTz={userTz}
-          />
+          <EventDetailLoader eventId={eventId} viewerId={userId} userTz={userTz} />
         </Suspense>
       )}
     </CreateStackProvider>
@@ -217,14 +201,7 @@ async function EventDetailLoader({
   if (!event) return null;
   if (!event.viewerCanSeeDetails) {
     // The "Busy" shell: no notes, no time entries, never editable.
-    return (
-      <EventDetailModal
-        event={event}
-        notes={[]}
-        timeEntries={[]}
-        canEdit={false}
-      />
-    );
+    return <EventDetailModal event={event} notes={[]} timeEntries={[]} canEdit={false} />;
   }
   const [
     notes,

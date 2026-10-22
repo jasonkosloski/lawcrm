@@ -17,12 +17,7 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { markMatterNotesRead } from "@/app/actions/notes";
 import { NoteCard, type NoteCardNote } from "./note-card";
-import {
-  NOTE_TYPES,
-  NOTE_TYPE_LABEL,
-  type NoteAccess,
-  type NoteType,
-} from "@/lib/note-constants";
+import { NOTE_TYPES, NOTE_TYPE_LABEL, type NoteAccess, type NoteType } from "@/lib/note-constants";
 import { noteToPlainText } from "@/lib/note-text";
 import type { NoteScope } from "@/lib/note-scope";
 import {
@@ -86,8 +81,7 @@ export function NotesTabBody({
 
   const matches = (n: NoteCardNote): boolean => {
     if (pinnedOnly && !n.isPinned) return false;
-    if (typeFilter.size > 0 && !typeFilter.has(n.type as NoteType))
-      return false;
+    if (typeFilter.size > 0 && !typeFilter.has(n.type as NoteType)) return false;
     const q = query.trim().toLowerCase();
     if (q.length > 0) {
       const hay = (noteToPlainText(n.content) + " " + n.authorName).toLowerCase();
@@ -100,11 +94,11 @@ export function NotesTabBody({
   const visibleTrees = useMemo(
     () => trees.filter((t) => subtreeMatches(t, matches)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [trees, query, typeFilter, pinnedOnly]
+    [trees, query, typeFilter, pinnedOnly],
   );
   const visibleNoteCount = useMemo(
     () => visibleTrees.reduce((n, t) => n + countNodes(t), 0),
-    [visibleTrees]
+    [visibleTrees],
   );
 
   const typesWithCounts = useMemo(() => {
@@ -114,18 +108,14 @@ export function NotesTabBody({
   }, [notes]);
 
   const pinnedCount = notes.filter((n) => n.isPinned).length;
-  const anyActive =
-    query.length > 0 || typeFilter.size > 0 || pinnedOnly;
+  const anyActive = query.length > 0 || typeFilter.size > 0 || pinnedOnly;
 
   return (
     <div className="flex flex-col gap-3">
       {/* Filter bar */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-64 max-w-sm">
-          <Search
-            size={13}
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4"
-          />
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4" />
           <input
             type="text"
             value={query}
@@ -161,7 +151,7 @@ export function NotesTabBody({
                   on
                     ? "bg-brand-soft text-brand-700 border-brand-200"
                     : "bg-white text-ink-3 border-line hover:text-brand-700 hover:border-brand-300",
-                  c === 0 && !on && "opacity-40 cursor-not-allowed"
+                  c === 0 && !on && "opacity-40 cursor-not-allowed",
                 )}
               >
                 {NOTE_TYPE_LABEL[t]}
@@ -180,17 +170,12 @@ export function NotesTabBody({
               "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium border transition-colors",
               pinnedOnly
                 ? "bg-brand-soft text-brand-700 border-brand-200"
-                : "bg-white text-ink-3 border-line hover:text-brand-700 hover:border-brand-300"
+                : "bg-white text-ink-3 border-line hover:text-brand-700 hover:border-brand-300",
             )}
           >
-            <Pin
-              size={11}
-              className={pinnedOnly ? "fill-brand-500 text-brand-500" : ""}
-            />
+            <Pin size={11} className={pinnedOnly ? "fill-brand-500 text-brand-500" : ""} />
             Pinned only
-            <span className="font-mono text-3xs text-ink-4">
-              {pinnedCount}
-            </span>
+            <span className="font-mono text-3xs text-ink-4">{pinnedCount}</span>
           </button>
         )}
 
@@ -229,13 +214,7 @@ export function NotesTabBody({
       ) : (
         <div className="flex flex-col gap-4">
           {visibleTrees.map((tree) => (
-            <ThreadView
-              key={tree.note.id}
-              node={tree}
-              scope={scope}
-              access={access}
-              depth={0}
-            />
+            <ThreadView key={tree.note.id} node={tree} scope={scope} access={access} depth={0} />
           ))}
         </div>
       )}
@@ -266,33 +245,22 @@ function ThreadView({
   // collapse it so old threads don't clutter the page. If anything
   // inside is still unread for this user, leave it open.
   const [collapsed, setCollapsed] = useState(
-    () => hasChildren && !node.children.some((c) => subtreeHasUnread(c))
+    () => hasChildren && !node.children.some((c) => subtreeHasUnread(c)),
   );
   // Count is of ALL descendants, not just direct children — that's
   // more useful info for deciding whether to expand a long thread.
-  const descendantCount = hasChildren
-    ? node.children.reduce((n, c) => n + countNodes(c), 0)
-    : 0;
+  const descendantCount = hasChildren ? node.children.reduce((n, c) => n + countNodes(c), 0) : 0;
 
   // Roll up attachments from descendants — surfaces "thread has N
   // items buried in replies" so the user knows the conversation has
   // actionable stuff before expanding it. Only computed at depth 0
   // (root of the conversation); deeper levels handle their own.
-  const rollup =
-    depth === 0 && hasChildren ? rollupDescendants(node) : null;
-  const rollupTotal =
-    rollup === null
-      ? 0
-      : rollup.tasks + rollup.deadlines + rollup.timeEntries;
+  const rollup = depth === 0 && hasChildren ? rollupDescendants(node) : null;
+  const rollupTotal = rollup === null ? 0 : rollup.tasks + rollup.deadlines + rollup.timeEntries;
 
   return (
     <div className="flex flex-col gap-2">
-      <NoteCard
-        note={node.note}
-        scope={scope}
-        access={access}
-        isReply={depth > 0}
-      />
+      <NoteCard note={node.note} scope={scope} access={access} isReply={depth > 0} />
       {hasChildren && (
         <>
           <div className="flex items-center gap-2 self-start pl-3 ml-3">
@@ -302,11 +270,7 @@ function ThreadView({
               aria-expanded={!collapsed}
               className="inline-flex items-center gap-1 text-2xs text-ink-3 hover:text-brand-700 transition-colors"
             >
-              {collapsed ? (
-                <ChevronRight size={11} />
-              ) : (
-                <ChevronDown size={11} />
-              )}
+              {collapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
               {collapsed
                 ? `Show ${descendantCount} ${descendantCount === 1 ? "reply" : "replies"}`
                 : `Hide ${descendantCount} ${descendantCount === 1 ? "reply" : "replies"}`}
@@ -318,16 +282,10 @@ function ThreadView({
                 title={summarizeRollup(rollup)}
                 className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded-md border border-line bg-paper-2/60 text-ink-3 hover:border-brand-300 hover:bg-brand-soft hover:text-brand-700 transition-colors"
               >
-                <span className="font-mono text-brand-700">
-                  {rollupTotal}
-                </span>
-                <span>
-                  {rollupTotal === 1 ? "item" : "items"} in replies
-                </span>
+                <span className="font-mono text-brand-700">{rollupTotal}</span>
+                <span>{rollupTotal === 1 ? "item" : "items"} in replies</span>
                 {rollup.totalHours > 0 && (
-                  <span className="font-mono text-ink-4">
-                    · {rollup.totalHours.toFixed(1)}h
-                  </span>
+                  <span className="font-mono text-ink-4">· {rollup.totalHours.toFixed(1)}h</span>
                 )}
               </button>
             )}
@@ -339,7 +297,7 @@ function ThreadView({
                 // Cap the visual indent — deeper replies still render
                 // inside the connector but stop marching right so they
                 // don't get cramped against the viewport edge.
-                depth + 1 <= MAX_INDENT_DEPTH ? "pl-5 ml-3" : "pl-3 ml-1"
+                depth + 1 <= MAX_INDENT_DEPTH ? "pl-5 ml-3" : "pl-3 ml-1",
               )}
             >
               {node.children.map((child) => (

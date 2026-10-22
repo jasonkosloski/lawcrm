@@ -37,10 +37,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
-import {
-  TIME_ENTRY_STATUSES,
-  type TimeEntryStatus,
-} from "@/lib/constants/time-entry-status";
+import { TIME_ENTRY_STATUSES, type TimeEntryStatus } from "@/lib/constants/time-entry-status";
 import type { TimeEntryFormState } from "@/lib/time-entry-constants";
 import { timeEntryFields } from "@/lib/time-entry-schema";
 import { assertTimeEntryScope } from "@/lib/time-entry-scope";
@@ -85,7 +82,7 @@ const timeEntrySchema = z.object({
 export async function createTimeEntry(
   matterId: string,
   _prev: TimeEntryFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<TimeEntryFormState> {
   await requirePermission("time_entries.create");
   await assertMatterAccess(matterId);
@@ -198,7 +195,7 @@ const leadTimeEntrySchema = timeEntrySchema.omit({ calendarEventId: true });
 export async function createLeadTimeEntry(
   leadId: string,
   _prev: TimeEntryFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<TimeEntryFormState> {
   await requirePermission("time_entries.create");
   // Restricted intake: 404 unless the viewer may see this lead (ADR-049).
@@ -228,9 +225,7 @@ export async function createLeadTimeEntry(
     return {
       status: "error",
       errors: {
-        activity: [
-          "Lead is already converted — log this time on the matter instead.",
-        ],
+        activity: ["Lead is already converted — log this time on the matter instead."],
       },
       values: raw,
     };
@@ -291,7 +286,7 @@ const updateTimeEntrySchema = z.object({
  *  billed between our read and write, or it was deleted. Say which. */
 async function writeRefusedState(
   timeEntryId: string,
-  raw: Record<string, string>
+  raw: Record<string, string>,
 ): Promise<TimeEntryFormState> {
   const now = await prisma.timeEntry.findUnique({
     where: { id: timeEntryId },
@@ -301,9 +296,7 @@ async function writeRefusedState(
     status: "error",
     errors: {
       activity: [
-        now
-          ? "Entry is already billed. Unbill it before editing."
-          : "Time entry no longer exists",
+        now ? "Entry is already billed. Unbill it before editing." : "Time entry no longer exists",
       ],
     },
     values: raw,
@@ -313,7 +306,7 @@ async function writeRefusedState(
 export async function updateTimeEntry(
   timeEntryId: string,
   _prev: TimeEntryFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<TimeEntryFormState> {
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
   const parsed = updateTimeEntrySchema.safeParse(raw);
@@ -424,9 +417,7 @@ export async function updateTimeEntry(
       // must recompute amount or the next generateInvoiceFromWip
       // sums a stale Decimal. Null rate (contingent matters) means
       // there's no amount to sync.
-      ...(entry.rate
-        ? { amount: roundMoney(entry.rate.mul(new Prisma.Decimal(newHours))) }
-        : {}),
+      ...(entry.rate ? { amount: roundMoney(entry.rate.mul(new Prisma.Decimal(newHours))) } : {}),
     },
   });
   if (written.count === 0) return writeRefusedState(timeEntryId, raw);
@@ -456,10 +447,11 @@ export async function updateTimeEntry(
     title: `Time entry edited · ${newHours}h`,
     // Privileged (before or after this edit): hours/status changes
     // only, never the activity text.
-    detail: (entry.privileged || parsed.data.privileged === "on"
-      ? changes
-      : [parsed.data.activity, ...changes]
-    ).join(" · ") || undefined,
+    detail:
+      (entry.privileged || parsed.data.privileged === "on"
+        ? changes
+        : [parsed.data.activity, ...changes]
+      ).join(" · ") || undefined,
   });
   return { status: "ok" };
 }
@@ -468,7 +460,7 @@ export async function updateTimeEntry(
 
 export async function setTimeEntryStatus(
   timeEntryId: string,
-  status: TimeEntryStatus
+  status: TimeEntryStatus,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!(TIME_ENTRY_STATUSES as readonly string[]).includes(status)) {
     return { ok: false, error: `Unknown status: ${status}` };
@@ -508,8 +500,7 @@ export async function setTimeEntryStatus(
     // resets its entries back to WIP.
     return {
       ok: false,
-      error:
-        "Entry is on an invoice. Void or delete the invoice to return it to WIP.",
+      error: "Entry is on an invoice. Void or delete the invoice to return it to WIP.",
     };
   }
 
@@ -523,8 +514,7 @@ export async function setTimeEntryStatus(
   if (written.count === 0) {
     return {
       ok: false,
-      error:
-        "This entry changed while you were editing it. Reload and try again.",
+      error: "This entry changed while you were editing it. Reload and try again.",
     };
   }
 
@@ -540,7 +530,7 @@ export async function setTimeEntryStatus(
 }
 
 export async function deleteTimeEntry(
-  timeEntryId: string
+  timeEntryId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const entry = await prisma.timeEntry.findUnique({
     where: { id: timeEntryId },
@@ -581,8 +571,7 @@ export async function deleteTimeEntry(
   if (removed.count === 0) {
     return {
       ok: false,
-      error:
-        "Entry is already billed or no longer exists. Reload to see its current state.",
+      error: "Entry is already billed or no longer exists. Reload to see its current state.",
     };
   }
 

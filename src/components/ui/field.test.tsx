@@ -1,19 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import {
-  Field,
-  FieldError,
-  formErrorMessage,
-  inputClass,
-  textareaClass,
-} from "./field";
+import { Field, FieldError, formErrorMessage, inputClass, textareaClass } from "./field";
 
 describe("Field", () => {
   it("with htmlFor, labels the control and wires the first error to it", () => {
     render(
       <Field label="Name" htmlFor="name" error={["Required", "Too short"]}>
         <input id="name" />
-      </Field>
+      </Field>,
     );
     const input = screen.getByLabelText("Name");
     expect(input).toHaveAttribute("aria-invalid", "true");
@@ -26,12 +20,9 @@ describe("Field", () => {
     render(
       <Field label="Email" htmlFor="email" hint="Work address">
         <input id="email" />
-      </Field>
+      </Field>,
     );
-    expect(screen.getByLabelText("Email")).toHaveAttribute(
-      "aria-describedby",
-      "email-hint"
-    );
+    expect(screen.getByLabelText("Email")).toHaveAttribute("aria-describedby", "email-hint");
     expect(screen.getByText("Work address")).toBeInTheDocument();
   });
 
@@ -39,7 +30,7 @@ describe("Field", () => {
     render(
       <Field label="City" required error="Pick one">
         <input />
-      </Field>
+      </Field>,
     );
     expect(screen.getByLabelText(/City/)).toBeInTheDocument();
     expect(screen.getByText("*")).toBeInTheDocument();
@@ -50,7 +41,7 @@ describe("Field", () => {
     render(
       <Field label="Role" error="Taken">
         {(control) => <input {...control} />}
-      </Field>
+      </Field>,
     );
     const input = screen.getByLabelText("Role");
     expect(input.id).not.toBe("");
@@ -84,12 +75,8 @@ describe("inputClass", () => {
 describe("formErrorMessage", () => {
   it("prefers _form, falls back only when there are no field errors", () => {
     expect(formErrorMessage({ status: "idle" }, "x")).toBeNull();
-    expect(
-      formErrorMessage({ status: "error", errors: { _form: ["Nope"] } }, "x")
-    ).toBe("Nope");
-    expect(
-      formErrorMessage({ status: "error", errors: { name: ["Bad"] } }, "x")
-    ).toBeNull();
+    expect(formErrorMessage({ status: "error", errors: { _form: ["Nope"] } }, "x")).toBe("Nope");
+    expect(formErrorMessage({ status: "error", errors: { name: ["Bad"] } }, "x")).toBeNull();
     expect(formErrorMessage({ status: "error" }, "Failed")).toBe("Failed");
   });
 });

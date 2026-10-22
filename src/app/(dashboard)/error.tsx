@@ -20,18 +20,6 @@
 
 import { ErrorCard } from "@/components/layout/error-card";
 
-export default function DashboardError({
-  error,
-  retry,
-}: {
-  error: unknown;
-  retry: () => void;
-}) {
-  return (
-    <ErrorCard
-      error={error}
-      retry={retry}
-      label="Dashboard error boundary caught:"
-    />
-  );
+export default function DashboardError({ error, retry }: { error: unknown; retry: () => void }) {
+  return <ErrorCard error={error} retry={retry} label="Dashboard error boundary caught:" />;
 }

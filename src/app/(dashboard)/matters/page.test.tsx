@@ -15,11 +15,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { currentUserHasPermission } from "@/lib/permission-check";
-import {
-  countMatters,
-  listMatters,
-  getMattersFilterOptions,
-} from "@/lib/queries/matters";
+import { countMatters, listMatters, getMattersFilterOptions } from "@/lib/queries/matters";
 import type { MatterListRow } from "@/lib/queries/matters";
 import type { MattersFilter } from "@/lib/matters-filters";
 import MattersListPage from "./page";
@@ -47,13 +43,7 @@ vi.mock("next/link", () => ({
   default: (props: React.ComponentProps<"a">) => <a {...props} />,
 }));
 vi.mock("@/components/layout/topbar", () => ({
-  TopBar: ({
-    title,
-    actions,
-  }: {
-    title: string;
-    actions?: React.ReactNode;
-  }) => (
+  TopBar: ({ title, actions }: { title: string; actions?: React.ReactNode }) => (
     <div>
       {title}
       {actions}
@@ -61,17 +51,11 @@ vi.mock("@/components/layout/topbar", () => ({
   ),
 }));
 vi.mock("@/components/ui/button", () => ({
-  Button: ({ children }: { children?: React.ReactNode }) => (
-    <button>{children}</button>
-  ),
+  Button: ({ children }: { children?: React.ReactNode }) => <button>{children}</button>,
 }));
 vi.mock("@/components/matters/matters-toolbar", () => ({
   MattersToolbar: (props: { visibleCount: number; totalCount: number }) => (
-    <div
-      data-testid="toolbar"
-      data-visible={props.visibleCount}
-      data-total={props.totalCount}
-    />
+    <div data-testid="toolbar" data-visible={props.visibleCount} data-total={props.totalCount} />
   ),
 }));
 vi.mock("@/components/matters/matters-table", () => ({
@@ -90,7 +74,7 @@ const optionsMock = vi.mocked(getMattersFilterOptions);
 const row = (id: string) => ({ id }) as unknown as MatterListRow;
 const pg = (
   rows: MatterListRow[],
-  over: Partial<Awaited<ReturnType<typeof listMatters>>> = {}
+  over: Partial<Awaited<ReturnType<typeof listMatters>>> = {},
 ) => ({
   rows,
   page: 1,
@@ -197,7 +181,7 @@ describe("paging (no silent truncation)", () => {
     await renderPage({ q: "smith", area: ["A", "B"], page: "2" });
     expect(screen.getByText(/201–400 of 450/)).toBeTruthy();
     expect(screen.getByRole("link", { name: /Next/ }).getAttribute("href")).toBe(
-      "/matters?q=smith&area=A&area=B&page=3"
+      "/matters?q=smith&area=A&area=B&page=3",
     );
   });
 

@@ -18,10 +18,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/current-user";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  EditMatterForm,
-  type MatterForEdit,
-} from "@/components/matters/edit-matter-form";
+import { EditMatterForm, type MatterForEdit } from "@/components/matters/edit-matter-form";
 import {
   MatterTeamManagement,
   type TeamMemberRow,
@@ -36,9 +33,7 @@ import { getCurrentFirm } from "@/lib/firm";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { MatterRestrictCard } from "@/components/matters/matter-restrict-card";
 
-export default async function EditMatterPage({
-  params,
-}: PageProps<"/matters/[id]/edit">) {
+export default async function EditMatterPage({ params }: PageProps<"/matters/[id]/edit">) {
   // Pages guard themselves: layouts don't re-run on soft navigation (ADR-028).
   await requireUser();
   const { id } = await params;
@@ -68,9 +63,7 @@ export default async function EditMatterPage({
   });
   if (!matter) notFound();
 
-  const activeLead = matter.teamMembers.find(
-    (m) => m.role === "lead" && !m.removedAt
-  );
+  const activeLead = matter.teamMembers.find((m) => m.role === "lead" && !m.removedAt);
 
   const [
     areaRows,
@@ -116,10 +109,7 @@ export default async function EditMatterPage({
     }),
     prisma.user.findMany({
       where: {
-        OR: [
-          { isActive: true },
-          ...(activeLead ? [{ id: activeLead.userId }] : []),
-        ],
+        OR: [{ isActive: true }, ...(activeLead ? [{ id: activeLead.userId }] : [])],
       },
       select: { id: true, name: true, jobTitle: true, isActive: true },
       orderBy: { name: "asc" },
@@ -169,12 +159,10 @@ export default async function EditMatterPage({
   }
 
   // Calendar period (ADR-035) as one serializable value for the forms.
-  const areas = areaRows.map(
-    ({ statutePeriodAmount, statutePeriodUnit, ...a }) => ({
-      ...a,
-      statutePeriod: toSolPeriod(statutePeriodAmount, statutePeriodUnit),
-    })
-  );
+  const areas = areaRows.map(({ statutePeriodAmount, statutePeriodUnit, ...a }) => ({
+    ...a,
+    statutePeriod: toSolPeriod(statutePeriodAmount, statutePeriodUnit),
+  }));
 
   const clients = clientRows.map((c) => ({
     id: c.id,
@@ -257,10 +245,9 @@ export default async function EditMatterPage({
         ) : (
           <Card>
             <CardContent className="p-5 text-xs text-ink-3">
-              Matter details are read-only for your role. Editing is
-              gated on the{" "}
-              <span className="text-ink font-medium">matters.edit</span>{" "}
-              permission, assigned via /settings/roles.
+              Matter details are read-only for your role. Editing is gated on the{" "}
+              <span className="text-ink font-medium">matters.edit</span> permission, assigned via
+              /settings/roles.
             </CardContent>
           </Card>
         )}

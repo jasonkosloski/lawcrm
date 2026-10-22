@@ -11,12 +11,7 @@ import { useState } from "react";
 
 export function ImageViewer({ src, name }: { src: string; name: string }) {
   const [zoomed, setZoomed] = useState(false);
-  const toggle = (
-    label: string,
-    title: string,
-    className: string,
-    imgClassName: string
-  ) => (
+  const toggle = (label: string, title: string, className: string, imgClassName: string) => (
     // The zoom toggle is a real button so keyboard and screen reader
     // users can use it (a click handler on a bare <img> is neither
     // focusable nor announced).
@@ -40,7 +35,12 @@ export function ImageViewer({ src, name }: { src: string; name: string }) {
     // 1:1 — the picture at its real size, scrolling both ways.
     return (
       <div className="min-h-[420px] flex-1 overflow-auto rounded-lg border border-line bg-paper-2 p-4">
-        {toggle(`Fit ${name} to window`, "Click to fit", "block cursor-zoom-out", "block max-w-none")}
+        {toggle(
+          `Fit ${name} to window`,
+          "Click to fit",
+          "block cursor-zoom-out",
+          "block max-w-none",
+        )}
       </div>
     );
   }
@@ -55,7 +55,7 @@ export function ImageViewer({ src, name }: { src: string; name: string }) {
         `Zoom ${name} to full size`,
         "Click to zoom",
         "absolute inset-4 cursor-zoom-in",
-        "h-full w-full object-contain"
+        "h-full w-full object-contain",
       )}
     </div>
   );

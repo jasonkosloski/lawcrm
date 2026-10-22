@@ -50,13 +50,11 @@ beforeEach(() => {
     return { size: statSizeOverride.get(key) ?? files.get(key)!.length };
   });
   // Facade contract: bytes up to `maxBytes`, null when gone.
-  vi.mocked(readStoredFile).mockImplementation(
-    async (key: string, maxBytes?: number) => {
-      const buf = files.get(key);
-      if (!buf) return null;
-      return maxBytes !== undefined ? buf.subarray(0, maxBytes) : buf;
-    }
-  );
+  vi.mocked(readStoredFile).mockImplementation(async (key: string, maxBytes?: number) => {
+    const buf = files.get(key);
+    if (!buf) return null;
+    return maxBytes !== undefined ? buf.subarray(0, maxBytes) : buf;
+  });
 });
 
 // ── DOCX fixture builders (real OOXML, real mammoth) ───────────────────
@@ -70,10 +68,7 @@ const ROOT_RELS =
   '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
   '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
 
-async function buildDocx(opts: {
-  documentXml: string;
-  documentRels?: string;
-}): Promise<Buffer> {
+async function buildDocx(opts: { documentXml: string; documentRels?: string }): Promise<Buffer> {
   const zip = new JSZip();
   zip.file("[Content_Types].xml", CONTENT_TYPES);
   zip.file("_rels/.rels", ROOT_RELS);
@@ -84,10 +79,8 @@ async function buildDocx(opts: {
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
-const W_NS =
-  'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
-const R_NS =
-  'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+const W_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+const R_NS = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 
 describe("renderStoredDocxToSafeHtml — happy path (real mammoth)", () => {
   test("paragraphs and bold runs convert to sanitized HTML", async () => {
@@ -99,7 +92,7 @@ describe("renderStoredDocxToSafeHtml — happy path (real mammoth)", () => {
           "<w:p><w:r><w:t>Hello viewer</w:t></w:r></w:p>" +
           "<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>bold text</w:t></w:r></w:p>" +
           "</w:body></w:document>",
-      })
+      }),
     );
     const result = await renderStoredDocxToSafeHtml("k1");
     expect(result).toEqual({
@@ -122,7 +115,7 @@ describe("renderStoredDocxToSafeHtml — happy path (real mammoth)", () => {
           `<?xml version="1.0"?><w:document ${W_NS} ${R_NS}><w:body>` +
           '<w:p><w:hyperlink r:id="rId2"><w:r><w:t>click me</w:t></w:r></w:hyperlink></w:p>' +
           "</w:body></w:document>",
-      })
+      }),
     );
     const result = await renderStoredDocxToSafeHtml("k2");
     expect(result.ok).toBe(true);
@@ -167,7 +160,7 @@ describe("renderStoredDocxToSafeHtml — failure paths", () => {
         documentXml:
           `<?xml version="1.0"?><w:document ${W_NS}><w:body>` +
           "<w:p><w:r><w:t>Hello</w:t></w:r></w:p></w:body></w:document>",
-      })
+      }),
     );
     const result = await renderStoredDocxToSafeHtml("once");
     expect(result.ok).toBe(true);
@@ -189,7 +182,7 @@ describe("renderStoredDocxToSafeHtml — failure paths", () => {
       "empty",
       await buildDocx({
         documentXml: `<?xml version="1.0"?><w:document ${W_NS}><w:body></w:body></w:document>`,
-      })
+      }),
     );
     const result = await renderStoredDocxToSafeHtml("empty");
     expect(result).toEqual({
@@ -219,10 +212,7 @@ describe("readStoredTextPreview", () => {
     expect(result.truncated).toBe(true);
     expect(result.text.length).toBe(TEXT_PREVIEW_MAX_BYTES);
     // The read itself must be capped — never pull bytes past it.
-    expect(vi.mocked(readStoredFile)).toHaveBeenCalledWith(
-      "t2",
-      TEXT_PREVIEW_MAX_BYTES
-    );
+    expect(vi.mocked(readStoredFile)).toHaveBeenCalledWith("t2", TEXT_PREVIEW_MAX_BYTES);
   });
 
   test("missing file → reason", async () => {
@@ -298,7 +288,7 @@ describe("renderStoredDocxToSafeHtml — one stat per view", () => {
         documentXml:
           `<?xml version="1.0"?><w:document ${W_NS}><w:body>` +
           "<w:p><w:r><w:t>hi</w:t></w:r></w:p></w:body></w:document>",
-      })
+      }),
     );
     const result = await renderStoredDocxToSafeHtml("once");
     expect(result.ok).toBe(true);
@@ -335,7 +325,7 @@ describe("checkZipBounds — decompression-bomb guard", () => {
   test("an entry declaring more than the per-entry ceiling is rejected", async () => {
     const buf = forgeDeclaredSize(
       await buildDocx({ documentXml: xml("bomb") }),
-      DOCX_MAX_ENTRY_UNCOMPRESSED_BYTES + 1
+      DOCX_MAX_ENTRY_UNCOMPRESSED_BYTES + 1,
     );
     const res = checkZipBounds(buf);
     expect(res.ok).toBe(false);
@@ -345,10 +335,7 @@ describe("checkZipBounds — decompression-bomb guard", () => {
     const perEntry = Math.floor(DOCX_MAX_TOTAL_UNCOMPRESSED_BYTES / 3) + 1;
     const zip = new JSZip();
     for (let i = 0; i < 4; i++) zip.file(`part${i}.xml`, "x");
-    const buf = forgeDeclaredSize(
-      await zip.generateAsync({ type: "nodebuffer" }),
-      perEntry
-    );
+    const buf = forgeDeclaredSize(await zip.generateAsync({ type: "nodebuffer" }), perEntry);
     expect(checkZipBounds(buf).ok).toBe(false);
   });
 
@@ -364,8 +351,8 @@ describe("checkZipBounds — decompression-bomb guard", () => {
       "bomb",
       forgeDeclaredSize(
         await buildDocx({ documentXml: xml("bomb") }),
-        DOCX_MAX_ENTRY_UNCOMPRESSED_BYTES + 1
-      )
+        DOCX_MAX_ENTRY_UNCOMPRESSED_BYTES + 1,
+      ),
     );
     const result = await renderStoredDocxToSafeHtml("bomb");
     expect(result.ok).toBe(false);

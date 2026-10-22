@@ -57,7 +57,7 @@ describe("chip totals", () => {
             userInitials: "RK",
           }),
         ]}
-      />
+      />,
     );
     const chip = screen.getByRole("button");
     expect(chip).toHaveTextContent("0.5h");
@@ -69,11 +69,7 @@ describe("chip totals", () => {
 describe("date-only entry dates", () => {
   test("an Oct 16 entry lists as Oct 16 (not a day early in US zones)", async () => {
     const user = userEvent.setup();
-    render(
-      <CommTimeLoggedIndicator
-        entries={[entry({ date: parseDateOnly("2026-10-16")! })]}
-      />
-    );
+    render(<CommTimeLoggedIndicator entries={[entry({ date: parseDateOnly("2026-10-16")! })]} />);
     await user.click(screen.getByRole("button"));
     expect(screen.getByText("Oct 16")).toBeInTheDocument();
   });
@@ -109,7 +105,7 @@ describe("aggregateByUser", () => {
             userInitials: "JK",
           }),
         ]}
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: /0\.6h/ }));
     expect(screen.getByText("Total")).toBeInTheDocument();

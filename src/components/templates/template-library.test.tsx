@@ -49,54 +49,24 @@ beforeEach(() => {
 describe("TemplateLibrary", () => {
   it("lists curated categories in catalog order, then stray categories, then archived", () => {
     render(
-      <TemplateLibrary
-        templates={TEMPLATES}
-        canCreate={false}
-        canEdit={false}
-        canDelete={false}
-      />
+      <TemplateLibrary templates={TEMPLATES} canCreate={false} canEdit={false} canDelete={false} />,
     );
-    const headings = screen
-      .getAllByRole("heading", { level: 2 })
-      .map((h) => h.textContent);
-    expect(headings).toEqual([
-      "Demand letters",
-      "General",
-      "intake",
-      "Archived (1)",
-    ]);
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(headings).toEqual(["Demand letters", "General", "intake", "Archived (1)"]);
   });
 
   it("renders no manage affordances for a read-only viewer", () => {
     render(
-      <TemplateLibrary
-        templates={TEMPLATES}
-        canCreate={false}
-        canEdit={false}
-        canDelete={false}
-      />
+      <TemplateLibrary templates={TEMPLATES} canCreate={false} canEdit={false} canDelete={false} />,
     );
-    expect(
-      screen.queryByRole("button", { name: /new template/i })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /actions for/i })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /new template/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /actions for/i })).not.toBeInTheDocument();
   });
 
   it("offers Edit + Archive but not Delete when only canEdit", async () => {
     const user = userEvent.setup();
-    render(
-      <TemplateLibrary
-        templates={TEMPLATES}
-        canCreate={false}
-        canEdit
-        canDelete={false}
-      />
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Actions for Demand one" })
-    );
+    render(<TemplateLibrary templates={TEMPLATES} canCreate={false} canEdit canDelete={false} />);
+    await user.click(screen.getByRole("button", { name: "Actions for Demand one" }));
     const menu = within(screen.getByRole("menu"));
     expect(menu.getByText("Edit")).toBeInTheDocument();
     expect(menu.getByText("Archive")).toBeInTheDocument();
@@ -105,17 +75,8 @@ describe("TemplateLibrary", () => {
 
   it("offers only Delete when only canDelete, and archived rows offer Restore", async () => {
     const user = userEvent.setup();
-    render(
-      <TemplateLibrary
-        templates={TEMPLATES}
-        canCreate={false}
-        canEdit={false}
-        canDelete
-      />
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Actions for Demand one" })
-    );
+    render(<TemplateLibrary templates={TEMPLATES} canCreate={false} canEdit={false} canDelete />);
+    await user.click(screen.getByRole("button", { name: "Actions for Demand one" }));
     const menu = within(screen.getByRole("menu"));
     expect(menu.getByText(/delete permanently/i)).toBeInTheDocument();
     expect(menu.queryByText("Edit")).not.toBeInTheDocument();
@@ -124,39 +85,19 @@ describe("TemplateLibrary", () => {
 
   it("archives and restores through the action", async () => {
     const user = userEvent.setup();
-    render(
-      <TemplateLibrary
-        templates={TEMPLATES}
-        canCreate={false}
-        canEdit
-        canDelete={false}
-      />
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Actions for Demand one" })
-    );
+    render(<TemplateLibrary templates={TEMPLATES} canCreate={false} canEdit canDelete={false} />);
+    await user.click(screen.getByRole("button", { name: "Actions for Demand one" }));
     await user.click(screen.getByText("Archive"));
     expect(setActive).toHaveBeenCalledWith("3", false);
 
-    await user.click(
-      screen.getByRole("button", { name: "Actions for Old demand" })
-    );
+    await user.click(screen.getByRole("button", { name: "Actions for Old demand" }));
     await user.click(screen.getByText("Restore"));
     expect(setActive).toHaveBeenCalledWith("4", true);
   });
 
   it("shows the create button and empty state to a creator", () => {
-    render(
-      <TemplateLibrary
-        templates={[]}
-        canCreate
-        canEdit={false}
-        canDelete={false}
-      />
-    );
-    expect(
-      screen.getByRole("button", { name: /new template/i })
-    ).toBeInTheDocument();
+    render(<TemplateLibrary templates={[]} canCreate canEdit={false} canDelete={false} />);
+    expect(screen.getByRole("button", { name: /new template/i })).toBeInTheDocument();
     expect(screen.getByText("No templates yet")).toBeInTheDocument();
   });
 });

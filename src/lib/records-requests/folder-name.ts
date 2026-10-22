@@ -19,7 +19,5 @@ function cleanPart(value: string): string {
 
 /** "{custodian} — {type}", sanitized and capped at 120 characters. */
 export function recordsFolderName(custodianName: string, typeName: string): string {
-  return `${cleanPart(custodianName)} — ${cleanPart(typeName)}`
-    .slice(0, MAX_LENGTH)
-    .trimEnd();
+  return `${cleanPart(custodianName)} — ${cleanPart(typeName)}`.slice(0, MAX_LENGTH).trimEnd();
 }

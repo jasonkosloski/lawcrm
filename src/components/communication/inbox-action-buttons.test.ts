@@ -21,22 +21,19 @@ vi.mock("@/app/actions/inbox-actions", () => ({
   createTaskFromMessage: vi.fn(),
 }));
 
-import {
-  defaultTitleFromSource,
-  stripHtmlForTextarea,
-} from "./inbox-action-buttons";
+import { defaultTitleFromSource, stripHtmlForTextarea } from "./inbox-action-buttons";
 
 describe("stripHtmlForTextarea — entity decoding", () => {
   test("decodes &amp; last so escaped literal entities survive one decode pass", () => {
     // Sender's plain text was "&lt;" — escaped upstream to "&amp;lt;".
     expect(stripHtmlForTextarea("<p>use &amp;lt; for less-than</p>")).toBe(
-      "use &lt; for less-than"
+      "use &lt; for less-than",
     );
   });
 
   test("still decodes ordinary entities", () => {
     expect(
-      stripHtmlForTextarea("<p>Smith &amp; Jones &lt;3 &quot;win&quot; &#39;em&#39;</p>")
+      stripHtmlForTextarea("<p>Smith &amp; Jones &lt;3 &quot;win&quot; &#39;em&#39;</p>"),
     ).toBe("Smith & Jones <3 \"win\" 'em'");
   });
 
@@ -45,10 +42,7 @@ describe("stripHtmlForTextarea — entity decoding", () => {
     // must reproduce the original entity sequence.
     const original = "use &amp;lt; here";
     const decoded = stripHtmlForTextarea(`<p>${original}</p>`);
-    const reEscaped = decoded
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    const reEscaped = decoded.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     expect(reEscaped).toBe(original);
   });
 });
@@ -83,7 +77,7 @@ describe("defaultTitleFromSource - reply/forward prefixes", () => {
         id: "m",
         contactLabel: "Dana Client",
         preview: "hi",
-      })
+      }),
     ).toBe("Re: Dana Client");
   });
 });
@@ -92,8 +86,6 @@ describe("stripHtmlForTextarea - note prefill shape", () => {
   test("the 'From email' header is separated from the quote by a blank line", () => {
     const html =
       "<p><em>From email: Re: Discovery</em></p><blockquote>Hi Jason</blockquote><p></p>";
-    expect(stripHtmlForTextarea(html)).toBe(
-      "From email: Re: Discovery\n\n> Hi Jason"
-    );
+    expect(stripHtmlForTextarea(html)).toBe("From email: Re: Discovery\n\n> Hi Jason");
   });
 });

@@ -8,6 +8,7 @@
 **Decision:** Use SQLite via Prisma for local dev. Swap the `datasource` to PostgreSQL when deploying. Prisma abstracts the differences for most queries.
 
 **Trade-offs:**
+
 - (+) No Docker/postgres setup needed to start developing
 - (+) DB file is portable, easy to reset (`rm dev.db && prisma migrate dev`)
 - (-) Some Prisma features differ between SQLite and Postgres (e.g., `@db.Text`, full-text search, JSON querying)

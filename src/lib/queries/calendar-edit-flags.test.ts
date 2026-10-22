@@ -24,7 +24,7 @@ vi.mock("@/lib/permission-check", () => ({
 
 vi.mock("@/lib/matter-access", () => ({
   filterAccessibleMatterIds: vi.fn(
-    async (_u: string, ids: string[]) => new Set(ids.filter((i) => i !== "walled"))
+    async (_u: string, ids: string[]) => new Set(ids.filter((i) => i !== "walled")),
   ),
 }));
 
@@ -66,21 +66,13 @@ describe("getEditableEventIds", () => {
   test("events.edit alone covers matter events, not others' personal events", async () => {
     grant("events.edit");
     const ids = await getEditableEventIds(rows.map((r) => r.id));
-    expect([...ids].sort()).toEqual([
-      "mine-matter",
-      "mine-personal",
-      "theirs-matter",
-    ]);
+    expect([...ids].sort()).toEqual(["mine-matter", "mine-personal", "theirs-matter"]);
   });
 
   test("events.edit_non_matter alone covers non-matter events only", async () => {
     grant("events.edit_non_matter");
     const ids = await getEditableEventIds(rows.map((r) => r.id));
-    expect([...ids].sort()).toEqual([
-      "mine-matter",
-      "mine-personal",
-      "theirs-personal",
-    ]);
+    expect([...ids].sort()).toEqual(["mine-matter", "mine-personal", "theirs-personal"]);
   });
 
   test("holding both keys allows every non-private, non-walled event", async () => {
@@ -117,12 +109,7 @@ describe("getEditableEventIds - private events and the matter wall", () => {
       { ...base, id: "plain", createdById: "other", matterId: null },
       { ...base, id: "own-private", createdById: "me", matterId: null, visibility: "private" },
     ]);
-    const ids = await getEditableEventIds([
-      "private",
-      "walled",
-      "plain",
-      "own-private",
-    ]);
+    const ids = await getEditableEventIds(["private", "walled", "plain", "own-private"]);
     expect([...ids].sort()).toEqual(["own-private", "plain"]);
   });
 });

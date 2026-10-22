@@ -110,9 +110,7 @@ describe("resolveStaffUser", () => {
       status: "no_access",
       clerkUserId: "user_b",
     });
-    expect((await linkedRow("jane@firm.test"))?.clerkUserId).toBe(
-      "user_first"
-    );
+    expect((await linkedRow("jane@firm.test"))?.clerkUserId).toBe("user_first");
   });
 
   test("unverified email -> no_access, nothing linked", async () => {
@@ -147,14 +145,14 @@ describe("resolveStaffUser", () => {
     expect(
       await prisma.activityLog.count({
         where: { type: "auth", title: "Signed in without firm access" },
-      })
+      }),
     ).toBe(1);
     // A different Clerk id is its own audit subject.
     await resolveStaffUser("user_b", "s3");
     expect(
       await prisma.activityLog.count({
         where: { type: "auth", title: "Signed in without firm access" },
-      })
+      }),
     ).toBe(2);
     // Outside the 15 minute window the event is recorded again.
     await prisma.activityLog.updateMany({
@@ -165,7 +163,7 @@ describe("resolveStaffUser", () => {
     expect(
       await prisma.activityLog.count({
         where: { type: "auth", title: "Signed in without firm access" },
-      })
+      }),
     ).toBe(3);
   });
 

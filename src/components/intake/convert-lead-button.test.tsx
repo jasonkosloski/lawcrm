@@ -56,7 +56,7 @@ function renderButton() {
       defaultMatterName="Doe v. Acme"
       areas={AREAS}
       todayKey="2026-10-20"
-    />
+    />,
   );
 }
 
@@ -66,8 +66,7 @@ async function openDialog(user: ReturnType<typeof userEvent.setup>) {
 
 /** The stage <select> is the one offering the PI stage options. */
 function stageSelect() {
-  return screen.getByRole("option", { name: "Intake" })
-    .closest("select") as HTMLSelectElement;
+  return screen.getByRole("option", { name: "Intake" }).closest("select") as HTMLSelectElement;
 }
 
 beforeEach(() => {
@@ -124,17 +123,14 @@ describe("ConvertLeadButton — cancel + reopen reset", () => {
     await user.type(nameInput, "Edited name");
     await user.selectOptions(
       screen.getByRole("option", { name: "Hourly" }).closest("select")!,
-      "hourly"
+      "hourly",
     );
     await user.click(screen.getByRole("button", { name: /cancel/i }));
 
     await openDialog(user);
-    expect(screen.getByPlaceholderText("Matter name")).toHaveValue(
-      "Doe v. Acme"
-    );
+    expect(screen.getByPlaceholderText("Matter name")).toHaveValue("Doe v. Acme");
     expect(
-      (screen.getByRole("option", { name: "Hourly" })
-        .closest("select") as HTMLSelectElement).value
+      (screen.getByRole("option", { name: "Hourly" }).closest("select") as HTMLSelectElement).value,
     ).toBe("contingent");
   });
 });
@@ -149,9 +145,7 @@ describe("ConvertLeadButton — server errors and live props", () => {
     renderButton();
     await openDialog(user);
     await user.click(screen.getByRole("button", { name: /^convert$/i }));
-    expect(
-      await screen.findByText("Stage is no longer active")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Stage is no longer active")).toBeInTheDocument();
   });
 
   test.each([
@@ -200,16 +194,13 @@ describe("ConvertLeadButton — server errors and live props", () => {
     await user.type(nameInput, "Edited name");
     await user.selectOptions(
       screen.getByRole("option", { name: "Hourly" }).closest("select")!,
-      "hourly"
+      "hourly",
     );
     await user.click(screen.getByRole("button", { name: /^convert$/i }));
     await screen.findByText("Lead is already converted to a matter.");
-    expect(screen.getByPlaceholderText("Matter name")).toHaveValue(
-      "Edited name"
-    );
+    expect(screen.getByPlaceholderText("Matter name")).toHaveValue("Edited name");
     expect(
-      (screen.getByRole("option", { name: "Hourly" })
-        .closest("select") as HTMLSelectElement).value
+      (screen.getByRole("option", { name: "Hourly" }).closest("select") as HTMLSelectElement).value,
     ).toBe("hourly");
   });
 
@@ -229,11 +220,9 @@ describe("ConvertLeadButton — server errors and live props", () => {
         defaultMatterName="Doe v. Acme"
         areas={AREAS.map((a) => ({ ...a }))}
         todayKey="2026-10-20"
-      />
+      />,
     );
-    expect(screen.getByPlaceholderText("Matter name")).toHaveValue(
-      "Typed name"
-    );
+    expect(screen.getByPlaceholderText("Matter name")).toHaveValue("Typed name");
     expect(stageSelect().value).toBe("st-closed");
   });
 
@@ -263,11 +252,11 @@ describe("ConvertLeadButton — restricted intake (ADR-049)", () => {
         areas={AREAS}
         restrictedTo={["Alice Attorney", "Bob Paralegal"]}
         todayKey="2026-10-20"
-      />
+      />,
     );
     await openDialog(user);
     expect(
-      screen.getByText(/matter will be restricted to Alice Attorney, Bob Paralegal/i)
+      screen.getByText(/matter will be restricted to Alice Attorney, Bob Paralegal/i),
     ).toBeTruthy();
   });
 
@@ -289,10 +278,12 @@ describe("ConvertLeadButton — engagement block", () => {
     AREAS[1],
   ];
 
-  function renderEngagement(over: {
-    required?: boolean;
-    areas?: PracticeAreaOption[];
-  } = {}) {
+  function renderEngagement(
+    over: {
+      required?: boolean;
+      areas?: PracticeAreaOption[];
+    } = {},
+  ) {
     return render(
       <ConvertLeadButton
         leadId="lead1"
@@ -301,7 +292,7 @@ describe("ConvertLeadButton — engagement block", () => {
         documents={DOCS}
         requireOriginatingDoc={over.required ?? false}
         todayKey="2026-10-20"
-      />
+      />,
     );
   }
 
@@ -309,9 +300,7 @@ describe("ConvertLeadButton — engagement block", () => {
     const user = userEvent.setup();
     renderEngagement();
     await openDialog(user);
-    expect(
-      screen.getByRole("heading", { name: "Retainer agreement" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Retainer agreement" })).toBeInTheDocument();
     expect(screen.getByLabelText(/^Status/)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Date signed/)).toBeInTheDocument();
   });
@@ -324,12 +313,8 @@ describe("ConvertLeadButton — engagement block", () => {
       .getByRole("option", { name: "Personal Injury" })
       .closest("select") as HTMLSelectElement;
     await user.selectOptions(areaSelect, "pa-fam");
-    expect(
-      screen.getByRole("heading", { name: "Fee agreement" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("This is the Fee agreement", { exact: false })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Fee agreement" })).toBeInTheDocument();
+    expect(screen.getByText("This is the Fee agreement", { exact: false })).toBeInTheDocument();
   });
 
   test("lists the lead's documents with a None option", async () => {
@@ -337,9 +322,7 @@ describe("ConvertLeadButton — engagement block", () => {
     renderEngagement();
     await openDialog(user);
     expect(screen.getByRole("option", { name: "None" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "retainer-signed.pdf" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "retainer-signed.pdf" })).toBeInTheDocument();
   });
 
   test("not required: no markers, and an empty block converts", async () => {
@@ -356,17 +339,11 @@ describe("ConvertLeadButton — engagement block", () => {
     const user = userEvent.setup();
     renderEngagement({ required: true });
     await openDialog(user);
-    expect(
-      document.querySelectorAll(".text-warn.ml-0\\.5").length
-    ).toBeGreaterThanOrEqual(3);
+    expect(document.querySelectorAll(".text-warn.ml-0\\.5").length).toBeGreaterThanOrEqual(3);
     await user.click(screen.getByRole("button", { name: /^convert$/i }));
     expect(convertLeadToMatter).not.toHaveBeenCalled();
-    expect(
-      screen.getByText("Attach the signed Retainer agreement.")
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Mark the Retainer agreement as signed.")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Attach the signed Retainer agreement.")).toBeInTheDocument();
+    expect(screen.getByText("Mark the Retainer agreement as signed.")).toBeInTheDocument();
     expect(screen.getByText("Enter the date it was signed.")).toBeInTheDocument();
   });
 
@@ -379,7 +356,7 @@ describe("ConvertLeadButton — engagement block", () => {
     await user.type(screen.getByLabelText(/^Date signed/), "2026-10-01");
     await user.selectOptions(
       screen.getByRole("option", { name: "retainer-signed.pdf" }).closest("select")!,
-      "d1"
+      "d1",
     );
     await user.click(screen.getByRole("button", { name: /^convert$/i }));
     const fd = vi.mocked(convertLeadToMatter).mock.calls.at(-1)![2] as FormData;
@@ -397,17 +374,14 @@ describe("ConvertLeadButton — engagement block", () => {
     renderEngagement({ required: false });
     await openDialog(user);
     await user.click(screen.getByRole("button", { name: /^convert$/i }));
-    expect(
-      await screen.findByText("Attach the signed Retainer agreement.")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Attach the signed Retainer agreement.")).toBeInTheDocument();
   });
 });
 
 describe("ConvertLeadButton — billing type", () => {
   const billingSelect = () =>
     screen.getByRole("combobox", { name: "Billing type" }) as HTMLSelectElement;
-  const optionLabels = () =>
-    Array.from(billingSelect().options).map((o) => o.textContent);
+  const optionLabels = () => Array.from(billingSelect().options).map((o) => o.textContent);
 
   test("offers the chosen area's types and preselects its default", async () => {
     const user = userEvent.setup();

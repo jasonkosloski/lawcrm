@@ -12,9 +12,7 @@ describe("mailtoHref", () => {
   test("plain addresses keep a readable mailto", () => {
     expect(mailtoHref("dana@example.com")).toBe("mailto:dana@example.com");
     expect(mailtoHref("  dana@example.com  ")).toBe("mailto:dana@example.com");
-    expect(mailtoHref("dana+matter@example.com")).toBe(
-      "mailto:dana+matter@example.com"
-    );
+    expect(mailtoHref("dana+matter@example.com")).toBe("mailto:dana+matter@example.com");
   });
 
   test("# is encoded so the mailto does not truncate at a fragment", () => {
@@ -52,10 +50,7 @@ describe("mailtoHref", () => {
 describe("EmailLink", () => {
   test("renders an encoded mailto anchor for a valid address", () => {
     render(<EmailLink email="billing#2@firm.com" />);
-    expect(screen.getByRole("link")).toHaveAttribute(
-      "href",
-      "mailto:billing%232@firm.com"
-    );
+    expect(screen.getByRole("link")).toHaveAttribute("href", "mailto:billing%232@firm.com");
   });
 
   test("renders plain text, not a link, for an injected value", () => {

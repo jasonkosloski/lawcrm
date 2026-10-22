@@ -11,27 +11,17 @@ const CHIP = "rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-n
 
 function StatusChip({ row }: { row: PortalInvoiceRow }) {
   if (row.overdue) {
-    return (
-      <span className={`${CHIP} border-line bg-danger-soft text-danger`}>
-        Overdue
-      </span>
-    );
+    return <span className={`${CHIP} border-line bg-danger-soft text-danger`}>Overdue</span>;
   }
   if (row.status === "paid") {
     return <span className={`${CHIP} border-line bg-ok-soft text-ok`}>Paid</span>;
   }
   if (row.status === "partial") {
     return (
-      <span className={`${CHIP} border-warn-border bg-warn-soft text-warn`}>
-        Partially paid
-      </span>
+      <span className={`${CHIP} border-warn-border bg-warn-soft text-warn`}>Partially paid</span>
     );
   }
-  return (
-    <span className={`${CHIP} border-brand-200 bg-brand-tint text-brand-700`}>
-      Sent
-    </span>
-  );
+  return <span className={`${CHIP} border-brand-200 bg-brand-tint text-brand-700`}>Sent</span>;
 }
 
 const day = (d: Date) => formatDate(d, "medium", PORTAL_TIME_ZONE);
@@ -62,13 +52,27 @@ export function BillingSection({
           <table className="w-full min-w-[40rem] text-sm">
             <thead>
               <tr className="border-b border-line-2 text-left text-ink-3">
-                <th scope="col" className={th}>Invoice</th>
-                <th scope="col" className={th}>Issued</th>
-                <th scope="col" className={th}>Due</th>
-                <th scope="col" className={`${th} text-right`}>Total</th>
-                <th scope="col" className={`${th} text-right`}>Paid</th>
-                <th scope="col" className={`${th} text-right`}>Balance</th>
-                <th scope="col" className={th}>Status</th>
+                <th scope="col" className={th}>
+                  Invoice
+                </th>
+                <th scope="col" className={th}>
+                  Issued
+                </th>
+                <th scope="col" className={th}>
+                  Due
+                </th>
+                <th scope="col" className={`${th} text-right`}>
+                  Total
+                </th>
+                <th scope="col" className={`${th} text-right`}>
+                  Paid
+                </th>
+                <th scope="col" className={`${th} text-right`}>
+                  Balance
+                </th>
+                <th scope="col" className={th}>
+                  Status
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line-2">
@@ -87,7 +91,9 @@ export function BillingSection({
                   <td className={num}>{formatMoney(i.totalAmount)}</td>
                   <td className={num}>{formatMoney(i.paidAmount)}</td>
                   <td className={`${num} font-medium text-ink`}>{formatMoney(i.balance)}</td>
-                  <td className="px-4 py-3"><StatusChip row={i} /></td>
+                  <td className="px-4 py-3">
+                    <StatusChip row={i} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -111,17 +117,29 @@ export function BillingSection({
               <table className="w-full min-w-[34rem] text-sm">
                 <thead>
                   <tr className="border-b border-line-2 text-left text-ink-3">
-                    <th scope="col" className={th}>Date</th>
-                    <th scope="col" className={th}>Type</th>
-                    <th scope="col" className={th}>Description</th>
-                    <th scope="col" className={`${th} text-right`}>Amount</th>
-                    <th scope="col" className={`${th} text-right`}>Running balance</th>
+                    <th scope="col" className={th}>
+                      Date
+                    </th>
+                    <th scope="col" className={th}>
+                      Type
+                    </th>
+                    <th scope="col" className={th}>
+                      Description
+                    </th>
+                    <th scope="col" className={`${th} text-right`}>
+                      Amount
+                    </th>
+                    <th scope="col" className={`${th} text-right`}>
+                      Running balance
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line-2">
                   {trust.entries.map((e) => (
                     <tr key={e.id}>
-                      <td className="px-4 py-3 text-ink-2">{formatDate(e.date, "medium", "UTC")}</td>
+                      <td className="px-4 py-3 text-ink-2">
+                        {formatDate(e.date, "medium", "UTC")}
+                      </td>
                       <td className="px-4 py-3 text-ink-2">{trustTypeLabel(e.type)}</td>
                       <td className="px-4 py-3 text-ink-2">{e.description}</td>
                       <td className={num}>{formatMoney(e.amount)}</td>

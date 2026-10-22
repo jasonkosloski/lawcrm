@@ -41,9 +41,7 @@ export function IntakeTabs({
       <nav className="flex gap-1 flex-1">
         {tabs.map((t) => {
           const href = t.slug ? `${base}/${t.slug}` : base;
-          const active = t.slug
-            ? pathname.startsWith(`${base}/${t.slug}`)
-            : pathname === base;
+          const active = t.slug ? pathname.startsWith(`${base}/${t.slug}`) : pathname === base;
           return (
             <Link
               key={t.slug || "overview"}
@@ -52,7 +50,7 @@ export function IntakeTabs({
                 "px-3 py-2.5 text-xs font-medium -mb-px border-b-2 transition-colors",
                 active
                   ? "text-ink border-ink"
-                  : "text-ink-3 border-transparent hover:text-ink hover:border-line"
+                  : "text-ink-3 border-transparent hover:text-ink hover:border-line",
               )}
             >
               {t.label}

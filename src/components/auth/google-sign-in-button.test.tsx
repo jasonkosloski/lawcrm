@@ -15,9 +15,7 @@ describe("GoogleSignInButton", () => {
   test("starts the Google SSO flow with the callback and destination", async () => {
     sso.mockResolvedValue({ error: null });
     render(<GoogleSignInButton next="/matters?tab=notes" />);
-    await userEvent.click(
-      screen.getByRole("button", { name: /continue with google/i })
-    );
+    await userEvent.click(screen.getByRole("button", { name: /continue with google/i }));
     expect(sso).toHaveBeenCalledWith({
       strategy: "oauth_google",
       redirectCallbackUrl: "/sso-callback?next=%2Fmatters%3Ftab%3Dnotes",
@@ -30,14 +28,11 @@ describe("GoogleSignInButton", () => {
     sso.mockResolvedValue({ error: { message: "boom" } });
     render(<GoogleSignInButton next="/" />);
     await userEvent.click(screen.getByRole("button"));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      /google sign-in didn't start/i
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(/google sign-in didn't start/i);
     await waitFor(() => expect(screen.getByRole("button")).toBeEnabled());
-    expect(logged).toHaveBeenCalledWith(
-      "[auth] Google sign-in did not start:",
-      { message: "boom" }
-    );
+    expect(logged).toHaveBeenCalledWith("[auth] Google sign-in did not start:", {
+      message: "boom",
+    });
     logged.mockRestore();
   });
 

@@ -1,8 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  looksLikeOrganization,
-  splitName,
-} from "./matter-name";
+import { looksLikeOrganization, splitName } from "./matter-name";
 
 describe("splitName", () => {
   test("splits on the last token", () => {
@@ -57,10 +54,9 @@ describe("splitName", () => {
 describe("looksLikeOrganization", () => {
   test.each(["Acme LLC", "Acme, Inc.", "Colorado Freedom Fund", "City of Aurora"])(
     "%s is an organization",
-    (n) => expect(looksLikeOrganization(n)).toBe(true)
+    (n) => expect(looksLikeOrganization(n)).toBe(true),
   );
-  test.each(["Maria Alvarez", "Mary Jane Watson", "Madonna", "Funderburk"])(
-    "%s is a person",
-    (n) => expect(looksLikeOrganization(n)).toBe(false)
+  test.each(["Maria Alvarez", "Mary Jane Watson", "Madonna", "Funderburk"])("%s is a person", (n) =>
+    expect(looksLikeOrganization(n)).toBe(false),
   );
 });

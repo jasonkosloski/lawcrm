@@ -36,8 +36,7 @@ export function SessionList({ sessions }: { sessions: SessionRow[] }) {
   return (
     <ul className="flex flex-col divide-y divide-line">
       {sessions.map((s) => {
-        const label =
-          [s.browser, s.device].filter(Boolean).join(" · ") || "Unknown device";
+        const label = [s.browser, s.device].filter(Boolean).join(" · ") || "Unknown device";
         return (
           <li key={s.id} className="py-2 flex items-center justify-between gap-4">
             <div className="min-w-0">
@@ -46,9 +45,7 @@ export function SessionList({ sessions }: { sessions: SessionRow[] }) {
                 {s.isCurrent && <Badge variant="secondary">This device</Badge>}
               </div>
               <div className="text-2xs text-ink-4 truncate">
-                {[s.location, `Last active ${s.lastActive}`]
-                  .filter(Boolean)
-                  .join(" · ")}
+                {[s.location, `Last active ${s.lastActive}`].filter(Boolean).join(" · ")}
               </div>
             </div>
             {!s.isCurrent && (

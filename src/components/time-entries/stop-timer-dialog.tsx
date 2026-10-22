@@ -30,15 +30,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import {
-  DateField,
-  TextField,
-  TextareaField,
-} from "@/components/matters/captures/primary-fields";
-import {
-  DurationFields,
-  UtbmsCodeSelect,
-} from "@/components/time-entries/time-entry-fields";
+import { DateField, TextField, TextareaField } from "@/components/matters/captures/primary-fields";
+import { DurationFields, UtbmsCodeSelect } from "@/components/time-entries/time-entry-fields";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { todayKey } from "@/lib/format-date";
 import { stopTimer } from "@/app/actions/timer";
@@ -77,7 +70,7 @@ export function StopTimerDialog({
   const [state, formAction, isPending] = useDialogActionState(
     stopTimer,
     timeEntryInitialState,
-    open
+    open,
   );
 
   const [matterId, setMatterId] = useState(initialMatterId ?? "");
@@ -131,8 +124,7 @@ export function StopTimerDialog({
         <DialogHeader>
           <DialogTitle>Stop timer &amp; log time</DialogTitle>
           <DialogDescription>
-            Review the captured time — elapsed is rounded up to the
-            billing increment.
+            Review the captured time — elapsed is rounded up to the billing increment.
           </DialogDescription>
         </DialogHeader>
 
@@ -154,9 +146,7 @@ export function StopTimerDialog({
                 </NativeSelectOption>
               ))}
             </NativeSelect>
-            {errs.matterId && (
-              <div className="text-2xs text-warn">{errs.matterId[0]}</div>
-            )}
+            {errs.matterId && <div className="text-2xs text-warn">{errs.matterId[0]}</div>}
           </div>
 
           <div className="grid grid-cols-[auto_1fr] gap-2 items-start">
@@ -167,11 +157,7 @@ export function StopTimerDialog({
               placeholder="Date"
               error={errs.date?.[0]}
             />
-            <DurationFields
-              hours={hours}
-              onHoursChange={setHours}
-              error={errs.hours?.[0]}
-            />
+            <DurationFields hours={hours} onHoursChange={setHours} error={errs.hours?.[0]} />
           </div>
 
           <TextField
@@ -192,11 +178,7 @@ export function StopTimerDialog({
             error={errs.narrative?.[0]}
           />
 
-          <UtbmsCodeSelect
-            value={utbmsCode}
-            onChange={setUtbmsCode}
-            error={errs.utbmsCode?.[0]}
-          />
+          <UtbmsCodeSelect value={utbmsCode} onChange={setUtbmsCode} error={errs.utbmsCode?.[0]} />
 
           <div className="flex flex-wrap items-center gap-4 text-xs">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -229,18 +211,12 @@ export function StopTimerDialog({
           </div>
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Keep running
             </Button>
             <Button
               type="submit"
-              disabled={
-                isPending || !matterId || !hours.trim() || !activity.trim()
-              }
+              disabled={isPending || !matterId || !hours.trim() || !activity.trim()}
             >
               {isPending ? "Logging…" : "Log time"}
             </Button>

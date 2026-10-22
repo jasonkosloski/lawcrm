@@ -2,10 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { portalMatterWhere } from "@/lib/portal-access";
-import {
-  isEffectivelyShared,
-  sharedFolderIds,
-} from "@/lib/portal/document-visibility";
+import { isEffectivelyShared, sharedFolderIds } from "@/lib/portal/document-visibility";
 
 export type PortalDocumentRow = {
   id: string;
@@ -31,10 +28,7 @@ async function portalIsOn(): Promise<boolean> {
 }
 
 /** True when the identity holds live access to the matter and the portal is on. */
-async function hasLiveAccess(
-  identityId: string,
-  matterId: string
-): Promise<boolean> {
+async function hasLiveAccess(identityId: string, matterId: string): Promise<boolean> {
   if (!(await portalIsOn())) return false;
   const m = await prisma.matter.findFirst({
     where: { id: matterId, ...portalMatterWhere(identityId) },
@@ -51,7 +45,7 @@ async function hasLiveAccess(
  */
 export async function listPortalSharedDocuments(
   identityId: string,
-  matterId: string
+  matterId: string,
 ): Promise<PortalDocumentRow[]> {
   if (!(await hasLiveAccess(identityId, matterId))) return [];
   const [folders, docs] = await Promise.all([
@@ -94,7 +88,7 @@ export async function listPortalSharedDocuments(
  */
 export async function canPortalDownload(
   identityId: string,
-  documentId: string
+  documentId: string,
 ): Promise<{
   fileUrl: string;
   name: string;
@@ -146,7 +140,7 @@ export async function canPortalDownload(
 /** Files portal users uploaded to the matter, visible to every live-access identity on it. */
 export async function listPortalUploads(
   identityId: string,
-  matterId: string
+  matterId: string,
 ): Promise<PortalUploadRow[]> {
   if (!(await hasLiveAccess(identityId, matterId))) return [];
   const rows = await prisma.document.findMany({

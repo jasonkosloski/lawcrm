@@ -44,8 +44,7 @@ export function PortalEnabledCard({ current }: { current: boolean }) {
           <div className="flex flex-col gap-0.5">
             <span className="text-ink font-medium">Client portal enabled</span>
             <span className="text-2xs text-ink-3 leading-relaxed">
-              When off, staff cannot send portal invites and clients cannot
-              sign in.
+              When off, staff cannot send portal invites and clients cannot sign in.
             </span>
           </div>
         </label>

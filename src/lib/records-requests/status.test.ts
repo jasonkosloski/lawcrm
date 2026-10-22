@@ -63,7 +63,10 @@ describe("checkRecordsTransition", () => {
     const sent = { hasSentAt: true };
     expect(checkRecordsTransition("complete", "draft", sent)).toEqual({ ok: false });
     expect(checkRecordsTransition("complete", "partial", sent)).toEqual({ ok: true, reopen: true });
-    expect(checkRecordsTransition("denied", "acknowledged", sent)).toEqual({ ok: true, reopen: true });
+    expect(checkRecordsTransition("denied", "acknowledged", sent)).toEqual({
+      ok: true,
+      reopen: true,
+    });
   });
 
   it("rejects moving backwards between non-terminal statuses", () => {
@@ -96,7 +99,9 @@ describe("isRecordsRequestOverdue", () => {
   });
 
   it("is not overdue once complete", () => {
-    expect(isRecordsRequestOverdue({ status: "complete", responseDueDate: due }, today)).toBe(false);
+    expect(isRecordsRequestOverdue({ status: "complete", responseDueDate: due }, today)).toBe(
+      false,
+    );
   });
 
   it("is not overdue without a due date", () => {

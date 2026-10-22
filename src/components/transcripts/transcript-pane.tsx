@@ -27,11 +27,7 @@ import type { TranscriptView } from "@/lib/queries/transcript";
 import { activeWordIndex } from "@/lib/transcription/timecode";
 import { FindBar } from "./find-bar";
 import { SelectionToolbar, type SelectionSpan } from "./selection-toolbar";
-import {
-  TranscriptSegmentView,
-  type SegmentDecor,
-  type SegmentFind,
-} from "./transcript-segment";
+import { TranscriptSegmentView, type SegmentDecor, type SegmentFind } from "./transcript-segment";
 import {
   FailedBanner,
   InFlightNotice,
@@ -97,8 +93,7 @@ export function TranscriptPane({
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [matchIdx, setMatchIdx] = useState(0);
-  const { run: retranscribe, pending: retranscribing } =
-    useRequestTranscript(documentId);
+  const { run: retranscribe, pending: retranscribing } = useRequestTranscript(documentId);
 
   const status = transcript?.status ?? null;
   const segments = transcript?.segments;
@@ -535,15 +530,7 @@ export function TranscriptPane({
   );
 }
 
-const SCROLL_KEYS = new Set([
-  "PageUp",
-  "PageDown",
-  "Home",
-  "End",
-  "ArrowUp",
-  "ArrowDown",
-  " ",
-]);
+const SCROLL_KEYS = new Set(["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown", " "]);
 
 /** A non-collapsed selection that touches `box`. */
 function hasSelectionIn(box: HTMLElement): boolean {

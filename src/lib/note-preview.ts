@@ -12,10 +12,6 @@
 
 import { noteToPlainText } from "@/lib/note-text";
 
-export function notePreviewText(
-  html: string,
-  fallback = "Note",
-  max = 80
-): string {
+export function notePreviewText(html: string, fallback = "Note", max = 80): string {
   return noteToPlainText(html).slice(0, max) || fallback;
 }

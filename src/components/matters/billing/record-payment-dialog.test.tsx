@@ -72,11 +72,9 @@ describe("RecordPaymentDialog — email copy", () => {
         canSendInvoice
         open
         onOpenChange={vi.fn()}
-      />
+      />,
     );
-    expect(
-      screen.getByText("Emails the refreshed invoice PDF to c@x.com.")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Emails the refreshed invoice PDF to c@x.com.")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/logged-only|nothing is emailed/i);
   });
 
@@ -104,22 +102,15 @@ describe("RecordPaymentDialog — send updated invoice", () => {
         canSendInvoice
         open
         onOpenChange={vi.fn()}
-      />
+      />,
     );
     expect(screen.getByRole("checkbox")).not.toBeChecked();
-    expect(
-      document.querySelector<HTMLInputElement>('input[name="notifyClient"]')?.value
-    ).toBe("");
+    expect(document.querySelector<HTMLInputElement>('input[name="notifyClient"]')?.value).toBe("");
   });
 
   test("is hidden without billing.send_invoice", () => {
     render(
-      <RecordPaymentDialog
-        {...baseProps}
-        clientEmail="c@x.com"
-        open
-        onOpenChange={vi.fn()}
-      />
+      <RecordPaymentDialog {...baseProps} clientEmail="c@x.com" open onOpenChange={vi.fn()} />,
     );
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(document.querySelector('input[name="notifyClient"]')).toBeNull();
@@ -130,9 +121,7 @@ describe("RecordPaymentDialog — close on success", () => {
   test("closes the dialog after a successful payment", async () => {
     const user = setupUser();
     const onOpenChange = vi.fn();
-    render(
-      <RecordPaymentDialog {...baseProps} open onOpenChange={onOpenChange} />
-    );
+    render(<RecordPaymentDialog {...baseProps} open onOpenChange={onOpenChange} />);
 
     // Amount defaults to the open balance, so the form is
     // submittable as-is ("paid in full" is one click).
@@ -181,9 +170,7 @@ describe("RecordPaymentDialog — close on success", () => {
     await user.click(screen.getByRole("button", { name: /record \$/i }));
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: /record \$/i })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: /record \$/i })).not.toBeInTheDocument(),
     );
 
     // Round two: reopen and pay again. With the effect keyed on
@@ -191,9 +178,7 @@ describe("RecordPaymentDialog — close on success", () => {
     // already "ok", so the close effect never re-fired.
     await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
     onOpenChange.mockClear();
-    await user.click(
-      await screen.findByRole("button", { name: /record \$/i })
-    );
+    await user.click(await screen.findByRole("button", { name: /record \$/i }));
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(mockedAction).toHaveBeenCalledTimes(2);
@@ -206,15 +191,11 @@ describe("RecordPaymentDialog — close on success", () => {
     }));
     const user = setupUser();
     const onOpenChange = vi.fn();
-    render(
-      <RecordPaymentDialog {...baseProps} open onOpenChange={onOpenChange} />
-    );
+    render(<RecordPaymentDialog {...baseProps} open onOpenChange={onOpenChange} />);
 
     await user.click(screen.getByRole("button", { name: /record \$/i }));
 
-    expect(
-      await screen.findByText("Invoice is not in a payable state.")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Invoice is not in a payable state.")).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 });
@@ -232,24 +213,17 @@ describe("RecordPaymentDialog — stale error masking on reopen", () => {
         <button type="button" onClick={() => setOpen(true)}>
           reopen dialog
         </button>
-        <RecordPaymentDialog
-          {...baseProps}
-          open={open}
-          onOpenChange={setOpen}
-        />
+        <RecordPaymentDialog {...baseProps} open={open} onOpenChange={setOpen} />
       </>
     );
   }
 
-  const submitButton = () =>
-    screen.getByRole("button", { name: /record \$/i });
+  const submitButton = () => screen.getByRole("button", { name: /record \$/i });
 
   const closeAndReopen = async (user: ReturnType<typeof setupUser>) => {
     await user.click(screen.getByRole("button", { name: /^cancel$/i }));
     await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: /record \$/i })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: /record \$/i })).not.toBeInTheDocument(),
     );
     await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
     await screen.findByRole("button", { name: /record \$/i });
@@ -299,9 +273,7 @@ describe("RecordPaymentDialog — stale error masking on reopen", () => {
     mockedAction.mockImplementation(async () => ({ status: "ok" as const }));
     await user.click(submitButton());
     await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: /record \$/i })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: /record \$/i })).not.toBeInTheDocument(),
     );
     expect(mockedAction).toHaveBeenCalledTimes(2);
   });
@@ -309,20 +281,12 @@ describe("RecordPaymentDialog — stale error masking on reopen", () => {
 
 describe("RecordPaymentDialog — Trust method needs billing.apply_trust", () => {
   const methodValues = () =>
-    Array.from(
-      (document.querySelector('select[name="source"]') as HTMLSelectElement)
-        .options
-    ).map((o) => o.value);
+    Array.from((document.querySelector('select[name="source"]') as HTMLSelectElement).options).map(
+      (o) => o.value,
+    );
 
   test("hides Trust when the viewer lacks apply_trust, even with funds in trust", () => {
-    render(
-      <RecordPaymentDialog
-        {...baseProps}
-        trustBalance={900}
-        open
-        onOpenChange={vi.fn()}
-      />
-    );
+    render(<RecordPaymentDialog {...baseProps} trustBalance={900} open onOpenChange={vi.fn()} />);
     expect(methodValues()).not.toContain("trust");
     expect(methodValues()).toContain("check");
   });
@@ -335,7 +299,7 @@ describe("RecordPaymentDialog — Trust method needs billing.apply_trust", () =>
         canApplyTrust
         open
         onOpenChange={vi.fn()}
-      />
+      />,
     );
     expect(methodValues()).toContain("trust");
   });
@@ -348,51 +312,37 @@ describe("RecordPaymentDialog — Trust method needs billing.apply_trust", () =>
         canApplyTrust
         open
         onOpenChange={vi.fn()}
-      />
+      />,
     );
     expect(methodValues()).not.toContain("trust");
   });
 });
 
 describe("RecordPaymentDialog — amount parsing matches the server (F467)", () => {
-  const amountInput = () =>
-    screen.getByLabelText(/^amount/i) as HTMLInputElement;
+  const amountInput = () => screen.getByLabelText(/^amount/i) as HTMLInputElement;
 
   test("'1,200.00' on a $5,000 invoice previews $1,200.00, not $1.00", async () => {
     const user = setupUser();
     render(
-      <RecordPaymentDialog
-        {...baseProps}
-        invoiceBalance={5000}
-        open
-        onOpenChange={vi.fn()}
-      />
+      <RecordPaymentDialog {...baseProps} invoiceBalance={5000} open onOpenChange={vi.fn()} />,
     );
     await user.clear(amountInput());
     await user.type(amountInput(), "1,200.00");
-    expect(
-      screen.getByRole("button", { name: "Record $1,200.00" })
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Record $1,200.00" })).toBeEnabled();
     expect(screen.getByText("$3,800.00")).toBeInTheDocument();
   });
 
   test("'$500' is accepted (the server strips the $)", async () => {
     const user = setupUser();
-    render(
-      <RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />
-    );
+    render(<RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />);
     await user.clear(amountInput());
     await user.type(amountInput(), "$500");
-    expect(
-      screen.getByRole("button", { name: "Record $500.00 · mark paid" })
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Record $500.00 · mark paid" })).toBeEnabled();
   });
 
   test("the over-balance guard fires on a comma amount", async () => {
     const user = setupUser();
-    render(
-      <RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />
-    );
+    render(<RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />);
     await user.clear(amountInput());
     await user.type(amountInput(), "1,000");
     expect(screen.getByText(/exceeds the invoice balance/i)).toBeInTheDocument();
@@ -401,9 +351,7 @@ describe("RecordPaymentDialog — amount parsing matches the server (F467)", () 
 
   test("unparseable text says so instead of silently disabling submit", async () => {
     const user = setupUser();
-    render(
-      <RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />
-    );
+    render(<RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />);
     await user.clear(amountInput());
     await user.type(amountInput(), "12.345");
     expect(screen.getByText("Enter a valid amount.")).toBeInTheDocument();
@@ -420,19 +368,13 @@ describe("RecordPaymentDialog — form behaviour", () => {
         canApplyTrust
         open
         onOpenChange={vi.fn()}
-      />
+      />,
     );
     expect(screen.getByLabelText(/^amount/i)).toHaveAttribute("name", "amount");
     expect(screen.getByLabelText(/^method/i)).toHaveAttribute("name", "source");
     expect(screen.getByLabelText(/^date/i)).toHaveAttribute("name", "date");
-    expect(screen.getByLabelText(/^reference/i)).toHaveAttribute(
-      "name",
-      "reference"
-    );
-    expect(screen.getByLabelText(/^memo/i)).toHaveAttribute(
-      "name",
-      "description"
-    );
+    expect(screen.getByLabelText(/^reference/i)).toHaveAttribute("name", "reference");
+    expect(screen.getByLabelText(/^memo/i)).toHaveAttribute("name", "description");
   });
 
   test("a failed submit keeps what the user typed (no form-reset wipe)", async () => {
@@ -441,9 +383,7 @@ describe("RecordPaymentDialog — form behaviour", () => {
       error: "Invoice is not in a payable state.",
     }));
     const user = setupUser();
-    render(
-      <RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />
-    );
+    render(<RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />);
     await user.type(screen.getByLabelText(/^reference/i), "Check 4411");
     await user.selectOptions(screen.getByLabelText(/^method/i), "ach");
     await user.click(screen.getByRole("button", { name: /record \$/i }));
@@ -460,11 +400,7 @@ describe("RecordPaymentDialog — form behaviour", () => {
           <button type="button" onClick={() => setOpen(true)}>
             reopen dialog
           </button>
-          <RecordPaymentDialog
-            {...baseProps}
-            open={open}
-            onOpenChange={setOpen}
-          />
+          <RecordPaymentDialog {...baseProps} open={open} onOpenChange={setOpen} />
         </>
       );
     }
@@ -473,9 +409,7 @@ describe("RecordPaymentDialog — form behaviour", () => {
     await user.clear(screen.getByLabelText(/^amount/i));
     await user.type(screen.getByLabelText(/^amount/i), "42");
     await user.click(screen.getByRole("button", { name: /^cancel$/i }));
-    await waitFor(() =>
-      expect(screen.queryByLabelText(/^amount/i)).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByLabelText(/^amount/i)).not.toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
     expect(await screen.findByLabelText(/^amount/i)).toHaveValue("500.00");
   });
@@ -488,7 +422,7 @@ describe("RecordPaymentDialog — form behaviour", () => {
       render(
         <UserTimeZoneProvider timeZone="America/Denver">
           <RecordPaymentDialog {...baseProps} open onOpenChange={vi.fn()} />
-        </UserTimeZoneProvider>
+        </UserTimeZoneProvider>,
       );
       expect(screen.getByLabelText(/^date/i)).toHaveValue("2026-04-27");
     } finally {

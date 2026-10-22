@@ -4,11 +4,13 @@ The `/settings` area, grouped in the side nav as You (Profile, Security, Notific
 Related: [PERMISSIONS.md](../PERMISSIONS.md), [deadlines-and-tasks.md](deadlines-and-tasks.md) (Automations), [documents.md](documents.md) (templates)
 
 ## Open work
+
 - [~] **Settings: Security** (P2) — sign-in is Google via Clerk; auth audit shipped. Two-factor is Clerk's. See [auth.md](auth.md).
 - [~] **Settings: Integrations** (P2) — Gmail and Google Calendar live. Remaining: Westlaw, e-sign, IOLTA bank feed, PACER; each lights up when its underlying feature phase lands.
 - [ ] **Settings: Billing and rates** (P2) — default hourly rate, UTBMS code library, invoice templates, payment terms. `/settings/billing` is a placeholder page gated on `firm.edit_info`.
 
 ## Shipped
+
 - [x] **Route framework** — `/settings` layout with left-rail section nav; entries the user cannot see are hidden. Routes are gated end-to-end on permission keys: `/settings/practice-areas` (+ `[id]`) on `firm.manage_practice_areas`; `/settings/billing` on `firm.edit_info`; `/settings/activity` on `firm.view_activity`; `/settings/integrations` and `/settings/security` are self-service (identity-scoped, no key).
 - [x] **Profile** — self-edit form (name, initials, phone, bar number, avatar URL, time zone, default event visibility). Right rail shows identity + governance read-only (email, role, admin badge, active status, member-since, firm) with a chip to /settings/team.
 - [x] **Team** — firm-scoped roster (admins first, then active alphabetically). Admins get a per-row menu (Edit / Sign out everywhere / Reset sign-in link / Resend invite) and an "Invite member" composer. Admin and privileged-role controls are locked for non-Admin holders of `firm.manage_team_directory`. Invariants: at least one Admin; cannot deactivate yourself; unique email on invite. Invite emails a Clerk invitation (Google sign-in); deactivate/reactivate bans/unbans in Clerk after the DB commit (a Clerk failure is a warning; the DB already denies access). Wrapper: `src/lib/clerk-admin.ts`. See [auth.md](auth.md).
@@ -26,4 +28,5 @@ Related: [PERMISSIONS.md](../PERMISSIONS.md), [deadlines-and-tasks.md](deadlines
 - [x] **Venues and matter intake settings** (2026-10-20, ADR-055) — `/settings/venues` manages the firm's court/venue list (name, city, county, state; add, edit, archive/restore, delete); state is required free text defaulting to the firm's state. Gated on the `venues.*` keys; the migration gave `venues.add` to every role that already had `matters.create`. Changes log as firm-level `settings` rows. The firm's matter-name template is on Firm info; each practice area's form adds a name-template override and the required-field checklist for new matters.
 
 ## Notes
+
 - Data-loss hardening of contact/party/practice-area mutations (audit logging etc.) is in [platform-quality.md](platform-quality.md).

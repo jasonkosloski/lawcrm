@@ -21,7 +21,7 @@ describe("normalizeAssemblyAI", () => {
 
   it("splits a >90s turn at the last sentence end before 90s", () => {
     expect(r.segments[0].text).toBe(
-      "Good morning everyone. Please state your name. I was at the store."
+      "Good morning everyone. Please state your name. I was at the store.",
     );
     expect(r.segments[1].text).toBe("Then I left the building.");
     expect(r.segments.map((s) => s.index)).toEqual(r.segments.map((_, i) => i));

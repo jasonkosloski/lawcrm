@@ -35,10 +35,7 @@ export type NotificationTypeMeta = {
   tone: string;
 };
 
-export const NOTIFICATION_TYPE_META: Record<
-  NotificationType,
-  NotificationTypeMeta
-> = {
+export const NOTIFICATION_TYPE_META: Record<NotificationType, NotificationTypeMeta> = {
   task_assigned: { icon: ClipboardCheck, tone: "text-brand-700" },
   task_due_soon: { icon: ListChecks, tone: "text-warn" },
   deadline_approaching: { icon: CircleAlert, tone: "text-warn" },
@@ -58,8 +55,5 @@ export const NOTIFICATION_TYPE_META: Record<
 /** Meta lookup for a DB-sourced type string — unknown values fall
  *  back to the generic meta rather than throwing. */
 export function notificationTypeMeta(type: string): NotificationTypeMeta {
-  return (
-    NOTIFICATION_TYPE_META[type as NotificationType] ??
-    NOTIFICATION_TYPE_META.generic
-  );
+  return NOTIFICATION_TYPE_META[type as NotificationType] ?? NOTIFICATION_TYPE_META.generic;
 }

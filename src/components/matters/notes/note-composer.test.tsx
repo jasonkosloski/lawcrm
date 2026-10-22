@@ -18,9 +18,8 @@ import userEvent from "@testing-library/user-event";
 
 import type { NoteCapture, NoteFormState } from "@/lib/note-constants";
 
-const createNote = vi.fn<
-  (matterId: string, prev: NoteFormState, fd: FormData) => Promise<NoteFormState>
->();
+const createNote =
+  vi.fn<(matterId: string, prev: NoteFormState, fd: FormData) => Promise<NoteFormState>>();
 vi.mock("@/app/actions/notes", () => ({
   createNote: (matterId: string, prev: NoteFormState, fd: FormData) =>
     createNote(matterId, prev, fd),
@@ -28,10 +27,7 @@ vi.mock("@/app/actions/notes", () => ({
 // Tiptap isn't needed: a textarea stands in and reports its HTML.
 vi.mock("./note-editor", () => ({
   NoteEditor: ({ onChange }: { onChange: (html: string) => void }) => (
-    <textarea
-      data-testid="editor"
-      onChange={(e) => onChange(e.target.value)}
-    />
+    <textarea data-testid="editor" onChange={(e) => onChange(e.target.value)} />
   ),
 }));
 // A stack that can queue one capture and shows its count.
@@ -104,7 +100,9 @@ describe("NoteComposer pin toggle", () => {
 
 describe("NoteComposer capture kinds", () => {
   test("passes the viewer's allowed kinds to the stack", async () => {
-    render(<NoteComposer scope={{ kind: "matter", matterId: "m1" }} allowedKinds={["task", "time"]} />);
+    render(
+      <NoteComposer scope={{ kind: "matter", matterId: "m1" }} allowedKinds={["task", "time"]} />,
+    );
     await expand();
     expect(screen.getByTestId("stack").dataset.kinds).toBe("task,time");
   });
@@ -114,19 +112,13 @@ describe("NoteComposer type pills", () => {
   test("expose the selected type with aria-pressed", async () => {
     render(<NoteComposer scope={{ kind: "matter", matterId: "m1" }} />);
     const user = await expand();
-    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByRole("button", { name: "Strategy" }));
     expect(screen.getByRole("button", { name: "Strategy" })).toHaveAttribute(
       "aria-pressed",
-      "true"
+      "true",
     );
-    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute(
-      "aria-pressed",
-      "false"
-    );
+    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute("aria-pressed", "false");
   });
 });
 
@@ -147,14 +139,8 @@ describe("NoteComposer Cancel", () => {
     // Re-open: pristine.
     await user.click(screen.getByRole("button", { name: /write a note/i }));
     expect(screen.getByTestId("capture-count").textContent).toBe("0");
-    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
-    expect(screen.getByRole("button", { name: /^pin$/i })).toHaveAttribute(
-      "aria-pressed",
-      "false"
-    );
+    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^pin$/i })).toHaveAttribute("aria-pressed", "false");
     expect((screen.getByTestId("editor") as HTMLTextAreaElement).value).toBe("");
   });
 });
@@ -178,9 +164,7 @@ describe("NoteComposer submit", () => {
     expect(JSON.parse(String(fd.get("attachments")))).toHaveLength(1);
 
     // Collapsed back to the placeholder, ready for the next note.
-    expect(
-      await screen.findByRole("button", { name: /write a note/i })
-    ).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /write a note/i })).toBeTruthy();
   });
 
   test("a failed save keeps the typed note and shows the error", async () => {
@@ -193,13 +177,9 @@ describe("NoteComposer submit", () => {
     await user.type(screen.getByTestId("editor"), "important memo");
     await user.click(screen.getByRole("button", { name: /save note/i }));
 
-    expect(
-      await screen.findByText("You don't have permission to log time.")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("You don't have permission to log time.")).toBeInTheDocument();
     // Still expanded with the text intact.
-    expect((screen.getByTestId("editor") as HTMLTextAreaElement).value).toBe(
-      "important memo"
-    );
+    expect((screen.getByTestId("editor") as HTMLTextAreaElement).value).toBe("important memo");
   });
 
   test("a previous attempt's error is gone after cancelling and reopening", async () => {

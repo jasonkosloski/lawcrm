@@ -57,16 +57,9 @@ import {
 } from "@/lib/records-requests/fee-expense";
 import { applyAutoDefaults, describeDefaults } from "@/lib/automations/apply";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
-import {
-  BILLING_TYPES,
-  billingTypeFields,
-  normalizeAreaBillingTypes,
-} from "@/lib/billing-type";
+import { BILLING_TYPES, billingTypeFields, normalizeAreaBillingTypes } from "@/lib/billing-type";
 import { plural } from "@/lib/utils";
-import type {
-  ConvertLeadFormState,
-  DeclineLeadFormState,
-} from "@/lib/lead-conversion-form";
+import type { ConvertLeadFormState, DeclineLeadFormState } from "@/lib/lead-conversion-form";
 import { LEAD_SOURCES, type LeadStage } from "@/lib/constants/lead-stage";
 import { assertLeadAccess } from "@/lib/lead-access";
 
@@ -80,8 +73,7 @@ const ALREADY_CONVERTED_ERROR = "Lead is already converted to a matter.";
 const ALREADY_DECLINED_ERROR = "Lead is already declined.";
 const CONFLICT_BLOCKS_CONVERSION_ERROR =
   "The conflict check found a conflict. Resolve it, or have someone authorized record an override on the lead's Overview, before converting.";
-const DECLINED_BEFORE_CONVERT_ERROR =
-  "This lead was declined. Reopen it before converting.";
+const DECLINED_BEFORE_CONVERT_ERROR = "This lead was declined. Reopen it before converting.";
 const DECLINE_AFTER_CONVERT_ERROR =
   "Lead is already converted — can't decline a matter that exists.";
 
@@ -97,8 +89,7 @@ class BillingTypeNotOfferedError extends Error {}
 
 // ── Create (New intake form) ────────────────────────────────────────────
 
-const optionalText = (max: number) =>
-  z.string().trim().max(max).optional().or(z.literal(""));
+const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
 const createLeadSchema = z
   .object({
@@ -137,7 +128,7 @@ const createLeadSchema = z
  */
 export async function createLead(
   _prev: NewIntakeFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<NewIntakeFormState> {
   const actorId = await requirePermission("intake.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -155,13 +146,26 @@ export async function createLead(
     }
   }
 
-  const contactSelect = { id: true, name: true, email: true, phone: true, organization: true } as const;
+  const contactSelect = {
+    id: true,
+    name: true,
+    email: true,
+    phone: true,
+    organization: true,
+  } as const;
   const activeContact = { isActive: true, mergedIntoId: null } as const;
   let contact = d.contactId
-    ? await prisma.contact.findFirst({ where: { id: d.contactId, ...activeContact }, select: contactSelect })
+    ? await prisma.contact.findFirst({
+        where: { id: d.contactId, ...activeContact },
+        select: contactSelect,
+      })
     : null;
   if (d.contactId && !contact) {
-    return { status: "error", errors: { name: ["That contact is no longer available — search again"] }, values: raw };
+    return {
+      status: "error",
+      errors: { name: ["That contact is no longer available — search again"] },
+      values: raw,
+    };
   }
   if (!contact && d.email) {
     contact = await prisma.contact.findFirst({
@@ -181,7 +185,11 @@ export async function createLead(
           phone: d.phone || null, // denormalized — mirrors the primary ContactPhone
           type: "client",
           ...(d.phone
-            ? { phones: { create: { label: "Primary", number: d.phone, isPrimary: true, order: 0 } } }
+            ? {
+                phones: {
+                  create: { label: "Primary", number: d.phone, isPrimary: true, order: 0 },
+                },
+              }
             : {}),
         },
         select: contactSelect,
@@ -261,15 +269,11 @@ function composeMatterDescription(lead: {
   if (lead.summary) lines.push(lead.summary);
   if (lead.location) lines.push(`Incident location: ${lead.location}`);
   if (lead.dateOfIncident) {
-    lines.push(
-      `Date of incident: ${dateOnlyKey(lead.dateOfIncident)}`
-    );
+    lines.push(`Date of incident: ${dateOnlyKey(lead.dateOfIncident)}`);
   }
   if (lead.injuries) lines.push(`Injuries: ${lead.injuries}`);
   if (lead.source) {
-    lines.push(
-      `Source: ${lead.source}${lead.sourceDetail ? ` · ${lead.sourceDetail}` : ""}`
-    );
+    lines.push(`Source: ${lead.source}${lead.sourceDetail ? ` · ${lead.sourceDetail}` : ""}`);
   }
   return lines.join("\n\n");
 }
@@ -277,7 +281,7 @@ function composeMatterDescription(lead: {
 export async function convertLeadToMatter(
   leadId: string,
   _prev: ConvertLeadFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<ConvertLeadFormState> {
   // Conversion creates a Matter row — same gate as the direct
   // create path so the rule is single: "creating a matter requires
@@ -354,10 +358,7 @@ export async function convertLeadToMatter(
 
   // Originating-document gate: same rules and order as createMatter,
   // after validation and before the conflict re-check.
-  const [userId, tz] = await Promise.all([
-    getCurrentUserId(),
-    getCurrentUserTimeZone(),
-  ]);
+  const [userId, tz] = await Promise.all([getCurrentUserId(), getCurrentUserTimeZone()]);
   const [gateFirm, gateArea, onLead] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -389,7 +390,7 @@ export async function convertLeadToMatter(
       required: gateFirm?.firm?.requireOriginatingDoc ?? false,
       label: agreementLabel,
       today: dateOnlyKey(await todayDateOnly()),
-    }
+    },
   );
   if (Object.keys(agreementErrors).length > 0) {
     return {
@@ -398,7 +399,7 @@ export async function convertLeadToMatter(
         Object.entries(agreementErrors).map(([k, v]) => [
           k === "originatingFileId" ? "originatingDocumentId" : k,
           [v as string],
-        ])
+        ]),
       ),
     };
   }
@@ -456,313 +457,313 @@ export async function convertLeadToMatter(
   // and auto-compute the SOL date from the area's configured period.
   // The lead form has no manual SOL-date override; per-matter
   // overrides happen on the matter edit form after conversion.
-  const incidentDate = area.hasStatuteOfLimitations
-    ? lead.dateOfIncident
-    : null;
+  const incidentDate = area.hasStatuteOfLimitations ? lead.dateOfIncident : null;
   const solDate = computeSolDate(
     incidentDate,
-    toSolPeriod(area.statutePeriodAmount, area.statutePeriodUnit)
+    toSolPeriod(area.statutePeriodAmount, area.statutePeriodUnit),
   );
 
   // Single transaction so a half-converted lead can't exist.
-  const result = await prisma.$transaction(async (tx) => {
-    // Billing type must be one the area offers. Checked against a
-    // fresh read of the area and BEFORE the claim, so a rejection
-    // leaves the lead's stage untouched and creates nothing.
-    const billingArea = await tx.practiceArea.findUniqueOrThrow({
-      where: { id: area.id },
-      select: { allowedBillingTypes: true, defaultBillingType: true },
-    });
-    const offered = normalizeAreaBillingTypes(billingArea);
-    const billingType = parsed.data.billingType ?? offered.defaultBillingType;
-    if (!offered.allowedBillingTypes.includes(billingType)) {
-      throw new BillingTypeNotOfferedError();
-    }
-    // Claim the lead FIRST, with a predicate on the exact stage we
-    // read. That read is outside the transaction, so a double-click /
-    // second tab / second attorney could pass the checks above; this
-    // conditional write is the real guard. Under READ COMMITTED a
-    // concurrent claimer blocks on this row lock, re-evaluates the
-    // predicate, and matches 0 rows. A decline that committed after
-    // our read also fails the predicate, so it is never overwritten.
-    // (Converting a lead that was ALREADY declined when read stays
-    // allowed, and clears the stale decline reason so a converted lead
-    // never carries one.) convertedMatterId is set once the matter
-    // exists.
-    const claimed = await tx.lead.updateMany({
-      where: { id: leadId, stage: lead.stage },
-      data: { stage: CONVERTED, declineReason: null },
-    });
-    if (claimed.count === 0) throw new LeadClaimLostError();
-    // Re-read the wall now that the claim holds the row lock: a
-    // setLeadRestricted that committed after the read above must not
-    // leave the matter open (ADR-049; setLeadRestricted locks the same row).
-    const { restricted } = await tx.lead.findUniqueOrThrow({
-      where: { id: leadId },
-      select: { restricted: true },
-    });
+  const result = await prisma
+    .$transaction(async (tx) => {
+      // Billing type must be one the area offers. Checked against a
+      // fresh read of the area and BEFORE the claim, so a rejection
+      // leaves the lead's stage untouched and creates nothing.
+      const billingArea = await tx.practiceArea.findUniqueOrThrow({
+        where: { id: area.id },
+        select: { allowedBillingTypes: true, defaultBillingType: true },
+      });
+      const offered = normalizeAreaBillingTypes(billingArea);
+      const billingType = parsed.data.billingType ?? offered.defaultBillingType;
+      if (!offered.allowedBillingTypes.includes(billingType)) {
+        throw new BillingTypeNotOfferedError();
+      }
+      // Claim the lead FIRST, with a predicate on the exact stage we
+      // read. That read is outside the transaction, so a double-click /
+      // second tab / second attorney could pass the checks above; this
+      // conditional write is the real guard. Under READ COMMITTED a
+      // concurrent claimer blocks on this row lock, re-evaluates the
+      // predicate, and matches 0 rows. A decline that committed after
+      // our read also fails the predicate, so it is never overwritten.
+      // (Converting a lead that was ALREADY declined when read stays
+      // allowed, and clears the stale decline reason so a converted lead
+      // never carries one.) convertedMatterId is set once the matter
+      // exists.
+      const claimed = await tx.lead.updateMany({
+        where: { id: leadId, stage: lead.stage },
+        data: { stage: CONVERTED, declineReason: null },
+      });
+      if (claimed.count === 0) throw new LeadClaimLostError();
+      // Re-read the wall now that the claim holds the row lock: a
+      // setLeadRestricted that committed after the read above must not
+      // leave the matter open (ADR-049; setLeadRestricted locks the same row).
+      const { restricted } = await tx.lead.findUniqueOrThrow({
+        where: { id: leadId },
+        select: { restricted: true },
+      });
 
-    // Lock the lead's records requests BEFORE re-homing tasks/documents
-    // (request rows first, then task rows: the order every records
-    // helper uses) and before reading them for fee booking. A lead fee
-    // save in flight either commits first (and is booked below) or waits
-    // and then sees the request on the matter.
-    await tx.$queryRaw`SELECT id FROM "records_requests" WHERE "leadId" = ${leadId} FOR UPDATE`;
+      // Lock the lead's records requests BEFORE re-homing tasks/documents
+      // (request rows first, then task rows: the order every records
+      // helper uses) and before reading them for fee booking. A lead fee
+      // save in flight either commits first (and is booked below) or waits
+      // and then sees the request on the matter.
+      await tx.$queryRaw`SELECT id FROM "records_requests" WHERE "leadId" = ${leadId} FOR UPDATE`;
 
-    // Every lead is attached to a Contact (Lead.contactId) — same
-    // shape as Matter.clientId. The Patel-style "find by email"
-    // dance lives in the create-lead flow now (so prior intakes for
-    // the same person coalesce up front), not at conversion time.
-    //
-    // For un-backfilled rows that still lack a contactId, fall back
-    // to the legacy create-on-conversion path so old data doesn't
-    // block conversion. This branch can be deleted once the legacy
-    // text columns get retired.
-    let clientContactId = lead.contactId;
-    if (!clientContactId) {
-      const created = await tx.contact.create({
+      // Every lead is attached to a Contact (Lead.contactId) — same
+      // shape as Matter.clientId. The Patel-style "find by email"
+      // dance lives in the create-lead flow now (so prior intakes for
+      // the same person coalesce up front), not at conversion time.
+      //
+      // For un-backfilled rows that still lack a contactId, fall back
+      // to the legacy create-on-conversion path so old data doesn't
+      // block conversion. This branch can be deleted once the legacy
+      // text columns get retired.
+      let clientContactId = lead.contactId;
+      if (!clientContactId) {
+        const created = await tx.contact.create({
+          data: {
+            name: lead.name,
+            type: "client",
+            email: lead.email,
+            phone: lead.phone, // denormalized — kept in sync with the primary ContactPhone
+          },
+          select: { id: true },
+        });
+        clientContactId = created.id;
+        // Mirror the lead's phone as a primary ContactPhone row so it
+        // matches what the parties composer creates.
+        if (lead.phone) {
+          await tx.contactPhone.create({
+            data: {
+              contactId: created.id,
+              label: "Primary",
+              number: lead.phone,
+              isPrimary: true,
+              order: 0,
+            },
+          });
+        }
+        // Heal the lead row so the next read sees the FK populated.
+        await tx.lead.update({
+          where: { id: leadId },
+          data: { contactId: created.id },
+        });
+      }
+
+      const matter = await tx.matter.create({
         data: {
-          name: lead.name,
-          type: "client",
-          email: lead.email,
-          phone: lead.phone, // denormalized — kept in sync with the primary ContactPhone
+          name: parsed.data.name,
+          practiceAreaId: area.id,
+          stageId: stage.id,
+          // One billing type writes both columns, same as the direct
+          // matter-create path.
+          ...billingTypeFields(billingType),
+          color: area.color,
+          description: description || null,
+          clientId: clientContactId,
+          // A restricted intake stays walled as a matter (ADR-049).
+          restricted,
+          incidentDate,
+          statuteOfLimitationsDate: solDate,
+          // Invariant shared with createMatter / updateMatter: whenever
+          // a matter has a client, that contact is also a MatterContact
+          // with category="client" so the Parties tab shows them.
+          contacts: {
+            create: { contactId: clientContactId, category: "client" },
+          },
         },
         select: { id: true },
       });
-      clientContactId = created.id;
-      // Mirror the lead's phone as a primary ContactPhone row so it
-      // matches what the parties composer creates.
-      if (lead.phone) {
-        await tx.contactPhone.create({
+
+      // Auto-create the critical SOL Deadline when a date computed.
+      // The matter is brand-new inside this transaction, so there's no
+      // existing auto row to reconcile — a conditional create is the
+      // whole of syncMatterSolDeadline's contract here. Later edits
+      // (updateMatter / setMatterSolSatisfied in matters.ts) find this
+      // row by SOL_SOURCE_TYPE and keep it in sync.
+      if (solDate) {
+        await tx.deadline.create({
           data: {
-            contactId: created.id,
-            label: "Primary",
-            number: lead.phone,
-            isPrimary: true,
-            order: 0,
+            matterId: matter.id,
+            title: "Statute of limitations",
+            dueDate: solDate,
+            kind: "critical",
+            sourceType: SOL_SOURCE_TYPE,
+            // Converting user is the lead attorney (set just below) —
+            // same owner default as the direct create path.
+            ownerId: userId,
+            status: "open",
           },
         });
       }
-      // Heal the lead row so the next read sees the FK populated.
+
+      // Lead attorney = the user doing the conversion. Solo-friendly
+      // default; multi-user firms can re-assign on the matter detail
+      // page once the team editor lands.
+      await tx.matterTeamMember.create({
+        data: { matterId: matter.id, userId, role: "lead" },
+      });
+      // The intake team carries over with its roles (ADR-049), so a
+      // restricted lead's matter is visible to the same people. The
+      // converter is already the lead; any other intake "lead" joins as
+      // co-counsel (one lead per matter).
+      const intakeTeam = await tx.leadTeamMember.findMany({
+        where: { leadId, NOT: { userId } },
+        select: { userId: true, role: true },
+      });
+      if (intakeTeam.length > 0) {
+        await tx.matterTeamMember.createMany({
+          data: intakeTeam.map((m) => ({
+            matterId: matter.id,
+            userId: m.userId,
+            role: m.role === "lead" ? "co_counsel" : m.role,
+          })),
+        });
+      }
+
+      // Auto-pin so the new matter appears in the user's sidebar.
+      await tx.userMatterPin.create({
+        data: { userId, matterId: matter.id },
+      });
+
+      // Roll intake time forward: every lead-scoped entry (evaluation
+      // calls, conflict checks) re-homes onto the new matter — matterId
+      // set, leadId cleared in one write, so the exactly-one-of scope
+      // invariant holds for every row throughout. Hours / flags /
+      // amounts are untouched: the entry is the same work, it just
+      // gained a matter. Must happen before the lead could ever be
+      // deleted — Lead→TimeEntry cascades.
+      const carried = await tx.timeEntry.updateMany({
+        where: { leadId },
+        data: { matterId: matter.id, leadId: null },
+      });
+      // Intake notes roll forward the same way (Lead→Note cascades
+      // too). Replies, reads and reactions key off the note id, so
+      // threads arrive on the matter's Notes tab intact.
+      const carriedNotes = await tx.note.updateMany({
+        where: { leadId },
+        data: { matterId: matter.id, leadId: null },
+      });
+      // Intake tasks and events too. An event moves under the matter's
+      // visibility rules from here on (the team now sees its details);
+      // its attendees stay as they were.
+      const carriedTasks = await tx.task.updateMany({
+        where: { leadId },
+        data: { matterId: matter.id, leadId: null },
+      });
+      const carriedEvents = await tx.calendarEvent.updateMany({
+        where: { leadId },
+        data: { matterId: matter.id, leadId: null },
+      });
+      // Email threads filed to the lead, from every user's mailbox,
+      // follow it onto the matter (the thread list is per-account, so
+      // no account filter).
+      const carriedEmailThreads = await tx.emailThread.updateMany({
+        where: { leadId },
+        data: { matterId: matter.id, leadId: null },
+      });
+
+      // Mark lead converted so it leaves the active intake queue.
       await tx.lead.update({
         where: { id: leadId },
-        data: { contactId: created.id },
-      });
-    }
-
-    const matter = await tx.matter.create({
-      data: {
-        name: parsed.data.name,
-        practiceAreaId: area.id,
-        stageId: stage.id,
-        // One billing type writes both columns, same as the direct
-        // matter-create path.
-        ...billingTypeFields(billingType),
-        color: area.color,
-        description: description || null,
-        clientId: clientContactId,
-        // A restricted intake stays walled as a matter (ADR-049).
-        restricted,
-        incidentDate,
-        statuteOfLimitationsDate: solDate,
-        // Invariant shared with createMatter / updateMatter: whenever
-        // a matter has a client, that contact is also a MatterContact
-        // with category="client" so the Parties tab shows them.
-        contacts: {
-          create: { contactId: clientContactId, category: "client" },
+        data: {
+          stage: CONVERTED,
+          convertedMatterId: matter.id,
         },
-      },
-      select: { id: true },
-    });
+      });
 
-    // Auto-create the critical SOL Deadline when a date computed.
-    // The matter is brand-new inside this transaction, so there's no
-    // existing auto row to reconcile — a conditional create is the
-    // whole of syncMatterSolDeadline's contract here. Later edits
-    // (updateMatter / setMatterSolSatisfied in matters.ts) find this
-    // row by SOL_SOURCE_TYPE and keep it in sync.
-    if (solDate) {
-      await tx.deadline.create({
+      // Firm-configured defaults (Settings → Automations) — the same
+      // matter_created trigger the New-matter form fires. After the
+      // team insert above so "assign to lead" tasks + deadline owners
+      // resolve to the converting attorney.
+      const defaults = await applyAutoDefaults(tx, {
+        matterId: matter.id,
+        practiceAreaId: area.id,
+        trigger: "matter_created",
+        tz,
+      });
+
+      // Intake documents + folders roll forward last. Defensive: in case the
+      // new matter already has root folders, a colliding lead folder is
+      // suffixed rather than duplicated.
+      const carriedDocumentCount = await rehomeLeadDocuments(tx, leadId, matter.id);
+
+      // Every matter has an agreement row; the picked document moved with
+      // the lead's documents above (same id).
+      await tx.matterAgreement.create({
         data: {
           matterId: matter.id,
-          title: "Statute of limitations",
-          dueDate: solDate,
-          kind: "critical",
-          sourceType: SOL_SOURCE_TYPE,
-          // Converting user is the lead attorney (set just below) —
-          // same owner default as the direct create path.
-          ownerId: userId,
-          status: "open",
+          status: agreementStatus,
+          signedDate: agreementSignedKey ? parseDateOnly(agreementSignedKey) : null,
+          documentId: onLead ? onLead.id : null,
         },
       });
-    }
 
-    // Lead attorney = the user doing the conversion. Solo-friendly
-    // default; multi-user firms can re-assign on the matter detail
-    // page once the team editor lands.
-    await tx.matterTeamMember.create({
-      data: { matterId: matter.id, userId, role: "lead" },
-    });
-    // The intake team carries over with its roles (ADR-049), so a
-    // restricted lead's matter is visible to the same people. The
-    // converter is already the lead; any other intake "lead" joins as
-    // co-counsel (one lead per matter).
-    const intakeTeam = await tx.leadTeamMember.findMany({
-      where: { leadId, NOT: { userId } },
-      select: { userId: true, role: true },
-    });
-    if (intakeTeam.length > 0) {
-      await tx.matterTeamMember.createMany({
-        data: intakeTeam.map((m) => ({
-          matterId: matter.id,
-          userId: m.userId,
-          role: m.role === "lead" ? "co_counsel" : m.role,
-        })),
+      // Records requests roll forward after tasks/documents (their follow-up
+      // tasks and letters already moved). The lead row is write-locked by
+      // the claim above, matching the uploads' lead-then-request lock order.
+      const requests = await tx.recordsRequest.findMany({
+        where: { leadId },
+        select: {
+          id: true,
+          feeAmount: true,
+          feePaidAt: true,
+          expenseId: true,
+          adHocTypeName: true,
+          custodian: { select: { name: true } },
+          type: { select: { name: true } },
+        },
       });
-    }
-
-    // Auto-pin so the new matter appears in the user's sidebar.
-    await tx.userMatterPin.create({
-      data: { userId, matterId: matter.id },
-    });
-
-    // Roll intake time forward: every lead-scoped entry (evaluation
-    // calls, conflict checks) re-homes onto the new matter — matterId
-    // set, leadId cleared in one write, so the exactly-one-of scope
-    // invariant holds for every row throughout. Hours / flags /
-    // amounts are untouched: the entry is the same work, it just
-    // gained a matter. Must happen before the lead could ever be
-    // deleted — Lead→TimeEntry cascades.
-    const carried = await tx.timeEntry.updateMany({
-      where: { leadId },
-      data: { matterId: matter.id, leadId: null },
-    });
-    // Intake notes roll forward the same way (Lead→Note cascades
-    // too). Replies, reads and reactions key off the note id, so
-    // threads arrive on the matter's Notes tab intact.
-    const carriedNotes = await tx.note.updateMany({
-      where: { leadId },
-      data: { matterId: matter.id, leadId: null },
-    });
-    // Intake tasks and events too. An event moves under the matter's
-    // visibility rules from here on (the team now sees its details);
-    // its attendees stay as they were.
-    const carriedTasks = await tx.task.updateMany({
-      where: { leadId },
-      data: { matterId: matter.id, leadId: null },
-    });
-    const carriedEvents = await tx.calendarEvent.updateMany({
-      where: { leadId },
-      data: { matterId: matter.id, leadId: null },
-    });
-    // Email threads filed to the lead, from every user's mailbox,
-    // follow it onto the matter (the thread list is per-account, so
-    // no account filter).
-    const carriedEmailThreads = await tx.emailThread.updateMany({
-      where: { leadId },
-      data: { matterId: matter.id, leadId: null },
-    });
-
-    // Mark lead converted so it leaves the active intake queue.
-    await tx.lead.update({
-      where: { id: leadId },
-      data: {
-        stage: CONVERTED,
-        convertedMatterId: matter.id,
-      },
-    });
-
-    // Firm-configured defaults (Settings → Automations) — the same
-    // matter_created trigger the New-matter form fires. After the
-    // team insert above so "assign to lead" tasks + deadline owners
-    // resolve to the converting attorney.
-    const defaults = await applyAutoDefaults(tx, {
-      matterId: matter.id,
-      practiceAreaId: area.id,
-      trigger: "matter_created",
-      tz,
-    });
-
-    // Intake documents + folders roll forward last. Defensive: in case the
-    // new matter already has root folders, a colliding lead folder is
-    // suffixed rather than duplicated.
-    const carriedDocumentCount = await rehomeLeadDocuments(tx, leadId, matter.id);
-
-    // Every matter has an agreement row; the picked document moved with
-    // the lead's documents above (same id).
-    await tx.matterAgreement.create({
-      data: {
-        matterId: matter.id,
-        status: agreementStatus,
-        signedDate: agreementSignedKey ? parseDateOnly(agreementSignedKey) : null,
-        documentId: onLead ? onLead.id : null,
-      },
-    });
-
-    // Records requests roll forward after tasks/documents (their follow-up
-    // tasks and letters already moved). The lead row is write-locked by
-    // the claim above, matching the uploads' lead-then-request lock order.
-    const requests = await tx.recordsRequest.findMany({
-      where: { leadId },
-      select: {
-        id: true,
-        feeAmount: true,
-        feePaidAt: true,
-        expenseId: true,
-        adHocTypeName: true,
-        custodian: { select: { name: true } },
-        type: { select: { name: true } },
-      },
-    });
-    await tx.recordsRequest.updateMany({
-      where: { leadId },
-      data: { matterId: matter.id, leadId: null },
-    });
-    let carriedRecordsFeeCount = 0;
-    for (const r of requests) {
-      if (r.expenseId || !r.feePaidAt || !feeMakesExpense(r.feeAmount, r.feePaidAt)) {
-        continue;
-      }
-      const e = await tx.expense.create({
-        data: recordsFeeExpenseData({
-          matterId: matter.id,
-          loggedBy: userId,
-          feePaidAt: r.feePaidAt,
-          feeAmount: r.feeAmount!,
-          description: recordsFeeDescription({
-            custodianName: r.custodian.name,
-            typeName: r.type?.name ?? null,
-            adHocTypeName: r.adHocTypeName,
+      await tx.recordsRequest.updateMany({
+        where: { leadId },
+        data: { matterId: matter.id, leadId: null },
+      });
+      let carriedRecordsFeeCount = 0;
+      for (const r of requests) {
+        if (r.expenseId || !r.feePaidAt || !feeMakesExpense(r.feeAmount, r.feePaidAt)) {
+          continue;
+        }
+        const e = await tx.expense.create({
+          data: recordsFeeExpenseData({
+            matterId: matter.id,
+            loggedBy: userId,
+            feePaidAt: r.feePaidAt,
+            feeAmount: r.feeAmount!,
+            description: recordsFeeDescription({
+              custodianName: r.custodian.name,
+              typeName: r.type?.name ?? null,
+              adHocTypeName: r.adHocTypeName,
+            }),
           }),
-        }),
-        select: { id: true },
-      });
-      await tx.recordsRequest.update({
-        where: { id: r.id },
-        data: { expenseId: e.id },
-      });
-      carriedRecordsFeeCount++;
-    }
+          select: { id: true },
+        });
+        await tx.recordsRequest.update({
+          where: { id: r.id },
+          data: { expenseId: e.id },
+        });
+        carriedRecordsFeeCount++;
+      }
 
-    return {
-      matterId: matter.id,
-      carriedCount: carried.count,
-      carriedNoteCount: carriedNotes.count,
-      carriedTaskCount: carriedTasks.count,
-      carriedEventCount: carriedEvents.count,
-      carriedEmailThreadCount: carriedEmailThreads.count,
-      carriedDocumentCount,
-      carriedRequestCount: requests.length,
-      carriedRecordsFeeCount,
-      defaults,
-    };
-  }).catch((err: unknown) => {
-    // Lost the claim race — surfaced below as a form error. Anything
-    // else is a real failure and must propagate.
-    if (err instanceof LeadClaimLostError) return null;
-    if (err instanceof BillingTypeNotOfferedError) return "billing" as const;
-    throw err;
-  });
+      return {
+        matterId: matter.id,
+        carriedCount: carried.count,
+        carriedNoteCount: carriedNotes.count,
+        carriedTaskCount: carriedTasks.count,
+        carriedEventCount: carriedEvents.count,
+        carriedEmailThreadCount: carriedEmailThreads.count,
+        carriedDocumentCount,
+        carriedRequestCount: requests.length,
+        carriedRecordsFeeCount,
+        defaults,
+      };
+    })
+    .catch((err: unknown) => {
+      // Lost the claim race — surfaced below as a form error. Anything
+      // else is a real failure and must propagate.
+      if (err instanceof LeadClaimLostError) return null;
+      if (err instanceof BillingTypeNotOfferedError) return "billing" as const;
+      throw err;
+    });
   if (result === "billing") {
     return {
       status: "error",
@@ -940,7 +941,7 @@ const declineSchema = z.object({
 export async function declineLead(
   leadId: string,
   _prev: DeclineLeadFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<DeclineLeadFormState> {
   // Declining permanently removes the lead from the active intake
   // queue — an intake decision, gated granularly like its

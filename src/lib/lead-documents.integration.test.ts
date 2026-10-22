@@ -33,13 +33,10 @@ beforeEach(async () => {
     stageId,
     leadUserId: userId,
   }));
-  leadId = (
-    await prisma.lead.create({ data: { name: "L" }, select: { id: true } })
-  ).id;
+  leadId = (await prisma.lead.create({ data: { name: "L" }, select: { id: true } })).id;
 });
 
-const run = (lid = leadId) =>
-  prisma.$transaction((tx) => rehomeLeadDocuments(tx, lid, matterId));
+const run = (lid = leadId) => prisma.$transaction((tx) => rehomeLeadDocuments(tx, lid, matterId));
 
 describe("rehomeLeadDocuments", () => {
   test("moves folders and documents, keeps links, returns doc count", async () => {
@@ -102,26 +99,22 @@ describe("rehomeLeadDocuments", () => {
     });
     await run();
     const names = [a, b].map(
-      async (f) =>
-        (await prisma.documentFolder.findUniqueOrThrow({ where: { id: f.id } })).name
+      async (f) => (await prisma.documentFolder.findUniqueOrThrow({ where: { id: f.id } })).name,
     );
     const got = (await Promise.all(names)).sort();
     expect(new Set(got.map((s) => s.toLowerCase())).size).toBe(2);
     expect(got.every((s) => /\(\d+\)$/.test(s))).toBe(true);
     // nested folder keeps its name
-    expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: n.id } })).name).toBe("Medical");
+    expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: n.id } })).name).toBe(
+      "Medical",
+    );
   });
 });
 
 describe("resolveLeadUploadTarget (real SQL, incl. the FOR SHARE lock)", () => {
-  const resolve = (
-    lid: string,
-    userId: string,
-    folderId: string | null,
-    allow = true
-  ) =>
+  const resolve = (lid: string, userId: string, folderId: string | null, allow = true) =>
     prisma.$transaction((tx) =>
-      resolveLeadUploadTarget(tx, lid, userId, folderId, async () => allow)
+      resolveLeadUploadTarget(tx, lid, userId, folderId, async () => allow),
     );
 
   test("an open lead files on the lead, keeping a lead folder", async () => {
@@ -138,7 +131,10 @@ describe("resolveLeadUploadTarget (real SQL, incl. the FOR SHARE lock)", () => {
   });
 
   test("a converted lead reroutes to its matter; a re-homed folder keeps resolving, a stale one falls back to root", async () => {
-    const { userId } = await seedUser({ firmId: (await seedFirm()).firmId, email: "z@example.com" });
+    const { userId } = await seedUser({
+      firmId: (await seedFirm()).firmId,
+      email: "z@example.com",
+    });
     const f = await prisma.documentFolder.create({ data: { leadId, name: "F" } });
     await prisma.$transaction(async (tx) => {
       await rehomeLeadDocuments(tx, leadId, matterId);

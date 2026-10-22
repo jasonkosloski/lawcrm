@@ -31,10 +31,7 @@ import { dropStateClass, useFolderDropTarget } from "@/components/documents/work
 /** How long a drag hovers over a collapsed folder before it opens. */
 const SPRING_OPEN_MS = 600;
 
-function collectAncestors(
-  nodes: FolderNode[],
-  selectedId: string | null
-): string[] {
+function collectAncestors(nodes: FolderNode[], selectedId: string | null): string[] {
   if (!selectedId) return [];
   // folderPath works on flat parent-links; flatten just id/parent/name.
   const flat: { id: string; parentId: string | null; name: string }[] = [];
@@ -68,7 +65,7 @@ export function FolderTree({
   selectedId: string | null;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(
-    () => new Set(collectAncestors(tree, selectedId))
+    () => new Set(collectAncestors(tree, selectedId)),
   );
 
   // Auto-expand the new selection's ancestors when navigation moves
@@ -98,7 +95,7 @@ export function FolderTree({
   // Stable, so a hovering drag's spring-open timer isn't reset by re-renders.
   const open = useCallback(
     (id: string) => setExpanded((prev) => (prev.has(id) ? prev : new Set([...prev, id]))),
-    []
+    [],
   );
 
   const renderNode = (node: FolderNode, depth: number) => (
@@ -129,21 +126,16 @@ export function FolderTree({
           selectedId === null
             ? "bg-brand-soft text-brand-700 font-medium"
             : "text-ink-2 hover:bg-paper-2",
-          dropStateClass(rootDropState)
+          dropStateClass(rootDropState),
         )}
       >
         <Files
           size={13}
-          className={cn(
-            "shrink-0",
-            selectedId === null ? "text-brand-600" : "text-ink-4"
-          )}
+          className={cn("shrink-0", selectedId === null ? "text-brand-600" : "text-ink-4")}
         />
         <span className="truncate">All documents</span>
         {rootCount > 0 && (
-          <span className="ml-auto shrink-0 text-2xs font-mono text-ink-4">
-            {rootCount}
-          </span>
+          <span className="ml-auto shrink-0 text-2xs font-mono text-ink-4">{rootCount}</span>
         )}
       </Link>
       {tree.map((node) => renderNode(node, 0))}
@@ -191,10 +183,8 @@ function TreeNode({
         {...dropProps}
         className={cn(
           "group flex items-center gap-1 rounded-md pr-2",
-          isSelected
-            ? "bg-brand-soft text-brand-700"
-            : "text-ink-2 hover:bg-paper-2",
-          dropStateClass(state)
+          isSelected ? "bg-brand-soft text-brand-700" : "text-ink-2 hover:bg-paper-2",
+          dropStateClass(state),
         )}
         style={{ paddingLeft: `${depth * 14}px` }}
       >
@@ -206,11 +196,7 @@ function TreeNode({
             aria-expanded={isExpanded}
             className="shrink-0 w-5 h-6 inline-flex items-center justify-center text-ink-4 hover:text-ink-2"
           >
-            {isExpanded ? (
-              <ChevronDown size={12} />
-            ) : (
-              <ChevronRight size={12} />
-            )}
+            {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </button>
         ) : (
           <span className="shrink-0 w-5" />
@@ -223,15 +209,9 @@ function TreeNode({
         >
           <Folder
             size={13}
-            className={cn(
-              "shrink-0",
-              isSelected ? "text-brand-600" : "text-ink-4"
-            )}
+            className={cn("shrink-0", isSelected ? "text-brand-600" : "text-ink-4")}
           />
-          <span
-            className={cn("truncate", isSelected && "font-medium")}
-            title={node.name}
-          >
+          <span className={cn("truncate", isSelected && "font-medium")} title={node.name}>
             {node.name}
           </span>
           {node.systemKind && (
@@ -243,14 +223,11 @@ function TreeNode({
             />
           )}
           {count > 0 && (
-            <span className="ml-auto shrink-0 text-2xs font-mono text-ink-4">
-              {count}
-            </span>
+            <span className="ml-auto shrink-0 text-2xs font-mono text-ink-4">{count}</span>
           )}
         </Link>
       </div>
-      {isExpanded &&
-        node.children.map((child) => renderChild(child, depth + 1))}
+      {isExpanded && node.children.map((child) => renderChild(child, depth + 1))}
     </div>
   );
 }

@@ -34,10 +34,14 @@ beforeEach(async () => {
   const live = await seedContact({ email: "jane@example.com" });
   const gone = await seedContact({ email: "gone@example.com" });
   const janeId = (
-    await prisma.portalIdentity.create({ data: { contactId: live.contactId, email: "jane@example.com" } })
+    await prisma.portalIdentity.create({
+      data: { contactId: live.contactId, email: "jane@example.com" },
+    })
   ).id;
   const goneId = (
-    await prisma.portalIdentity.create({ data: { contactId: gone.contactId, email: "gone@example.com" } })
+    await prisma.portalIdentity.create({
+      data: { contactId: gone.contactId, email: "gone@example.com" },
+    })
   ).id;
   await prisma.portalMatterAccess.createMany({
     data: [

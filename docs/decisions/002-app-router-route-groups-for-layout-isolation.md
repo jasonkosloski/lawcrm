@@ -8,6 +8,7 @@
 **Decision:** Use Next.js route groups: `(dashboard)` for authenticated pages inside the app shell, and future `(auth)` or `(public)` groups for pages without the shell.
 
 **Trade-offs:**
+
 - (+) Clean layout separation without URL nesting
 - (+) Easy to add auth checks at the layout level later
 - (-) Slightly deeper file nesting

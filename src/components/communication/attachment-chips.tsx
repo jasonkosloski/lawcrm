@@ -35,7 +35,7 @@ import {
   Paperclip,
   Pin,
   Search,
-  } from "lucide-react";
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -48,10 +48,7 @@ import { cn } from "@/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { isInlineSafeType } from "@/lib/inline-safe-types";
 import { contentTypeForFilename } from "@/app/api/documents/upload/upload-config";
-import {
-  fileAttachmentToMatter,
-  listMatterFolders,
-} from "@/app/actions/email-attachments";
+import { fileAttachmentToMatter, listMatterFolders } from "@/app/actions/email-attachments";
 import type { FilingMatterOption } from "@/lib/queries/communication";
 import type { FlatFolder } from "@/lib/folder-tree";
 import { Button } from "@/components/ui/button";
@@ -71,8 +68,7 @@ const formatSize = (bytes: number | null): string => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const downloadUrl = (id: string): string =>
-  `/api/email-attachments/${id}/download`;
+const downloadUrl = (id: string): string => `/api/email-attachments/${id}/download`;
 
 export function AttachmentChips({
   attachments,
@@ -109,9 +105,7 @@ export function AttachmentChips({
           >
             <Paperclip size={11} className="text-ink-4 shrink-0" />
             <span className="font-medium truncate max-w-48">{a.filename}</span>
-            <span className="font-mono text-ink-4 shrink-0">
-              {formatSize(a.fileSize)}
-            </span>
+            <span className="font-mono text-ink-4 shrink-0">{formatSize(a.fileSize)}</span>
             <span className="flex items-center gap-0.5 shrink-0 pl-1 ml-0.5 border-l border-line">
               {viewable && (
                 <a
@@ -196,9 +190,7 @@ function FileAttachmentDialog({
   // Reset per open (render-phase reset — MoveToFolderDialog pattern),
   // defaulting the matter to the thread's filing.
   const open = attachment !== null;
-  const [prevAttachmentId, setPrevAttachmentId] = useState<string | null>(
-    null
-  );
+  const [prevAttachmentId, setPrevAttachmentId] = useState<string | null>(null);
   if ((attachment?.id ?? null) !== prevAttachmentId) {
     setPrevAttachmentId(attachment?.id ?? null);
     if (attachment) {
@@ -251,16 +243,13 @@ function FileAttachmentDialog({
   const pickedOption = matterOptions.find((m) => m.id === matterId);
   const pickedName =
     pickedOption?.name ??
-    (matterId !== null && matterId === defaultMatter?.id
-      ? defaultMatter.name
-      : null);
+    (matterId !== null && matterId === defaultMatter?.id ? defaultMatter.name : null);
   const pickedIsClosed = matterId !== null && !pickedOption;
 
   const q = query.trim().toLowerCase();
   const filtered = q
     ? matterOptions.filter(
-        (m) =>
-          m.name.toLowerCase().includes(q) || m.area.toLowerCase().includes(q)
+        (m) => m.name.toLowerCase().includes(q) || m.area.toLowerCase().includes(q),
       )
     : matterOptions;
 
@@ -270,17 +259,11 @@ function FileAttachmentDialog({
     setNotice(null);
     startTransition(async () => {
       try {
-        const res = await fileAttachmentToMatter(
-          attachment.id,
-          matterId,
-          folderId
-        );
+        const res = await fileAttachmentToMatter(attachment.id, matterId, folderId);
         if (!res.ok) {
           setError(res.error ?? "Couldn't file the attachment — try again.");
         } else if (res.alreadyFiled) {
-          setNotice(
-            "Already filed to this matter — nothing was duplicated."
-          );
+          setNotice("Already filed to this matter — nothing was duplicated.");
         } else {
           onClose();
         }
@@ -298,9 +281,7 @@ function FileAttachmentDialog({
         <DialogHeader>
           <DialogTitle>File attachment to matter</DialogTitle>
           <DialogDescription>
-            {attachment
-              ? `Save “${attachment.filename}” into a matter's documents.`
-              : ""}
+            {attachment ? `Save “${attachment.filename}” into a matter's documents.` : ""}
           </DialogDescription>
         </DialogHeader>
 
@@ -325,9 +306,7 @@ function FileAttachmentDialog({
           </div>
           <div className="flex flex-col gap-0.5 max-h-44 overflow-y-auto rounded-md border border-line bg-white p-1.5">
             {filtered.length === 0 && (
-              <div className="px-2 py-2 text-2xs text-ink-4">
-                No open matters match.
-              </div>
+              <div className="px-2 py-2 text-2xs text-ink-4">No open matters match.</div>
             )}
             {filtered.map((m) => {
               const picked = m.id === matterId;
@@ -353,7 +332,7 @@ function FileAttachmentDialog({
                     "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-left text-xs",
                     picked
                       ? "bg-brand-soft text-brand-700 font-medium"
-                      : "text-ink-2 hover:bg-paper-2"
+                      : "text-ink-2 hover:bg-paper-2",
                   )}
                 >
                   <span
@@ -361,9 +340,7 @@ function FileAttachmentDialog({
                     style={{ background: m.color }}
                   />
                   <span className="truncate">{m.name}</span>
-                  <span className="text-2xs text-ink-4 truncate">
-                    {m.area}
-                  </span>
+                  <span className="text-2xs text-ink-4 truncate">{m.area}</span>
                   <span className="ml-auto shrink-0 flex items-center gap-1">
                     {m.isPinned && <Pin size={10} className="text-ink-4" />}
                     {picked && <Check size={12} />}
@@ -388,9 +365,7 @@ function FileAttachmentDialog({
               className="w-full"
             >
               <NativeSelectOption value="">
-                {foldersLoading
-                  ? "Loading folders…"
-                  : "All documents (matter root)"}
+                {foldersLoading ? "Loading folders…" : "All documents (matter root)"}
               </NativeSelectOption>
               {folders.map((f) => (
                 <NativeSelectOption key={f.id} value={f.id}>
@@ -401,13 +376,8 @@ function FileAttachmentDialog({
             </NativeSelect>
             {foldersError && (
               <span className="flex items-center gap-2 text-warn">
-                Couldn&apos;t load folders - this would file to the matter
-                root.
-                <button
-                  type="button"
-                  onClick={retryFolders}
-                  className="underline hover:text-ink-2"
-                >
+                Couldn&apos;t load folders - this would file to the matter root.
+                <button type="button" onClick={retryFolders} className="underline hover:text-ink-2">
                   Retry
                 </button>
               </span>
@@ -424,18 +394,10 @@ function FileAttachmentDialog({
         )}
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            type="button"
-            onClick={onClose}
-          >
+          <Button variant="outline" type="button" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            type="button"
-            onClick={submit}
-            disabled={pending || !matterId || foldersLoading}
-          >
+          <Button type="button" onClick={submit} disabled={pending || !matterId || foldersLoading}>
             <FolderInput size={12} />
             {pending ? "Filing…" : "File to matter"}
           </Button>

@@ -23,12 +23,7 @@
  */
 
 export type TrustFilter = "any" | "has" | "none" | "over-10k";
-export type DeadlineFilter =
-  | "any"
-  | "within-7d"
-  | "within-30d"
-  | "overdue"
-  | "none";
+export type DeadlineFilter = "any" | "within-7d" | "within-30d" | "overdue" | "none";
 
 export type MattersFilter = {
   q: string;
@@ -49,14 +44,7 @@ export type MattersFilter = {
 };
 
 export type SortField =
-  | "name"
-  | "area"
-  | "lead"
-  | "stage"
-  | "trust"
-  | "fee"
-  | "deadline"
-  | "created";
+  "name" | "area" | "lead" | "stage" | "trust" | "fee" | "deadline" | "created";
 
 export type SortDir = "asc" | "desc";
 
@@ -84,16 +72,13 @@ export function formatDeadlineDays(days: number): string {
 /** Normalizes a searchParams-ish shape to a single value or array. */
 const getOne = (
   sp: Record<string, string | string[] | undefined>,
-  key: string
+  key: string,
 ): string | undefined => {
   const v = sp[key];
   return Array.isArray(v) ? v[0] : v;
 };
 
-const getAll = (
-  sp: Record<string, string | string[] | undefined>,
-  key: string
-): string[] => {
+const getAll = (sp: Record<string, string | string[] | undefined>, key: string): string[] => {
   const v = sp[key];
   if (Array.isArray(v)) return v.filter(Boolean);
   if (typeof v === "string" && v.length > 0) return [v];
@@ -116,11 +101,7 @@ export const EMPTY_FILTER: MattersFilter = {
 const isTrust = (v: string | undefined): v is TrustFilter =>
   v === "any" || v === "has" || v === "none" || v === "over-10k";
 const isDeadline = (v: string | undefined): v is DeadlineFilter =>
-  v === "any" ||
-  v === "within-7d" ||
-  v === "within-30d" ||
-  v === "overdue" ||
-  v === "none";
+  v === "any" || v === "within-7d" || v === "within-30d" || v === "overdue" || v === "none";
 const isSortField = (v: string | undefined): v is SortField =>
   v === "name" ||
   v === "area" ||
@@ -130,12 +111,13 @@ const isSortField = (v: string | undefined): v is SortField =>
   v === "fee" ||
   v === "deadline" ||
   v === "created";
-const isViewMode = (v: string | undefined): v is ViewMode =>
-  v === "table" || v === "kanban";
+const isViewMode = (v: string | undefined): v is ViewMode => v === "table" || v === "kanban";
 
-export function parseMattersParams(
-  sp: Record<string, string | string[] | undefined>
-): { filter: MattersFilter; sort: MattersSort; view: ViewMode } {
+export function parseMattersParams(sp: Record<string, string | string[] | undefined>): {
+  filter: MattersFilter;
+  sort: MattersSort;
+  view: ViewMode;
+} {
   const trust = getOne(sp, "trust");
   const deadline = getOne(sp, "deadline");
   const sortField = getOne(sp, "sort");
@@ -198,7 +180,7 @@ export function isFilterActive(f: MattersFilter): boolean {
 /** Builds a new URLSearchParams from current state, omitting defaults. */
 export function buildMattersSearchParams(
   filter: MattersFilter,
-  sort: MattersSort
+  sort: MattersSort,
 ): URLSearchParams {
   const p = new URLSearchParams();
   if (filter.q) p.set("q", filter.q);
@@ -211,10 +193,7 @@ export function buildMattersSearchParams(
   if (filter.includeArchived) p.set("archived", "1");
   if (filter.pinnedOnly) p.set("pinned", "1");
   if (filter.showClosed) p.set("show_closed", "1");
-  if (
-    sort.field !== DEFAULT_SORT.field ||
-    sort.dir !== DEFAULT_SORT.dir
-  ) {
+  if (sort.field !== DEFAULT_SORT.field || sort.dir !== DEFAULT_SORT.dir) {
     p.set("sort", sort.field);
     p.set("dir", sort.dir);
   }

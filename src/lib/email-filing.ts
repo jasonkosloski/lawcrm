@@ -20,10 +20,7 @@ import { assertScopeAccess, assertScopeWritable } from "@/lib/scope-access";
 export const APP_SENT_UNFILE_ERROR =
   "This thread has email sent from the app, so it must stay filed. Move it to another matter or lead instead.";
 
-export const sameScope = (
-  a: RecordScope | null,
-  b: RecordScope | null,
-): boolean => {
+export const sameScope = (a: RecordScope | null, b: RecordScope | null): boolean => {
   if (!a || !b) return a === b;
   if (a.kind === "matter" && b.kind === "matter") {
     return a.matterId === b.matterId;
@@ -120,9 +117,7 @@ export async function fileEmailThread(
     where: {
       id: threadId,
       ...visibleEmailThreadWhere(userId),
-      ...(!scope && current
-        ? { messages: { none: { sentFromApp: true } } }
-        : {}),
+      ...(!scope && current ? { messages: { none: { sentFromApp: true } } } : {}),
       ...(options.onlyIfUnfiled ? { matterId: null, leadId: null } : {}),
     },
     data: {

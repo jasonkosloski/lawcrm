@@ -67,7 +67,7 @@ describe("POST /api/documents/upload/blob error mapping", () => {
 
   test("UploadTokenError passes its status and user-safe message through", async () => {
     vi.mocked(handleUpload).mockRejectedValue(
-      new UploadTokenError(403, "You don't have permission to upload.")
+      new UploadTokenError(403, "You don't have permission to upload."),
     );
     const res = await POST(post({ type: "blob.generate-client-token" }));
     expect(res.status).toBe(403);
@@ -93,7 +93,7 @@ describe("POST /api/documents/upload/blob error mapping", () => {
         event: "blob.upload-completed",
         status: 500,
         message: internal,
-      })
+      }),
     );
   });
 

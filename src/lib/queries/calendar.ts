@@ -93,7 +93,7 @@ function dayBoundsOf(rangeStart: Date, rangeEnd: Date, tz: string) {
 function eventsInRangeWhere(
   rangeStart: Date,
   rangeEnd: Date,
-  tz: string
+  tz: string,
 ): Prisma.CalendarEventWhereInput {
   const days = dayBoundsOf(rangeStart, rangeEnd, tz);
   return {
@@ -101,10 +101,7 @@ function eventsInRangeWhere(
       {
         isAllDay: false,
         startTime: { lte: rangeEnd },
-        OR: [
-          { endTime: { gt: rangeStart } },
-          { startTime: { gte: rangeStart } },
-        ],
+        OR: [{ endTime: { gt: rangeStart } }, { startTime: { gte: rangeStart } }],
       },
       {
         isAllDay: true,
@@ -119,7 +116,7 @@ export async function getCalendarItems(
   rangeStart: Date,
   rangeEnd: Date,
   /** The viewer's zone; resolved from the session when omitted. */
-  tzArg?: string
+  tzArg?: string,
 ): Promise<CalendarItem[]> {
   const tz = tzArg ?? (await getCurrentUserTimeZone());
   // The visibility resolver runs per-event (creator + attendee
@@ -179,26 +176,23 @@ export async function getCalendarItems(
   // the viewer see?
   const accessibleMatters = await filterAccessibleMatterIds(
     viewerId,
-    events.flatMap((e) => (e.matter ? [e.matter.id] : []))
+    events.flatMap((e) => (e.matter ? [e.matter.id] : [])),
   );
   // Restricted intake (ADR-049): events on hidden leads are Busy too.
   const accessibleLeads = await filterAccessibleLeadIds(
     viewerId,
-    events.flatMap((e) => (e.leadId ? [e.leadId] : []))
+    events.flatMap((e) => (e.leadId ? [e.leadId] : [])),
   );
 
   const mappedEvents: CalendarItem[] = events.map((e) => {
-    const attendeeUserIds = e.attendees
-      .map((a) => a.userId)
-      .filter((id): id is string => !!id);
+    const attendeeUserIds = e.attendees.map((a) => a.userId).filter((id): id is string => !!id);
     const matterTeamUserIds = e.matter?.teamMembers.map((m) => m.userId) ?? [];
 
     const canSee = canViewEventDetails({
       viewerId,
       createdById: e.createdById,
       eventVisibility: e.visibility,
-      creatorDefaultEventVisibility:
-        e.createdBy?.defaultEventVisibility ?? null,
+      creatorDefaultEventVisibility: e.createdBy?.defaultEventVisibility ?? null,
       matterId: e.matter?.id ?? null,
       attendeeUserIds,
       matterTeamUserIds,
@@ -232,22 +226,21 @@ export async function getCalendarItems(
     }
 
     return {
-    id: e.id,
-    kind: "event",
-    title: e.title,
-    type: e.type,
-    startTime: e.startTime,
-    endTime: e.endTime,
-    isAllDay: e.isAllDay,
-    location: e.location,
-    color: e.matter?.color ?? e.color ?? "var(--color-ink-3)",
-    matterId: e.matter?.id ?? null,
-    // Intake events show their lead as the context line.
-    matterName:
-      e.matter?.name ?? (e.lead ? `Intake · ${e.lead.name}` : null),
-    attendeeCount: e.attendees.length,
-    attendeeNames: e.attendees.slice(0, 3).map((a) => a.name),
-    viewerCanSeeDetails: true,
+      id: e.id,
+      kind: "event",
+      title: e.title,
+      type: e.type,
+      startTime: e.startTime,
+      endTime: e.endTime,
+      isAllDay: e.isAllDay,
+      location: e.location,
+      color: e.matter?.color ?? e.color ?? "var(--color-ink-3)",
+      matterId: e.matter?.id ?? null,
+      // Intake events show their lead as the context line.
+      matterName: e.matter?.name ?? (e.lead ? `Intake · ${e.lead.name}` : null),
+      attendeeCount: e.attendees.length,
+      attendeeNames: e.attendees.slice(0, 3).map((a) => a.name),
+      viewerCanSeeDetails: true,
     };
   });
 
@@ -316,9 +309,7 @@ export type CalendarEventDetail = {
   visibility: string;
 };
 
-export async function getCalendarEventById(
-  id: string
-): Promise<CalendarEventDetail | null> {
+export async function getCalendarEventById(id: string): Promise<CalendarEventDetail | null> {
   const e = await prisma.calendarEvent.findUnique({
     where: { id },
     include: {
@@ -356,22 +347,17 @@ export async function getCalendarEventById(
   // modal needs to render SOMETHING when a user clicks a busy
   // block, so we keep the row + scrub the sensitive bits.
   const viewerId = await getCurrentUserId();
-  const attendeeUserIds = e.attendees
-    .map((a) => a.userId)
-    .filter((uid): uid is string => !!uid);
+  const attendeeUserIds = e.attendees.map((a) => a.userId).filter((uid): uid is string => !!uid);
   const matterTeamUserIds = e.matter?.teamMembers.map((m) => m.userId) ?? [];
   const canSee = canViewEventDetails({
     viewerId,
     createdById: e.createdById,
     eventVisibility: e.visibility,
-    creatorDefaultEventVisibility:
-      e.createdBy?.defaultEventVisibility ?? null,
+    creatorDefaultEventVisibility: e.createdBy?.defaultEventVisibility ?? null,
     matterId: e.matter?.id ?? null,
     attendeeUserIds,
     matterTeamUserIds,
-    matterAccessible: e.matter
-      ? await canAccessMatter(viewerId, e.matter.id)
-      : true,
+    matterAccessible: e.matter ? await canAccessMatter(viewerId, e.matter.id) : true,
     leadId: e.leadId,
     leadAccessible: e.leadId ? await canAccessLead(viewerId, e.leadId) : true,
   });
@@ -482,9 +468,7 @@ export type EventTimeEntry = {
 /** Time entries directly attached to a specific calendar event
  *  (calendarEventId FK). Sorted most-recent-first so new logs bubble
  *  up. */
-export async function getEventTimeEntries(
-  eventId: string
-): Promise<EventTimeEntry[]> {
+export async function getEventTimeEntries(eventId: string): Promise<EventTimeEntry[]> {
   const rows = await prisma.timeEntry.findMany({
     where: { calendarEventId: eventId },
     include: { user: { select: { name: true, initials: true } } },

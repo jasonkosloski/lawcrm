@@ -18,7 +18,13 @@ vi.mock("@/lib/file-storage", () => ({
 import { prisma } from "@/lib/prisma";
 import { deleteFile } from "@/lib/file-storage";
 import { fileInvoicePdf } from "@/lib/billing/invoice-filing";
-import { resetDb, seedFirm, seedMatter, seedPracticeArea, seedUser } from "@/test/integration-helpers";
+import {
+  resetDb,
+  seedFirm,
+  seedMatter,
+  seedPracticeArea,
+  seedUser,
+} from "@/test/integration-helpers";
 
 beforeAll(() => {
   expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
@@ -58,11 +64,21 @@ beforeEach(async () => {
 describe("fileInvoicePdf", () => {
   test("creates the Invoices folder and a document", async () => {
     const { documentId } = await fileInvoicePdf({
-      matterId, invoiceId, invoiceNumber: "2026-101", kind: "initial", bytes, userId, day,
+      matterId,
+      invoiceId,
+      invoiceNumber: "2026-101",
+      kind: "initial",
+      bytes,
+      userId,
+      day,
     });
     const folders = await prisma.documentFolder.findMany({ where: { matterId } });
     expect(folders).toHaveLength(1);
-    expect(folders[0]).toMatchObject({ name: "Invoices", systemKind: "invoices", clientShared: false });
+    expect(folders[0]).toMatchObject({
+      name: "Invoices",
+      systemKind: "invoices",
+      clientShared: false,
+    });
     const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
     expect(doc).toMatchObject({
       name: "Invoice 2026-101 (sent 2026-10-21).pdf",
@@ -75,9 +91,23 @@ describe("fileInvoicePdf", () => {
   });
 
   test("reuses the folder on later calls", async () => {
-    await fileInvoicePdf({ matterId, invoiceId, invoiceNumber: "2026-101", kind: "initial", bytes, userId, day });
+    await fileInvoicePdf({
+      matterId,
+      invoiceId,
+      invoiceNumber: "2026-101",
+      kind: "initial",
+      bytes,
+      userId,
+      day,
+    });
     const { documentId } = await fileInvoicePdf({
-      matterId, invoiceId, invoiceNumber: "2026-101", kind: "updated", bytes, userId, day,
+      matterId,
+      invoiceId,
+      invoiceNumber: "2026-101",
+      kind: "updated",
+      bytes,
+      userId,
+      day,
     });
     expect(await prisma.documentFolder.count({ where: { matterId } })).toBe(1);
     const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
@@ -90,15 +120,21 @@ describe("fileInvoicePdf", () => {
       fileInvoicePdf({ ...args, kind: "initial" }),
       fileInvoicePdf({ ...args, kind: "updated" }),
     ]);
-    expect(
-      await prisma.documentFolder.count({ where: { matterId, systemKind: "invoices" } })
-    ).toBe(1);
+    expect(await prisma.documentFolder.count({ where: { matterId, systemKind: "invoices" } })).toBe(
+      1,
+    );
     expect(await prisma.document.count({ where: { matterId } })).toBe(2);
   });
 
   test("writes invoiceId on the document", async () => {
     const { documentId } = await fileInvoicePdf({
-      matterId, invoiceId, invoiceNumber: "2026-101", kind: "initial", bytes, userId, day,
+      matterId,
+      invoiceId,
+      invoiceNumber: "2026-101",
+      kind: "initial",
+      bytes,
+      userId,
+      day,
     });
     const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
     expect(doc.invoiceId).toBe(invoiceId);
@@ -106,7 +142,13 @@ describe("fileInvoicePdf", () => {
 
   test("void is named void", async () => {
     const { documentId } = await fileInvoicePdf({
-      matterId, invoiceId, invoiceNumber: "2026-101", kind: "void", bytes, userId, day,
+      matterId,
+      invoiceId,
+      invoiceNumber: "2026-101",
+      kind: "void",
+      bytes,
+      userId,
+      day,
     });
     const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
     expect(doc.name).toBe("Invoice 2026-101 (void 2026-10-21).pdf");
@@ -114,7 +156,13 @@ describe("fileInvoicePdf", () => {
 
   test("resend is named resent", async () => {
     const { documentId } = await fileInvoicePdf({
-      matterId, invoiceId, invoiceNumber: "2026-101", kind: "resend", bytes, userId, day,
+      matterId,
+      invoiceId,
+      invoiceNumber: "2026-101",
+      kind: "resend",
+      bytes,
+      userId,
+      day,
     });
     const doc = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
     expect(doc.name).toBe("Invoice 2026-101 (resent 2026-10-21).pdf");
@@ -123,7 +171,15 @@ describe("fileInvoicePdf", () => {
   test("deletes the stored file when the row write fails", async () => {
     vi.spyOn(prisma.document, "create").mockRejectedValueOnce(new Error("db down"));
     await expect(
-      fileInvoicePdf({ matterId, invoiceId, invoiceNumber: "2026-101", kind: "initial", bytes, userId, day })
+      fileInvoicePdf({
+        matterId,
+        invoiceId,
+        invoiceNumber: "2026-101",
+        kind: "initial",
+        bytes,
+        userId,
+        day,
+      }),
     ).rejects.toThrow("db down");
     expect(deleteFile).toHaveBeenCalledTimes(1);
     expect(vi.mocked(deleteFile).mock.calls[0][0]).toMatch(/^k__/);

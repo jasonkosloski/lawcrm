@@ -47,7 +47,10 @@ export function DocumentPlacement({
         <span className="inline-flex items-center gap-1">
           <Paperclip className="h-3 w-3" aria-hidden />
           Attachment of{" "}
-          <Link href={`${scopeBasePath(scope)}/documents/${parent.id}`} className="text-brand-700 hover:underline">
+          <Link
+            href={`${scopeBasePath(scope)}/documents/${parent.id}`}
+            className="text-brand-700 hover:underline"
+          >
             {parent.name}
           </Link>
         </span>
@@ -85,7 +88,13 @@ export function DocumentPlacement({
 }
 
 /** For an email whose attachments haven't been extracted yet. */
-export function ExtractAttachmentsButton({ documentId, count }: { documentId: string; count: number }) {
+export function ExtractAttachmentsButton({
+  documentId,
+  count,
+}: {
+  documentId: string;
+  count: number;
+}) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   return (
@@ -104,7 +113,9 @@ export function ExtractAttachmentsButton({ documentId, count }: { documentId: st
         className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-2 py-0.5 text-2xs font-medium text-ink-2 hover:border-brand-300 hover:text-brand-700 disabled:opacity-60"
       >
         <Paperclip className="h-3 w-3" aria-hidden />
-        {pending ? "Adding…" : `Add ${count === 1 ? "attachment" : `${count} attachments`} to documents`}
+        {pending
+          ? "Adding…"
+          : `Add ${count === 1 ? "attachment" : `${count} attachments`} to documents`}
       </button>
       {error && (
         <span role="alert" className="text-2xs text-warn">

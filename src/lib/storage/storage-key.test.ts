@@ -10,12 +10,7 @@
  */
 
 import { describe, expect, test } from "vitest";
-import {
-  isBlobKey,
-  isValidStorageKey,
-  makeStorageKey,
-  sanitizeStorageName,
-} from "./storage-key";
+import { isBlobKey, isValidStorageKey, makeStorageKey, sanitizeStorageName } from "./storage-key";
 
 describe("makeStorageKey", () => {
   test("produces {16-char-base64url}__{name}", () => {
@@ -107,9 +102,7 @@ describe("sanitizeStorageName", () => {
 
 describe("isBlobKey", () => {
   test("full https URLs are blob keys; bare keys are not", () => {
-    expect(
-      isBlobKey("https://x.public.blob.vercel-storage.com/k__f.pdf")
-    ).toBe(true);
+    expect(isBlobKey("https://x.public.blob.vercel-storage.com/k__f.pdf")).toBe(true);
     expect(isBlobKey("AAAAAAAAAAAAAAAA__f.pdf")).toBe(false);
   });
 });

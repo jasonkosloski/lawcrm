@@ -47,10 +47,8 @@ const ROOT_RELS =
   '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
   '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
 
-const W_NS =
-  'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
-const R_NS =
-  'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+const W_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+const R_NS = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 
 async function buildDocx(opts: {
   documentXml: string;
@@ -69,9 +67,7 @@ async function buildDocx(opts: {
 // ── fetch stub ──────────────────────────────────────────────────────────
 
 /** Route the component's same-origin fetch to in-memory bytes. */
-function stubFetch(
-  handler: (url: string) => { ok: boolean; status: number; bytes: ArrayBuffer }
-) {
+function stubFetch(handler: (url: string) => { ok: boolean; status: number; bytes: ArrayBuffer }) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
@@ -81,7 +77,7 @@ function stubFetch(
         status,
         arrayBuffer: async () => bytes,
       } as unknown as Response;
-    })
+    }),
   );
 }
 
@@ -107,12 +103,14 @@ describe("DocxPreviewRenderer — successful render", () => {
     stubFetch(() => ({ ok: true, status: 200, bytes }));
 
     const { container } = render(
-      <DocxPreviewRenderer src="/api/documents/d1/download" name="motion.docx" fallback={FALLBACK} />
+      <DocxPreviewRenderer
+        src="/api/documents/d1/download"
+        name="motion.docx"
+        fallback={FALLBACK}
+      />,
     );
 
-    await waitFor(() =>
-      expect(container.textContent).toContain("Comes now the Plaintiff")
-    );
+    await waitFor(() => expect(container.textContent).toContain("Comes now the Plaintiff"));
     // Real text nodes — exactly what TextReview's TreeWalker +
     // locateQuote consume for select-to-flag and quote relocation.
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
@@ -143,11 +141,9 @@ describe("DocxPreviewRenderer — successful render", () => {
     stubFetch(() => ({ ok: true, status: 200, bytes }));
 
     const { container } = render(
-      <DocxPreviewRenderer src="/dl" name="sig.docx" fallback={FALLBACK} />
+      <DocxPreviewRenderer src="/dl" name="sig.docx" fallback={FALLBACK} />,
     );
-    await waitFor(() =>
-      expect(container.textContent).toContain("Signature:")
-    );
+    await waitFor(() => expect(container.textContent).toContain("Signature:"));
     expect(screen.queryByTestId("mammoth-fallback")).toBeNull();
   });
 
@@ -164,16 +160,14 @@ describe("DocxPreviewRenderer — successful render", () => {
     stubFetch(() => ({ ok: true, status: 200, bytes }));
 
     const { container } = render(
-      <DocxPreviewRenderer src="/dl" name="linked.docx" fallback={FALLBACK} />
+      <DocxPreviewRenderer src="/dl" name="linked.docx" fallback={FALLBACK} />,
     );
     await waitFor(() => expect(container.textContent).toContain("the rule"));
     // The anchor exists and its text is flaggable; happy-dom's XML
     // parser can't resolve `r:id`, so the href stays "" here — the
     // hostile-href handling is covered in the wiring + walker tests.
     expect(
-      Array.from(container.querySelectorAll("a")).some((a) =>
-        a.textContent?.includes("the rule")
-      )
+      Array.from(container.querySelectorAll("a")).some((a) => a.textContent?.includes("the rule")),
     ).toBe(true);
   });
 
@@ -190,7 +184,7 @@ describe("DocxPreviewRenderer — successful render", () => {
     document.addEventListener(VIEWER_CONTENT_READY_EVENT, onReady);
     try {
       const { container } = render(
-        <DocxPreviewRenderer src="/dl" name="a.docx" fallback={FALLBACK} />
+        <DocxPreviewRenderer src="/dl" name="a.docx" fallback={FALLBACK} />,
       );
       await waitFor(() => expect(onReady).toHaveBeenCalledTimes(1));
       // Fired AFTER the text became walkable, not before.
@@ -203,19 +197,14 @@ describe("DocxPreviewRenderer — successful render", () => {
 
 describe("DocxPreviewRenderer — fallback chain", () => {
   test("corrupt bytes (not a zip) → mammoth fallback mounts, ready event still fires", async () => {
-    const bytes = new TextEncoder().encode("this is not a zip archive")
-      .buffer as ArrayBuffer;
+    const bytes = new TextEncoder().encode("this is not a zip archive").buffer as ArrayBuffer;
     stubFetch(() => ({ ok: true, status: 200, bytes }));
 
     const onReady = vi.fn();
     document.addEventListener(VIEWER_CONTENT_READY_EVENT, onReady);
     try {
-      render(
-        <DocxPreviewRenderer src="/dl" name="corrupt.docx" fallback={FALLBACK} />
-      );
-      await waitFor(() =>
-        expect(screen.getByTestId("mammoth-fallback")).toBeInTheDocument()
-      );
+      render(<DocxPreviewRenderer src="/dl" name="corrupt.docx" fallback={FALLBACK} />);
+      await waitFor(() => expect(screen.getByTestId("mammoth-fallback")).toBeInTheDocument());
       await waitFor(() => expect(onReady).toHaveBeenCalledTimes(1));
       expect(console.warn).toHaveBeenCalled();
     } finally {
@@ -225,12 +214,8 @@ describe("DocxPreviewRenderer — fallback chain", () => {
 
   test("failed download (non-OK response) → mammoth fallback mounts", async () => {
     stubFetch(() => ({ ok: false, status: 404, bytes: new ArrayBuffer(0) }));
-    render(
-      <DocxPreviewRenderer src="/dl" name="gone.docx" fallback={FALLBACK} />
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("mammoth-fallback")).toBeInTheDocument()
-    );
+    render(<DocxPreviewRenderer src="/dl" name="gone.docx" fallback={FALLBACK} />);
+    await waitFor(() => expect(screen.getByTestId("mammoth-fallback")).toBeInTheDocument());
   });
 
   test("a response declaring more than the 25 MB cap is never buffered (F998)", async () => {
@@ -244,14 +229,10 @@ describe("DocxPreviewRenderer — fallback chain", () => {
           "content-length": String(25 * 1024 * 1024 + 1),
         }),
         arrayBuffer,
-      }))
+      })),
     );
-    render(
-      <DocxPreviewRenderer src="/dl" name="huge.docx" fallback={FALLBACK} />
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("mammoth-fallback")).toBeInTheDocument()
-    );
+    render(<DocxPreviewRenderer src="/dl" name="huge.docx" fallback={FALLBACK} />);
+    await waitFor(() => expect(screen.getByTestId("mammoth-fallback")).toBeInTheDocument());
     expect(arrayBuffer).not.toHaveBeenCalled();
   });
 
@@ -263,33 +244,25 @@ describe("DocxPreviewRenderer — fallback chain", () => {
         status: 200,
         headers: new Headers(),
         arrayBuffer: async () => new ArrayBuffer(25 * 1024 * 1024 + 1),
-      }))
+      })),
     );
-    render(
-      <DocxPreviewRenderer src="/dl" name="huge.docx" fallback={FALLBACK} />
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("mammoth-fallback")).toBeInTheDocument()
-    );
+    render(<DocxPreviewRenderer src="/dl" name="huge.docx" fallback={FALLBACK} />);
+    await waitFor(() => expect(screen.getByTestId("mammoth-fallback")).toBeInTheDocument());
   });
 
   test("loading skeleton shows while the fetch is in flight", async () => {
     let resolveFetch!: (v: unknown) => void;
     vi.stubGlobal(
       "fetch",
-      vi.fn(() => new Promise((resolve) => (resolveFetch = resolve)))
+      vi.fn(() => new Promise((resolve) => (resolveFetch = resolve))),
     );
-    render(
-      <DocxPreviewRenderer src="/dl" name="slow.docx" fallback={FALLBACK} />
-    );
+    render(<DocxPreviewRenderer src="/dl" name="slow.docx" fallback={FALLBACK} />);
     expect(
-      screen.getByRole("status", { name: /loading preview of slow\.docx/i })
+      screen.getByRole("status", { name: /loading preview of slow\.docx/i }),
     ).toBeInTheDocument();
     // Resolve as a failure to let the effect finish cleanly.
     resolveFetch({ ok: false, status: 500 });
-    await waitFor(() =>
-      expect(screen.getByTestId("mammoth-fallback")).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByTestId("mammoth-fallback")).toBeInTheDocument());
   });
 });
 

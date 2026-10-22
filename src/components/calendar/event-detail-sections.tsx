@@ -30,12 +30,8 @@ export function BusyEventView({
         <header className="flex items-start gap-3 px-5 pt-5 pb-4 border-b border-line">
           <div className="w-1 self-stretch rounded-full shrink-0 bg-ink-3" />
           <div className="flex-1 min-w-0">
-            <div className="text-2xs font-medium text-ink-3 mb-1">
-              Busy
-            </div>
-            <h2 className="text-lg font-display font-medium text-ink leading-tight">
-              Unavailable
-            </h2>
+            <div className="text-2xs font-medium text-ink-3 mb-1">Busy</div>
+            <h2 className="text-lg font-display font-medium text-ink leading-tight">Unavailable</h2>
           </div>
           <button
             type="button"
@@ -51,14 +47,12 @@ export function BusyEventView({
             <Calendar size={14} className="text-ink-3 mt-0.5 shrink-0" />
             <div className="flex flex-col leading-tight">
               <span className="font-medium">{dateLabel}</span>
-              <span className="text-2xs text-ink-3 font-mono">
-                {startsAndEnds}
-              </span>
+              <span className="text-2xs text-ink-3 font-mono">{startsAndEnds}</span>
             </div>
           </div>
           <p className="text-2xs text-ink-4 leading-relaxed mt-1">
-            You don&apos;t have access to this event&apos;s details.
-            Ask the creator or a matter team member to share more.
+            You don&apos;t have access to this event&apos;s details. Ask the creator or a matter
+            team member to share more.
           </p>
         </div>
       </div>
@@ -82,9 +76,7 @@ export function EventVisibilityRow({
           checked={committed.visibility === "show_details"}
           onChange={(e) =>
             commit({
-              visibility: e.target.checked
-                ? "show_details"
-                : "default",
+              visibility: e.target.checked ? "show_details" : "default",
             })
           }
           className="h-3.5 w-3.5 rounded border-line"
@@ -92,19 +84,15 @@ export function EventVisibilityRow({
         <span>
           Show details to everyone in the firm
           <span className="text-2xs text-ink-4 ml-1.5">
-            (off: attendees + matter team always see
-            details; everyone else follows the
-            creator&apos;s profile default — usually
-            &ldquo;Busy&rdquo;)
+            (off: attendees + matter team always see details; everyone else follows the
+            creator&apos;s profile default — usually &ldquo;Busy&rdquo;)
           </span>
         </span>
       </label>
-    <div className="mt-2">
+      <div className="mt-2">
         <EventPrivateToggle
           checked={committed.visibility === "private"}
-          onChange={(next) =>
-            commit({ visibility: next ? "private" : "default" })
-          }
+          onChange={(next) => commit({ visibility: next ? "private" : "default" })}
         />
       </div>
     </Row>
@@ -138,18 +126,10 @@ export function EventAttendeesSection({
       ) : (
         <ul className="flex flex-col gap-1.5">
           {event.attendees.map((a) => (
-            <li
-              key={a.id}
-              className="flex items-center justify-between text-xs"
-            >
+            <li key={a.id} className="flex items-center justify-between text-xs">
               <div className="flex flex-col leading-tight">
                 <span className="text-ink">{a.name}</span>
-                {a.email && (
-                  <EmailLink
-                    email={a.email}
-                    className="text-2xs text-ink-4 font-mono"
-                  />
-                )}
+                {a.email && <EmailLink email={a.email} className="text-2xs text-ink-4 font-mono" />}
               </div>
               {a.status !== "accepted" && (
                 <span className="text-2xs text-ink-3">

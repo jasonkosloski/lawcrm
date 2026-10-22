@@ -54,7 +54,7 @@ describe("paginate", () => {
       async (w) => {
         calls.push(w);
         return ["x"];
-      }
+      },
     );
     expect(calls).toEqual([{ skip: 20, take: 10 }]);
     expect(p).toEqual({ rows: ["x"], page: 3, pageCount: 3, total: 25, pageSize: 10 });
@@ -62,10 +62,15 @@ describe("paginate", () => {
 
   test("skips the fetch when nothing matches", async () => {
     let fetched = false;
-    const p = await paginate(1, 10, async () => 0, async () => {
-      fetched = true;
-      return [];
-    });
+    const p = await paginate(
+      1,
+      10,
+      async () => 0,
+      async () => {
+        fetched = true;
+        return [];
+      },
+    );
     expect(fetched).toBe(false);
     expect(p.rows).toEqual([]);
   });
@@ -95,7 +100,7 @@ describe("withPageParam", () => {
 
 test("hrefFromSearchParams keeps repeated keys and drops page", () => {
   expect(
-    hrefFromSearchParams("/matters", { q: "a b", area: ["X", "Y"], page: "3", none: undefined })
+    hrefFromSearchParams("/matters", { q: "a b", area: ["X", "Y"], page: "3", none: undefined }),
   ).toBe("/matters?q=a+b&area=X&area=Y");
   expect(hrefFromSearchParams("/matters", { page: "2" })).toBe("/matters");
 });

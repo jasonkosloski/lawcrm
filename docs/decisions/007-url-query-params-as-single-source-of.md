@@ -8,6 +8,7 @@
 **Decision:** Encode all filter + sort state in the URL as query params. Server components read them via `searchParams` and run the filtered Prisma query; client toolbar components update the URL via `router.replace(..., { scroll: false })` on change. No client-side filter state, no prop drilling, no context.
 
 **Trade-offs:**
+
 - (+) Every filtered view is a shareable URL
 - (+) Back/forward buttons just work
 - (+) Server renders the correct filtered result on first paint

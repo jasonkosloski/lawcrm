@@ -19,9 +19,7 @@ import { logActivity } from "@/lib/activity-log";
 import { hasAtMostDecimals, roundMoney } from "@/lib/money";
 import { UserFacingError, toUserMessage } from "@/lib/user-facing-error";
 import { type LineItemEditState } from "@/lib/billing-form";
-import {
-  sumLineAmounts,
-} from "./helpers";
+import { sumLineAmounts } from "./helpers";
 
 // ── Invoice line-item editing (DRAFT invoices only) ────────────────────
 //
@@ -68,18 +66,15 @@ const updateLineItemSchema = z.object({
     .optional()
     .or(z.literal(""))
     .refine(
-      (v) =>
-        v === undefined ||
-        v === "" ||
-        (Number.isFinite(Number(v)) && Number(v) > 0),
-      "Rate must be a positive number"
+      (v) => v === undefined || v === "" || (Number.isFinite(Number(v)) && Number(v) > 0),
+      "Rate must be a positive number",
     ),
 });
 
 export async function updateInvoiceLineItem(
   timeEntryId: string,
   _prev: LineItemEditState,
-  formData: FormData
+  formData: FormData,
 ): Promise<LineItemEditState> {
   // Pricing an invoice line rewrites the invoice total: gate it on
   // the billing key, not just authorship.
@@ -112,8 +107,7 @@ export async function updateInvoiceLineItem(
   if (!entry.invoice) {
     return {
       status: "error",
-      error:
-        "This entry isn't on an invoice. Use the standard time-entry edit instead.",
+      error: "This entry isn't on an invoice. Use the standard time-entry edit instead.",
     };
   }
   if (!editableInvoiceStatuses.has(entry.invoice.status)) {
@@ -135,10 +129,7 @@ export async function updateInvoiceLineItem(
   // is let through — the cell editor re-posts every field — but a
   // newly typed value must not carry more than 2 decimals.
   const newHoursNum = Number(parsed.data.hours);
-  if (
-    !hasAtMostDecimals(parsed.data.hours, 2) &&
-    newHoursNum !== entry.hours
-  ) {
+  if (!hasAtMostDecimals(parsed.data.hours, 2) && newHoursNum !== entry.hours) {
     return {
       status: "error",
       errors: { hours: ["Hours can have at most 2 decimal places."] },
@@ -205,7 +196,7 @@ export async function updateInvoiceLineItem(
       if (!invoice) throw new UserFacingError("Invoice not found.");
       if (!editableInvoiceStatuses.has(invoice.status)) {
         throw new UserFacingError(
-          `Invoice is ${invoice.status}. Line items can only be edited on draft invoices.`
+          `Invoice is ${invoice.status}. Line items can only be edited on draft invoices.`,
         );
       }
       const before = await tx.timeEntry.findUnique({
@@ -214,7 +205,7 @@ export async function updateInvoiceLineItem(
       });
       if (!before || before.invoiceId !== invoice.id) {
         throw new UserFacingError(
-          "This entry is no longer on that invoice — refresh and try again."
+          "This entry is no longer on that invoice — refresh and try again.",
         );
       }
 
@@ -246,8 +237,8 @@ export async function updateInvoiceLineItem(
       ]);
       const subtotal = roundMoney(
         sumLineAmounts(timeEntries.map((e) => e.amount)).add(
-          sumLineAmounts(expenses.map((e) => e.amount))
-        )
+          sumLineAmounts(expenses.map((e) => e.amount)),
+        ),
       );
       // No tax in v1 — total = subtotal. Mirrors generateInvoiceFromWip.
       await tx.invoice.update({
@@ -257,8 +248,7 @@ export async function updateInvoiceLineItem(
       return { invoice, before, subtotal };
     });
 
-    const fmt = (d: Prisma.Decimal | null) =>
-      d ? `$${d.toFixed(2)}` : "none";
+    const fmt = (d: Prisma.Decimal | null) => (d ? `$${d.toFixed(2)}` : "none");
     await logActivity({
       matterId: entry.matterId,
       userId: actorId,
@@ -278,11 +268,7 @@ export async function updateInvoiceLineItem(
   } catch (err) {
     return {
       status: "error",
-      error: toUserMessage(
-        err,
-        "Couldn't update line item.",
-        "billing.updateInvoiceLineItem"
-      ),
+      error: toUserMessage(err, "Couldn't update line item.", "billing.updateInvoiceLineItem"),
     };
   }
 }

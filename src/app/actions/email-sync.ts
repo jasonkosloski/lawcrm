@@ -127,7 +127,7 @@ export async function backfillMyEmailAccount(accountId: string): Promise<{
       error: toUserMessage(
         err,
         "Backfill failed. Try again in a few minutes.",
-        "email-sync backfill"
+        "email-sync backfill",
       ),
     };
   }

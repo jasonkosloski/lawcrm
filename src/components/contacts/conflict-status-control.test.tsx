@@ -48,9 +48,7 @@ describe("ConflictStatusControl", () => {
     await user.click(screen.getByRole("button", { name: /update/i }));
     await user.click(await screen.findByRole("button", { name: "Save status" }));
 
-    expect(
-      screen.getByText(/a short justification is required/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/a short justification is required/i)).toBeInTheDocument();
     expect(mockedSet).not.toHaveBeenCalled();
   });
 
@@ -61,19 +59,16 @@ describe("ConflictStatusControl", () => {
     await user.click(screen.getByRole("button", { name: /update/i }));
     await user.selectOptions(
       await screen.findByRole("combobox", { name: /conflict status/i }),
-      "override"
+      "override",
     );
-    await user.type(
-      screen.getByRole("textbox", { name: /justification/i }),
-      "Waiver signed 3/12"
-    );
+    await user.type(screen.getByRole("textbox", { name: /justification/i }), "Waiver signed 3/12");
     await user.click(screen.getByRole("button", { name: "Save status" }));
 
     await waitFor(() =>
-      expect(mockedSet).toHaveBeenCalledWith("c1", "override", "Waiver signed 3/12")
+      expect(mockedSet).toHaveBeenCalledWith("c1", "override", "Waiver signed 3/12"),
     );
     await waitFor(() =>
-      expect(screen.queryByText("Update conflict status")).not.toBeInTheDocument()
+      expect(screen.queryByText("Update conflict status")).not.toBeInTheDocument(),
     );
   });
 
@@ -83,10 +78,7 @@ describe("ConflictStatusControl", () => {
     render(<ConflictStatusControl contactId="c1" currentStatus="clear" />);
 
     await user.click(screen.getByRole("button", { name: /update/i }));
-    await user.type(
-      await screen.findByRole("textbox", { name: /justification/i }),
-      "because"
-    );
+    await user.type(await screen.findByRole("textbox", { name: /justification/i }), "because");
     await user.click(screen.getByRole("button", { name: "Save status" }));
 
     expect(await screen.findByText("Contact not found")).toBeInTheDocument();
@@ -100,22 +92,17 @@ describe("ConflictStatusControl", () => {
     await user.click(screen.getByRole("button", { name: /update/i }));
     await user.selectOptions(
       await screen.findByRole("combobox", { name: /conflict status/i }),
-      "flagged"
+      "flagged",
     );
-    await user.type(
-      screen.getByRole("textbox", { name: /justification/i }),
-      "draft text"
-    );
+    await user.type(screen.getByRole("textbox", { name: /justification/i }), "draft text");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     await waitFor(() =>
-      expect(screen.queryByText("Update conflict status")).not.toBeInTheDocument()
+      expect(screen.queryByText("Update conflict status")).not.toBeInTheDocument(),
     );
     await user.click(screen.getByRole("button", { name: /update/i }));
 
-    expect(
-      await screen.findByRole("combobox", { name: /conflict status/i })
-    ).toHaveValue("clear");
+    expect(await screen.findByRole("combobox", { name: /conflict status/i })).toHaveValue("clear");
     expect(screen.getByRole("textbox", { name: /justification/i })).toHaveValue("");
   });
 });

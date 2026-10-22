@@ -24,7 +24,7 @@ function makeEvent(opts: { kind?: string; data?: unknown; protectedMode?: boolea
       get types() {
         return Array.from(store.keys());
       },
-      getData: (m: string) => (opts.protectedMode ? "" : store.get(m) ?? ""),
+      getData: (m: string) => (opts.protectedMode ? "" : (store.get(m) ?? "")),
       dropEffect: "",
     },
   };
@@ -33,9 +33,7 @@ function makeEvent(opts: { kind?: string; data?: unknown; protectedMode?: boolea
 
 describe("useDropTarget", () => {
   test("a matching drag in protected mode (Chromium dragover) is accepted: preventDefault + move", () => {
-    const { result } = renderHook(() =>
-      useDropTarget({ kind: "calendar-event", onDrop: vi.fn() })
-    );
+    const { result } = renderHook(() => useDropTarget({ kind: "calendar-event", onDrop: vi.fn() }));
     const e = makeEvent({ kind: "calendar-event", protectedMode: true });
     act(() => result.current.handlers.onDragOver(e));
     expect(e.preventDefault).toHaveBeenCalled();
@@ -43,9 +41,7 @@ describe("useDropTarget", () => {
   });
 
   test("a different kind or no kind is not accepted", () => {
-    const { result } = renderHook(() =>
-      useDropTarget({ kind: "calendar-event", onDrop: vi.fn() })
-    );
+    const { result } = renderHook(() => useDropTarget({ kind: "calendar-event", onDrop: vi.fn() }));
     const wrong = makeEvent({ kind: "kanban-card" });
     const none = makeEvent({});
     act(() => {
@@ -62,7 +58,7 @@ describe("useDropTarget", () => {
   test("disabled targets never accept, highlight, or fire onDrop", () => {
     const onDrop = vi.fn();
     const { result } = renderHook(() =>
-      useDropTarget({ kind: "calendar-event", onDrop, disabled: true })
+      useDropTarget({ kind: "calendar-event", onDrop, disabled: true }),
     );
     const over = makeEvent({ kind: "calendar-event", protectedMode: true });
     act(() => {
@@ -78,9 +74,7 @@ describe("useDropTarget", () => {
   });
 
   test("nested enter/leave is counted: highlight stays until the last leave", () => {
-    const { result } = renderHook(() =>
-      useDropTarget({ kind: "calendar-event", onDrop: vi.fn() })
-    );
+    const { result } = renderHook(() => useDropTarget({ kind: "calendar-event", onDrop: vi.fn() }));
     const e = makeEvent({ kind: "calendar-event", protectedMode: true });
     act(() => result.current.handlers.onDragEnter(e)); // target
     act(() => result.current.handlers.onDragEnter(e)); // child
@@ -98,7 +92,7 @@ describe("useDropTarget", () => {
   test("drop fires onDrop with the parsed payload and clears the highlight", () => {
     const onDrop = vi.fn();
     const { result } = renderHook(() =>
-      useDropTarget<{ id: string }>({ kind: "calendar-event", onDrop })
+      useDropTarget<{ id: string }>({ kind: "calendar-event", onDrop }),
     );
     const enter = makeEvent({ kind: "calendar-event", protectedMode: true });
     act(() => {
@@ -115,18 +109,14 @@ describe("useDropTarget", () => {
 
   test("a drop of the wrong kind resets the highlight but does not fire onDrop", () => {
     const onDrop = vi.fn();
-    const { result } = renderHook(() =>
-      useDropTarget({ kind: "calendar-event", onDrop })
-    );
+    const { result } = renderHook(() => useDropTarget({ kind: "calendar-event", onDrop }));
     act(() =>
       result.current.handlers.onDragEnter(
-        makeEvent({ kind: "calendar-event", protectedMode: true })
-      )
+        makeEvent({ kind: "calendar-event", protectedMode: true }),
+      ),
     );
     act(() =>
-      result.current.handlers.onDrop(
-        makeEvent({ kind: "kanban-card", data: { id: "x" } })
-      )
+      result.current.handlers.onDrop(makeEvent({ kind: "kanban-card", data: { id: "x" } })),
     );
     expect(onDrop).not.toHaveBeenCalled();
     expect(result.current.isOver).toBe(false);

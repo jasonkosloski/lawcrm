@@ -4,12 +4,14 @@ Week / Month / Day views with deadlines, events (create / edit / delete / drag-r
 Related: [ADR-021](../decisions/021-matter-tabs-honour-calendar-visibility-and-money.md), [ADR-037](../decisions/037-private-calendar-events-show-to-their-creator.md), [ADR-012](../decisions/012-date-only-values-are-utc-midnight-calendar.md), [PERMISSIONS.md](../PERMISSIONS.md)
 
 ## Open work
+
 - [ ] **Calendar — recurring events** (P1) — Needs an RRULE data-model decision first (series row vs. materialized occurrences, exception handling; schema change). Explicitly out of scope until that ADR lands. Until then Google sync imports recurring instances individually (`singleEvents=true`).
 - [ ] **Calendar — visibility v2** (P2) — A user can opt to view another user's calendar, with the visibility resolver still in force (they see only what they'd see anyway). Foundation in place.
 - [ ] **Real RSVP statuses** (P2) — Remaining from event-create v2.
 - [ ] **Day-view chip enrichment** (P2) — Any day-specific enrichment beyond what full width already gives. Also: matter reassignment of an existing event is not supported anywhere.
 
 ## Shipped
+
 - [x] **Week view** — 7 day columns, hour grid 6am–9pm, events positioned by start/end, deadlines as thin bars, "now" line in today's column, events colored by matter.
 - [x] **Month view** — 6-row grid; compact pills (time + title); deadlines styled by kind; "+N more" overflow; today highlighted.
 - [x] **Navigation** — Prev/Today/Next, URL-driven (`?view=week|month|day&d=YYYY-MM-DD&show=...`) via `parseCalendarParams` / `buildCalendarHref`; `stepCalendarFocal` centralizes ±1 day / ±7 days / ±1 month.

@@ -40,12 +40,7 @@ vi.mock("@/lib/permission-check", () => ({
 import { getCurrentUserId } from "@/lib/current-user";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import {
-  deleteTask,
-  setTaskOwner,
-  setTaskStatus,
-  updateTask,
-} from "@/app/actions/tasks";
+import { deleteTask, setTaskOwner, setTaskStatus, updateTask } from "@/app/actions/tasks";
 import { updateTaskInitialState } from "@/lib/task-form";
 import {
   resetDb,
@@ -460,7 +455,7 @@ describe("updateTask — owner tri-state + notification", () => {
     const res = await updateTask(
       id,
       updateTaskInitialState,
-      taskForm({ ownerId: assignee.userId })
+      taskForm({ ownerId: assignee.userId }),
     );
     expect(res.status).toBe("ok");
 
@@ -490,11 +485,7 @@ describe("updateTask — owner tri-state + notification", () => {
     const assignee = await seedUser({ firmId, email: "clear-edit@example.com" });
     const id = await seedTask({ ownerId: assignee.userId });
 
-    const res = await updateTask(
-      id,
-      updateTaskInitialState,
-      taskForm({ ownerId: "" })
-    );
+    const res = await updateTask(id, updateTaskInitialState, taskForm({ ownerId: "" }));
     expect(res.status).toBe("ok");
     const row = await prisma.task.findUnique({ where: { id } });
     expect(row!.ownerId).toBeNull();
@@ -508,7 +499,7 @@ describe("updateTask — owner tri-state + notification", () => {
     const res = await updateTask(
       id,
       updateTaskInitialState,
-      taskForm({ ownerId: assignee.userId })
+      taskForm({ ownerId: assignee.userId }),
     );
     expect(res.status).toBe("ok");
     expect(await prisma.notification.count()).toBe(0);
@@ -516,11 +507,7 @@ describe("updateTask — owner tri-state + notification", () => {
 
   test("self-assignment saves but is notification-silent (actor exclusion)", async () => {
     const id = await seedTask();
-    const res = await updateTask(
-      id,
-      updateTaskInitialState,
-      taskForm({ ownerId: userId })
-    );
+    const res = await updateTask(id, updateTaskInitialState, taskForm({ ownerId: userId }));
     expect(res.status).toBe("ok");
     const row = await prisma.task.findUnique({ where: { id } });
     expect(row!.ownerId).toBe(userId);
@@ -538,7 +525,7 @@ describe("updateTask — owner tri-state + notification", () => {
     const res = await updateTask(
       id,
       updateTaskInitialState,
-      taskForm({ title: "Changed title", ownerId: inactive.userId })
+      taskForm({ title: "Changed title", ownerId: inactive.userId }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.ownerId?.[0]).toMatch(/inactive|not found/i);
@@ -686,7 +673,7 @@ describe("updateTask - stale form guard (F521)", () => {
     const res = await updateTask(
       id,
       updateTaskInitialState,
-      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() })
+      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?._form?.[0]).toMatch(/changed by someone else/i);
@@ -707,7 +694,7 @@ describe("updateTask - stale form guard (F521)", () => {
     const res = await updateTask(
       id,
       updateTaskInitialState,
-      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() })
+      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() }),
     );
     expect(res.status).toBe("error");
     expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/tasks`);
@@ -720,12 +707,10 @@ describe("updateTask - stale form guard (F521)", () => {
     const res = await updateTask(
       id,
       updateTaskInitialState,
-      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() })
+      form({ expectedUpdatedAt: seeded.updatedAt.toISOString() }),
     );
     expect(res.status).toBe("ok");
-    expect(
-      (await prisma.task.findUniqueOrThrow({ where: { id } })).title
-    ).toBe("Edited by A");
+    expect((await prisma.task.findUniqueOrThrow({ where: { id } })).title).toBe("Edited by A");
   });
 
   test("no expectedUpdatedAt field = no check (legacy callers)", async () => {
@@ -763,7 +748,7 @@ describe("records follow-up task hook", () => {
     expect(
       await prisma.task.count({
         where: { recordsRequestId: req.id, status: "open" },
-      })
+      }),
     ).toBe(1);
   });
 });

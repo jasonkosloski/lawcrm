@@ -133,19 +133,12 @@ describe("InviteMemberComposer", () => {
     await user.click(screen.getByRole("checkbox", { name: /billing/i }));
     await user.click(screen.getByRole("button", { name: /send invite/i }));
 
-    await waitFor(() =>
-      expect(screen.getByText(/already exists/i)).toBeTruthy()
+    await waitFor(() => expect(screen.getByText(/already exists/i)).toBeTruthy());
+    expect((screen.getByLabelText(/^name/i) as HTMLInputElement).value).toBe("New Person");
+    expect((screen.getByLabelText(/^email/i) as HTMLInputElement).value).toBe("dup@example.com");
+    expect((screen.getByRole("checkbox", { name: /billing/i }) as HTMLInputElement).checked).toBe(
+      true,
     );
-    expect((screen.getByLabelText(/^name/i) as HTMLInputElement).value).toBe(
-      "New Person"
-    );
-    expect((screen.getByLabelText(/^email/i) as HTMLInputElement).value).toBe(
-      "dup@example.com"
-    );
-    expect(
-      (screen.getByRole("checkbox", { name: /billing/i }) as HTMLInputElement)
-        .checked
-    ).toBe(true);
     // The action got the ticked role.
     const fd = mockedInvite.mock.calls[0][1] as FormData;
     expect(fd.getAll("roleId")).toEqual(["r_billing"]);
@@ -166,7 +159,7 @@ describe("InviteMemberComposer", () => {
     await user.type(screen.getByLabelText(/^job title/i), "Paralegal");
     await user.click(screen.getByRole("button", { name: /send invite/i }));
     await waitFor(() =>
-      expect(screen.getByText(/missing the system 'default' role/i)).toBeTruthy()
+      expect(screen.getByText(/missing the system 'default' role/i)).toBeTruthy(),
     );
   });
 
@@ -177,21 +170,18 @@ describe("InviteMemberComposer", () => {
         rolePickerOptions={ROLES}
         viewerIsAdmin={false}
         privilegedRoleIds={PRIVILEGED}
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: /invite member/i }));
+    expect((screen.getByRole("checkbox", { name: /^admin$/i }) as HTMLInputElement).disabled).toBe(
+      true,
+    );
     expect(
-      (screen.getByRole("checkbox", { name: /^admin$/i }) as HTMLInputElement)
-        .disabled
+      (screen.getByRole("checkbox", { name: /access manager/i }) as HTMLInputElement).disabled,
     ).toBe(true);
-    expect(
-      (screen.getByRole("checkbox", { name: /access manager/i }) as HTMLInputElement)
-        .disabled
-    ).toBe(true);
-    expect(
-      (screen.getByRole("checkbox", { name: /billing/i }) as HTMLInputElement)
-        .disabled
-    ).toBe(false);
+    expect((screen.getByRole("checkbox", { name: /billing/i }) as HTMLInputElement).disabled).toBe(
+      false,
+    );
   });
 
   test("confirms each successful invite, not just the first", async () => {
@@ -206,9 +196,7 @@ describe("InviteMemberComposer", () => {
       await user.type(screen.getByLabelText(/^initials/i), "X");
       await user.type(screen.getByLabelText(/^job title/i), "Paralegal");
       await user.click(screen.getByRole("button", { name: /send invite/i }));
-      await waitFor(() =>
-        expect(screen.getByText(`Invitation sent to ${email}.`)).toBeTruthy()
-      );
+      await waitFor(() => expect(screen.getByText(`Invitation sent to ${email}.`)).toBeTruthy());
       await user.click(screen.getByRole("button", { name: /dismiss/i }));
     }
   });
@@ -226,9 +214,7 @@ describe("InviteMemberComposer", () => {
     await user.type(screen.getByLabelText(/^initials/i), "X");
     await user.type(screen.getByLabelText(/^job title/i), "Paralegal");
     await user.click(screen.getByRole("button", { name: /send invite/i }));
-    await waitFor(() =>
-      expect(screen.getByText(/Use Resend invite/)).toBeTruthy()
-    );
+    await waitFor(() => expect(screen.getByText(/Use Resend invite/)).toBeTruthy());
   });
 });
 
@@ -243,23 +229,13 @@ describe("MemberEditForm", () => {
       values: {},
     });
     const user = userEvent.setup();
-    render(
-      <MemberEditForm
-        member={MEMBER}
-        rolePickerOptions={ROLES}
-        onDone={() => {}}
-      />
-    );
+    render(<MemberEditForm member={MEMBER} rolePickerOptions={ROLES} onDone={() => {}} />);
     await user.type(screen.getByLabelText(/^phone/i), "555-0100 ext 12");
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
-    await waitFor(() =>
-      expect(screen.getByText(/at most 40 character/i)).toBeTruthy()
-    );
+    await waitFor(() => expect(screen.getByText(/at most 40 character/i)).toBeTruthy());
     expect(screen.getByText("Too long")).toBeTruthy();
-    expect((screen.getByLabelText(/^phone/i) as HTMLInputElement).value).toBe(
-      "555-0100 ext 12"
-    );
+    expect((screen.getByLabelText(/^phone/i) as HTMLInputElement).value).toBe("555-0100 ext 12");
   });
 
   test("renders the concurrent-edit (_form) error instead of failing silently", async () => {
@@ -271,17 +247,9 @@ describe("MemberEditForm", () => {
       values: {},
     });
     const user = userEvent.setup();
-    render(
-      <MemberEditForm
-        member={MEMBER}
-        rolePickerOptions={ROLES}
-        onDone={() => {}}
-      />
-    );
+    render(<MemberEditForm member={MEMBER} rolePickerOptions={ROLES} onDone={() => {}} />);
     await user.click(screen.getByRole("button", { name: /^save$/i }));
-    await waitFor(() =>
-      expect(screen.getByText(/try again/i)).toBeTruthy()
-    );
+    await waitFor(() => expect(screen.getByText(/try again/i)).toBeTruthy());
   });
 
   test("for a delegated manager, a held privileged role is locked but still posted", async () => {
@@ -294,7 +262,7 @@ describe("MemberEditForm", () => {
         viewerIsAdmin={false}
         privilegedRoleIds={PRIVILEGED}
         onDone={() => {}}
-      />
+      />,
     );
     const access = screen.getByRole("checkbox", {
       name: /access manager/i,
@@ -313,10 +281,7 @@ describe("MemberEditForm", () => {
 });
 
 describe("MemberRow", () => {
-  function renderRow(props: {
-    member: FirmUserRow;
-    viewerIsAdmin: boolean;
-  }) {
+  function renderRow(props: { member: FirmUserRow; viewerIsAdmin: boolean }) {
     return render(
       <table>
         <tbody>
@@ -328,7 +293,7 @@ describe("MemberRow", () => {
             privilegedRoleIds={PRIVILEGED}
           />
         </tbody>
-      </table>
+      </table>,
     );
   }
 
@@ -382,9 +347,7 @@ describe("CreateRoleForm", () => {
       await user.type(screen.getByLabelText(/^name/i), name);
       await user.click(screen.getByRole("button", { name: /create role/i }));
       // Back to the collapsed "New role" button each time.
-      await waitFor(() =>
-        expect(screen.getByRole("button", { name: /new role/i })).toBeTruthy()
-      );
+      await waitFor(() => expect(screen.getByRole("button", { name: /new role/i })).toBeTruthy());
     }
     expect(mockedCreateRole).toHaveBeenCalledTimes(2);
   });
@@ -400,12 +363,8 @@ describe("CreateRoleForm", () => {
     await user.click(screen.getByRole("button", { name: /new role/i }));
     await user.type(screen.getByLabelText(/^name/i), "Paralegal");
     await user.click(screen.getByRole("button", { name: /create role/i }));
-    await waitFor(() =>
-      expect(screen.getByText(/already exists/i)).toBeTruthy()
-    );
-    expect((screen.getByLabelText(/^name/i) as HTMLInputElement).value).toBe(
-      "Paralegal"
-    );
+    await waitFor(() => expect(screen.getByText(/already exists/i)).toBeTruthy());
+    expect((screen.getByLabelText(/^name/i) as HTMLInputElement).value).toBe("Paralegal");
   });
 
   test("renders a permission-denied (_form) error", async () => {
@@ -418,9 +377,7 @@ describe("CreateRoleForm", () => {
     await user.click(screen.getByRole("button", { name: /new role/i }));
     await user.type(screen.getByLabelText(/^name/i), "X");
     await user.click(screen.getByRole("button", { name: /create role/i }));
-    await waitFor(() =>
-      expect(screen.getByText(/do not have permission/i)).toBeTruthy()
-    );
+    await waitFor(() => expect(screen.getByText(/do not have permission/i)).toBeTruthy());
   });
 });
 
@@ -443,7 +400,7 @@ describe("RoleRow", () => {
             <RoleRow role={ROLE} isAdmin />
           </tbody>
         </table>
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
   }
 
@@ -471,9 +428,7 @@ describe("RoleRow", () => {
     await user.type(name, "Admin2");
     await user.click(screen.getByRole("button", { name: /^save$/i }));
     await waitFor(() => expect(screen.getByText("Reserved name")).toBeTruthy());
-    expect((screen.getByLabelText(/^name/i) as HTMLInputElement).value).toBe(
-      "Admin2"
-    );
+    expect((screen.getByLabelText(/^name/i) as HTMLInputElement).value).toBe("Admin2");
     expect(screen.getByLabelText(/^description/i)).toBeTruthy();
   });
 });
@@ -501,9 +456,7 @@ describe("FirmEditForm — rejected save", () => {
   // jsdom's floating-point step check rejects 200 against step=0.1
   // (browsers use decimal math), so submit the form directly.
   function submitFirmForm() {
-    const form = screen
-      .getByRole("button", { name: /save changes/i })
-      .closest("form");
+    const form = screen.getByRole("button", { name: /save changes/i }).closest("form");
     if (!form) throw new Error("form not found");
     fireEvent.submit(form);
   }
@@ -525,16 +478,10 @@ describe("FirmEditForm — rejected save", () => {
     await user.type(screen.getByLabelText(/^phone/i), "555-0100 ext 12");
     submitFirmForm();
 
-    await waitFor(() =>
-      expect(screen.getByText(/at most 40 character/i)).toBeTruthy()
-    );
+    await waitFor(() => expect(screen.getByText(/at most 40 character/i)).toBeTruthy());
     expect(screen.getByText("Too long")).toBeTruthy();
-    expect(
-      (screen.getByLabelText(/^firm name/i) as HTMLInputElement).value
-    ).toBe("Renamed LLP");
-    expect((screen.getByLabelText(/^phone/i) as HTMLInputElement).value).toBe(
-      "555-0100 ext 12"
-    );
+    expect((screen.getByLabelText(/^firm name/i) as HTMLInputElement).value).toBe("Renamed LLP");
+    expect((screen.getByLabelText(/^phone/i) as HTMLInputElement).value).toBe("555-0100 ext 12");
   });
 
   test("renders a permission-denied (_form) error", async () => {
@@ -544,8 +491,6 @@ describe("FirmEditForm — rejected save", () => {
     });
     render(<FirmEditForm firm={FIRM} goals={GOALS} />);
     submitFirmForm();
-    await waitFor(() =>
-      expect(screen.getByText(/do not have permission/i)).toBeTruthy()
-    );
+    await waitFor(() => expect(screen.getByText(/do not have permission/i)).toBeTruthy());
   });
 });

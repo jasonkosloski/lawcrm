@@ -36,8 +36,7 @@ function tab(node: ReactNode): React.ReactElement<Record<string, unknown>> {
   throw new Error("RecordsTab not found");
 }
 
-const call = () =>
-  MatterRecordsPage({ params: Promise.resolve({ id: "m1" }) } as never);
+const call = () => MatterRecordsPage({ params: Promise.resolve({ id: "m1" }) } as never);
 
 beforeEach(() => vi.clearAllMocks());
 

@@ -23,12 +23,8 @@ import type { CaptureFormState } from "@/lib/capture-schemas";
 
 const mockedCreate = vi.hoisted(() =>
   vi.fn<
-    (
-      matterId: string,
-      prev: CaptureFormState,
-      formData: FormData
-    ) => Promise<CaptureFormState>
-  >()
+    (matterId: string, prev: CaptureFormState, formData: FormData) => Promise<CaptureFormState>
+  >(),
 );
 
 vi.mock("@/app/actions/captures", () => ({
@@ -60,19 +56,12 @@ describe("TimeComposer — UTBMS picker", () => {
     await expand(user);
 
     await user.type(screen.getByPlaceholderText("Hrs"), "1.5");
-    await user.type(
-      screen.getByPlaceholderText(/^Activity/),
-      "Draft motion"
-    );
-    const select = container.querySelector(
-      'select[name="utbmsCode"]'
-    ) as HTMLSelectElement;
+    await user.type(screen.getByPlaceholderText(/^Activity/), "Draft motion");
+    const select = container.querySelector('select[name="utbmsCode"]') as HTMLSelectElement;
     expect(select).toBeTruthy();
     await user.selectOptions(select, "A103");
 
-    await user.click(
-      screen.getByRole("button", { name: /save time entry/i })
-    );
+    await user.click(screen.getByRole("button", { name: /save time entry/i }));
 
     const fd = postedForm();
     expect(fd.get("utbmsCode")).toBe("A103");
@@ -87,9 +76,7 @@ describe("TimeComposer — UTBMS picker", () => {
 
     await user.type(screen.getByPlaceholderText("Hrs"), "0.5");
     await user.type(screen.getByPlaceholderText(/^Activity/), "Call");
-    await user.click(
-      screen.getByRole("button", { name: /save time entry/i })
-    );
+    await user.click(screen.getByRole("button", { name: /save time entry/i }));
 
     expect(postedForm().get("utbmsCode")).toBe("");
   });
@@ -115,14 +102,10 @@ describe("TimeComposer — start–end duration mode", () => {
       target: { value: "10:30" },
     });
 
-    expect(
-      screen.getByTestId("range-computed-hours").textContent
-    ).toContain("1.5");
+    expect(screen.getByTestId("range-computed-hours").textContent).toContain("1.5");
 
     await user.type(screen.getByPlaceholderText(/^Activity/), "Hearing");
-    await user.click(
-      screen.getByRole("button", { name: /save time entry/i })
-    );
+    await user.click(screen.getByRole("button", { name: /save time entry/i }));
 
     expect(postedForm().get("hours")).toBe("1.5");
   });
@@ -138,9 +121,7 @@ describe("TimeComposer — start–end duration mode", () => {
     await user.click(screen.getByRole("button", { name: "start–end" }));
     await user.type(screen.getByPlaceholderText(/^Activity/), "Work");
 
-    expect(
-      screen.getByRole("button", { name: /save time entry/i })
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: /save time entry/i })).toBeDisabled();
     expect(mockedCreate).not.toHaveBeenCalled();
   });
 });

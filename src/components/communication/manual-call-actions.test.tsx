@@ -59,9 +59,7 @@ describe("ManualCallActions delete", () => {
     await clickDelete();
 
     await waitFor(() =>
-      expect(notifyError).toHaveBeenCalledWith(
-        expect.stringMatching(/try again/i)
-      )
+      expect(notifyError).toHaveBeenCalledWith(expect.stringMatching(/try again/i)),
     );
   });
 
@@ -81,14 +79,14 @@ describe("ManualCallActions delete", () => {
     await clickDelete();
 
     expect(confirmAction).toHaveBeenCalledWith(
-      expect.objectContaining({ title: expect.stringContaining("Dana Client") })
+      expect.objectContaining({ title: expect.stringContaining("Dana Client") }),
     );
     expect(deleteCallLog).not.toHaveBeenCalled();
   });
 
   test("renders nothing without edit or delete permission", () => {
     const { container } = render(
-      <ManualCallActions item={item} canEdit={false} canDelete={false} />
+      <ManualCallActions item={item} canEdit={false} canDelete={false} />,
     );
     expect(container).toBeEmptyDOMElement();
   });

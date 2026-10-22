@@ -19,7 +19,7 @@ const renderDialog = (warningFor?: (t: string | null) => string | null) =>
       currentFolderId={null}
       warningFor={warningFor}
       onMove={vi.fn(async () => ({ ok: true }))}
-    />
+    />,
   );
 
 describe("MoveToFolderDialog warning", () => {
@@ -35,7 +35,7 @@ describe("MoveToFolderDialog warning", () => {
 
   test("warningLoader: loads on pick, shows only when non-null", async () => {
     const loader = vi.fn(async (t: string | null) =>
-      t === "a" ? "2 files will become visible to the client." : null
+      t === "a" ? "2 files will become visible to the client." : null,
     );
     render(
       <MoveToFolderDialog
@@ -47,10 +47,12 @@ describe("MoveToFolderDialog warning", () => {
         currentFolderId={null}
         warningLoader={loader}
         onMove={vi.fn(async () => ({ ok: true }))}
-      />
+      />,
     );
     await userEvent.click(screen.getByRole("button", { name: /^A$/ }));
-    expect(await screen.findByText("2 files will become visible to the client.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("2 files will become visible to the client."),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /^B$/ }));
     await waitFor(() => expect(loader).toHaveBeenCalledWith("b"));
     expect(screen.queryByText(/visible to the client/)).toBeNull();
@@ -70,7 +72,7 @@ describe("MoveToFolderDialog warning", () => {
           throw new Error("x");
         }}
         onMove={vi.fn(async () => ({ ok: true }))}
-      />
+      />,
     );
     await userEvent.click(screen.getByRole("button", { name: /^A$/ }));
     expect(screen.getByRole("button", { name: "Move" })).toBeEnabled();

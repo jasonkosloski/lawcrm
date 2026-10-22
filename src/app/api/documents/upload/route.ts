@@ -82,16 +82,10 @@ import { isStoredFileReferenced } from "@/lib/stored-file-refs";
 import { userHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
-import {
-  assertScopeWritable,
-  revalidateDocumentScope,
-} from "@/lib/scope-access";
+import { assertScopeWritable, revalidateDocumentScope } from "@/lib/scope-access";
 import { resolveLeadUploadTarget } from "@/lib/lead-documents";
 import { resolveRecordsUpload } from "@/lib/records-requests/folder";
-import {
-  isRecordsDocRole,
-  type RecordsDocRole,
-} from "@/lib/records-requests/roles";
+import { isRecordsDocRole, type RecordsDocRole } from "@/lib/records-requests/roles";
 import { extractIfEmail } from "@/lib/email-attachment-extract";
 import {
   FileTooLargeError,
@@ -166,7 +160,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!allowed) {
     return NextResponse.json(
       { error: "You don't have permission to upload documents." },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -177,36 +171,26 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (activeStorageDriver() !== "local") {
     return NextResponse.json(
       {
-        error:
-          "This deployment uses client-direct uploads — POST /api/documents/upload/blob.",
+        error: "This deployment uses client-direct uploads — POST /api/documents/upload/blob.",
       },
-      { status: 501 }
+      { status: 501 },
     );
   }
 
   const contentType = req.headers.get("content-type") ?? "";
-  if (
-    !contentType.toLowerCase().includes("multipart/form-data") ||
-    !req.body
-  ) {
-    return NextResponse.json(
-      { error: "Expected a multipart/form-data body." },
-      { status: 400 }
-    );
+  if (!contentType.toLowerCase().includes("multipart/form-data") || !req.body) {
+    return NextResponse.json({ error: "Expected a multipart/form-data body." }, { status: 400 });
   }
 
   const result = await parseAndStore(
     req.body as unknown as WebReadableStream<Uint8Array>,
     contentType,
-    userId
+    userId,
   );
 
   if (!result.ok) {
     await Promise.all(result.stored.map((f) => deleteFile(f.key)));
-    return NextResponse.json(
-      { error: result.error },
-      { status: result.status }
-    );
+    return NextResponse.json({ error: result.error }, { status: result.status });
   }
 
   if (result.draftId) {
@@ -224,7 +208,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     f: StoredUpload,
     target: RecordScope,
     folderId: string | null,
-    tag: RecordsTag = null
+    tag: RecordsTag = null,
   ) => ({
     ...scopeWhere(target),
     folderId: tag ? tag.folderId : folderId,
@@ -265,7 +249,7 @@ export async function POST(req: NextRequest): Promise<Response> {
           leadId,
           userId,
           result.folderId,
-          canAccessMatter
+          canAccessMatter,
         );
         if (target.kind !== "filed") return target;
         // Re-check the request against the FINAL scope: after a
@@ -277,7 +261,7 @@ export async function POST(req: NextRequest): Promise<Response> {
               result.recordsRequestId,
               target.scope,
               target.folderId,
-              result.recordsRole
+              result.recordsRole,
             )
           : null;
         const dropped = Boolean(result.recordsRequestId) && !tag;
@@ -287,7 +271,7 @@ export async function POST(req: NextRequest): Promise<Response> {
             await tx.document.create({
               data: rowData(f, target.scope, target.folderId, tag),
               select,
-            })
+            }),
           );
         }
         return { ...target, docs, dropped };
@@ -301,7 +285,7 @@ export async function POST(req: NextRequest): Promise<Response> {
                 error:
                   "This lead was converted to a matter you don't have access to; the upload was discarded.",
               },
-              { status: 403 }
+              { status: 403 },
             );
       }
       scope = outcome.scope;
@@ -316,7 +300,7 @@ export async function POST(req: NextRequest): Promise<Response> {
           requestId,
           matterScope,
           result.folderId,
-          result.recordsRole
+          result.recordsRole,
         );
         recordsTagDropped = !tag;
         const docs = [];
@@ -325,7 +309,7 @@ export async function POST(req: NextRequest): Promise<Response> {
             await tx.document.create({
               data: rowData(f, matterScope, result.folderId, tag),
               select,
-            })
+            }),
           );
         }
         return docs;
@@ -338,8 +322,8 @@ export async function POST(req: NextRequest): Promise<Response> {
           prisma.document.create({
             data: rowData(f, docScope, result.folderId),
             select,
-          })
-        )
+          }),
+        ),
       );
     }
   } catch (err) {
@@ -355,10 +339,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     leadId: scope.kind === "lead" ? scope.leadId : null,
     userId,
     type: "document",
-    title:
-      documents.length === 1
-        ? "Document uploaded"
-        : `${documents.length} documents uploaded`,
+    title: documents.length === 1 ? "Document uploaded" : `${documents.length} documents uploaded`,
     detail: (
       documents.map((d) => d.name).join(", ") +
       (recordsTagDropped
@@ -382,7 +363,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 async function fileOntoDraft(
   result: Extract<ParseResult, { ok: true }>,
   draftId: string,
-  userId: string
+  userId: string,
 ): Promise<Response> {
   const removeBytes = () =>
     Promise.all(
@@ -393,7 +374,7 @@ async function fileOntoDraft(
         } catch {
           /* best-effort */
         }
-      })
+      }),
     );
   let outcome: "gone" | "full" | { id: string; name: string }[];
   try {
@@ -424,7 +405,7 @@ async function fileOntoDraft(
               uploadedBy: userId,
             },
             select: { id: true, name: true },
-          })
+          }),
         );
       }
       return rows;
@@ -479,7 +460,7 @@ async function resolveTarget(
     recordsRole?: string;
     category?: string;
     name?: string;
-  }
+  },
 ): Promise<Target | UploadFailure> {
   const meta = parseUploadMeta({
     name: fields.name,
@@ -492,9 +473,7 @@ async function resolveTarget(
   if (roleField && !isRecordsDocRole(roleField)) {
     return { status: 400, error: "Invalid records document kind." };
   }
-  const recordsRole: RecordsDocRole = isRecordsDocRole(roleField)
-    ? roleField
-    : "received_records";
+  const recordsRole: RecordsDocRole = isRecordsDocRole(roleField) ? roleField : "received_records";
   const matterId = fields.matterId?.trim();
   const leadId = fields.leadId?.trim();
   const draftId = fields.draftId?.trim();
@@ -615,7 +594,7 @@ async function resolveTarget(
 async function parseAndStore(
   body: WebReadableStream<Uint8Array>,
   contentTypeHeader: string,
-  userId: string
+  userId: string,
 ): Promise<ParseResult> {
   const stored: StoredUpload[] = [];
 
@@ -705,98 +684,97 @@ async function parseAndStore(
 
     bb.on("file", (name, stream, info) => {
       sawFilePart = true;
-      chain = chain.then(async () => {
-        if (failure) {
-          stream.resume();
-          return;
-        }
-        if (name !== "files") {
-          // Unknown file field — drain and ignore rather than
-          // failing a batch over a stray part.
-          stream.resume();
-          return;
-        }
-        const filename = capDocumentName((info.filename ?? "").trim());
-        if (!filename) {
-          // An empty <input type="file"> submits a nameless empty
-          // part — skip it; the zero-files check below still fires.
-          stream.resume();
-          return;
-        }
-
-        if (!target) {
-          const resolved = await resolveTarget(userId, fields);
-          if ("error" in resolved) {
-            fail(resolved);
+      chain = chain
+        .then(async () => {
+          if (failure) {
             stream.resume();
             return;
           }
-          target = resolved;
-        }
-
-        const resolvedType = contentTypeForFilename(filename);
-        const isDraft = Boolean(target.draftId);
-        if (
-          isDraft &&
-          target.existingDraftFiles + stored.length + 1 > DRAFT_MAX_FILES
-        ) {
-          fail({ status: 400, error: DRAFT_FILE_COUNT_ERROR });
-          stream.resume();
-          return;
-        }
-        const cap = isDraft
-          ? DRAFT_MAX_FILE_BYTES
-          : isMediaType(resolvedType)
-            ? MAX_MEDIA_UPLOAD_BYTES
-            : MAX_STANDARD_UPLOAD_BYTES;
-
-        // A failed pipeline destroys busboy's part stream and busboy
-        // may still push into it — swallow the post-mortem error so
-        // it can't crash the process.
-        stream.on("error", () => {});
-
-        try {
-          const s = await storeStream(stream, filename, cap);
-          if (s.size === 0) {
-            await deleteFile(s.key);
-            fail({ status: 400, error: `"${filename}" is empty.` });
+          if (name !== "files") {
+            // Unknown file field — drain and ignore rather than
+            // failing a batch over a stray part.
+            stream.resume();
             return;
           }
-          stored.push({
-            key: s.key,
-            size: s.size,
-            name: filename,
-            contentType: resolvedType,
-          });
-        } catch (err) {
-          if (err instanceof FileTooLargeError && isDraft) {
-            fail({ status: 400, error: DRAFT_FILE_TOO_LARGE_ERROR });
-          } else if (err instanceof FileTooLargeError) {
-            const capMiB = Math.floor(cap / (1024 * 1024));
-            fail({
-              status: 413,
-              error: `"${filename}" is too large (max ${capMiB} MiB for ${
-                isMediaType(resolvedType) ? "media" : "this file type"
-              }).`,
-            });
-          } else {
-            fail({
-              status: 500,
-              error: "Upload failed while writing to storage.",
-            });
+          const filename = capDocumentName((info.filename ?? "").trim());
+          if (!filename) {
+            // An empty <input type="file"> submits a nameless empty
+            // part — skip it; the zero-files check below still fires.
+            stream.resume();
+            return;
           }
-        }
-      }).catch(() => {
-        // Unexpected throw (e.g. the DB lookup inside resolveTarget)
-        // — fail the batch but keep the chain resolved so teardown
-        // and the settle path still run.
-        fail({ status: 500, error: "Upload failed." });
-        try {
-          stream.resume();
-        } catch {
-          /* part stream already destroyed */
-        }
-      });
+
+          if (!target) {
+            const resolved = await resolveTarget(userId, fields);
+            if ("error" in resolved) {
+              fail(resolved);
+              stream.resume();
+              return;
+            }
+            target = resolved;
+          }
+
+          const resolvedType = contentTypeForFilename(filename);
+          const isDraft = Boolean(target.draftId);
+          if (isDraft && target.existingDraftFiles + stored.length + 1 > DRAFT_MAX_FILES) {
+            fail({ status: 400, error: DRAFT_FILE_COUNT_ERROR });
+            stream.resume();
+            return;
+          }
+          const cap = isDraft
+            ? DRAFT_MAX_FILE_BYTES
+            : isMediaType(resolvedType)
+              ? MAX_MEDIA_UPLOAD_BYTES
+              : MAX_STANDARD_UPLOAD_BYTES;
+
+          // A failed pipeline destroys busboy's part stream and busboy
+          // may still push into it — swallow the post-mortem error so
+          // it can't crash the process.
+          stream.on("error", () => {});
+
+          try {
+            const s = await storeStream(stream, filename, cap);
+            if (s.size === 0) {
+              await deleteFile(s.key);
+              fail({ status: 400, error: `"${filename}" is empty.` });
+              return;
+            }
+            stored.push({
+              key: s.key,
+              size: s.size,
+              name: filename,
+              contentType: resolvedType,
+            });
+          } catch (err) {
+            if (err instanceof FileTooLargeError && isDraft) {
+              fail({ status: 400, error: DRAFT_FILE_TOO_LARGE_ERROR });
+            } else if (err instanceof FileTooLargeError) {
+              const capMiB = Math.floor(cap / (1024 * 1024));
+              fail({
+                status: 413,
+                error: `"${filename}" is too large (max ${capMiB} MiB for ${
+                  isMediaType(resolvedType) ? "media" : "this file type"
+                }).`,
+              });
+            } else {
+              fail({
+                status: 500,
+                error: "Upload failed while writing to storage.",
+              });
+            }
+          }
+        })
+        .catch(() => {
+          // Unexpected throw (e.g. the DB lookup inside resolveTarget)
+          // — fail the batch but keep the chain resolved so teardown
+          // and the settle path still run.
+          fail({ status: 500, error: "Upload failed." });
+          try {
+            stream.resume();
+          } catch {
+            /* part stream already destroyed */
+          }
+        });
 
       // After each file settles: if the batch is dead, stop pulling
       // the client's remaining bytes.

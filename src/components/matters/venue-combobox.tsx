@@ -13,12 +13,7 @@
 
 import { useId, useState } from "react";
 import { Plus } from "lucide-react";
-import {
-  Command,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import { Command, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { createVenue } from "@/app/actions/venues";
 import type { VenueOption } from "@/lib/queries/venues";
@@ -112,7 +107,7 @@ export function VenueCombobox({
     const match = all.find(
       (v) =>
         (v.isActive || v.id === original) &&
-        (v.name.trim().toLowerCase() === t || inputText(v).toLowerCase() === t)
+        (v.name.trim().toLowerCase() === t || inputText(v).toLowerCase() === t),
     );
     if (match) return pick(match);
     const prev = lastPicked ? all.find((v) => v.id === lastPicked) : undefined;
@@ -149,9 +144,7 @@ export function VenueCombobox({
         setAddOpen(false);
         pick(res.venue);
       } else if (res.code === "archived") {
-        setFormError(
-          `"${draft.name.trim()}" is archived. Restore it in Settings → Venues.`
-        );
+        setFormError(`"${draft.name.trim()}" is archived. Restore it in Settings → Venues.`);
       } else {
         setFieldErrors(res.errors);
       }
@@ -164,9 +157,7 @@ export function VenueCombobox({
 
   const fieldCls = inputClass(false);
   const err = (k: string) =>
-    fieldErrors[k]?.[0] ? (
-      <div className="text-2xs text-warn">{fieldErrors[k][0]}</div>
-    ) : null;
+    fieldErrors[k]?.[0] ? <div className="text-2xs text-warn">{fieldErrors[k][0]}</div> : null;
 
   return (
     <div
@@ -214,22 +205,13 @@ export function VenueCombobox({
             >
               {/* First, so cmdk's auto-selected first row is the add action. */}
               {showAdd && (
-                <CommandItem
-                  value={ADD_VALUE}
-                  onSelect={openAdd}
-                  className="text-xs"
-                >
+                <CommandItem value={ADD_VALUE} onSelect={openAdd} className="text-xs">
                   <Plus size={12} />
                   Press Enter to add &quot;{text.trim()}&quot;
                 </CommandItem>
               )}
               {shown.map((v) => (
-                <CommandItem
-                  key={v.id}
-                  value={v.id}
-                  onSelect={() => pick(v)}
-                  className="text-xs"
-                >
+                <CommandItem key={v.id} value={v.id} onSelect={() => pick(v)} className="text-xs">
                   {venueLabel(v)}
                   {!v.isActive ? " (archived)" : ""}
                 </CommandItem>

@@ -73,15 +73,11 @@ describe("summarizeMatchSeverity", () => {
   });
 
   test("warn + warn → warn", () => {
-    expect(
-      summarizeMatchSeverity([matchOf("warn"), matchOf("warn")])
-    ).toBe("warn");
+    expect(summarizeMatchSeverity([matchOf("warn"), matchOf("warn")])).toBe("warn");
   });
 
   test("any conflict → conflict (even mixed with warns)", () => {
-    expect(
-      summarizeMatchSeverity([matchOf("warn"), matchOf("conflict")])
-    ).toBe("conflict");
+    expect(summarizeMatchSeverity([matchOf("warn"), matchOf("conflict")])).toBe("conflict");
   });
 
   test("only conflict → conflict", () => {
@@ -147,9 +143,7 @@ describe("runConflictMatcher (integration)", () => {
       email: null,
       organization: null,
     });
-    expect(byName.matches).toEqual([
-      expect.objectContaining({ kind: "contact_name", contactId }),
-    ]);
+    expect(byName.matches).toEqual([expect.objectContaining({ kind: "contact_name", contactId })]);
   });
 
   test("matching is case- and candidate-whitespace-insensitive", async () => {
@@ -167,9 +161,7 @@ describe("runConflictMatcher (integration)", () => {
     // Exactly one hit: the email path claims the contact first and
     // the name / org paths skip it via seenContactIds (dedupe).
     expect(result.severity).toBe("warn");
-    expect(result.matches).toEqual([
-      expect.objectContaining({ matchedField: "email", contactId }),
-    ]);
+    expect(result.matches).toEqual([expect.objectContaining({ matchedField: "email", contactId })]);
   });
 
   test("free-text opposingParty on an active matter is a hard conflict", async () => {

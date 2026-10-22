@@ -26,9 +26,7 @@ export function SettingsPlaceholder({
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">
-            Coming as features land
-          </CardTitle>
+          <CardTitle className="text-sm font-semibold">Coming as features land</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
           {expectedItems && expectedItems.length > 0 && (

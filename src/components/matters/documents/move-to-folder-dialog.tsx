@@ -61,9 +61,7 @@ export function MoveToFolderDialog({
   warningFor?: (folderId: string | null) => string | null;
   /** Async variant for warnings that need the server (folder moves). */
   warningLoader?: (folderId: string | null) => Promise<string | null>;
-  onMove: (
-    folderId: string | null
-  ) => Promise<{ ok: boolean; error?: string }>;
+  onMove: (folderId: string | null) => Promise<{ ok: boolean; error?: string }>;
 }) {
   const [target, setTarget] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -113,12 +111,7 @@ export function MoveToFolderDialog({
     });
   };
 
-  const option = (
-    id: string | null,
-    label: string,
-    depth: number,
-    isDisabled: boolean
-  ) => {
+  const option = (id: string | null, label: string, depth: number, isDisabled: boolean) => {
     const isCurrent = id === currentFolderId;
     const isPicked = target !== undefined && target === id;
     return (
@@ -131,20 +124,15 @@ export function MoveToFolderDialog({
         onClick={() => pick(id)}
         className={cn(
           "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-left text-xs",
-          isPicked
-            ? "bg-brand-soft text-brand-700 font-medium"
-            : "text-ink-2 hover:bg-paper-2",
-          (isDisabled || isCurrent) &&
-            "opacity-45 cursor-not-allowed hover:bg-transparent"
+          isPicked ? "bg-brand-soft text-brand-700 font-medium" : "text-ink-2 hover:bg-paper-2",
+          (isDisabled || isCurrent) && "opacity-45 cursor-not-allowed hover:bg-transparent",
         )}
         style={{ paddingLeft: `${8 + (depth - 1) * 16}px` }}
       >
         <Folder size={13} className="shrink-0 text-ink-4" />
         <span className="truncate">{label}</span>
         {isCurrent && (
-          <span className="ml-auto shrink-0 text-2xs font-mono text-ink-4">
-            current
-          </span>
+          <span className="ml-auto shrink-0 text-2xs font-mono text-ink-4">current</span>
         )}
       </button>
     );
@@ -160,9 +148,7 @@ export function MoveToFolderDialog({
 
         <div className="flex flex-col gap-0.5 max-h-72 overflow-y-auto rounded-md border border-line bg-white p-1.5">
           {option(null, "All documents", 1, false)}
-          {folders.map((f) =>
-            option(f.id, f.name, f.depth + 1, disabled.has(f.id))
-          )}
+          {folders.map((f) => option(f.id, f.name, f.depth + 1, disabled.has(f.id)))}
         </div>
 
         {warning && (
@@ -178,18 +164,10 @@ export function MoveToFolderDialog({
         <FormErrorBanner message={error} />
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            type="button"
-            onClick={() => onOpenChange(false)}
-          >
+          <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            type="button"
-            onClick={submit}
-            disabled={pending || target === undefined}
-          >
+          <Button type="button" onClick={submit} disabled={pending || target === undefined}>
             <FolderInput size={12} />
             {pending ? pendingLabel : submitLabel}
           </Button>

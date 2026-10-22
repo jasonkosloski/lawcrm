@@ -13,14 +13,7 @@
  * Invoice.status predates the approved/partial refactor.)
  */
 
-export const INVOICE_STATUSES = [
-  "draft",
-  "approved",
-  "sent",
-  "partial",
-  "paid",
-  "void",
-] as const;
+export const INVOICE_STATUSES = ["draft", "approved", "sent", "partial", "paid", "void"] as const;
 
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 

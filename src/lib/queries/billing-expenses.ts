@@ -21,9 +21,7 @@ export type UnbilledExpenseSummary = {
   total: number;
 };
 
-export async function getUnbilledExpenseSummary(
-  matterId: string
-): Promise<UnbilledExpenseSummary> {
+export async function getUnbilledExpenseSummary(matterId: string): Promise<UnbilledExpenseSummary> {
   const agg = await prisma.expense.aggregate({
     where: { matterId, billable: true, invoiceId: null },
     _sum: { amount: true },

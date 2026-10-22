@@ -57,9 +57,7 @@ export function RenameFolderDialog({
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Rename folder</DialogTitle>
-          <DialogDescription>
-            Folder names must be unique within their parent.
-          </DialogDescription>
+          <DialogDescription>Folder names must be unique within their parent.</DialogDescription>
         </DialogHeader>
         <form
           onSubmit={(e) => {
@@ -80,17 +78,10 @@ export function RenameFolderDialog({
           />
           <FormErrorBanner message={error} />
           <DialogFooter>
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={pending || newName.trim().length === 0}
-            >
+            <Button type="submit" disabled={pending || newName.trim().length === 0}>
               {pending ? "Renaming…" : "Rename"}
             </Button>
           </DialogFooter>

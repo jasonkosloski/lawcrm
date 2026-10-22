@@ -175,15 +175,13 @@ export function invoiceDaysUntilDue(
   status: string,
   dueDate: Date,
   tz: string,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): number | null {
   if (status !== "sent" && status !== "partial") return null;
   return daysBetweenKeys(todayKey(tz, now), dateKeyInTz(dueDate, tz));
 }
 
-export async function getMatterBilling(
-  matterId: string
-): Promise<MatterBilling> {
+export async function getMatterBilling(matterId: string): Promise<MatterBilling> {
   const tz = await getCurrentUserTimeZone();
   // Shared WIP predicate — the aggregate (totals) and the capped
   // findMany (recent list) below must stay in lockstep or the
@@ -196,16 +194,8 @@ export async function getMatterBilling(
     status: { in: [...WIP_STATUSES] },
   };
 
-  const [
-    wipAgg,
-    expenseAgg,
-    wipRecent,
-    trustTxns,
-    invoices,
-    matter,
-    receivedAgg,
-    receivedRows,
-  ] = await Promise.all([
+  const [wipAgg, expenseAgg, wipRecent, trustTxns, invoices, matter, receivedAgg, receivedRows] =
+    await Promise.all([
       // WIP totals summed in the DB. A contingency / long-unbilled
       // matter can have `invoiceId: null` match its entire time
       // history, but only WIP_RECENT_LIMIT rows ever render —
@@ -321,11 +311,8 @@ export async function getMatterBilling(
   // memorializes work done) regardless of their status.
   const outstandingAr = roundToCents(
     invoiceRows
-      .filter(
-        (i) =>
-          i.kind === "client" && (i.status === "sent" || i.status === "partial")
-      )
-      .reduce((sum, i) => sum + i.balance, 0)
+      .filter((i) => i.kind === "client" && (i.status === "sent" || i.status === "partial"))
+      .reduce((sum, i) => sum + i.balance, 0),
   );
 
   const trust: TrustSummary = {
@@ -460,7 +447,7 @@ export type InvoiceDetail = InvoiceRow & {
  *  callers omit it and get the signed-in user's zone. */
 export async function getInvoiceById(
   invoiceId: string,
-  tz?: string
+  tz?: string,
 ): Promise<InvoiceDetail | null> {
   const inv = await prisma.invoice.findUnique({
     where: { id: invoiceId },
@@ -568,9 +555,6 @@ export async function getInvoiceById(
       // payment side of the ledger, not the trust-account side.
       amount: p.amount.toNumber(),
     })),
-    paymentsRecordedTotal: inv.payments.reduce(
-      (sum, p) => sum + p.amount.toNumber(),
-      0
-    ),
+    paymentsRecordedTotal: inv.payments.reduce((sum, p) => sum + p.amount.toNumber(), 0),
   };
 }

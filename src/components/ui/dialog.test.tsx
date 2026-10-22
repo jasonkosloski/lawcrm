@@ -17,7 +17,7 @@ describe("DialogContent", () => {
         <DialogContent>
           <DialogTitle>Tall</DialogTitle>
         </DialogContent>
-      </Dialog>
+      </Dialog>,
     );
     const popup = screen.getByRole("dialog");
     expect(popup.className).toContain("max-h-[calc(100dvh-2rem)]");
@@ -30,7 +30,7 @@ describe("CommandDialog", () => {
     render(
       <CommandDialog open={false} title="Command palette">
         <div>body</div>
-      </CommandDialog>
+      </CommandDialog>,
     );
     expect(screen.queryByRole("heading", { name: "Command palette" })).toBeNull();
     expect(screen.queryByText("Search for a command to run...")).toBeNull();
@@ -40,7 +40,7 @@ describe("CommandDialog", () => {
     render(
       <CommandDialog open title="Command palette">
         <div>body</div>
-      </CommandDialog>
+      </CommandDialog>,
     );
     const dialog = screen.getByRole("dialog", { name: "Command palette" });
     const heading = screen.getByRole("heading", { name: "Command palette" });

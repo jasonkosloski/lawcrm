@@ -31,12 +31,7 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { checkDestructiveDbAllowed } from "../src/lib/seed-guard";
-import {
-  addDaysToKey,
-  parseDateOnly,
-  parseWallClock,
-  todayKey,
-} from "../src/lib/format-date";
+import { addDaysToKey, parseDateOnly, parseWallClock, todayKey } from "../src/lib/format-date";
 
 // Refuse BEFORE a client exists, let alone a single deleteMany runs.
 const guard = checkDestructiveDbAllowed(process.env);
@@ -47,9 +42,7 @@ if (!guard.ok) {
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
-  throw new Error(
-    "DATABASE_URL is not set. Configure it in .env before running the seed."
-  );
+  throw new Error("DATABASE_URL is not set. Configure it in .env before running the seed.");
 }
 const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
@@ -175,8 +168,7 @@ async function main() {
       data: {
         firmId: firm.id,
         name: "Admin",
-        description:
-          "Firm administrators — can edit firm settings, manage team, and create roles.",
+        description: "Firm administrators — can edit firm settings, manage team, and create roles.",
         isSystem: true,
       },
     }),
@@ -469,13 +461,49 @@ async function main() {
     order: number;
     hasStatuteOfLimitations: boolean;
   }> = [
-    { name: "§1983", label: "§1983 · Civil rights", color: "#2563a8", order: 0, hasStatuteOfLimitations: true },
-    { name: "Housing/FHA", label: "Housing · FHA", color: "#2d8a5f", order: 1, hasStatuteOfLimitations: true },
-    { name: "Employment/CADA", label: "Employment · CADA", color: "#b6623d", order: 2, hasStatuteOfLimitations: true },
-    { name: "Criminal", label: "Criminal", color: "#7a5aa6", order: 3, hasStatuteOfLimitations: true },
-    { name: "Class", label: "Class actions", color: "#8a6a2d", order: 4, hasStatuteOfLimitations: true },
+    {
+      name: "§1983",
+      label: "§1983 · Civil rights",
+      color: "#2563a8",
+      order: 0,
+      hasStatuteOfLimitations: true,
+    },
+    {
+      name: "Housing/FHA",
+      label: "Housing · FHA",
+      color: "#2d8a5f",
+      order: 1,
+      hasStatuteOfLimitations: true,
+    },
+    {
+      name: "Employment/CADA",
+      label: "Employment · CADA",
+      color: "#b6623d",
+      order: 2,
+      hasStatuteOfLimitations: true,
+    },
+    {
+      name: "Criminal",
+      label: "Criminal",
+      color: "#7a5aa6",
+      order: 3,
+      hasStatuteOfLimitations: true,
+    },
+    {
+      name: "Class",
+      label: "Class actions",
+      color: "#8a6a2d",
+      order: 4,
+      hasStatuteOfLimitations: true,
+    },
     { name: "ADA", label: "ADA", color: "#3a8a7a", order: 5, hasStatuteOfLimitations: true },
-    { name: "Education/IDEA", label: "Education · IDEA", color: "#3a8a7a", order: 6, hasStatuteOfLimitations: true },
+    {
+      name: "Education/IDEA",
+      label: "Education · IDEA",
+      color: "#3a8a7a",
+      order: 6,
+      hasStatuteOfLimitations: true,
+    },
   ];
 
   const DEFAULT_STAGES: Array<{ name: string; isTerminal?: boolean }> = [
@@ -910,8 +938,7 @@ async function main() {
         kind: "critical",
         sourceType: "statute",
         sourceRef: "CRS §24-10-109",
-        description:
-          "Colorado Governmental Immunity Act — 182-day notice required before suit.",
+        description: "Colorado Governmental Immunity Act — 182-day notice required before suit.",
         ownerId: jason.id,
       },
       {
@@ -1229,9 +1256,7 @@ async function main() {
       take: 3,
       select: { id: true, amount: true },
     });
-    const linesTotal = +lines
-      .reduce((sum, l) => sum + Number(l.amount), 0)
-      .toFixed(2);
+    const linesTotal = +lines.reduce((sum, l) => sum + Number(l.amount), 0).toFixed(2);
     const total = lines.length > 0 ? linesTotal : f.total;
     const paid = f.status === "paid" ? total : f.paid;
     const invoice = await prisma.invoice.create({
@@ -1501,8 +1526,7 @@ async function main() {
   const threadSeeds: ThreadSeed[] = [
     {
       subject: "Rule 26 disclosures — schedule",
-      snippet:
-        "Attached the initial disclosures. We propose discovery cutoff of…",
+      snippet: "Attached the initial disclosures. We propose discovery cutoff of…",
       matterId: matters.williams.id,
       lastMessageAt: hoursAgo(3),
       isRead: false,
@@ -1514,9 +1538,7 @@ async function main() {
           fromName: "A. McGrath",
           fromEmail: "a.mcgrath@denvergov.org",
           toRecipients: [{ name: "Jason Kosloski", email: JASON_EMAIL }],
-          ccRecipients: [
-            { name: "Rachel Kim", email: "rachel@kosloskilaw.com" },
-          ],
+          ccRecipients: [{ name: "Rachel Kim", email: "rachel@kosloskilaw.com" }],
           body: `Counsel,
 
 Attached are the City's initial Rule 26 disclosures. We propose a discovery cutoff of July 15 and expert disclosures on staggered dates per the attached schedule.
@@ -1555,9 +1577,7 @@ Denver City Attorney's Office`,
         {
           fromName: "Marco Guerra",
           fromEmail: "marco@kosloskilaw.com",
-          toRecipients: [
-            { name: "APD Records", email: "records@aurorapd.org" },
-          ],
+          toRecipients: [{ name: "APD Records", email: "records@aurorapd.org" }],
           ccRecipients: [{ name: "Jason Kosloski", email: JASON_EMAIL }],
           body: `APD Records,
 
@@ -1573,9 +1593,7 @@ Investigator, Kosloski Law`,
         {
           fromName: "APD Records",
           fromEmail: "records@aurorapd.org",
-          toRecipients: [
-            { name: "Marco Guerra", email: "marco@kosloskilaw.com" },
-          ],
+          toRecipients: [{ name: "Marco Guerra", email: "marco@kosloskilaw.com" }],
           body: `Mr. Guerra,
 
 Request acknowledged. We require an additional 7 business days per CRS §24-72-203(3)(b). Production expected by April 30.
@@ -1587,8 +1605,7 @@ Request acknowledged. We require an additional 7 business days per CRS §24-72-2
     },
     {
       subject: "Meet & confer — MTD briefing",
-      snippet:
-        "Proposing Thursday 2pm for the meet & confer on the pending MTD…",
+      snippet: "Proposing Thursday 2pm for the meet & confer on the pending MTD…",
       matterId: matters.alvarez.id,
       lastMessageAt: hoursAgo(26),
       isRead: true,
@@ -1615,8 +1632,7 @@ Deputy City Attorney, Aurora`,
     },
     {
       subject: "Memorial lien — revised reduction",
-      snippet:
-        "Memorial came back with $8,200 — that's 34% off original. Recommend accepting…",
+      snippet: "Memorial came back with $8,200 — that's 34% off original. Recommend accepting…",
       matterId: matters.rivera.id,
       lastMessageAt: hoursAgo(28),
       isRead: true,
@@ -1689,8 +1705,7 @@ Orthopedic Health`,
     },
     {
       subject: "Client update — next steps post-Rule 26",
-      snippet:
-        "Derek — quick summary of where we are. Disclosures went out today; we expect…",
+      snippet: "Derek — quick summary of where we are. Disclosures went out today; we expect…",
       matterId: matters.williams.id,
       lastMessageAt: daysFromNow(-3, 16, 22),
       isRead: true,
@@ -1700,9 +1715,7 @@ Orthopedic Health`,
         {
           fromName: "Jason Kosloski",
           fromEmail: JASON_EMAIL,
-          toRecipients: [
-            { name: "Derek Williams", email: "d.williams@email.com" },
-          ],
+          toRecipients: [{ name: "Derek Williams", email: "d.williams@email.com" }],
           body: `Derek,
 
 Quick summary of where we are on your case:
@@ -1729,8 +1742,7 @@ Jason`,
     },
     {
       subject: "Intake — Priya Patel follow-up",
-      snippet:
-        "Sending the retainer + conflict check confirmation. Welcome to Kosloski Law…",
+      snippet: "Sending the retainer + conflict check confirmation. Welcome to Kosloski Law…",
       matterId: matters.patel.id,
       lastMessageAt: daysFromNow(-10, 11, 30),
       isRead: true,
@@ -1741,9 +1753,7 @@ Jason`,
           fromName: "Elena Serrano",
           fromEmail: "elena@kosloskilaw.com",
           toRecipients: [{ name: "Priya Patel", email: "ppatel@email.com" }],
-          ccRecipients: [
-            { name: "Rachel Kim", email: "rachel@kosloskilaw.com" },
-          ],
+          ccRecipients: [{ name: "Rachel Kim", email: "rachel@kosloskilaw.com" }],
           body: `Priya,
 
 Welcome to Kosloski Law. Attached:
@@ -1775,8 +1785,7 @@ Intake Coordinator`,
     },
     {
       subject: "PACER filing notification — Alvarez",
-      snippet:
-        "U.S. District Court, District of Colorado / 2026-CV-00481 / Minute Order…",
+      snippet: "U.S. District Court, District of Colorado / 2026-CV-00481 / Minute Order…",
       matterId: matters.alvarez.id,
       lastMessageAt: hoursAgo(2),
       isRead: false,
@@ -1811,8 +1820,7 @@ A copy of the document is available through PACER and is attached for your recor
     // ── Unfiled examples — for testing the file-to-matter flow ──
     {
       subject: "Possible new case — wrongful arrest, Aurora",
-      snippet:
-        "Got your name from Maria Alvarez. I think I have a similar case…",
+      snippet: "Got your name from Maria Alvarez. I think I have a similar case…",
       matterId: null,
       lastMessageAt: hoursAgo(5),
       isRead: false,
@@ -1838,8 +1846,7 @@ Marcus Patterson
     },
     {
       subject: "Bar association CLE — Spring civil rights conference",
-      snippet:
-        "Registration is now open for our spring conference. Early-bird…",
+      snippet: "Registration is now open for our spring conference. Early-bird…",
       matterId: null,
       lastMessageAt: hoursAgo(28),
       isRead: true,
@@ -1882,9 +1889,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         hasAttachments: t.hasAttachments,
         messageCount: t.messages.length,
         lastMessageAt: t.lastMessageAt,
-        labels: t.labels
-          ? { create: t.labels.map((label) => ({ label })) }
-          : undefined,
+        labels: t.labels ? { create: t.labels.map((label) => ({ label })) } : undefined,
       },
     });
     for (const msg of t.messages) {
@@ -1894,9 +1899,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
           fromName: msg.fromName,
           fromEmail: msg.fromEmail,
           toRecipients: JSON.stringify(msg.toRecipients),
-          ccRecipients: msg.ccRecipients
-            ? JSON.stringify(msg.ccRecipients)
-            : null,
+          ccRecipients: msg.ccRecipients ? JSON.stringify(msg.ccRecipients) : null,
           body: msg.body,
           sentAt: msg.sentAt,
           isPrivileged: msg.isPrivileged ?? false,
@@ -1921,8 +1924,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
   console.log("  Creating messenger account + threads…");
   const minsAgo = (m: number) => new Date(NOW.getTime() - m * 60 * 1000);
   const hrsAgo = (h: number) => new Date(NOW.getTime() - h * 60 * 60 * 1000);
-  const daysAgoMsg = (d: number) =>
-    new Date(NOW.getTime() - d * 24 * 60 * 60 * 1000);
+  const daysAgoMsg = (d: number) => new Date(NOW.getTime() - d * 24 * 60 * 60 * 1000);
 
   const FIRM_NUMBER = "+13035550100"; // Jason's firm Quo line, E.164.
 
@@ -1974,8 +1976,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         {
           kind: "sms",
           direction: "outbound",
-          body:
-            "Hi Maria — quick reminder that your deposition prep is Thursday at 10am. Let me know if anything changes.",
+          body: "Hi Maria — quick reminder that your deposition prep is Thursday at 10am. Let me know if anything changes.",
           occurredAt: hrsAgo(28),
           isRead: true,
         },
@@ -1989,8 +1990,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         {
           kind: "sms",
           direction: "outbound",
-          body:
-            "No need — Rachel already pulled everything. Just bring photo ID and yourself :)",
+          body: "No need — Rachel already pulled everything. Just bring photo ID and yourself :)",
           occurredAt: hrsAgo(27),
           isRead: true,
         },
@@ -2004,8 +2004,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         {
           kind: "sms",
           direction: "inbound",
-          body:
-            "One more thing — my sister Lisa is asking if she can come for moral support. Is that ok?",
+          body: "One more thing — my sister Lisa is asking if she can come for moral support. Is that ok?",
           occurredAt: hrsAgo(2),
           isRead: false,
         },
@@ -2078,8 +2077,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         {
           kind: "sms",
           direction: "inbound",
-          body:
-            "Counsel — sending over the proposed protective order on the Williams matter shortly. Will include the redaction schedule.",
+          body: "Counsel — sending over the proposed protective order on the Williams matter shortly. Will include the redaction schedule.",
           // Filed per-item to Williams since this number touches multiple matters.
           matterId: matters.williams.id,
           occurredAt: daysAgoMsg(3),
@@ -2106,8 +2104,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         {
           kind: "sms",
           direction: "inbound",
-          body:
-            "Following up on our call — sending discovery responses for Aurora today. Will need a 7-day extension on the Williams interrogatories.",
+          body: "Following up on our call — sending discovery responses for Aurora today. Will need a 7-day extension on the Williams interrogatories.",
           // Two matters mentioned but the actionable ask is Aurora —
           // file there. The unfiled-at-thread design lets the user
           // re-file if the read changes.
@@ -2127,8 +2124,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         {
           kind: "sms",
           direction: "outbound",
-          body:
-            "Priya — your initial intake form went out via DocuSign just now. Should hit your inbox in a minute.",
+          body: "Priya — your initial intake form went out via DocuSign just now. Should hit your inbox in a minute.",
           occurredAt: hrsAgo(50),
           isRead: true,
         },
@@ -2142,8 +2138,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         {
           kind: "sms",
           direction: "inbound",
-          body:
-            "Done. Let me know if anything else is needed before our meeting next week.",
+          body: "Done. Let me know if anything else is needed before our meeting next week.",
           occurredAt: hrsAgo(48),
           isRead: true,
         },
@@ -2159,8 +2154,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         {
           kind: "sms",
           direction: "inbound",
-          body:
-            "Hi — I was given your number by Maria Alvarez. I think I have a similar case to hers (excessive force in Aurora last September). Would you have time to talk this week?",
+          body: "Hi — I was given your number by Maria Alvarez. I think I have a similar case to hers (excessive force in Aurora last September). Would you have time to talk this week?",
           occurredAt: minsAgo(20),
           isRead: false,
         },
@@ -2176,8 +2170,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         {
           kind: "sms",
           direction: "outbound",
-          body:
-            "Dr. Singh — checking on availability for a deposition the week of June 16. Williams matter, ortho damages testimony.",
+          body: "Dr. Singh — checking on availability for a deposition the week of June 16. Williams matter, ortho damages testimony.",
           matterId: matters.williams.id,
           occurredAt: daysAgoMsg(2),
           isRead: true,
@@ -2185,8 +2178,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         {
           kind: "sms",
           direction: "inbound",
-          body:
-            "Tuesday June 17 afternoon works. I can do morning if needed. Will need the updated MRI scans 48 hrs in advance.",
+          body: "Tuesday June 17 afternoon works. I can do morning if needed. Will need the updated MRI scans 48 hrs in advance.",
           matterId: matters.williams.id,
           occurredAt: daysAgoMsg(2),
           isRead: true,
@@ -2204,8 +2196,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         {
           kind: "sms",
           direction: "inbound",
-          body:
-            "Per our call — invoice for the Alvarez record review will go out Friday. $1,850 flat.",
+          body: "Per our call — invoice for the Alvarez record review will go out Friday. $1,850 flat.",
           matterId: matters.alvarez.id,
           occurredAt: hrsAgo(19),
           isRead: false,
@@ -2241,10 +2232,8 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
           providerEventId: `seed-${thread.id}-${idx}`,
           kind: it.kind,
           direction: it.direction,
-          fromNumber:
-            it.direction === "inbound" ? t.contactPhone : FIRM_NUMBER,
-          toNumber:
-            it.direction === "inbound" ? FIRM_NUMBER : t.contactPhone,
+          fromNumber: it.direction === "inbound" ? t.contactPhone : FIRM_NUMBER,
+          toNumber: it.direction === "inbound" ? FIRM_NUMBER : t.contactPhone,
           body: it.body ?? null,
           callDurationSec: it.callDurationSec ?? null,
           callStatus: it.callStatus ?? null,
@@ -2258,9 +2247,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
       messengerItemsCreated++;
     }
   }
-  console.log(
-    `   ${messengerSeeds.length} messenger threads · ${messengerItemsCreated} items`
-  );
+  console.log(`   ${messengerSeeds.length} messenger threads · ${messengerItemsCreated} items`);
 
   // ─────────────────────────────────────────────────────────────────────
   // Inbox-action examples — a task / note / deadline spawned from
@@ -2323,8 +2310,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
         matterId: matters.aurora.id,
         messengerItemId: aurorVoicemailOrSms.id,
         title: "Aurora interrogatories — opposing extension request",
-        description:
-          "Counsel asked for a 7-day extension via text. Granting puts the cutoff here.",
+        description: "Counsel asked for a 7-day extension via text. Granting puts the cutoff here.",
         kind: "manual",
         dueDate: dayOnly(7),
         ownerId: jason.id,
@@ -2695,10 +2681,7 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
     perCommTimeCount++;
   }
   if (sampleVoicemail) {
-    const matterId =
-      sampleVoicemail.matterId ??
-      sampleVoicemail.thread?.defaultMatterId ??
-      null;
+    const matterId = sampleVoicemail.matterId ?? sampleVoicemail.thread?.defaultMatterId ?? null;
     if (matterId) {
       await prisma.timeEntry.create({
         data: {
@@ -2748,7 +2731,9 @@ Early-bird pricing through the end of this month. Agenda + speakers attached.
   console.log(`   ${counts[10]} messenger threads`);
   console.log(`   ${counts[11]} messenger items`);
 
-  console.log("\n🔐 Staff sign in through Clerk with a matching @kosloskilaw.com email (e.g. jkosloski@kosloskilaw.com).");
+  console.log(
+    "\n🔐 Staff sign in through Clerk with a matching @kosloskilaw.com email (e.g. jkosloski@kosloskilaw.com).",
+  );
 }
 
 main()

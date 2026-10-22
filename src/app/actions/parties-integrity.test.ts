@@ -32,10 +32,7 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(),
 }));
 
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
   createMatterContact,
@@ -74,19 +71,13 @@ beforeEach(async () => {
   const { firmId } = await seedFirm();
   userId = (await seedUser({ firmId })).userId;
   const { areaId, stageId } = await seedPracticeArea();
-  matterId = (
-    await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId })
-  ).matterId;
+  matterId = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId })).matterId;
   mockedRequirePermission.mockResolvedValue(userId);
   mockedHasPermission.mockResolvedValue(true);
 });
 
 const add = (fields: Record<string, string>) =>
-  createMatterContact(
-    matterId,
-    partyInitialState,
-    form({ contactMode: "__new__", ...fields })
-  );
+  createMatterContact(matterId, partyInitialState, form({ contactMode: "__new__", ...fields }));
 
 describe("permission keys", () => {
   test("each action gates on its own granular key", async () => {
@@ -96,11 +87,7 @@ describe("permission keys", () => {
     });
     await add({ category: "other", newContactName: "Y" });
     expect(mockedRequirePermission).toHaveBeenLastCalledWith("parties.create");
-    await updateMatterContact(
-      mc.id,
-      partyInitialState,
-      form({ contactName: "X" })
-    );
+    await updateMatterContact(mc.id, partyInitialState, form({ contactName: "X" }));
     expect(mockedRequirePermission).toHaveBeenLastCalledWith("parties.edit");
     await removeMatterContact(mc.id);
     expect(mockedRequirePermission).toHaveBeenLastCalledWith("parties.delete");
@@ -108,9 +95,7 @@ describe("permission keys", () => {
 
   test("a denied gate stops before touching the database", async () => {
     mockedRequirePermission.mockRejectedValue(new Error("NEXT_REDIRECT"));
-    await expect(
-      add({ category: "other", newContactName: "Nope" })
-    ).rejects.toThrow();
+    await expect(add({ category: "other", newContactName: "Nope" })).rejects.toThrow();
     expect(await prisma.contact.count()).toBe(0);
   });
 });
@@ -132,9 +117,9 @@ describe("createMatterContact - new contact type", () => {
     ["opposing counsel"],
     ["  OPPOSING-COUNSEL "],
   ])("opposing subrole %j creates an opposing_counsel contact", async (role) => {
-    expect(
-      await typeOf({ category: "opposing", newContactName: "Jane", role })
-    ).toBe("opposing_counsel");
+    expect(await typeOf({ category: "opposing", newContactName: "Jane", role })).toBe(
+      "opposing_counsel",
+    );
   });
 
   test("other opposing subroles stay 'other' (defendant is not counsel)", async () => {
@@ -143,20 +128,14 @@ describe("createMatterContact - new contact type", () => {
         category: "opposing",
         newContactName: "Acme",
         role: "Defendant",
-      })
+      }),
     ).toBe("other");
   });
 
   test("categories map to client / expert / witness", async () => {
-    expect(await typeOf({ category: "client", newContactName: "C" })).toBe(
-      "client"
-    );
-    expect(
-      await typeOf({ category: "expert_witness", newContactName: "E" })
-    ).toBe("expert");
-    expect(
-      await typeOf({ category: "lay_witness", newContactName: "W" })
-    ).toBe("witness");
+    expect(await typeOf({ category: "client", newContactName: "C" })).toBe("client");
+    expect(await typeOf({ category: "expert_witness", newContactName: "E" })).toBe("expert");
+    expect(await typeOf({ category: "lay_witness", newContactName: "W" })).toBe("witness");
   });
 
   test("the single phone becomes a primary ContactPhone row", async () => {
@@ -267,9 +246,7 @@ describe("createMatterContact - representation", () => {
     });
     expect(mc.isRepresented).toBeNull();
     expect(mc.representationContactId).toBeNull();
-    expect(
-      await prisma.contact.count({ where: { name: "Should Not Exist" } })
-    ).toBe(0);
+    expect(await prisma.contact.count({ where: { name: "Should Not Exist" } })).toBe(0);
   });
 
   test("an unknown attorney id rolls the whole add back (no orphan contact)", async () => {
@@ -282,9 +259,7 @@ describe("createMatterContact - representation", () => {
     });
     expect(res.status).toBe("error");
     expect(res.errors?.representationContactId?.[0]).toMatch(/no longer exists/i);
-    expect(await prisma.contact.count({ where: { name: "Orphan Risk" } })).toBe(
-      0
-    );
+    expect(await prisma.contact.count({ where: { name: "Orphan Risk" } })).toBe(0);
     expect(await prisma.matterContact.count({ where: { matterId } })).toBe(0);
   });
 
@@ -333,7 +308,7 @@ describe("createMatterContact - stale picks", () => {
         category: "lay_witness",
         contactMode: "__existing__",
         contactId: "gone",
-      })
+      }),
     );
     expect(missing.status).toBe("error");
     expect(missing.errors?.contactId?.[0]).toMatch(/no longer exists/i);
@@ -346,7 +321,7 @@ describe("createMatterContact - stale picks", () => {
         category: "lay_witness",
         contactMode: "__existing__",
         contactId: inactive,
-      })
+      }),
     );
     expect(res.errors?.contactId?.[0]).toMatch(/inactive/i);
 
@@ -363,7 +338,7 @@ describe("createMatterContact - stale picks", () => {
         category: "lay_witness",
         contactMode: "__existing__",
         contactId: merged,
-      })
+      }),
     );
     expect(res2.errors?.contactId?.[0]).toMatch(/merged/i);
     expect(await prisma.matterContact.count({ where: { matterId } })).toBe(0);
@@ -377,7 +352,7 @@ describe("createMatterContact - stale picks", () => {
         category: "other",
         contactMode: "__new__",
         newContactName: "Z",
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?._form?.[0]).toMatch(/matter not found/i);
@@ -434,15 +409,13 @@ function editForm(over: Record<string, string> = {}): FormData {
   });
 }
 
-const phoneJson = (
-  entries: Array<{ label?: string; number: string; isPrimary?: boolean }>
-) =>
+const phoneJson = (entries: Array<{ label?: string; number: string; isPrimary?: boolean }>) =>
   JSON.stringify(
     entries.map((e) => ({
       label: e.label ?? "",
       number: e.number,
       isPrimary: e.isPrimary ?? false,
-    }))
+    })),
   );
 
 describe("updateMatterContact - phones", () => {
@@ -456,7 +429,7 @@ describe("updateMatterContact - phones", () => {
     const res = await updateMatterContact(
       matterContactId,
       partyInitialState,
-      editForm({ phones: "{not json" })
+      editForm({ phones: "{not json" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.phones).toBeDefined();
@@ -476,7 +449,7 @@ describe("updateMatterContact - phones", () => {
             number: "(303) 555-0101",
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.phones?.[0]).toMatch(/40/);
@@ -491,7 +464,7 @@ describe("updateMatterContact - phones", () => {
     const res = await updateMatterContact(
       matterContactId,
       partyInitialState,
-      editForm({ phones: phoneJson(many) })
+      editForm({ phones: phoneJson(many) }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.phones).toBeDefined();
@@ -502,7 +475,7 @@ describe("updateMatterContact - phones", () => {
     const res = await updateMatterContact(
       matterContactId,
       partyInitialState,
-      editForm({ notes: "no phones field posted" })
+      editForm({ notes: "no phones field posted" }),
     );
     expect(res.status).toBe("ok");
     expect(await prisma.contactPhone.count({ where: { contactId } })).toBe(2);
@@ -519,7 +492,7 @@ describe("updateMatterContact - phones", () => {
           { number: "(720) 555-0002", isPrimary: true },
           { number: "(720) 555-0003" },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const rows = await prisma.contactPhone.findMany({
@@ -541,9 +514,7 @@ describe("updateMatterContact - phones", () => {
 });
 
 describe("updateMatterContact - concurrent contact edits", () => {
-  const phones = [
-    { label: "Mobile", number: "(303) 555-0100", isPrimary: true },
-  ];
+  const phones = [{ label: "Mobile", number: "(303) 555-0100", isPrimary: true }];
   const loaded = {
     origContactName: "Maria Alvarez",
     origContactEmail: "maria@example.com",
@@ -574,7 +545,7 @@ describe("updateMatterContact - concurrent contact edits", () => {
         ...loaded,
         notes: "only notes changed",
         phones: phoneJson(phones), // stale snapshot
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const c = await prisma.contact.findUniqueOrThrow({
@@ -603,7 +574,7 @@ describe("updateMatterContact - concurrent contact edits", () => {
         contactEmail: "mine@example.com",
         notes: "should not land",
         phones: phoneJson(phones),
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?._form?.[0]).toMatch(/email changed since you opened/i);
@@ -629,7 +600,7 @@ describe("updateMatterContact - concurrent contact edits", () => {
         ...loaded,
         contactOrganization: "Alvarez Co",
         phones: phoneJson(phones),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const c = await prisma.contact.findUniqueOrThrow({
@@ -657,7 +628,7 @@ describe("updateMatterContact - concurrent contact edits", () => {
         notes: "still saves",
         phones: phoneJson(phones),
         origPhones: phoneJson(phones),
-      })
+      }),
     );
     expect(odd.status).toBe("ok");
 
@@ -669,7 +640,7 @@ describe("updateMatterContact - concurrent contact edits", () => {
         origContactEmail: "legacy-odd-email",
         phones: phoneJson(phones),
         origPhones: phoneJson(phones),
-      })
+      }),
     );
     expect(bad.status).toBe("error");
     expect(bad.errors?.contactEmail).toBeDefined();
@@ -687,7 +658,7 @@ describe("updateMatterContact - stale party and representation", () => {
     const res = await updateMatterContact(
       matterContactId,
       partyInitialState,
-      editForm({ notes: "x" })
+      editForm({ notes: "x" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?._form?.[0]).toMatch(/removed/i);
@@ -697,17 +668,17 @@ describe("updateMatterContact - stale party and representation", () => {
     const { matterContactId } = await seedParty({});
     // Simulate the race: the pre-read sees the row, the update does not.
     const real = prisma.matterContact.findUnique.bind(prisma.matterContact);
-    const spy = vi
-      .spyOn(prisma.matterContact, "findUnique")
-      .mockImplementationOnce(((args: Parameters<typeof real>[0]) =>
-        real(args).then(async (r) => {
-          await prisma.matterContact.delete({ where: { id: matterContactId } });
-          return r;
-        })) as typeof real);
+    const spy = vi.spyOn(prisma.matterContact, "findUnique").mockImplementationOnce(((
+      args: Parameters<typeof real>[0],
+    ) =>
+      real(args).then(async (r) => {
+        await prisma.matterContact.delete({ where: { id: matterContactId } });
+        return r;
+      })) as typeof real);
     const res = await updateMatterContact(
       matterContactId,
       partyInitialState,
-      editForm({ notes: "x" })
+      editForm({ notes: "x" }),
     );
     spy.mockRestore();
     expect(res.status).toBe("error");
@@ -731,16 +702,14 @@ describe("updateMatterContact - stale party and representation", () => {
         representation: "yes",
         representationContactMode: "__existing__",
         representationContactId: atty,
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const mc = await prisma.matterContact.findUniqueOrThrow({
       where: { id: matterContactId },
     });
     expect(mc.representationContactId).toBe(atty);
-    expect(
-      await prisma.contact.count({ where: { type: "opposing_counsel" } })
-    ).toBe(1);
+    expect(await prisma.contact.count({ where: { type: "opposing_counsel" } })).toBe(1);
   });
 
   test("switching to a different, inactive attorney is refused", async () => {
@@ -757,7 +726,7 @@ describe("updateMatterContact - stale party and representation", () => {
         representation: "yes",
         representationContactMode: "__existing__",
         representationContactId: other,
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.representationContactId?.[0]).toMatch(/inactive/i);
@@ -773,7 +742,7 @@ describe("updateMatterContact - stale party and representation", () => {
         representationContactMode: "__new__",
         newRepresentationName: "Atty",
         newRepresentationEmail: "nope",
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.newRepresentationEmail).toBeDefined();

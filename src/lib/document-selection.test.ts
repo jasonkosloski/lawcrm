@@ -32,7 +32,12 @@ describe("applyClick", () => {
   });
 
   test("shift selects the span from the anchor, either direction", () => {
-    const s = applyClick(applyClick(EMPTY_SELECTION, docKey("c"), order, plain), folderKey("f1"), order, range);
+    const s = applyClick(
+      applyClick(EMPTY_SELECTION, docKey("c"), order, plain),
+      folderKey("f1"),
+      order,
+      range,
+    );
     expect(s.keys).toEqual(new Set([folderKey("f1"), docKey("a"), docKey("b"), docKey("c")]));
     expect(s.anchor).toBe(docKey("c"));
   });
@@ -71,8 +76,16 @@ describe("moveBlockReason", () => {
     { id: "C", parentId: "B", name: "C", order: 0 },
     { id: "D", parentId: null, name: "D", order: 1 },
   ];
-  const doc = (folderId: string | null, isAttachment = false) => ({ id: "d", folderId, isAttachment });
-  const folder = (id: string, parentId: string | null, isProtected = false) => ({ id, parentId, isProtected });
+  const doc = (folderId: string | null, isAttachment = false) => ({
+    id: "d",
+    folderId,
+    isAttachment,
+  });
+  const folder = (id: string, parentId: string | null, isProtected = false) => ({
+    id,
+    parentId,
+    isProtected,
+  });
 
   test("documents move anywhere but where they are", () => {
     expect(moveBlockReason({ docs: [doc(null)], folders: [] }, "C", folders)).toBeNull();
@@ -85,13 +98,21 @@ describe("moveBlockReason", () => {
   });
 
   test("attachments and generated folders never move", () => {
-    expect(moveBlockReason({ docs: [doc(null, true)], folders: [] }, "D", folders)).toMatch(/attachments/);
-    expect(moveBlockReason({ docs: [], folders: [folder("D", null, true)] }, "A", folders)).toMatch(/records request/);
+    expect(moveBlockReason({ docs: [doc(null, true)], folders: [] }, "D", folders)).toMatch(
+      /attachments/,
+    );
+    expect(moveBlockReason({ docs: [], folders: [folder("D", null, true)] }, "A", folders)).toMatch(
+      /records request/,
+    );
   });
 
   test("a folder can't go into itself or its subtree", () => {
-    expect(moveBlockReason({ docs: [], folders: [folder("A", null)] }, "A", folders)).toMatch(/into itself/);
-    expect(moveBlockReason({ docs: [], folders: [folder("A", null)] }, "C", folders)).toMatch(/into itself/);
+    expect(moveBlockReason({ docs: [], folders: [folder("A", null)] }, "A", folders)).toMatch(
+      /into itself/,
+    );
+    expect(moveBlockReason({ docs: [], folders: [folder("A", null)] }, "C", folders)).toMatch(
+      /into itself/,
+    );
     expect(moveBlockReason({ docs: [], folders: [folder("B", "A")] }, "D", folders)).toBeNull();
     expect(moveBlockReason({ docs: [], folders: [folder("B", "A")] }, null, folders)).toBeNull();
   });
@@ -103,8 +124,14 @@ describe("moveBlockReason", () => {
       name: `L${i + 1}`,
       order: 0,
     }));
-    const all = [...chain, { id: "X", parentId: null, name: "X", order: 1 }, { id: "Y", parentId: "X", name: "Y", order: 0 }];
-    expect(moveBlockReason({ docs: [], folders: [folder("X", null)] }, "L7", all)).toMatch(/levels deep/);
+    const all = [
+      ...chain,
+      { id: "X", parentId: null, name: "X", order: 1 },
+      { id: "Y", parentId: "X", name: "Y", order: 0 },
+    ];
+    expect(moveBlockReason({ docs: [], folders: [folder("X", null)] }, "L7", all)).toMatch(
+      /levels deep/,
+    );
     expect(moveBlockReason({ docs: [], folders: [folder("Y", "X")] }, "L7", all)).toBeNull();
   });
 

@@ -22,9 +22,7 @@ export function RequiredFieldsGroup({
 }) {
   return (
     <fieldset className="flex flex-col gap-2 px-3 py-2.5 rounded-md border border-line bg-paper-2/30">
-      <legend className="px-1 text-2xs font-medium text-ink-3">
-        Required at creation
-      </legend>
+      <legend className="px-1 text-2xs font-medium text-ink-3">Required at creation</legend>
       <input type="hidden" name="requiredMatterFieldsPresent" value="1" />
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5">
         {REQUIRED_MATTER_FIELDS.map((f) => (
@@ -48,13 +46,10 @@ export function RequiredFieldsGroup({
         ))}
       </div>
       <p className="text-2xs text-ink-4 leading-relaxed">
-        New matters in this area can&rsquo;t be created without these.
-        Existing matters aren&rsquo;t affected unless someone clears a value
-        they already had.
+        New matters in this area can&rsquo;t be created without these. Existing matters aren&rsquo;t
+        affected unless someone clears a value they already had.
       </p>
-      {error && error.length > 0 && (
-        <div className="text-2xs text-warn">{error[0]}</div>
-      )}
+      {error && error.length > 0 && <div className="text-2xs text-warn">{error[0]}</div>}
     </fieldset>
   );
 }

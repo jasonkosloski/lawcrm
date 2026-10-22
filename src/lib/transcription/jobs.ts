@@ -52,9 +52,7 @@ export async function drainTranscriptPurges(): Promise<{
       await prisma.transcriptPurge.deleteMany({ where: { id: r.id } });
       out.deleted++;
     } else if (Date.now() - r.createdAt.getTime() > PURGE_GIVE_UP_MS) {
-      console.warn(
-        `[transcription] giving up deleting provider job ${r.providerJobId}`,
-      );
+      console.warn(`[transcription] giving up deleting provider job ${r.providerJobId}`);
       await prisma.transcriptPurge.deleteMany({ where: { id: r.id } });
       out.gaveUp++;
     } else {
@@ -77,9 +75,7 @@ export type FinishOutcome = "completed" | "failed" | "pending" | "gone";
  * with the same provider job id, so a duplicate webhook, a sweep racing
  * a webhook, or a re-run that replaced the job writes nothing twice.
  */
-export async function finishTranscriptJob(
-  transcriptId: string,
-): Promise<FinishOutcome> {
+export async function finishTranscriptJob(transcriptId: string): Promise<FinishOutcome> {
   const t = await prisma.transcript.findUnique({
     where: { id: transcriptId },
     include: {
@@ -161,50 +157,50 @@ export async function finishTranscriptJob(
   }
 
   const result = normalizeAssemblyAI(job.raw);
-  const speakers = Object.fromEntries(
-    result.speakers.map((label) => [label, `Speaker ${label}`]),
-  );
+  const speakers = Object.fromEntries(result.speakers.map((label) => [label, `Speaker ${label}`]));
 
   // A write that keeps failing (e.g. a transcript too big for the
   // transaction) would otherwise leave the job `processing` and refetch
   // it every sweep forever: rethrow until the job's age limit, then fail.
-  const won = await prisma.$transaction(async (tx) => {
-    const res = await tx.transcript.updateMany({
-      where: inFlight,
-      data: {
-        status: "completed",
-        error: null,
-        durationSeconds: result.durationSeconds,
-        language: result.language,
-        speakers,
-        completedAt: new Date(),
-        webhookSecret: null,
-        correctedAt: null,
-        correctedById: null,
-      },
-    });
-    if (res.count === 0) return false;
-    await tx.transcriptSegment.deleteMany({ where: { transcriptId: t.id } });
-    // Chunked: long depositions carry thousands of segments with
-    // word-level JSON; one giant INSERT risks the statement size limit.
-    for (let i = 0; i < result.segments.length; i += SEGMENT_INSERT_CHUNK) {
-      await tx.transcriptSegment.createMany({
-        data: result.segments.slice(i, i + SEGMENT_INSERT_CHUNK).map((s) => ({
-          transcriptId: t.id,
-          index: s.index,
-          speaker: s.speaker,
-          startSeconds: s.startSeconds,
-          endSeconds: s.endSeconds,
-          text: s.text,
-          words: s.words,
-        })),
+  const won = await prisma
+    .$transaction(async (tx) => {
+      const res = await tx.transcript.updateMany({
+        where: inFlight,
+        data: {
+          status: "completed",
+          error: null,
+          durationSeconds: result.durationSeconds,
+          language: result.language,
+          speakers,
+          completedAt: new Date(),
+          webhookSecret: null,
+          correctedAt: null,
+          correctedById: null,
+        },
       });
-    }
-    return true;
-  }, COMPLETE_TX_OPTIONS).catch((err: unknown) => {
-    if (timedOut) return "save-failed" as const;
-    throw err;
-  });
+      if (res.count === 0) return false;
+      await tx.transcriptSegment.deleteMany({ where: { transcriptId: t.id } });
+      // Chunked: long depositions carry thousands of segments with
+      // word-level JSON; one giant INSERT risks the statement size limit.
+      for (let i = 0; i < result.segments.length; i += SEGMENT_INSERT_CHUNK) {
+        await tx.transcriptSegment.createMany({
+          data: result.segments.slice(i, i + SEGMENT_INSERT_CHUNK).map((s) => ({
+            transcriptId: t.id,
+            index: s.index,
+            speaker: s.speaker,
+            startSeconds: s.startSeconds,
+            endSeconds: s.endSeconds,
+            text: s.text,
+            words: s.words,
+          })),
+        });
+      }
+      return true;
+    }, COMPLETE_TX_OPTIONS)
+    .catch((err: unknown) => {
+      if (timedOut) return "save-failed" as const;
+      throw err;
+    });
   if (won === "save-failed") {
     console.warn("[transcription] completion write failed past the job age limit", t.id);
     return fail("Couldn't save the transcript");

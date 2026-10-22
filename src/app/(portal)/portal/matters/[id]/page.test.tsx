@@ -81,13 +81,11 @@ beforeEach(async () => {
 
 describe("portal matter page", () => {
   test("matter page 404s for an un-invited matter and shows the name for an invited one", async () => {
-    await expect(
-      PortalMatterPage({ params: Promise.resolve({ id: other }) }),
-    ).rejects.toThrow("NEXT_NOT_FOUND");
-
-    render(
-      await PortalMatterPage({ params: Promise.resolve({ id: invited }) }),
+    await expect(PortalMatterPage({ params: Promise.resolve({ id: other }) })).rejects.toThrow(
+      "NEXT_NOT_FOUND",
     );
+
+    render(await PortalMatterPage({ params: Promise.resolve({ id: invited }) }));
     expect(screen.getByText("Smith Estate")).toBeTruthy();
     expect(screen.getByText("Requested from you")).toBeTruthy();
     expect(screen.getByText("Nothing requested right now")).toBeTruthy();
@@ -133,9 +131,7 @@ describe("portal matter page", () => {
         fileSize: 100,
       },
     });
-    render(
-      await PortalMatterPage({ params: Promise.resolve({ id: invited }) }),
-    );
+    render(await PortalMatterPage({ params: Promise.resolve({ id: invited }) }));
     expect(screen.getByText("Bank statements")).toBeTruthy();
     expect(screen.getByText("Last 3 months")).toBeTruthy();
     expect(screen.getByText("Overdue")).toBeTruthy();
@@ -145,9 +141,7 @@ describe("portal matter page", () => {
     expect(screen.getByText("Done (1)")).toBeTruthy();
     expect(screen.queryByText("Dropped")).toBeNull();
     const link = screen.getByText("Engagement letter.pdf").closest("a");
-    expect(link?.getAttribute("href")).toMatch(
-      /^\/api\/documents\/.+\/download$/,
-    );
+    expect(link?.getAttribute("href")).toMatch(/^\/api\/documents\/.+\/download$/);
     expect(screen.getByText("my-id.jpg")).toBeTruthy();
     // one uploader per open request plus the general one
     expect(screen.getAllByTestId("uploader")).toHaveLength(3);
@@ -178,9 +172,7 @@ describe("portal matter page billing", () => {
       },
     });
     // Switch off: no section.
-    const off = render(
-      await PortalMatterPage({ params: Promise.resolve({ id: invited }) }),
-    );
+    const off = render(await PortalMatterPage({ params: Promise.resolve({ id: invited }) }));
     expect(screen.queryByRole("heading", { name: "Billing" })).toBeNull();
     off.unmount();
     // Switch on: section with the invoice.
@@ -188,9 +180,7 @@ describe("portal matter page billing", () => {
       where: { id: invited },
       data: { portalBillingEnabled: true },
     });
-    render(
-      await PortalMatterPage({ params: Promise.resolve({ id: invited }) }),
-    );
+    render(await PortalMatterPage({ params: Promise.resolve({ id: invited }) }));
     expect(screen.getByRole("heading", { name: "Billing" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "INV-9" })).toBeTruthy();
   });

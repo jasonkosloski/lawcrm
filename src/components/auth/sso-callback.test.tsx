@@ -35,18 +35,14 @@ describe("SsoCallback", () => {
     act(() => {
       vi.advanceTimersByTime(SSO_CALLBACK_TIMEOUT_MS + 1);
     });
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Sign-in didn't complete."
-    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Sign-in didn't complete.");
     expect(screen.getByRole("link")).toHaveAttribute("href", "/login");
   });
 
   test("shows the failure message when the callback throws", () => {
     throwInCallback = true;
     render(<SsoCallback next="/" />);
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Sign-in didn't complete."
-    );
+    expect(screen.getByRole("alert")).toHaveTextContent("Sign-in didn't complete.");
     expect(screen.getByRole("link")).toHaveAttribute("href", "/login");
   });
 

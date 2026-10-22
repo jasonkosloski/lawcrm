@@ -22,7 +22,7 @@ async function main() {
     console.log(
       dryRun
         ? `[dry run] ${missing} matter(s) missing a client party row.`
-        : `${missing} matter(s) missing a client party row; ${created} row(s) created.`
+        : `${missing} matter(s) missing a client party row; ${created} row(s) created.`,
     );
   } finally {
     await prisma.$disconnect();

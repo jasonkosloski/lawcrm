@@ -87,9 +87,7 @@ describe("TaskStatusToggle", () => {
     const user = setupUser();
     render(<TaskStatusToggle taskId="t1" status="open" canEdit />);
     await user.click(screen.getByRole("button", { name: /mark task done/i }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("Task not found")
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Task not found"));
   });
 
   test("without tasks.edit it is a read-only indicator, not a button", () => {
@@ -108,9 +106,7 @@ describe("TaskRowMenu", () => {
     render(<TaskRowMenu task={task} assignees={[]} {...all} />);
     await user.click(screen.getByRole("button", { name: /task actions/i }));
     await user.click(await screen.findByText("Delete"));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("Task not found")
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Task not found"));
   });
 
   test("a viewer with only tasks.edit sees Edit and statuses, nothing else", async () => {
@@ -124,7 +120,7 @@ describe("TaskRowMenu", () => {
         canLogTime={false}
         canAddNote={false}
         canConvert={false}
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: /task actions/i }));
     await screen.findByText("Edit");
@@ -145,7 +141,7 @@ describe("TaskRowMenu", () => {
         canLogTime={false}
         canAddNote={false}
         canConvert={false}
-      />
+      />,
     );
     expect(screen.queryByRole("button", { name: /task actions/i })).toBeNull();
   });

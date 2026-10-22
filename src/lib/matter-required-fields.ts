@@ -13,15 +13,11 @@ export const REQUIRED_MATTER_FIELDS = [
 
 export type RequiredMatterField = (typeof REQUIRED_MATTER_FIELDS)[number]["key"];
 
-export type RequiredFieldValues = Partial<
-  Record<RequiredMatterField, string | null | undefined>
->;
+export type RequiredFieldValues = Partial<Record<RequiredMatterField, string | null | undefined>>;
 
 export const requiredFieldError = "Required for this practice area.";
 
-const KEYS: ReadonlySet<string> = new Set(
-  REQUIRED_MATTER_FIELDS.map((f) => f.key),
-);
+const KEYS: ReadonlySet<string> = new Set(REQUIRED_MATTER_FIELDS.map((f) => f.key));
 
 export function isRequiredMatterField(k: string): k is RequiredMatterField {
   return KEYS.has(k);

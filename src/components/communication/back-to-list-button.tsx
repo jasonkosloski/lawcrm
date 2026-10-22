@@ -20,9 +20,7 @@ export function BackToListButton() {
 
   const params = new URLSearchParams(sp.toString());
   params.delete("thread");
-  const href = params.toString()
-    ? `${pathname}?${params.toString()}`
-    : pathname;
+  const href = params.toString() ? `${pathname}?${params.toString()}` : pathname;
 
   return (
     <Link

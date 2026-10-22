@@ -12,42 +12,23 @@
  * in src/lib/party-constants.ts.
  */
 
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  PartyComposer,
-  type ContactOption,
-} from "@/components/matters/parties/party-composer";
+import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PartyComposer, type ContactOption } from "@/components/matters/parties/party-composer";
 import { PartyRowView } from "@/components/matters/parties/party-row-view";
 import { prisma } from "@/lib/prisma";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { getMatterParties, type PartyRow } from "@/lib/queries/matter-detail";
-import {
-  PARTY_CATEGORIES,
-  PARTY_CATEGORY_LABEL,
-  type PartyCategory,
-} from "@/lib/party-constants";
+import { PARTY_CATEGORIES, PARTY_CATEGORY_LABEL, type PartyCategory } from "@/lib/party-constants";
 import { requireUser } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
 
-export default async function MatterPartiesPage({
-  params,
-}: PageProps<"/matters/[id]">) {
+export default async function MatterPartiesPage({ params }: PageProps<"/matters/[id]">) {
   await requireUser();
   const { id } = await params;
   await assertMatterAccess(id);
 
-  const [parties, contacts, canEditContact, canCreate, canEdit, canDelete] =
-    await Promise.all([
+  const [parties, contacts, canEditContact, canCreate, canEdit, canDelete] = await Promise.all([
     getMatterParties(id),
     // All active contacts feed the composer's typeahead. Small
     // dataset for a firm so passing them all is fine; revisit with
@@ -81,9 +62,7 @@ export default async function MatterPartiesPage({
   // backfill migration) get dumped under "other" so nothing disappears.
   const byCategory = new Map<string, PartyRow[]>();
   for (const p of parties) {
-    const cat = (PARTY_CATEGORIES as readonly string[]).includes(p.category)
-      ? p.category
-      : "other";
+    const cat = (PARTY_CATEGORIES as readonly string[]).includes(p.category) ? p.category : "other";
     if (!byCategory.has(cat)) byCategory.set(cat, []);
     byCategory.get(cat)!.push(p);
   }
@@ -139,16 +118,12 @@ function CategorySection({
   // Matter.clientId row is always visible at a glance.
   const sortedRows =
     category === "client"
-      ? [...rows].sort(
-          (a, b) => Number(b.isPrimaryClient) - Number(a.isPrimaryClient)
-        )
+      ? [...rows].sort((a, b) => Number(b.isPrimaryClient) - Number(a.isPrimaryClient))
       : rows;
   return (
     <section>
       <div className="flex items-center gap-2 mb-2">
-        <h2 className="text-2xs font-medium text-ink-3">
-          {PARTY_CATEGORY_LABEL[category]}
-        </h2>
+        <h2 className="text-2xs font-medium text-ink-3">{PARTY_CATEGORY_LABEL[category]}</h2>
         <span className="text-2xs font-mono text-ink-4">{sortedRows.length}</span>
       </div>
       <Card className="p-0 overflow-hidden">
@@ -179,9 +154,7 @@ function CategorySection({
                   canDelete={canDelete}
                   colSpan={
                     // name + subrole + contact + notes + actions = 5
-                    5 +
-                    (showsOrganization ? 1 : 0) +
-                    (showsRepresentation ? 1 : 0)
+                    5 + (showsOrganization ? 1 : 0) + (showsRepresentation ? 1 : 0)
                   }
                 />
               ))}
@@ -190,15 +163,10 @@ function CategorySection({
         )}
         {canCreate && (
           <CardContent className="px-4 py-3 border-t border-line">
-            <PartyComposer
-              matterId={matterId}
-              category={category}
-              contacts={contacts}
-            />
+            <PartyComposer matterId={matterId} category={category} contacts={contacts} />
           </CardContent>
         )}
       </Card>
     </section>
   );
 }
-

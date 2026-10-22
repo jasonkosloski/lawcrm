@@ -13,10 +13,7 @@ const LIFETIME_MS = {
  * purpose) is marked used first, so only the newest link works.
  * Returns the raw token; only its hash is stored.
  */
-export async function issueToken(
-  identityId: string,
-  purpose: "login" | "invite"
-): Promise<string> {
+export async function issueToken(identityId: string, purpose: "login" | "invite"): Promise<string> {
   const raw = newSecret();
   const now = new Date();
   await prisma.$transaction([
@@ -40,9 +37,7 @@ export async function issueToken(
  * Consume a token. One conditional update decides the winner, so two
  * concurrent callers can never both succeed.
  */
-export async function consumeToken(
-  raw: string
-): Promise<{ identityId: string } | null> {
+export async function consumeToken(raw: string): Promise<{ identityId: string } | null> {
   const tokenHash = hashSecret(raw);
   const now = new Date();
   const { count } = await prisma.portalLoginToken.updateMany({

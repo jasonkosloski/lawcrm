@@ -113,7 +113,7 @@ function parseMediaUrls(raw: unknown): MessengerItemRow["mediaUrls"] {
   return raw
     .filter(
       (m): m is { url: string } =>
-        typeof m === "object" && m !== null && typeof (m as { url: unknown }).url === "string"
+        typeof m === "object" && m !== null && typeof (m as { url: unknown }).url === "string",
     )
     .map((m) => ({
       url: (m as { url: string }).url,
@@ -136,18 +136,14 @@ const UNFILED_THREAD_WHERE: Prisma.MessengerThreadWhereInput = {
  * default matter is hidden from the viewer disappears (unfiled threads
  * stay). `{}` when the viewer sees every matter.
  */
-async function threadAccessWhere(
-  userId: string
-): Promise<Prisma.MessengerThreadWhereInput> {
+async function threadAccessWhere(userId: string): Promise<Prisma.MessengerThreadWhereInput> {
   const access = await matterAccessWhere(userId);
   if (Object.keys(access).length === 0) return {};
   return { OR: [{ defaultMatterId: null }, { defaultMatter: access }] };
 }
 
 /** Same, for items filed directly to a matter. */
-async function itemAccessWhere(
-  userId: string
-): Promise<Prisma.MessengerItemWhereInput> {
+async function itemAccessWhere(userId: string): Promise<Prisma.MessengerItemWhereInput> {
   const access = await matterAccessWhere(userId);
   if (Object.keys(access).length === 0) return {};
   return { OR: [{ matterId: null }, { matter: access }] };
@@ -212,14 +208,12 @@ export async function listMessengerThreads({
           skip,
           take,
           include: messengerThreadListInclude(itemAccess),
-        })
-      )
+        }),
+      ),
   );
 }
 
-function messengerThreadListInclude(
-  itemAccess: Prisma.MessengerItemWhereInput
-) {
+function messengerThreadListInclude(itemAccess: Prisma.MessengerItemWhereInput) {
   return {
     contact: { select: { id: true, name: true, type: true } },
     defaultMatter: { select: { id: true, name: true, color: true } },
@@ -240,7 +234,7 @@ function messengerThreadListInclude(
 function toMessengerThreadRows(
   threads: Prisma.MessengerThreadGetPayload<{
     include: ReturnType<typeof messengerThreadListInclude>;
-  }>[]
+  }>[],
 ): MessengerThreadRow[] {
   return threads.map((t) => {
     const last = t.items[0];
@@ -289,9 +283,7 @@ function toMessengerThreadRows(
  */
 export function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const withoutExt = raw
-    .trim()
-    .replace(/\s*(?:x|ext\.?|extension|#)\s*\d+\s*$/i, "");
+  const withoutExt = raw.trim().replace(/\s*(?:x|ext\.?|extension|#)\s*\d+\s*$/i, "");
   const digits = withoutExt.replace(/\D/g, "");
   if (digits.length === 10) return `+1${digits}`;
   if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
@@ -316,9 +308,7 @@ export async function listMessengerThreadsForLead({
   phones: Array<string | null | undefined>;
 }): Promise<MessengerThreadRow[]> {
   const numbers = [
-    ...new Set(
-      phones.map((p) => normalizePhone(p)).filter((p): p is string => !!p)
-    ),
+    ...new Set(phones.map((p) => normalizePhone(p)).filter((p): p is string => !!p)),
   ];
   if (!contactId && numbers.length === 0) return [];
   // One person's threads (one per number they use) never fill a page.
@@ -369,9 +359,7 @@ export async function getMessengerUnreadCount(): Promise<number> {
  * matches no thread - the page then renders the empty reader rather
  * than a 404.
  */
-export async function getMessengerThread(
-  threadId: string
-): Promise<MessengerThreadDetail | null> {
+export async function getMessengerThread(threadId: string): Promise<MessengerThreadDetail | null> {
   const userId = await getCurrentUserId();
   const t = await prisma.messengerThread.findFirst({
     where: { AND: [{ id: threadId }, await threadAccessWhere(userId)] },
@@ -469,14 +457,11 @@ export type MatterMessengerItemRow = {
  */
 export async function listMessengerItemsForMatter(
   matterId: string,
-  take = 100
+  take = 100,
 ): Promise<MatterMessengerItemRow[]> {
   const items = await prisma.messengerItem.findMany({
     where: {
-      OR: [
-        { matterId },
-        { matterId: null, thread: { defaultMatterId: matterId } },
-      ],
+      OR: [{ matterId }, { matterId: null, thread: { defaultMatterId: matterId } }],
     },
     orderBy: { occurredAt: "desc" },
     take,

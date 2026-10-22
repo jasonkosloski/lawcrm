@@ -19,10 +19,7 @@ import { useActionState, useState, useTransition } from "react";
 import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { inviteFirmMember } from "@/app/actions/team";
-import {
-  teamInitialState,
-  type TeamFormState,
-} from "@/lib/team-form";
+import { teamInitialState, type TeamFormState } from "@/lib/team-form";
 import { RoleMultiSelect } from "./member-edit-form";
 import type { RoleChip } from "@/lib/queries/team";
 import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
@@ -43,10 +40,10 @@ export function InviteMemberComposer({
   viewerIsAdmin?: boolean;
   privilegedRoleIds?: string[];
 }) {
-  const [state, formAction, isPending] = useActionState<
-    TeamFormState,
-    FormData
-  >(inviteFirmMember, teamInitialState);
+  const [state, formAction, isPending] = useActionState<TeamFormState, FormData>(
+    inviteFirmMember,
+    teamInitialState,
+  );
   const [, startTransition] = useTransition();
   const [expanded, setExpanded] = useState(false);
   const [invitedEmail, setInvitedEmail] = useState<string | null>(null);
@@ -80,9 +77,7 @@ export function InviteMemberComposer({
 
   const errs = state.errors ?? {};
   const v = state.values ?? {};
-  const lockedRoleIds = viewerIsAdmin
-    ? new Set<string>()
-    : new Set(privilegedRoleIds);
+  const lockedRoleIds = viewerIsAdmin ? new Set<string>() : new Set(privilegedRoleIds);
 
   return (
     <div className="flex flex-col gap-3 p-4 rounded-md border border-line bg-paper-2/40">
@@ -96,9 +91,7 @@ export function InviteMemberComposer({
                   ? `Invitation sent to ${invitedEmail}.`
                   : "Invitation sent."}
             </div>
-            <div className="text-ink-4">
-              They sign in with Google using this email address.
-            </div>
+            <div className="text-ink-4">They sign in with Google using this email address.</div>
           </div>
           <button
             type="button"
@@ -160,10 +153,7 @@ export function InviteMemberComposer({
                   maxLength={3}
                   defaultValue={v.initials ?? ""}
                   placeholder="AB"
-                  className={cn(
-                    inputClass(!!errs.initials),
-                    "uppercase font-mono"
-                  )}
+                  className={cn(inputClass(!!errs.initials), "uppercase font-mono")}
                 />
               )}
             </Field>
@@ -191,11 +181,7 @@ export function InviteMemberComposer({
                 />
               )}
             </Field>
-            <Field
-              label="Bar number"
-              hint="Attorneys only."
-              error={errs.barNumber?.[0]}
-            >
+            <Field label="Bar number" hint="Attorneys only." error={errs.barNumber?.[0]}>
               {(c) => (
                 <input
                   {...c}
@@ -216,10 +202,7 @@ export function InviteMemberComposer({
           />
 
           <FormErrorBanner
-            message={formErrorMessage(
-              state,
-              "Couldn’t invite — check the highlighted fields."
-            )}
+            message={formErrorMessage(state, "Couldn’t invite — check the highlighted fields.")}
           />
 
           <div className="flex items-center justify-end gap-2">
@@ -230,11 +213,7 @@ export function InviteMemberComposer({
             >
               Cancel
             </button>
-            <Button
-              size="sm"
-              type="submit"
-              disabled={isPending}
-            >
+            <Button size="sm" type="submit" disabled={isPending}>
               {isPending ? "Inviting…" : "Send invite"}
             </Button>
           </div>

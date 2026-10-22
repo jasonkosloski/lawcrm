@@ -130,23 +130,17 @@ export function SettingsNav({
         // labels separated by a vertical hairline so the user can
         // still see the grouping. The bottom border replaces the
         // right border so the strip reads as part of the topbar.
-        "border-b border-line lg:border-b-0"
+        "border-b border-line lg:border-b-0",
       )}
     >
       {/* Mobile / tablet: horizontal scroll. */}
       <nav className="lg:hidden flex items-center gap-3 overflow-x-auto scrollbar-thin px-3 py-2">
         {visibleSections.map((section, si) => (
           <div key={section.label} className="flex items-center gap-2">
-            {si > 0 && (
-              <span aria-hidden className="h-3 w-px bg-line shrink-0" />
-            )}
-            <span className="text-2xs font-medium text-ink-3 shrink-0">
-              {section.label}
-            </span>
+            {si > 0 && <span aria-hidden className="h-3 w-px bg-line shrink-0" />}
+            <span className="text-2xs font-medium text-ink-3 shrink-0">{section.label}</span>
             {section.items.map((item) => {
-              const active =
-                pathname === item.href ||
-                pathname.startsWith(`${item.href}/`);
+              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
                 <Link
                   key={item.href}
@@ -155,7 +149,7 @@ export function SettingsNav({
                     "shrink-0 inline-flex items-center px-2.5 py-1 rounded-full text-xs transition-colors",
                     active
                       ? "bg-sidebar-accent text-ink font-medium"
-                      : "text-ink-2 bg-paper-2 hover:bg-sidebar-accent hover:text-ink"
+                      : "text-ink-2 bg-paper-2 hover:bg-sidebar-accent hover:text-ink",
                   )}
                 >
                   {item.label}
@@ -170,17 +164,13 @@ export function SettingsNav({
       <nav className="hidden lg:flex flex-col gap-5">
         {visibleSections.map((section) => (
           <div key={section.label}>
-            <div className="px-2.5 pb-1.5 text-2xs font-medium text-ink-3">
-              {section.label}
-            </div>
+            <div className="px-2.5 pb-1.5 text-2xs font-medium text-ink-3">{section.label}</div>
             <ul className="flex flex-col gap-px">
               {section.items.map((item) => {
                 // Highlight the section link on any nested route too —
                 // e.g. /settings/practice-areas/<id> still highlights
                 // "Practice areas".
-                const active =
-                  pathname === item.href ||
-                  pathname.startsWith(`${item.href}/`);
+                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (
                   <li key={item.href}>
                     <Link
@@ -189,7 +179,7 @@ export function SettingsNav({
                         "block px-2.5 py-1.5 rounded-md text-xs transition-colors",
                         active
                           ? "bg-sidebar-accent text-ink font-medium"
-                          : "text-ink-2 hover:bg-sidebar-accent hover:text-ink"
+                          : "text-ink-2 hover:bg-sidebar-accent hover:text-ink",
                       )}
                     >
                       {item.label}

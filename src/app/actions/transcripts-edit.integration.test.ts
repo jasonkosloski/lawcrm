@@ -82,7 +82,11 @@ beforeEach(async () => {
   vi.mocked(assertChildMatterAccess).mockResolvedValue(null);
   const { areaId, stageId } = await seedPracticeArea();
   ({ matterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId }));
-  ({ documentId: docId } = await seedDocument({ matterId, name: "a.mp3", contentType: "audio/mpeg" }));
+  ({ documentId: docId } = await seedDocument({
+    matterId,
+    name: "a.mp3",
+    contentType: "audio/mpeg",
+  }));
   await seedTranscript();
 });
 
@@ -143,10 +147,14 @@ describe("updateTranscriptSegment", () => {
 
   test("permission redirect propagates; walled access refused", async () => {
     vi.mocked(requirePermission).mockRejectedValue(new Error("NEXT_REDIRECT"));
-    await expect(updateTranscriptSegment(segId, { text: "x", revision: 0 })).rejects.toThrow("NEXT_REDIRECT");
+    await expect(updateTranscriptSegment(segId, { text: "x", revision: 0 })).rejects.toThrow(
+      "NEXT_REDIRECT",
+    );
     vi.mocked(requirePermission).mockResolvedValue(userId);
     vi.mocked(assertChildMatterAccess).mockRejectedValue(new Error("NOT_FOUND"));
-    await expect(updateTranscriptSegment(segId, { text: "x", revision: 0 })).rejects.toThrow("NOT_FOUND");
+    await expect(updateTranscriptSegment(segId, { text: "x", revision: 0 })).rejects.toThrow(
+      "NOT_FOUND",
+    );
     expect(assertChildMatterAccess).toHaveBeenCalledWith("document", docId);
     expect((await seg()).text).toBe("the cat sat");
   });
@@ -194,7 +202,9 @@ describe("speakers", () => {
   });
 
   test("rename trims and validates", async () => {
-    expect(await renameTranscriptSpeaker(transcriptId, "A", "  Officer Diaz ")).toEqual({ ok: true });
+    expect(await renameTranscriptSpeaker(transcriptId, "A", "  Officer Diaz ")).toEqual({
+      ok: true,
+    });
     const t = await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } });
     expect(t.speakers).toMatchObject({ A: "Officer Diaz", B: "Speaker B" });
     expect((await renameTranscriptSpeaker(transcriptId, "A", "  ")).ok).toBe(false);

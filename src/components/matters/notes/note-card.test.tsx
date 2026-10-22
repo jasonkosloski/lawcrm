@@ -17,11 +17,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -55,11 +51,7 @@ vi.mock("@/components/conversions/convert-dialogs", () => ({
     defaultTitle: string;
     defaultDescription: string;
   }) => (
-    <div
-      data-testid="convert"
-      data-title={defaultTitle}
-      data-description={defaultDescription}
-    />
+    <div data-testid="convert" data-title={defaultTitle} data-description={defaultDescription} />
   ),
 }));
 
@@ -106,12 +98,12 @@ const note = (over: Partial<NoteCardNote> = {}): NoteCardNote => ({
 function renderCard(
   n: NoteCardNote,
   access: NoteAccess,
-  scope: NoteScope = { kind: "matter", matterId: "m1" }
+  scope: NoteScope = { kind: "matter", matterId: "m1" },
 ) {
   return render(
     <UserTimeZoneProvider timeZone="America/Denver">
       <NoteCard note={n} scope={scope} access={access} />
-    </UserTimeZoneProvider>
+    </UserTimeZoneProvider>,
   );
 }
 
@@ -206,7 +198,7 @@ describe("NoteCard on an intake (lead) note", () => {
     renderCard(
       note({ authorId: "other" }),
       { ...NO_NOTE_ACCESS, userId: "me", canCreateTask: true },
-      { kind: "lead", leadId: "l1" }
+      { kind: "lead", leadId: "l1" },
     );
     expect(screen.queryByRole("button", { name: /note actions/i })).toBeNull();
   });
@@ -218,15 +210,11 @@ describe("Convert-to-task prefill", () => {
       note({
         content: "<p>Call Smith &amp; Jones re: &lt;redacted&gt; exhibit</p>",
       }),
-      FULL
+      FULL,
     );
     const convert = screen.getByTestId("convert");
-    expect(convert.dataset.title).toBe(
-      "Call Smith & Jones re: <redacted> exhibit"
-    );
-    expect(convert.dataset.description).toBe(
-      "Call Smith & Jones re: <redacted> exhibit"
-    );
+    expect(convert.dataset.title).toBe("Call Smith & Jones re: <redacted> exhibit");
+    expect(convert.dataset.description).toBe("Call Smith & Jones re: <redacted> exhibit");
   });
 });
 
@@ -253,14 +241,21 @@ describe("NoteCard — Edit note", () => {
     expect(screen.queryByText("Edit note")).toBeNull();
     unmount();
 
-    renderCard(note({ authorId: "other" }), { ...NO_NOTE_ACCESS, userId: "me", canEditAnyNote: true });
+    renderCard(note({ authorId: "other" }), {
+      ...NO_NOTE_ACCESS,
+      userId: "me",
+      canEditAnyNote: true,
+    });
     await openMenu(user);
     expect(await screen.findByText("Edit note")).toBeInTheDocument();
   });
 
   test("saving posts the note's content and chosen type to updateNote", async () => {
     const user = userEvent.setup();
-    renderCard(note({ authorId: "me", type: "note", content: "<p>Body</p>" }), { ...NO_NOTE_ACCESS, userId: "me" });
+    renderCard(note({ authorId: "me", type: "note", content: "<p>Body</p>" }), {
+      ...NO_NOTE_ACCESS,
+      userId: "me",
+    });
     await openMenu(user);
     await user.click(await screen.findByText("Edit note"));
     await user.click(await screen.findByRole("button", { name: "Strategy" }));

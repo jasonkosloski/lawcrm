@@ -51,10 +51,7 @@ vi.mock("@/components/matters/notes/note-composer", () => ({
 }));
 vi.mock("@/components/matters/notes/notes-tab-body", () => ({
   NotesTabBody: ({ access }: { access: NoteAccess }) => (
-    <div
-      data-testid="notes-body"
-      data-can-create={String(access.canCreateNote)}
-    />
+    <div data-testid="notes-body" data-can-create={String(access.canCreateNote)} />
   ),
 }));
 
@@ -119,11 +116,9 @@ describe("LeadNotesPage", () => {
     grant(["notes.create"]);
     await renderPage();
     expect(screen.queryByTestId("note-composer")).toBeNull();
-    expect(
-      screen.getByRole("link", { name: /open matter notes/i }).getAttribute("href")
-    ).toBe("/matters/m_9/notes");
-    expect(
-      screen.getByTestId("notes-body").getAttribute("data-can-create")
-    ).toBe("false");
+    expect(screen.getByRole("link", { name: /open matter notes/i }).getAttribute("href")).toBe(
+      "/matters/m_9/notes",
+    );
+    expect(screen.getByTestId("notes-body").getAttribute("data-can-create")).toBe("false");
   });
 });

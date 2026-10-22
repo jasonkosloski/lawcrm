@@ -91,10 +91,7 @@ vi.mock("@/components/communication/log-call-button", () => ({
 }));
 vi.mock("@/components/communication/compose-email-launcher", () => ({
   ComposeEmailLauncher: (props: { initialScope?: { kind: string; matterId?: string } }) => (
-    <div
-      data-testid="compose-launcher"
-      data-scope={JSON.stringify(props.initialScope)}
-    />
+    <div data-testid="compose-launcher" data-scope={JSON.stringify(props.initialScope)} />
   ),
 }));
 vi.mock("@/components/communication/channel-toggle", () => ({
@@ -254,10 +251,7 @@ describe("per-channel fetch plumbing", () => {
     expect(screen.getByTestId("phone-log")).toBeInTheDocument();
     // Call / SMS / voicemail times are instants: the log must format
     // them in the viewer's profile zone, not the server's.
-    expect(screen.getByTestId("phone-log")).toHaveAttribute(
-      "data-tz",
-      "America/Denver"
-    );
+    expect(screen.getByTestId("phone-log")).toHaveAttribute("data-tz", "America/Denver");
     expect(mockedPhoneItems).toHaveBeenCalledWith("matter_1");
     expect(mockedThreads).not.toHaveBeenCalled();
     // Even a pasted ?thread= id fetches nothing on the phone channel.
@@ -288,9 +282,7 @@ describe("portal channel", () => {
 
   test("loads the conversation only on ?channel=portal and passes send gate and tz", async () => {
     vi.mocked(getPortalConversation).mockResolvedValue(convo);
-    mockedHasPermission.mockImplementation(
-      async (k: string) => k !== "portal.send_messages"
-    );
+    mockedHasPermission.mockImplementation(async (k: string) => k !== "portal.send_messages");
 
     render(await MatterCommunicationPage(props({ channel: "portal" })));
 
@@ -309,9 +301,7 @@ describe("portal channel", () => {
   });
 
   test("without portal.view_messages ?channel=portal falls back to email and hides the option", async () => {
-    mockedHasPermission.mockImplementation(
-      async (k: string) => k !== "portal.view_messages"
-    );
+    mockedHasPermission.mockImplementation(async (k: string) => k !== "portal.view_messages");
 
     render(await MatterCommunicationPage(props({ channel: "portal" })));
 

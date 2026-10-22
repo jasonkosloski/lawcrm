@@ -51,25 +51,18 @@ export function ErrorCard({
                   Something broke loading this page.
                 </h1>
                 <p className="text-sm text-ink-3 leading-relaxed mb-4">
-                  An unexpected error stopped this view from rendering. Try
-                  again — if it keeps happening, the details below help pin
-                  down the cause.
+                  An unexpected error stopped this view from rendering. Try again — if it keeps
+                  happening, the details below help pin down the cause.
                 </p>
 
                 {(message || digest) && (
                   <div className="mb-4 rounded-md border border-line bg-paper-2/40 px-3 py-2">
-                    <div className="text-2xs font-medium text-ink-3 mb-1">
-                      Error
-                    </div>
+                    <div className="text-2xs font-medium text-ink-3 mb-1">Error</div>
                     {message && (
-                      <code className="text-xs text-ink font-mono break-all">
-                        {message}
-                      </code>
+                      <code className="text-xs text-ink font-mono break-all">{message}</code>
                     )}
                     {digest && (
-                      <div className="text-2xs font-mono text-ink-4 mt-1">
-                        digest: {digest}
-                      </div>
+                      <div className="text-2xs font-mono text-ink-4 mt-1">digest: {digest}</div>
                     )}
                   </div>
                 )}
@@ -79,11 +72,7 @@ export function ErrorCard({
                     <RotateCcw />
                     Try again
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    render={<Link href="/" />}
-                  >
+                  <Button variant="outline" size="sm" render={<Link href="/" />}>
                     <Home />
                     Back to dashboard
                   </Button>

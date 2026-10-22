@@ -38,8 +38,7 @@ const mockedPut = vi.mocked(put);
 const mockedDel = vi.mocked(del);
 const mockedHead = vi.mocked(head);
 
-const BLOB_URL =
-  "https://abc123.public.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__x.pdf";
+const BLOB_URL = "https://abc123.public.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__x.pdf";
 
 /** Baseline: neither env set (stubEnv("", …) unsets for the test). */
 function clearStorageEnv() {
@@ -126,21 +125,17 @@ describe("write dispatch — active driver decides", () => {
       etag: "e",
     }));
 
-    const stored = await storeFile(
-      new File(["x"], "brief.pdf", { type: "application/pdf" })
-    );
+    const stored = await storeFile(new File(["x"], "brief.pdf", { type: "application/pdf" }));
     expect(mockedPut).toHaveBeenCalledTimes(1);
-    expect(stored.key).toMatch(
-      /^https:\/\/abc123\.public\.blob\.vercel-storage\.com\//
-    );
+    expect(stored.key).toMatch(/^https:\/\/abc123\.public\.blob\.vercel-storage\.com\//);
   });
 
   test("storeStream refuses the blob driver — GB uploads go client-direct", async () => {
     clearStorageEnv();
     vi.stubEnv("BLOB_READ_WRITE_TOKEN", "vercel_blob_rw_test_secret");
-    await expect(
-      storeStream(Readable.from([Buffer.from("x")]), "clip.mp4", 1024)
-    ).rejects.toThrow(/client-direct/);
+    await expect(storeStream(Readable.from([Buffer.from("x")]), "clip.mp4", 1024)).rejects.toThrow(
+      /client-direct/,
+    );
   });
 });
 
@@ -164,9 +159,7 @@ describe("read/delete dispatch — key shape decides (driver-switch safety)", ()
     clearStorageEnv();
     vi.stubEnv("BLOB_READ_WRITE_TOKEN", "vercel_blob_rw_test_secret");
     // Missing local file → best-effort no-op, and del() stays cold.
-    await expect(
-      deleteFile("AAAAAAAAAAAAAAAA__never-existed.pdf")
-    ).resolves.toBeUndefined();
+    await expect(deleteFile("AAAAAAAAAAAAAAAA__never-existed.pdf")).resolves.toBeUndefined();
     expect(mockedDel).not.toHaveBeenCalled();
   });
 

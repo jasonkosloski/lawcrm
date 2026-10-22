@@ -9,10 +9,7 @@ export type RecordsDocRole = (typeof RECORDS_DOC_ROLES)[number];
 export const RECORDS_REQUEST_DOCS_FOLDER = "Request documents";
 export const RECORDS_RESPONSIVE_DOCS_FOLDER = "Responsive documents";
 
-export const RECORDS_ROLE_INFO: Record<
-  RecordsDocRole,
-  { label: string; folderName: string }
-> = {
+export const RECORDS_ROLE_INFO: Record<RecordsDocRole, { label: string; folderName: string }> = {
   request_letter: { label: "Request documents", folderName: RECORDS_REQUEST_DOCS_FOLDER },
   received_records: {
     label: "Responsive documents",

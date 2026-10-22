@@ -27,7 +27,7 @@ export function isProtectedFolder(f: { systemKind: string | null }): boolean {
  *  ordinary folder. */
 export function folderSourceLink(
   f: { systemKind: string | null; recordsRequestId: string | null },
-  scope: RecordScope
+  scope: RecordScope,
 ): { href: string; label: string } | null {
   if (f.systemKind === "records_root") {
     return { href: `${scopeBasePath(scope)}/records`, label: "Records requests" };
@@ -42,7 +42,5 @@ export function folderSourceLink(
 }
 
 export function kindForRole(role: RecordsDocRole): FolderSystemKind {
-  return role === "request_letter"
-    ? "records_request_docs"
-    : "records_responsive_docs";
+  return role === "request_letter" ? "records_request_docs" : "records_responsive_docs";
 }

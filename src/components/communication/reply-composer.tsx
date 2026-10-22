@@ -43,10 +43,7 @@ import { replyToThread } from "@/app/actions/email-send";
 import { REPLY_NEEDS_FILER_ERROR } from "@/lib/email-send-status";
 import { notifySuccess } from "@/lib/feedback";
 import type { RecordScope } from "@/lib/record-scope";
-import type {
-  FilingLeadOption,
-  FilingMatterOption,
-} from "@/lib/queries/communication";
+import type { FilingLeadOption, FilingMatterOption } from "@/lib/queries/communication";
 import { blockEnterSubmit, LabeledField } from "./labeled-field";
 import { RecordPicker } from "./record-picker";
 import { SendAttachmentsField } from "./send-attachments-field";
@@ -66,8 +63,7 @@ type Mode = "reply" | "replyAll";
 const formatRecipient = (r: ReplyRecipient): string =>
   r.name ? `${r.name} <${r.email}>` : r.email;
 
-const toInputValue = (list: ReplyRecipient[]): string =>
-  list.map((r) => r.email).join(", ");
+const toInputValue = (list: ReplyRecipient[]): string => list.map((r) => r.email).join(", ");
 
 export function ReplyComposer({
   threadId,
@@ -122,8 +118,7 @@ export function ReplyComposer({
 
   // Reply-all earns its button only when it adds someone.
   const replyAllAddsRecipients =
-    replyAll.to.length + replyAll.cc.length >
-    reply.to.length + reply.cc.length;
+    replyAll.to.length + replyAll.cc.length > reply.to.length + reply.cc.length;
 
   const openMode = (m: Mode): void => {
     const d = m === "replyAll" ? replyAll : reply;
@@ -251,9 +246,7 @@ export function ReplyComposer({
             Reply all
           </Button>
         )}
-        <span className="ml-auto text-2xs font-mono text-ink-4 truncate">
-          from {accountEmail}
-        </span>
+        <span className="ml-auto text-2xs font-mono text-ink-4 truncate">from {accountEmail}</span>
       </div>
     );
   }
@@ -277,9 +270,7 @@ export function ReplyComposer({
             <span className="text-xs font-medium text-ink">
               {mode === "replyAll" ? "Reply all" : "Reply"}
             </span>
-            <span className="text-2xs font-mono text-ink-4 truncate">
-              from {accountEmail}
-            </span>
+            <span className="text-2xs font-mono text-ink-4 truncate">from {accountEmail}</span>
             {!editing && (
               <Button
                 type="button"
@@ -319,16 +310,12 @@ export function ReplyComposer({
             <div className="text-2xs text-ink-4 flex flex-col gap-0.5">
               <div className="break-all">
                 <span>To: </span>
-                <span className="font-mono">
-                  {defaults.to.map(formatRecipient).join(", ")}
-                </span>
+                <span className="font-mono">{defaults.to.map(formatRecipient).join(", ")}</span>
               </div>
               {defaults.cc.length > 0 && (
                 <div className="break-all">
                   <span>Cc: </span>
-                  <span className="font-mono">
-                    {defaults.cc.map(formatRecipient).join(", ")}
-                  </span>
+                  <span className="font-mono">{defaults.cc.map(formatRecipient).join(", ")}</span>
                 </div>
               )}
             </div>
@@ -337,15 +324,8 @@ export function ReplyComposer({
 
         <div className="px-3 sm:px-4 py-3 flex flex-col gap-2">
           {needsRecord && canFile && (
-            <div
-              role="group"
-              aria-labelledby="reply-record-label"
-              className="flex flex-col gap-1"
-            >
-              <span
-                id="reply-record-label"
-                className="text-2xs font-medium text-ink-3"
-              >
+            <div role="group" aria-labelledby="reply-record-label" className="flex flex-col gap-1">
+              <span id="reply-record-label" className="text-2xs font-medium text-ink-3">
                 Matter or lead
               </span>
               <RecordPicker
@@ -369,11 +349,7 @@ export function ReplyComposer({
               {REPLY_NEEDS_FILER_ERROR}
             </div>
           )}
-          <RichTextEditor
-            initialHTML={body}
-            onChange={setBody}
-            placeholder="Write your reply…"
-          />
+          <RichTextEditor initialHTML={body} onChange={setBody} placeholder="Write your reply…" />
           {!(needsRecord && !canFile) && (
             <SendAttachmentsField
               scope={attachScope}
@@ -401,10 +377,7 @@ export function ReplyComposer({
               <Button
                 type="submit"
                 disabled={
-                  isPending ||
-                  uploading ||
-                  isBodyEmpty(body, signature) ||
-                  (needsRecord && !scope)
+                  isPending || uploading || isBodyEmpty(body, signature) || (needsRecord && !scope)
                 }
               >
                 {isPending ? "Sending…" : "Send"}

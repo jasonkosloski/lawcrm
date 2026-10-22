@@ -37,10 +37,9 @@ export function MatterRestrictCard({
             }
           : {
               title: "Open this matter to the firm?",
-              description:
-                "It follows the firm's matter visibility setting again.",
+              description: "It follows the firm's matter visibility setting again.",
               confirmLabel: "Open to firm",
-            }
+            },
       ))
     )
       return;

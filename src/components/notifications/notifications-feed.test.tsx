@@ -17,12 +17,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    onClick,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, onClick, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a
       href={href}
       {...rest}
@@ -41,10 +36,7 @@ vi.mock("@/app/actions/notifications", () => ({
   markNotificationRead: vi.fn(),
 }));
 
-import {
-  markAllNotificationsRead,
-  markNotificationRead,
-} from "@/app/actions/notifications";
+import { markAllNotificationsRead, markNotificationRead } from "@/app/actions/notifications";
 import { NotificationsFeed } from "./notifications-feed";
 import type { NotificationRow } from "@/lib/queries/notifications";
 
@@ -76,21 +68,11 @@ describe("NotificationsFeed — time zone", () => {
     // 03:00Z on Aug 1 is still Jul 31 evening in Denver, but Aug 1 in
     // UTC and Tokyo.
     const { rerender } = render(
-      <NotificationsFeed
-        initialRows={[row()]}
-        initialUnreadCount={1}
-        tz="America/Denver"
-      />
+      <NotificationsFeed initialRows={[row()]} initialUnreadCount={1} tz="America/Denver" />,
     );
     expect(screen.getByTitle("Jul 31, 2026")).toBeInTheDocument();
 
-    rerender(
-      <NotificationsFeed
-        initialRows={[row()]}
-        initialUnreadCount={1}
-        tz="Asia/Tokyo"
-      />
-    );
+    rerender(<NotificationsFeed initialRows={[row()]} initialUnreadCount={1} tz="Asia/Tokyo" />);
     expect(screen.getByTitle("Aug 1, 2026")).toBeInTheDocument();
   });
 });
@@ -103,7 +85,7 @@ describe("NotificationsFeed — link-less rows are operable", () => {
         initialRows={[row({ title: "Plain notice" })]}
         initialUnreadCount={1}
         tz="UTC"
-      />
+      />,
     );
 
     const button = screen.getByRole("button", {
@@ -124,16 +106,13 @@ describe("NotificationsFeed — link-less rows are operable", () => {
         initialRows={[row({ link: "/matters/m_1", title: "Linked" })]}
         initialUnreadCount={1}
         tz="UTC"
-      />
+      />,
     );
 
     await user.click(screen.getByText("Linked"));
     await waitFor(() => expect(mockedMarkOne).toHaveBeenCalledWith("n_1"));
     expect(mockedMarkOne).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Linked").closest("a")).toHaveAttribute(
-      "href",
-      "/matters/m_1"
-    );
+    expect(screen.getByText("Linked").closest("a")).toHaveAttribute("href", "/matters/m_1");
   });
 });
 
@@ -146,21 +125,15 @@ describe("NotificationsFeed — failures roll back", () => {
         initialRows={[row({ title: "Plain notice" })]}
         initialUnreadCount={1}
         tz="UTC"
-      />
+      />,
     );
 
-    await user.click(
-      screen.getByRole("button", { name: /plain notice/i })
-    );
+    await user.click(screen.getByRole("button", { name: /plain notice/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      /couldn.t update/i
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(/couldn.t update/i);
     expect(screen.getByText("1 unread")).toBeInTheDocument();
     // Row is actionable again.
-    expect(
-      screen.getByRole("button", { name: /plain notice/i })
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: /plain notice/i })).toBeEnabled();
   });
 
   test("Mark all read sends the server cutoff and rolls back when refused", async () => {
@@ -169,14 +142,11 @@ describe("NotificationsFeed — failures roll back", () => {
     const user = userEvent.setup();
     render(
       <NotificationsFeed
-        initialRows={[
-          row({ id: "a", title: "A" }),
-          row({ id: "b", title: "B", isRead: true }),
-        ]}
+        initialRows={[row({ id: "a", title: "A" }), row({ id: "b", title: "B", isRead: true })]}
         initialUnreadCount={1}
         tz="UTC"
         asOf={asOf}
-      />
+      />,
     );
 
     await user.click(screen.getByRole("button", { name: /mark all read/i }));

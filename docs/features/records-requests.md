@@ -4,7 +4,9 @@ Tracks requests for records (medical, CORA/CGIA, police, employment) to custodia
 Related: [ADR-047](../decisions/047-records-requests-are-a-dedicated-model-with.md), [ADR-046](../decisions/046-intake-documents-share-document-and-documentfolder-scoped.md), [design spec](../superpowers/specs/2026-10-18-records-requests-design.md), [intake.md](intake.md), [PERMISSIONS.md](../PERMISSIONS.md)
 
 ## Open work
+
 Deferred ideas (none scheduled, all P2):
+
 - [ ] **Per-item completeness tracking** — which record types or date ranges arrived.
 - [ ] **HIPAA authorization tracking and expiry.**
 - [ ] **Holiday-aware business days** — today only weekends are skipped.
@@ -13,6 +15,7 @@ Deferred ideas (none scheduled, all P2):
 - [ ] **Firm-wide /records page** — the dashboard card covers it for now.
 
 ## Shipped
+
 - [x] **Records requests (matter and intake `/records` tabs)** (2026-10-18) — requests to custodians on a matter or lead.
   - **Types:** firm-defined (statutory response period, chase interval, default letter template), managed in settings (`records.types.manage`); seeded types (Medical HIPAA 30 calendar days, CORA 3 business, Police report 3 business, Employment 30 calendar) are editable starting points, not legal advice. Ad hoc type allowed (name required; no statutory period unless a due date is typed).
   - **Follow-ups:** each open request has exactly one rolling auto-created follow-up task that rolls on completion (via Log follow-up or completing the task anywhere).
@@ -26,6 +29,7 @@ Deferred ideas (none scheduled, all P2):
   - **Generated folders (2026-10-18):** request folders carry a `systemKind` and a link to their request, show a "Records request" badge linking back, and cannot be renamed, moved or deleted (nor can their ancestors be deleted); deleting the request unprotects them (ADR-048).
 
 ## Notes
+
 - Business days skip Saturdays and Sundays only; due dates are always editable. `computeResponseDue` lives in `src/lib/records-requests/due-date.ts` (calendar days: sent + N; business days: day 1 is the first weekday after sending).
 - Follow-up tasks do NOT require `tasks.create`: they are a system side effect of `records.create/edit`, an exception to the ADR-025 capture rule (recorded in ADR-047).
 - Fee-to-Expense also needs `matters.expense.create/edit`; letters and uploads also need `documents.upload`.

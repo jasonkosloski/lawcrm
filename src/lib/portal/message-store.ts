@@ -20,8 +20,7 @@ export function parseMessageBody(
 }
 
 export type PortalMessageAuthor =
-  | { kind: "client"; identityId: string }
-  | { kind: "staff"; userId: string };
+  { kind: "client"; identityId: string } | { kind: "staff"; userId: string };
 
 type Reader = { userId: string } | { identityId: string };
 
@@ -42,10 +41,7 @@ async function advanceReadStateIn(
     "userId" in reader
       ? { threadId_userId: { threadId, userId: reader.userId } }
       : { threadId_identityId: { threadId, identityId: reader.identityId } };
-  const who =
-    "userId" in reader
-      ? { userId: reader.userId }
-      : { identityId: reader.identityId };
+  const who = "userId" in reader ? { userId: reader.userId } : { identityId: reader.identityId };
   const row = await db.portalReadState.upsert({
     where,
     create: { threadId, ...who, lastReadAt: at },
@@ -126,9 +122,7 @@ export async function recordPortalMessage(
     await advanceReadStateIn(
       tx,
       thread.id,
-      author.kind === "client"
-        ? { identityId: author.identityId }
-        : { userId: author.userId },
+      author.kind === "client" ? { identityId: author.identityId } : { userId: author.userId },
       message.createdAt,
     );
     return { messageId: message.id, threadId: thread.id, createdAt: message.createdAt };

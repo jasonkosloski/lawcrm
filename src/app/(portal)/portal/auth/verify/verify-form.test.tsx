@@ -14,9 +14,7 @@ describe("portal verify form", () => {
     render(<VerifyForm token="t" />);
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     await waitFor(() =>
-      expect(
-        screen.getByText("This link has expired or was already used.")
-      ).toBeTruthy()
+      expect(screen.getByText("This link has expired or was already used.")).toBeTruthy(),
     );
     expect(screen.getByLabelText("Email")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Email"), {
@@ -25,8 +23,8 @@ describe("portal verify form", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send a new link" }));
     await waitFor(() =>
       expect(
-        screen.getByText("If that email has portal access, a link is on its way.")
-      ).toBeTruthy()
+        screen.getByText("If that email has portal access, a link is on its way."),
+      ).toBeTruthy(),
     );
   });
 

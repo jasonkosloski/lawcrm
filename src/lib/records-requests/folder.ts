@@ -235,10 +235,7 @@ async function resolveRecordsRoot(
   return created.id;
 }
 
-export async function resolveRecordsFolder(
-  tx: Tx,
-  request: RecordsFolderRequest,
-): Promise<string> {
+export async function resolveRecordsFolder(tx: Tx, request: RecordsFolderRequest): Promise<string> {
   const scope = scopeFromRequest(request);
   const where = scopeWhere(scope);
   await lockRecordsRequest(tx, request.id);
@@ -343,9 +340,7 @@ export async function resolveRecordsRoleFolder(
     ids[r] = created.id;
   }
   for (const r of RECORDS_DOC_ROLES) {
-    const moving = flat
-      .filter((d) => d.recordsRequestRole === r)
-      .map((d) => d.id);
+    const moving = flat.filter((d) => d.recordsRequestRole === r).map((d) => d.id);
     if (moving.length === 0) continue;
     await tx.document.updateMany({
       where: { id: { in: moving } },

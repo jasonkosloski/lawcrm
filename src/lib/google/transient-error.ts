@@ -22,14 +22,7 @@ import { Prisma } from "@/generated/prisma/client";
  *  P1001 can't reach DB, P1002 DB timed out, P1008 operation timed
  *  out, P1017 server closed the connection, P2024 pool timeout,
  *  P2034 write conflict / deadlock. */
-const TRANSIENT_PRISMA_CODES = new Set([
-  "P1001",
-  "P1002",
-  "P1008",
-  "P1017",
-  "P2024",
-  "P2034",
-]);
+const TRANSIENT_PRISMA_CODES = new Set(["P1001", "P1002", "P1008", "P1017", "P2024", "P2034"]);
 
 /** Node socket-level codes and Postgres SQLSTATEs (as surfaced by the
  *  `pg` driver adapter) for connectivity / contention. */
@@ -68,7 +61,7 @@ export function isTransientInfraError(err: unknown, depth = 0): boolean {
   if (
     typeof message === "string" &&
     /connection terminated|connection (?:reset|closed)|timeout exceeded when trying to connect/i.test(
-      message
+      message,
     )
   ) {
     return true;

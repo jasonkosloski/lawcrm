@@ -39,10 +39,7 @@ export type DateFormatVariant =
   | "datetime_medium" // "Apr 15, 2026, 3:42 PM"
   | "datetime_long"; // "April 15, 2026 at 3:42 PM"
 
-const FORMAT_OPTS: Record<
-  DateFormatVariant,
-  Intl.DateTimeFormatOptions
-> = {
+const FORMAT_OPTS: Record<DateFormatVariant, Intl.DateTimeFormatOptions> = {
   short: { month: "short", day: "numeric" },
   short_weekday: { weekday: "short", month: "short", day: "numeric" },
   medium: { month: "short", day: "numeric", year: "numeric" },
@@ -101,7 +98,7 @@ const FORMAT_OPTS: Record<
 export function formatDate(
   d: Date | null | undefined,
   variant: DateFormatVariant = "medium",
-  tz?: string | null
+  tz?: string | null,
 ): string {
   if (!d) return "—";
   // ISO format intentionally ignores the user's TZ — it's used for
@@ -119,10 +116,7 @@ export function formatDate(
  * feeds and timeline entries where the exact timestamp matters
  * less than recency.
  */
-export function formatRelative(
-  d: Date | null | undefined,
-  tz?: string | null
-): string {
+export function formatRelative(d: Date | null | undefined, tz?: string | null): string {
   if (!d) return "—";
   const now = Date.now();
   const ts = d.getTime();
@@ -148,7 +142,7 @@ export function formatRelative(
  */
 export function formatDayBucket(
   d: Date | null | undefined,
-  options: { now?: Date; tz?: string | null } = {}
+  options: { now?: Date; tz?: string | null } = {},
 ): string {
   if (!d) return "—";
   const now = options.now ?? new Date();
@@ -165,16 +159,12 @@ export function formatDayBucket(
     // each instant into its YYYY-MM-DD key in the user's TZ, pin the
     // key at noon UTC, and subtract — DST-proof whole days.
     const noonUtcOfKey = (key: string): number => {
-      const [y, m, dd] = key.split("-").map(Number) as [
-        number,
-        number,
-        number,
-      ];
+      const [y, m, dd] = key.split("-").map(Number) as [number, number, number];
       return Date.UTC(y, m - 1, dd, 12);
     };
     diffDays = Math.round(
       (noonUtcOfKey(dateKeyInTz(now, tz)) - noonUtcOfKey(dateKeyInTz(d, tz))) /
-        (24 * 60 * 60 * 1000)
+        (24 * 60 * 60 * 1000),
     );
   } else {
     // No TZ threaded in yet — fall back to the runtime's local days
@@ -184,9 +174,7 @@ export function formatDayBucket(
       c.setHours(0, 0, 0, 0);
       return c.getTime();
     };
-    diffDays = Math.round(
-      (startOfDay(now) - startOfDay(d)) / (24 * 60 * 60 * 1000)
-    );
+    diffDays = Math.round((startOfDay(now) - startOfDay(d)) / (24 * 60 * 60 * 1000));
   }
 
   if (diffDays === 0) return "Today";
@@ -245,11 +233,7 @@ export function parseDateOnly(value: string): Date | null {
   const date = new Date(Date.UTC(y, mo - 1, d));
   // Date.UTC rolls 2026-02-31 over into March and maps years 0-99 to
   // 1900-1999; a round-trip check rejects both.
-  if (
-    date.getUTCFullYear() !== y ||
-    date.getUTCMonth() !== mo - 1 ||
-    date.getUTCDate() !== d
-  ) {
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) {
     return null;
   }
   return date;
@@ -275,7 +259,7 @@ export type DateOnlyFormatVariant = Exclude<
  */
 export function formatDateOnly(
   d: Date | null | undefined,
-  variant: DateOnlyFormatVariant = "medium"
+  variant: DateOnlyFormatVariant = "medium",
 ): string {
   return formatDate(d, variant, "UTC");
 }
@@ -301,11 +285,7 @@ export function daysBetweenKeys(from: DayKey, to: DayKey): number {
  * value to `new Date()` directly — that marks items overdue on their
  * due day (and the evening before, west of UTC).
  */
-export function daysUntilDateOnly(
-  d: Date,
-  tz: string,
-  now: Date = new Date()
-): number {
+export function daysUntilDateOnly(d: Date, tz: string, now: Date = new Date()): number {
   return daysBetweenKeys(todayKey(tz, now), dateOnlyKey(d));
 }
 
@@ -315,10 +295,7 @@ export function daysUntilDateOnly(
  * on UTC midnights, so legacy rows stored at a western server's local
  * midnight still land in their day.
  */
-export function dateOnlyRange(
-  firstKey: DayKey,
-  lastKey: DayKey
-): { gte: Date; lt: Date } {
+export function dateOnlyRange(firstKey: DayKey, lastKey: DayKey): { gte: Date; lt: Date } {
   return {
     gte: new Date(utcMsOfKey(firstKey)),
     lt: new Date(utcMsOfKey(addDaysToKey(lastKey, 1))),
@@ -335,8 +312,7 @@ export function dateOnlyRange(
 // client components with `useUserTimeZone()` — so a value round-trips
 // through a form without drifting.
 
-const WALL_CLOCK_RE =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?$/;
+const WALL_CLOCK_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?$/;
 const EXPLICIT_ZONE_RE = /^\d{4}-\d{2}-\d{2}T.*(?:[zZ]|[+-]\d{2}:?\d{2})$/;
 
 /**
@@ -353,14 +329,7 @@ export function parseWallClock(value: string, tz: string): Date | null {
     const second = m[6] ? Number(m[6]) : 0;
     if (!parseDateOnly(`${m[1]}-${m[2]}-${m[3]}`)) return null;
     if (hour > 23 || minute > 59 || second > 59) return null;
-    const at = instantInTz(
-      Number(m[1]),
-      Number(m[2]),
-      Number(m[3]),
-      hour,
-      minute,
-      tz
-    );
+    const at = instantInTz(Number(m[1]), Number(m[2]), Number(m[3]), hour, minute, tz);
     return new Date(at.getTime() + second * 1000);
   }
   if (EXPLICIT_ZONE_RE.test(value)) {
@@ -437,7 +406,7 @@ export function instantInTz(
   day: number,
   hour: number,
   minute: number,
-  tz: string
+  tz: string,
 ): Date {
   let candidate = new Date(Date.UTC(year, month - 1, day, hour, minute));
   for (let i = 0; i < 2; i++) {
@@ -462,7 +431,7 @@ export function instantInTz(
       lookup("month") - 1,
       lookup("day"),
       h,
-      lookup("minute")
+      lookup("minute"),
     );
     const target = Date.UTC(year, month - 1, day, hour, minute);
     const drift = target - localAtCandidate;
@@ -503,7 +472,7 @@ function focalDateParts(focal: Date): [number, number, number] {
  */
 export function calendarWeekInTz(
   focal: Date,
-  tz: string
+  tz: string,
 ): { days: Date[]; rangeStart: Date; rangeEnd: Date } {
   const [fy, fm, fd] = focalDateParts(focal);
   // Noon UTC of the focal date — used purely to compute the weekday.
@@ -528,7 +497,7 @@ export function calendarWeekInTz(
     sunday.getUTCDate(),
     0,
     0,
-    tz
+    tz,
   );
   const rangeEnd = instantInTz(
     saturday.getUTCFullYear(),
@@ -536,7 +505,7 @@ export function calendarWeekInTz(
     saturday.getUTCDate(),
     23,
     59,
-    tz
+    tz,
   );
   return { days, rangeStart, rangeEnd };
 }
@@ -551,7 +520,7 @@ export function calendarWeekInTz(
  */
 export function calendarMonthGridInTz(
   focal: Date,
-  tz: string
+  tz: string,
 ): { days: Date[]; rangeStart: Date; rangeEnd: Date } {
   const [fy, fm] = focalDateParts(focal);
   // First day of the month at noon UTC.
@@ -578,7 +547,7 @@ export function calendarMonthGridInTz(
     first.getUTCDate(),
     0,
     0,
-    tz
+    tz,
   );
   const rangeEnd = instantInTz(
     last.getUTCFullYear(),
@@ -586,7 +555,7 @@ export function calendarMonthGridInTz(
     last.getUTCDate(),
     23,
     59,
-    tz
+    tz,
   );
   return { days, rangeStart, rangeEnd };
 }

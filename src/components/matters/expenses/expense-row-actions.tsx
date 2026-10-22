@@ -51,8 +51,7 @@ export function ExpenseRowActions({
     if (
       !(await confirmAction({
         title: `Delete expense "${expense.description}"?`,
-        description:
-          "This is permanent. The audit log keeps a record of the deletion.",
+        description: "This is permanent. The audit log keeps a record of the deletion.",
         confirmLabel: "Delete expense",
         destructive: true,
       }))

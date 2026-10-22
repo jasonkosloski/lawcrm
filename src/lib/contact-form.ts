@@ -49,9 +49,7 @@ export type ContactPhoneEntry = {
  * the first entry the user marked primary wins; when none is marked,
  * the first entry is promoted.
  */
-export function normalizeContactPhones(
-  entries: ContactPhoneEntry[]
-): ContactPhoneEntry[] {
+export function normalizeContactPhones(entries: ContactPhoneEntry[]): ContactPhoneEntry[] {
   const cleaned = entries
     .map((e) => ({
       label: e.label.trim(),

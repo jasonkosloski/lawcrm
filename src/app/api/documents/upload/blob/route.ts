@@ -21,11 +21,7 @@
 
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import {
-  UploadTokenError,
-  onBeforeGenerateToken,
-  onUploadCompleted,
-} from "./blob-upload";
+import { UploadTokenError, onBeforeGenerateToken, onUploadCompleted } from "./blob-upload";
 
 const GENERIC_UPLOAD_ERROR = "Upload handling failed.";
 
@@ -37,10 +33,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     body = (await request.json()) as HandleUploadBody;
   } catch {
-    return NextResponse.json(
-      { error: "Expected a JSON body." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Expected a JSON body." }, { status: 400 });
   }
 
   try {

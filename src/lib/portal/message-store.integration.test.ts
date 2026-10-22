@@ -44,8 +44,15 @@ beforeEach(async () => {
   ({ userId } = await seedUser({ firmId }));
   const { areaId, stageId } = await seedPracticeArea();
   const { contactId } = await seedContact({ email: "jane@example.com" });
-  identityId = (await prisma.portalIdentity.create({ data: { contactId, email: "jane@example.com" } })).id;
-  ({ matterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name: "M" }));
+  identityId = (
+    await prisma.portalIdentity.create({ data: { contactId, email: "jane@example.com" } })
+  ).id;
+  ({ matterId } = await seedMatter({
+    practiceAreaId: areaId,
+    stageId,
+    leadUserId: userId,
+    name: "M",
+  }));
 });
 
 const T1 = new Date("2026-03-01T10:00:00Z");
@@ -60,7 +67,12 @@ describe("recordPortalMessage", () => {
     expect(thread.lastMessageAt).toEqual(T1);
     expect(thread.lastFromClient).toBe(true);
     const m = await prisma.portalMessage.findUniqueOrThrow({ where: { id: r.messageId } });
-    expect(m).toMatchObject({ body: "hello", authorKind: "client", authorIdentityId: identityId, authorUserId: null });
+    expect(m).toMatchObject({
+      body: "hello",
+      authorKind: "client",
+      authorIdentityId: identityId,
+      authorUserId: null,
+    });
   });
 
   test("client sets lastFromClient true, staff sets false", async () => {
@@ -104,10 +116,14 @@ describe("recordPortalMessage", () => {
 
   test("advances the sender's read state", async () => {
     const r = await recordPortalMessage(matterId, "hi", { kind: "client", identityId }, T1);
-    const c = await prisma.portalReadState.findFirstOrThrow({ where: { threadId: r.threadId, identityId } });
+    const c = await prisma.portalReadState.findFirstOrThrow({
+      where: { threadId: r.threadId, identityId },
+    });
     expect(c.lastReadAt).toEqual(T1);
     await recordPortalMessage(matterId, "yo", { kind: "staff", userId }, T2);
-    const s = await prisma.portalReadState.findFirstOrThrow({ where: { threadId: r.threadId, userId } });
+    const s = await prisma.portalReadState.findFirstOrThrow({
+      where: { threadId: r.threadId, userId },
+    });
     expect(s.lastReadAt).toEqual(T2);
   });
 });
@@ -117,7 +133,9 @@ describe("advanceReadState", () => {
     const r = await recordPortalMessage(matterId, "hi", { kind: "client", identityId }, T1);
     await advanceReadState(r.threadId, { userId }, T2);
     await advanceReadState(r.threadId, { userId }, T1);
-    const s = await prisma.portalReadState.findFirstOrThrow({ where: { threadId: r.threadId, userId } });
+    const s = await prisma.portalReadState.findFirstOrThrow({
+      where: { threadId: r.threadId, userId },
+    });
     expect(s.lastReadAt).toEqual(T2);
   });
 });

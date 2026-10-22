@@ -19,7 +19,7 @@ describe("agreementGateErrors", () => {
   test("required + nothing -> all three errors with label", () => {
     const e = agreementGateErrors(
       { status: "", signedDate: "", hasOriginatingFile: false },
-      { required: true, label: "Retainer", today }
+      { required: true, label: "Retainer", today },
     );
     expect(Object.keys(e).sort()).toEqual([
       "agreementSignedDate",
@@ -34,7 +34,7 @@ describe("agreementGateErrors", () => {
     const base = { status: "signed", hasOriginatingFile: true };
     const opts = { required: true, label: "Fee agreement", today };
     expect(
-      agreementGateErrors({ ...base, signedDate: "2026-10-21" }, opts).agreementSignedDate
+      agreementGateErrors({ ...base, signedDate: "2026-10-21" }, opts).agreementSignedDate,
     ).toBeTruthy();
     expect(agreementGateErrors({ ...base, signedDate: today }, opts)).toEqual({});
   });
@@ -42,27 +42,27 @@ describe("agreementGateErrors", () => {
     expect(
       agreementGateErrors(
         { status: "", signedDate: "", hasOriginatingFile: false },
-        { required: false, label: "x", today }
-      )
+        { required: false, label: "x", today },
+      ),
     ).toEqual({});
   });
   test("not required: malformed or future date still errors", () => {
     const opts = { required: false, label: "x", today };
     expect(
       agreementGateErrors({ status: "", signedDate: "garbage", hasOriginatingFile: false }, opts)
-        .agreementSignedDate
+        .agreementSignedDate,
     ).toBeTruthy();
     expect(
       agreementGateErrors({ status: "", signedDate: "2027-01-01", hasOriginatingFile: false }, opts)
-        .agreementSignedDate
+        .agreementSignedDate,
     ).toBeTruthy();
   });
   test("unknown status errors", () => {
     expect(
       agreementGateErrors(
         { status: "bogus", signedDate: "", hasOriginatingFile: true },
-        { required: false, label: "x", today }
-      ).agreementStatus
+        { required: false, label: "x", today },
+      ).agreementStatus,
     ).toBeTruthy();
   });
 });
@@ -77,4 +77,3 @@ describe("agreementGateErrors with an unknown today", () => {
     });
   });
 });
-

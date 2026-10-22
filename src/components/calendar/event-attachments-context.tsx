@@ -41,8 +41,7 @@ const PERMISSIVE: EventAttachmentsViewer = {
   defaultTimeEntryDate: null,
 };
 
-const EventAttachmentsContext =
-  createContext<EventAttachmentsViewer>(PERMISSIVE);
+const EventAttachmentsContext = createContext<EventAttachmentsViewer>(PERMISSIVE);
 
 export function EventAttachmentsProvider({
   viewerId,
@@ -57,23 +56,13 @@ export function EventAttachmentsProvider({
       viewerId: viewerId ?? PERMISSIVE.viewerId,
       canPinNotes: canPinNotes ?? PERMISSIVE.canPinNotes,
       canDeleteAnyNote: canDeleteAnyNote ?? PERMISSIVE.canDeleteAnyNote,
-      canDeleteAnyTimeEntry:
-        canDeleteAnyTimeEntry ?? PERMISSIVE.canDeleteAnyTimeEntry,
-      defaultTimeEntryDate:
-        defaultTimeEntryDate ?? PERMISSIVE.defaultTimeEntryDate,
+      canDeleteAnyTimeEntry: canDeleteAnyTimeEntry ?? PERMISSIVE.canDeleteAnyTimeEntry,
+      defaultTimeEntryDate: defaultTimeEntryDate ?? PERMISSIVE.defaultTimeEntryDate,
     }),
-    [
-      viewerId,
-      canPinNotes,
-      canDeleteAnyNote,
-      canDeleteAnyTimeEntry,
-      defaultTimeEntryDate,
-    ]
+    [viewerId, canPinNotes, canDeleteAnyNote, canDeleteAnyTimeEntry, defaultTimeEntryDate],
   );
   return (
-    <EventAttachmentsContext.Provider value={value}>
-      {children}
-    </EventAttachmentsContext.Provider>
+    <EventAttachmentsContext.Provider value={value}>{children}</EventAttachmentsContext.Provider>
   );
 }
 
@@ -90,7 +79,7 @@ export function useEventAttachmentsViewer(): EventAttachmentsViewer {
 export function canDeleteRecord(
   authorId: string | undefined,
   viewerId: string | null,
-  canDeleteAny: boolean
+  canDeleteAny: boolean,
 ): boolean {
   if (canDeleteAny) return true;
   if (authorId === undefined || viewerId === null) return true;

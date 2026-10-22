@@ -18,10 +18,7 @@ import { PrintToolbar } from "@/components/matters/billing/print-toolbar";
 import { requireUser } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { formatDate } from "@/lib/format-date";
-import {
-  getDocumentTranscript,
-  getTranscriptCaption,
-} from "@/lib/queries/transcript";
+import { getDocumentTranscript, getTranscriptCaption } from "@/lib/queries/transcript";
 import { exportNotice, toTranscriptExport } from "@/lib/transcription/export";
 import { formatTimecode } from "@/lib/transcription/timecode";
 
@@ -84,13 +81,10 @@ export default async function PrintTranscriptPage({
       <PrintToolbar autoprint={sp.autoprint === "1"} />
       <main className="max-w-3xl mx-auto print:max-w-none print:mx-0 p-6 print:p-0 pb-8">
         <header className="mb-6 border-b border-line pb-4">
-          {exp.caption && (
-            <p className="text-sm font-semibold text-ink">{exp.caption}</p>
-          )}
+          {exp.caption && <p className="text-sm font-semibold text-ink">{exp.caption}</p>}
           <h1 className="font-serif text-xl text-ink">{exp.documentName}</h1>
           <p className="mt-1 text-xs text-ink-3">
-            {exp.durationSeconds !== null &&
-              `Duration ${formatTimecode(exp.durationSeconds)} · `}
+            {exp.durationSeconds !== null && `Duration ${formatTimecode(exp.durationSeconds)} · `}
             Transcribed {formatDate(exp.transcribedAt, "long", timeZone)}
           </p>
           <p className="text-xs text-ink-3">
@@ -102,13 +96,8 @@ export default async function PrintTranscriptPage({
 
         <div className="space-y-3">
           {exp.paragraphs.map((p, i) => (
-            <p
-              key={i}
-              className="text-sm leading-relaxed text-ink break-inside-avoid"
-            >
-              <span className="font-mono text-2xs text-ink-3">
-                {p.timecode}
-              </span>{" "}
+            <p key={i} className="text-sm leading-relaxed text-ink break-inside-avoid">
+              <span className="font-mono text-2xs text-ink-3">{p.timecode}</span>{" "}
               <span className="font-semibold">{p.speaker}:</span> {p.text}
             </p>
           ))}
@@ -116,9 +105,7 @@ export default async function PrintTranscriptPage({
       </main>
       {/* On screen the notice sits under the transcript; in print it moves
           into the page margin (below), so nothing is ever overlaid. */}
-      <p className="print:hidden max-w-3xl mx-auto px-6 pb-8 text-2xs text-ink-3">
-        {notice}
-      </p>
+      <p className="print:hidden max-w-3xl mx-auto px-6 pb-8 text-2xs text-ink-3">{notice}</p>
       <style dangerouslySetInnerHTML={{ __html: printCss(notice) }} />
     </div>
   );

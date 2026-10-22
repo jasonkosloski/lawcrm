@@ -39,17 +39,32 @@ import { Card } from "@/components/ui/card";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { moveDocuments, moveFolder, deleteFolder } from "@/app/actions/document-folders";
 import { copyDocumentToFolder, deleteDocument } from "@/app/actions/documents";
-import { previewFolderMoveVisibility, setDocumentsClientShare, setFolderClientShared } from "@/app/actions/portal-documents";
+import {
+  previewFolderMoveVisibility,
+  setDocumentsClientShare,
+  setFolderClientShared,
+} from "@/app/actions/portal-documents";
 import { COPY_DESCRIPTION } from "@/components/documents-viewer/document-placement";
 import { FolderTree } from "@/components/matters/documents/folder-tree";
 import { MoveToFolderDialog } from "@/components/matters/documents/move-to-folder-dialog";
-import { MultiFileUpload, type MultiFileUploadHandle } from "@/components/matters/documents/multi-file-upload";
+import {
+  MultiFileUpload,
+  type MultiFileUploadHandle,
+} from "@/components/matters/documents/multi-file-upload";
 import { NewFolderButton, NewFolderDialog } from "@/components/matters/documents/new-folder-button";
 import { RenameFolderDialog } from "@/components/matters/documents/rename-folder-dialog";
 import { EditDocumentDialog } from "@/components/matters/documents/edit-document-dialog";
 import { DeleteDocumentDialog } from "@/components/matters/documents/delete-document-dialog";
 import { confirmAction, notifyError, notifySuccess, notifyUndoable } from "@/lib/feedback";
-import { collectDescendantIds, MAX_FOLDER_DEPTH, MOVE_DOCUMENTS_BATCH_CAP, folderDepth, type FlatFolder, type FolderNode, type FolderRecord } from "@/lib/folder-tree";
+import {
+  collectDescendantIds,
+  MAX_FOLDER_DEPTH,
+  MOVE_DOCUMENTS_BATCH_CAP,
+  folderDepth,
+  type FlatFolder,
+  type FolderNode,
+  type FolderRecord,
+} from "@/lib/folder-tree";
 import { isProtectedFolder } from "@/lib/records-requests/folder-kinds";
 import { visibilityWarning } from "@/lib/portal/move-warning";
 import { visibilityChangeForMove } from "@/lib/portal/share-delta";
@@ -85,8 +100,7 @@ import { Button } from "@/components/ui/button";
 export type WorkspaceFolder = FolderRecord & { clientShared: boolean };
 
 type MenuTarget =
-  | { kind: "entries"; targets: ActionTarget[] }
-  | { kind: "background"; folderId: string | null };
+  { kind: "entries"; targets: ActionTarget[] } | { kind: "background"; folderId: string | null };
 
 /** Actions the selection bar shows as buttons. */
 const BAR_ACTIONS: EntryActionId[] = ["download", "move", "copy", "share", "unshare", "delete"];
@@ -139,7 +153,11 @@ export function DocumentsWorkspace({
 
   const [selection, setSelectionState] = useState<Selection>(EMPTY_SELECTION);
   const [hidden, setHidden] = useState<ReadonlySet<EntryKey>>(new Set());
-  const [dragging, setDragging] = useState<{ keys: ReadonlySet<EntryKey>; payload: MovePayload; targets: ActionTarget[] } | null>(null);
+  const [dragging, setDragging] = useState<{
+    keys: ReadonlySet<EntryKey>;
+    payload: MovePayload;
+    targets: ActionTarget[];
+  } | null>(null);
   const [fileDropFolder, setFileDropFolder] = useState<string | null | undefined>(undefined);
   const [menu, setMenu] = useState<MenuTarget>({ kind: "background", folderId: currentFolderId });
 
@@ -167,7 +185,8 @@ export function DocumentsWorkspace({
   };
 
   const folderById = useMemo(() => new Map(folders.map((f) => [f.id, f])), [folders]);
-  const folderName = (id: string | null) => (id === null ? "All documents" : (folderById.get(id)?.name ?? "folder"));
+  const folderName = (id: string | null) =>
+    id === null ? "All documents" : (folderById.get(id)?.name ?? "folder");
   const order = useMemo(() => rows.map((r) => r.key), [rows]);
   const rowByKey = useMemo(() => new Map(rows.map((r) => [r.key, r])), [rows]);
 
@@ -186,7 +205,8 @@ export function DocumentsWorkspace({
     setSelectionState(EMPTY_SELECTION);
   }
 
-  const atDepthCap = (id: string | null) => id !== null && folderDepth(folders, id) >= MAX_FOLDER_DEPTH;
+  const atDepthCap = (id: string | null) =>
+    id !== null && folderDepth(folders, id) >= MAX_FOLDER_DEPTH;
 
   /** A tree folder that may not be in the current listing. */
   const folderTarget = (id: string): FolderTarget | null => {
@@ -202,27 +222,37 @@ export function DocumentsWorkspace({
       href: `${basePath}?folder=${id}`,
       parentId: f.parentId,
       isProtected: isProtectedFolder({ systemKind: f.systemKind ?? null }),
-      hasProtectedDescendant: folders.some((x) => below.has(x.id) && isProtectedFolder({ systemKind: x.systemKind ?? null })),
+      hasProtectedDescendant: folders.some(
+        (x) => below.has(x.id) && isProtectedFolder({ systemKind: x.systemKind ?? null }),
+      ),
       clientShared: f.clientShared,
       atDepthCap: atDepthCap(id),
     };
   };
 
-  const selectedTargets = order.filter((k) => selection.keys.has(k)).map((k) => rowByKey.get(k)!.target);
+  const selectedTargets = order
+    .filter((k) => selection.keys.has(k))
+    .map((k) => rowByKey.get(k)!.target);
 
   // ── Mutations ──────────────────────────────────────────────────────
 
   /** What moving `targets` to `dest` does to what the client sees, or
    *  null. Files are worked out here; a folder's whole subtree is asked
    *  of the server. A failed preview never blocks the move. */
-  const moveVisibilityWarning = async (targets: ActionTarget[], dest: string | null): Promise<string | null> => {
+  const moveVisibilityWarning = async (
+    targets: ActionTarget[],
+    dest: string | null,
+  ): Promise<string | null> => {
     if (!visibilityWarnings) return null;
     const docs = targets.filter((t): t is DocTarget => t.kind === "doc" && t.folderId !== dest);
     const fs = targets.filter((t): t is FolderTarget => t.kind === "folder" && t.parentId !== dest);
     const delta = visibilityChangeForMove(
-      docs.flatMap((d) => [{ clientShare: d.clientShare, folderId: d.folderId, status: d.status }, ...d.attachmentShares]),
+      docs.flatMap((d) => [
+        { clientShare: d.clientShare, folderId: d.folderId, status: d.status },
+        ...d.attachmentShares,
+      ]),
       dest,
-      folders
+      folders,
     );
     try {
       for (const f of fs) {
@@ -237,7 +267,10 @@ export function DocumentsWorkspace({
   };
 
   /** Undo a move: everything goes back where it was. */
-  const undoMove = async (moved: { docs: { id: string; from: string | null }[]; folders: { id: string; from: string | null }[] }) => {
+  const undoMove = async (moved: {
+    docs: { id: string; from: string | null }[];
+    folders: { id: string; from: string | null }[];
+  }) => {
     const byFrom = new Map<string | null, string[]>();
     for (const d of moved.docs) byFrom.set(d.from, [...(byFrom.get(d.from) ?? []), d.id]);
     const errors: string[] = [];
@@ -255,14 +288,23 @@ export function DocumentsWorkspace({
 
   /** Move rows to a folder; toasts Undo. Partial failures report the
    *  first error but keep what moved. */
-  const moveTo = async (targets: ActionTarget[], dest: string | null): Promise<{ ok: boolean; error?: string }> => {
+  const moveTo = async (
+    targets: ActionTarget[],
+    dest: string | null,
+  ): Promise<{ ok: boolean; error?: string }> => {
     const docs = targets.filter((t): t is DocTarget => t.kind === "doc" && t.folderId !== dest);
     const fs = targets.filter((t): t is FolderTarget => t.kind === "folder" && t.parentId !== dest);
-    const moved = { docs: [] as { id: string; from: string | null }[], folders: [] as { id: string; from: string | null }[] };
+    const moved = {
+      docs: [] as { id: string; from: string | null }[],
+      folders: [] as { id: string; from: string | null }[],
+    };
     const errors: string[] = [];
     for (let i = 0; i < docs.length; i += MOVE_DOCUMENTS_BATCH_CAP) {
       const chunk = docs.slice(i, i + MOVE_DOCUMENTS_BATCH_CAP);
-      const res = await moveDocuments(chunk.map((d) => d.id), dest);
+      const res = await moveDocuments(
+        chunk.map((d) => d.id),
+        dest,
+      );
       if (res.ok) moved.docs.push(...chunk.map((d) => ({ id: d.id, from: d.folderId })));
       else errors.push(res.error);
     }
@@ -273,37 +315,46 @@ export function DocumentsWorkspace({
     }
     const n = moved.docs.length + moved.folders.length;
     if (n === 0) return { ok: false, error: errors[0] ?? "Nothing to move." };
-    const what = n === 1 ? `"${(docs.find((d) => d.id === moved.docs[0]?.id) ?? fs.find((f) => f.id === moved.folders[0]?.id))?.name}"` : plural(n, "item");
+    const what =
+      n === 1
+        ? `"${(docs.find((d) => d.id === moved.docs[0]?.id) ?? fs.find((f) => f.id === moved.folders[0]?.id))?.name}"`
+        : plural(n, "item");
     notifyUndoable(`Moved ${what} to ${folderName(dest)}.`, () => void undoMove(moved));
     if (errors.length) notifyError(`${plural(errors.length, "item")} didn't move: ${errors[0]}`);
     return { ok: true };
   };
 
-  const copyTo = async (docs: DocTarget[], dest: string | null): Promise<{ ok: boolean; error?: string }> => {
+  const copyTo = async (
+    docs: DocTarget[],
+    dest: string | null,
+  ): Promise<{ ok: boolean; error?: string }> => {
     const errors: string[] = [];
     for (const d of docs) {
       const res = await copyDocumentToFolder(d.id, dest);
       if (!res.ok) errors.push(res.error ?? "Couldn't copy.");
     }
     if (errors.length === docs.length) return { ok: false, error: errors[0] };
-    notifySuccess(`Copied ${docs.length === 1 ? `"${docs[0]!.name}"` : plural(docs.length - errors.length, "file")} to ${folderName(dest)}.`);
+    notifySuccess(
+      `Copied ${docs.length === 1 ? `"${docs[0]!.name}"` : plural(docs.length - errors.length, "file")} to ${folderName(dest)}.`,
+    );
     if (errors.length) notifyError(`${plural(errors.length, "file")} didn't copy: ${errors[0]}`);
     return { ok: true };
   };
 
-  const setShared = (targets: ActionTarget[], shared: boolean) => exclusive(async () => {
-    const docIds = targets.filter((t) => t.kind === "doc").map((t) => t.id);
-    const errors: string[] = [];
-    if (docIds.length) {
-      const res = await setDocumentsClientShare(docIds, shared);
-      if (!res.ok) errors.push(res.error ?? "Couldn't update sharing.");
-    }
-    for (const f of targets.filter((t) => t.kind === "folder")) {
-      const res = await setFolderClientShared(f.id, shared);
-      if (!res.ok) errors.push(res.error ?? "Couldn't update sharing.");
-    }
-    if (errors.length) notifyError(errors[0]!);
-  });
+  const setShared = (targets: ActionTarget[], shared: boolean) =>
+    exclusive(async () => {
+      const docIds = targets.filter((t) => t.kind === "doc").map((t) => t.id);
+      const errors: string[] = [];
+      if (docIds.length) {
+        const res = await setDocumentsClientShare(docIds, shared);
+        if (!res.ok) errors.push(res.error ?? "Couldn't update sharing.");
+      }
+      for (const f of targets.filter((t) => t.kind === "folder")) {
+        const res = await setFolderClientShared(f.id, shared);
+        if (!res.ok) errors.push(res.error ?? "Couldn't update sharing.");
+      }
+      if (errors.length) notifyError(errors[0]!);
+    });
 
   const deleteTargets = async (targets: ActionTarget[]) => {
     if (targets.length === 1) {
@@ -317,12 +368,18 @@ export function DocumentsWorkspace({
     const fs = targets.filter((t): t is FolderTarget => t.kind === "folder");
     const single = targets.length === 1 ? targets[0]! : null;
     const notes: string[] = [];
-    if (docs.length) notes.push("Deleted files can't be recovered. Copies in other folders are separate documents and aren't affected.");
-    if (fs.length) notes.push("Deleting a folder never deletes what's inside — its subfolders and files move up one level.");
+    if (docs.length)
+      notes.push(
+        "Deleted files can't be recovered. Copies in other folders are separate documents and aren't affected.",
+      );
+    if (fs.length)
+      notes.push(
+        "Deleting a folder never deletes what's inside — its subfolders and files move up one level.",
+      );
     const kept = docs.reduce((n, d) => n + d.unsavedAttachments.length, 0);
     if (kept > 0) {
       notes.push(
-        `${plural(kept, "attachment")} of the selected emails will be kept in their folder. To delete an email's attachments too, delete that email on its own.`
+        `${plural(kept, "attachment")} of the selected emails will be kept in their folder. To delete an email's attachments too, delete that email on its own.`,
       );
     }
     const ok = await confirmAction({
@@ -332,7 +389,11 @@ export function DocumentsWorkspace({
           : `Delete "${single.name}"?`
         : `Delete ${plural(targets.length, "item")}?`,
       description: notes.join(" "),
-      confirmLabel: single ? (single.kind === "folder" ? "Delete folder" : "Delete document") : `Delete ${plural(targets.length, "item")}`,
+      confirmLabel: single
+        ? single.kind === "folder"
+          ? "Delete folder"
+          : "Delete document"
+        : `Delete ${plural(targets.length, "item")}`,
       destructive: true,
     });
     if (!ok) return;
@@ -340,9 +401,15 @@ export function DocumentsWorkspace({
       const errors: string[] = [];
       // Selected attachments first: deleting their email can take a
       // saved one along, and a second delete would report "not found".
-      const ordered = [...docs.filter((d) => d.isAttachment), ...docs.filter((d) => !d.isAttachment)];
+      const ordered = [
+        ...docs.filter((d) => d.isAttachment),
+        ...docs.filter((d) => !d.isAttachment),
+      ];
       for (const d of ordered) {
-        const res = await deleteDocument(d.id, d.unsavedAttachments.length ? { attachments: "keep" } : {});
+        const res = await deleteDocument(
+          d.id,
+          d.unsavedAttachments.length ? { attachments: "keep" } : {},
+        );
         if (!res.ok) errors.push(res.error ?? "Couldn't delete document.");
       }
       for (const f of fs) {
@@ -350,7 +417,11 @@ export function DocumentsWorkspace({
         if (!res.ok) errors.push(res.error);
       }
       if (errors.length) {
-        notifyError(targets.length === 1 ? errors[0]! : `${plural(errors.length, "item")} weren't deleted: ${errors[0]}`);
+        notifyError(
+          targets.length === 1
+            ? errors[0]!
+            : `${plural(errors.length, "item")} weren't deleted: ${errors[0]}`,
+        );
       }
     });
   };
@@ -379,7 +450,11 @@ export function DocumentsWorkspace({
 
   // ── Action runner (menus, bar, shortcuts) ──────────────────────────
 
-  const run = (id: EntryActionId, targets: ActionTarget[], bgFolder: string | null = currentFolderId) => {
+  const run = (
+    id: EntryActionId,
+    targets: ActionTarget[],
+    bgFolder: string | null = currentFolderId,
+  ) => {
     const single = targets.length === 1 ? targets[0]! : null;
     switch (id) {
       case "open":
@@ -428,7 +503,7 @@ export function DocumentsWorkspace({
     // A small distance so plain clicks still select / open.
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     // Long-press on touch so the list still scrolls.
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } })
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }),
   );
 
   const payloadOf = (targets: ActionTarget[]): MovePayload => ({
@@ -467,7 +542,11 @@ export function DocumentsWorkspace({
       const warning = await moveVisibilityWarning(drag.targets, dest);
       if (
         warning &&
-        !(await confirmAction({ title: `Move to ${folderName(dest)}?`, description: warning, confirmLabel: "Move" }))
+        !(await confirmAction({
+          title: `Move to ${folderName(dest)}?`,
+          description: warning,
+          confirmLabel: "Move",
+        }))
       ) {
         return;
       }
@@ -479,14 +558,16 @@ export function DocumentsWorkspace({
   };
 
   const canDropOn = useCallback(
-    (folderId: string | null) => !!dragging && moveBlockReason(dragging.payload, folderId, folders) === null,
-    [dragging, folders]
+    (folderId: string | null) =>
+      !!dragging && moveBlockReason(dragging.payload, folderId, folders) === null,
+    [dragging, folders],
   );
 
   // ── Desktop files ──────────────────────────────────────────────────
 
   const acceptsFiles = perms.writable && perms.upload;
-  const isFileDrag = (e: DragEvent) => acceptsFiles && Array.from(e.dataTransfer.types).includes("Files");
+  const isFileDrag = (e: DragEvent) =>
+    acceptsFiles && Array.from(e.dataTransfer.types).includes("Files");
   const dropFolderAt = (el: EventTarget | null): string | null => {
     const hit = (el as HTMLElement | null)?.closest?.<HTMLElement>("[data-drop-folder]");
     if (!hit) return currentFolderId;
@@ -533,7 +614,10 @@ export function DocumentsWorkspace({
     const key = row.dataset.entryKey as EntryKey;
     const keys = selection.keys.has(key) ? selection.keys : new Set([key]);
     if (!selection.keys.has(key)) setSelectionState({ keys, anchor: key });
-    setMenu({ kind: "entries", targets: order.filter((k) => keys.has(k)).map((k) => rowByKey.get(k)!.target) });
+    setMenu({
+      kind: "entries",
+      targets: order.filter((k) => keys.has(k)).map((k) => rowByKey.get(k)!.target),
+    });
   };
 
   const onTreeContextMenu = (e: React.MouseEvent) => {
@@ -580,30 +664,38 @@ export function DocumentsWorkspace({
 
   // ── Dialog props ───────────────────────────────────────────────────
 
-  const moveDialog = moveTargets && (() => {
-    const fs = moveTargets.filter((t): t is FolderTarget => t.kind === "folder");
-    const locations = new Set(moveTargets.map((t) => (t.kind === "doc" ? t.folderId : t.parentId)));
-    const single = moveTargets.length === 1 ? moveTargets[0]! : null;
-    return (
-      <MoveToFolderDialog
-        open
-        onOpenChange={(o) => !o && setMoveTargets(null)}
-        title={single ? `Move "${single.name}"` : `Move ${plural(moveTargets.length, "item")}`}
-        description={
-          fs.length
-            ? "Pick where these should live. Folders move with everything inside them."
-            : "Pick the folder these documents should live in."
-        }
-        folders={flat}
-        disabledIds={fs.flatMap((f) => [f.id, ...collectDescendantIds(folders, f.id)])}
-        currentFolderId={locations.size === 1 ? [...locations][0]! : undefined}
-        warningLoader={visibilityWarnings ? (target) => moveVisibilityWarning(moveTargets, target) : undefined}
-        onMove={(target) => moveTo(moveTargets, target)}
-      />
-    );
-  })();
+  const moveDialog =
+    moveTargets &&
+    (() => {
+      const fs = moveTargets.filter((t): t is FolderTarget => t.kind === "folder");
+      const locations = new Set(
+        moveTargets.map((t) => (t.kind === "doc" ? t.folderId : t.parentId)),
+      );
+      const single = moveTargets.length === 1 ? moveTargets[0]! : null;
+      return (
+        <MoveToFolderDialog
+          open
+          onOpenChange={(o) => !o && setMoveTargets(null)}
+          title={single ? `Move "${single.name}"` : `Move ${plural(moveTargets.length, "item")}`}
+          description={
+            fs.length
+              ? "Pick where these should live. Folders move with everything inside them."
+              : "Pick the folder these documents should live in."
+          }
+          folders={flat}
+          disabledIds={fs.flatMap((f) => [f.id, ...collectDescendantIds(folders, f.id)])}
+          currentFolderId={locations.size === 1 ? [...locations][0]! : undefined}
+          warningLoader={
+            visibilityWarnings ? (target) => moveVisibilityWarning(moveTargets, target) : undefined
+          }
+          onMove={(target) => moveTo(moveTargets, target)}
+        />
+      );
+    })();
 
-  const selectedActions = entryActions(selectedTargets, perms).filter((a) => BAR_ACTIONS.includes(a.id));
+  const selectedActions = entryActions(selectedTargets, perms).filter((a) =>
+    BAR_ACTIONS.includes(a.id),
+  );
   const fileDropName = fileDropFolder === undefined ? null : folderName(fileDropFolder);
 
   return (
@@ -646,7 +738,11 @@ export function DocumentsWorkspace({
           {/* ── Browser ──────────────────────────────────────────── */}
           <div className="flex-1 min-w-0 w-full flex flex-col gap-4">
             <div className="flex flex-wrap items-center gap-2">
-              <FolderBreadcrumbs basePath={basePath} folders={folders} currentFolderId={currentFolderId} />
+              <FolderBreadcrumbs
+                basePath={basePath}
+                folders={folders}
+                currentFolderId={currentFolderId}
+              />
               {toolbarNote}
               <div className="ml-auto flex items-center gap-2">
                 {perms.writable && perms.folderCreate && !atDepthCap(currentFolderId) && (
@@ -698,7 +794,11 @@ export function DocumentsWorkspace({
                       type="button"
                       onClick={() => run(a.id, selectedTargets)}
                       disabled={busy}
-                      className={cn(a.destructive ? "text-danger hover:bg-danger-soft" : "text-ink-2 hover:bg-white")}
+                      className={cn(
+                        a.destructive
+                          ? "text-danger hover:bg-danger-soft"
+                          : "text-ink-2 hover:bg-white",
+                      )}
                     >
                       <Icon size={13} />
                       {a.label}
@@ -709,7 +809,10 @@ export function DocumentsWorkspace({
             )}
 
             <ContextMenu>
-              <ContextMenuTrigger onContextMenu={onListContextMenu} className="flex flex-col gap-4 min-h-40">
+              <ContextMenuTrigger
+                onContextMenu={onListContextMenu}
+                className="flex flex-col gap-4 min-h-40"
+              >
                 {rows.length === 0 ? (
                   empty
                 ) : (
@@ -758,7 +861,11 @@ export function DocumentsWorkspace({
         <MoveToFolderDialog
           open
           onOpenChange={(o) => !o && setCopyTargets(null)}
-          title={copyTargets.length === 1 ? `Copy "${copyTargets[0]!.name}" to…` : `Copy ${plural(copyTargets.length, "file")} to…`}
+          title={
+            copyTargets.length === 1
+              ? `Copy "${copyTargets[0]!.name}" to…`
+              : `Copy ${plural(copyTargets.length, "file")} to…`
+          }
           description={COPY_DESCRIPTION}
           folders={flat}
           currentFolderId={undefined}
@@ -817,7 +924,9 @@ function DragChip({ targets }: { targets: ActionTarget[] }) {
       <Icon size={13} className="text-ink-4" />
       <span className="max-w-60 truncate">{first.name}</span>
       {targets.length > 1 && (
-        <span className="rounded-full bg-brand-700 px-1.5 text-2xs text-white">+{targets.length - 1}</span>
+        <span className="rounded-full bg-brand-700 px-1.5 text-2xs text-white">
+          +{targets.length - 1}
+        </span>
       )}
     </div>
   );

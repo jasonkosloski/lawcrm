@@ -36,9 +36,7 @@ vi.mock("@/lib/queries/calendar", () => ({
   getEventTimeEntries: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("@/lib/queries/calendar-edit-flags", () => ({
-  getEditableEventIds: vi.fn(
-    async (ids: readonly string[]) => new Set<string>(ids)
-  ),
+  getEditableEventIds: vi.fn(async (ids: readonly string[]) => new Set<string>(ids)),
 }));
 vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
@@ -97,9 +95,7 @@ const mockedHasPermission = vi.mocked(currentUserHasPermission);
 
 /** Build the async searchParams prop Next 16 passes to pages. */
 const props = (sp: Record<string, string | string[]>) =>
-  ({ searchParams: Promise.resolve(sp) }) as Parameters<
-    typeof CalendarPage
-  >[0];
+  ({ searchParams: Promise.resolve(sp) }) as Parameters<typeof CalendarPage>[0];
 
 /** Minimal CalendarEventDetail — only the fields the loader reads. */
 const eventDetail = (viewerCanSeeDetails: boolean) =>
@@ -115,10 +111,7 @@ type AnyElement = ReactElement<Record<string, unknown> & { children?: unknown }>
 
 /** Depth-first search of an element tree for the first element whose
  *  `type` satisfies `match`. */
-function findElement(
-  node: unknown,
-  match: (el: AnyElement) => boolean
-): AnyElement | null {
+function findElement(node: unknown, match: (el: AnyElement) => boolean): AnyElement | null {
   if (!node || typeof node !== "object") return null;
   if (Array.isArray(node)) {
     for (const child of node) {
@@ -140,10 +133,7 @@ function findElement(
  * exported, since Next restricts page-file exports.
  */
 const findLoader = (node: unknown) =>
-  findElement(
-    node,
-    (el) => typeof el.type === "function" && el.type.name === "EventDetailLoader"
-  );
+  findElement(node, (el) => typeof el.type === "function" && el.type.name === "EventDetailLoader");
 
 /** Render the page, then run its EventDetailLoader to completion. */
 async function runLoader(sp: Record<string, string | string[]>) {
@@ -151,7 +141,7 @@ async function runLoader(sp: Record<string, string | string[]>) {
   const loader = findLoader(tree);
   if (!loader) return { loader: null, output: null, modal: null };
   const output = (await (loader.type as (p: unknown) => Promise<unknown>)(
-    loader.props
+    loader.props,
   )) as AnyElement | null;
   // The visible-event path wraps the modal in the attachments
   // provider; the Busy shell renders it bare.
@@ -165,9 +155,7 @@ afterEach(() => {
   mockedGetItems.mockResolvedValue([]);
   // Default: every id is editable (restores the factory behavior after
   // a test overrides it).
-  mockedEditable.mockImplementation(
-    async (ids: readonly string[]) => new Set<string>(ids)
-  );
+  mockedEditable.mockImplementation(async (ids: readonly string[]) => new Set<string>(ids));
 });
 
 describe("CalendarPage — event-detail loader visibility gating", () => {
@@ -191,12 +179,8 @@ describe("CalendarPage — event-detail loader visibility gating", () => {
 
   test("visible event: notes/time entries fetched and passed through", async () => {
     mockedGetEvent.mockResolvedValue(eventDetail(true));
-    const notes = [{ id: "note_1" }] as Awaited<
-      ReturnType<typeof getEventNotes>
-    >;
-    const timeEntries = [{ id: "te_1" }] as Awaited<
-      ReturnType<typeof getEventTimeEntries>
-    >;
+    const notes = [{ id: "note_1" }] as Awaited<ReturnType<typeof getEventNotes>>;
+    const timeEntries = [{ id: "te_1" }] as Awaited<ReturnType<typeof getEventTimeEntries>>;
     mockedGetNotes.mockResolvedValue(notes);
     mockedGetTimeEntries.mockResolvedValue(timeEntries);
 
@@ -250,9 +234,7 @@ describe("CalendarPage — per-event edit gate", () => {
 
   test("the attachments provider carries the viewer's pin/delete permissions", async () => {
     mockedGetEvent.mockResolvedValue(eventDetail(true));
-    mockedHasPermission.mockImplementation(
-      async (key: string) => key === "notes.pin"
-    );
+    mockedHasPermission.mockImplementation(async (key: string) => key === "notes.pin");
 
     const { output } = await runLoader({ event: "evt_1" });
 

@@ -122,10 +122,7 @@ export const MAX_DOCUMENT_NAME_LENGTH = 255;
 /** Trim a display name to `max` characters, cutting the STEM so a
  *  short trailing extension survives (the extension is what MIME
  *  resolution and users' eyes rely on). */
-export function capDocumentName(
-  name: string,
-  max: number = MAX_DOCUMENT_NAME_LENGTH
-): string {
+export function capDocumentName(name: string, max: number = MAX_DOCUMENT_NAME_LENGTH): string {
   if (name.length <= max) return name;
   const dot = name.lastIndexOf(".");
   const ext = dot > 0 && name.length - dot <= 17 ? name.slice(dot) : "";
@@ -134,17 +131,14 @@ export function capDocumentName(
 
 /** Media (video/audio) gets the big cap; everything else the small. */
 export function isMediaType(contentType: string): boolean {
-  return (
-    contentType.startsWith("video/") || contentType.startsWith("audio/")
-  );
+  return contentType.startsWith("video/") || contentType.startsWith("audio/");
 }
 
 /** Shared error copy for the two upload paths (streaming route +
  *  blob token callback) so scope validation reads the same. */
 export const UPLOAD_SCOPE_REQUIRED_ERROR =
   "Exactly one of matterId or leadId is required and must precede file parts in the form data.";
-export const UPLOAD_FOLDER_SCOPE_ERROR =
-  "Folder not found in this matter or intake.";
+export const UPLOAD_FOLDER_SCOPE_ERROR = "Folder not found in this matter or intake.";
 export const UPLOAD_RECORDS_REQUEST_SCOPE_ERROR =
   "Records request not found in this matter or intake.";
 
@@ -152,10 +146,8 @@ export const UPLOAD_RECORDS_REQUEST_SCOPE_ERROR =
  *  cap and a per-draft file count, enforced by both upload paths. */
 export const DRAFT_MAX_FILE_BYTES = 50 * 1024 * 1024;
 export const DRAFT_MAX_FILES = 20;
-export const DRAFT_FILE_TOO_LARGE_ERROR =
-  "Draft files are limited to 50 MB each.";
+export const DRAFT_FILE_TOO_LARGE_ERROR = "Draft files are limited to 50 MB each.";
 export const DRAFT_FILE_COUNT_ERROR = "A draft can hold up to 20 files.";
-export const UPLOAD_DRAFT_EXCLUSIVE_ERROR =
-  "Choose exactly one of a matter, a lead or a draft.";
+export const UPLOAD_DRAFT_EXCLUSIVE_ERROR = "Choose exactly one of a matter, a lead or a draft.";
 export const UPLOAD_DRAFT_NO_FOLDER_ERROR =
   "Draft files can't be placed in a folder or linked to a records request.";

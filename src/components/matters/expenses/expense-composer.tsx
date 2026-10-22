@@ -22,11 +22,7 @@ import { createExpense } from "@/app/actions/expenses";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { todayKey } from "@/lib/format-date";
 import { expenseInitialState, type ExpenseFormState } from "@/lib/expense-constants";
-import {
-  ExpenseFields,
-  blankExpenseDraft,
-  type ExpenseDraft,
-} from "./expense-fields";
+import { ExpenseFields, blankExpenseDraft, type ExpenseDraft } from "./expense-fields";
 
 export function ExpenseComposer({ matterId }: { matterId: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -34,10 +30,11 @@ export function ExpenseComposer({ matterId }: { matterId: string }) {
   // Wrapped useActionState: masks state left over from a previous
   // expand, so a failed attempt's errors don't reappear when the
   // form is re-expanded. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    ExpenseFormState,
-    FormData
-  >(action, expenseInitialState, expanded);
+  const [state, formAction, isPending] = useDialogActionState<ExpenseFormState, FormData>(
+    action,
+    expenseInitialState,
+    expanded,
+  );
 
   // Default date = today in the viewer's profile zone. Expense.date is
   // a date-only value (ADR-012), so this is a calendar-day key, not an
@@ -65,12 +62,7 @@ export function ExpenseComposer({ matterId }: { matterId: string }) {
 
   if (!expanded) {
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        type="button"
-        onClick={() => setExpanded(true)}
-      >
+      <Button variant="outline" size="sm" type="button" onClick={() => setExpanded(true)}>
         <Plus size={12} />
         Log expense
       </Button>
@@ -94,12 +86,7 @@ export function ExpenseComposer({ matterId }: { matterId: string }) {
         </button>
       </div>
 
-      <ExpenseFields
-        matterId={matterId}
-        draft={draft}
-        onChange={patch}
-        errors={state.errors}
-      />
+      <ExpenseFields matterId={matterId} draft={draft} onChange={patch} errors={state.errors} />
 
       {state.error && <div className="text-2xs text-warn">{state.error}</div>}
 

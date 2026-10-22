@@ -27,11 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { TextareaField } from "@/components/matters/captures/primary-fields";
 import { cn } from "@/lib/utils";
-import {
-  NOTE_TYPES,
-  NOTE_TYPE_LABEL,
-  type NoteType,
-} from "@/lib/note-constants";
+import { NOTE_TYPES, NOTE_TYPE_LABEL, type NoteType } from "@/lib/note-constants";
 import {
   noteAttachmentInitialState,
   type NoteAttachmentFormState,
@@ -48,10 +44,7 @@ export function AddNoteOnEntityDialog({
   onOpenChange: (open: boolean) => void;
   /** Pre-bound server action — `addNoteToTask.bind(null, id)` or
    *  `addNoteToDeadline.bind(null, id)` from the call site. */
-  action: (
-    prev: NoteAttachmentFormState,
-    formData: FormData
-  ) => Promise<NoteAttachmentFormState>;
+  action: (prev: NoteAttachmentFormState, formData: FormData) => Promise<NoteAttachmentFormState>;
   /** What the note is being added to, shown in the dialog
    *  description so context is obvious. */
   parentLabel: string;
@@ -60,10 +53,11 @@ export function AddNoteOnEntityDialog({
   // Wrapped useActionState: masks state left over from a previous
   // open, so a failed attempt's errors don't reappear when the
   // dialog is reopened. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    NoteAttachmentFormState,
-    FormData
-  >(action, noteAttachmentInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<NoteAttachmentFormState, FormData>(
+    action,
+    noteAttachmentInitialState,
+    open,
+  );
 
   // Close on success. Deps key on the state OBJECT, not
   // state.status: useActionState keeps its state across
@@ -81,9 +75,7 @@ export function AddNoteOnEntityDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add note on {parentKind}</DialogTitle>
-          <DialogDescription className="truncate">
-            {parentLabel}
-          </DialogDescription>
+          <DialogDescription className="truncate">{parentLabel}</DialogDescription>
         </DialogHeader>
 
         {/* The form (and its working copy of the text + type) lives in
@@ -143,9 +135,7 @@ function NoteForm({
             aria-pressed={type === t}
             className={cn(
               "text-2xs font-medium px-2 py-0.5 rounded-[5px] transition-colors",
-              type === t
-                ? "bg-white text-ink shadow-sm"
-                : "text-ink-3 hover:text-ink"
+              type === t ? "bg-white text-ink shadow-sm" : "text-ink-3 hover:text-ink",
             )}
           >
             {NOTE_TYPE_LABEL[t]}

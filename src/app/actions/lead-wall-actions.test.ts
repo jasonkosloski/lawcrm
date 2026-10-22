@@ -25,13 +25,7 @@ import { setTaskStatus } from "@/app/actions/tasks";
 import { deleteTimeEntry } from "@/app/actions/time-entries";
 import { deleteCalendarEvent } from "@/app/actions/calendar-events";
 import { noteInitialState } from "@/lib/note-constants";
-import {
-  resetDb,
-  seedFirm,
-  seedLead,
-  seedTimeEntry,
-  seedUser,
-} from "@/test/integration-helpers";
+import { resetDb, seedFirm, seedLead, seedTimeEntry, seedUser } from "@/test/integration-helpers";
 
 const NOT_FOUND = /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/;
 let currentUser = "";
@@ -62,11 +56,9 @@ beforeEach(async () => {
 describe("lead actions", () => {
   test("a non-member can't note, decline or conflict-check a restricted lead", async () => {
     await expect(
-      createLeadNote(leadId, noteInitialState, form({ content: "<p>hi</p>" }))
+      createLeadNote(leadId, noteInitialState, form({ content: "<p>hi</p>" })),
     ).rejects.toThrow(NOT_FOUND);
-    await expect(declineLead(leadId, { status: "idle" }, form({}))).rejects.toThrow(
-      NOT_FOUND
-    );
+    await expect(declineLead(leadId, { status: "idle" }, form({}))).rejects.toThrow(NOT_FOUND);
     await expect(runLeadConflictCheck(leadId)).rejects.toThrow(NOT_FOUND);
     const lead = await prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
     expect(lead.stage).toBe("new");
@@ -105,7 +97,7 @@ describe("children reached by id", () => {
     expect(await prisma.timeEntry.count()).toBe(1);
     expect(await prisma.calendarEvent.count()).toBe(1);
     expect((await prisma.task.findUniqueOrThrow({ where: { id: task.id } })).status).not.toBe(
-      "done"
+      "done",
     );
   });
 });

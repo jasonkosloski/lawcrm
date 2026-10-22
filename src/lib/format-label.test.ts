@@ -30,9 +30,7 @@ describe("formatEmailLabel", () => {
     expect(formatEmailLabel("custom:shipping_label")).toBe("Shipping Label");
     expect(formatEmailLabel("custom:white-label")).toBe("White Label");
     // "Privileged" and "Privileged Label" stay distinguishable.
-    expect(formatEmailLabel("privileged")).not.toBe(
-      formatEmailLabel("custom:privileged_label")
-    );
+    expect(formatEmailLabel("privileged")).not.toBe(formatEmailLabel("custom:privileged_label"));
   });
 
   test("custom: namespace prefix strips", () => {

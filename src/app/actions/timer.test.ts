@@ -18,15 +18,7 @@
  *     `time_entries.create`.
  */
 
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
@@ -38,12 +30,7 @@ vi.mock("@/lib/permission-check", () => ({
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
-import {
-  discardTimer,
-  startTimer,
-  stopTimer,
-  updateTimer,
-} from "@/app/actions/timer";
+import { discardTimer, startTimer, stopTimer, updateTimer } from "@/app/actions/timer";
 import { timeEntryInitialState } from "@/lib/time-entry-constants";
 import {
   resetDb,
@@ -82,14 +69,11 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const getSession = () =>
-  prisma.timerSession.findUnique({ where: { userId } });
+const getSession = () => prisma.timerSession.findUnique({ where: { userId } });
 
 // Posts the id of the session that's running RIGHT NOW unless the
 // test overrides it (the stop dialog always holds a real session id).
-const buildStopForm = async (
-  overrides: Partial<Record<string, string>> = {}
-) => {
+const buildStopForm = async (overrides: Partial<Record<string, string>> = {}) => {
   const fd = new FormData();
   const current = await getSession();
   fd.set("sessionId", overrides.sessionId ?? current?.id ?? "no-session");
@@ -156,14 +140,14 @@ describe("startTimer", () => {
     expect(sessions[0].activity).toBe("Second");
     expect(sessions[0].matterId).toBeNull();
     expect(sessions[0].id).not.toBe(first!.id);
-    expect(sessions[0].startedAt.getTime()).toBeGreaterThanOrEqual(
-      first!.startedAt.getTime()
-    );
+    expect(sessions[0].startedAt.getTime()).toBeGreaterThanOrEqual(first!.startedAt.getTime());
   });
 
   test("rejects a matter id that doesn't exist", async () => {
     // Unknown == hidden: the matter wall answers with notFound().
-    await expect(startTimer({ matterId: "nope" })).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
+    await expect(startTimer({ matterId: "nope" })).rejects.toThrow(
+      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/,
+    );
     expect(await getSession()).toBeNull();
   });
 
@@ -211,13 +195,11 @@ describe("updateTimer", () => {
     // Simulate the other tab: the action's findUnique sees the
     // session, then the row is gone before the write.
     const real = prisma.timerSession.findUnique.bind(prisma.timerSession);
-    vi.spyOn(prisma.timerSession, "findUnique").mockImplementationOnce(
-      (async (args: never) => {
-        const row = await real(args);
-        await prisma.timerSession.deleteMany({ where: { userId } });
-        return row;
-      }) as never
-    );
+    vi.spyOn(prisma.timerSession, "findUnique").mockImplementationOnce((async (args: never) => {
+      const row = await real(args);
+      await prisma.timerSession.deleteMany({ where: { userId } });
+      return row;
+    }) as never);
 
     const res = await updateTimer({ activity: "Too late" });
 
@@ -227,7 +209,9 @@ describe("updateTimer", () => {
 
   test("rejects a matter id that doesn't exist", async () => {
     await startTimer();
-    await expect(updateTimer({ matterId: "nope" })).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
+    await expect(updateTimer({ matterId: "nope" })).rejects.toThrow(
+      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/,
+    );
     expect((await getSession())?.matterId).toBeNull();
   });
 });
@@ -264,7 +248,7 @@ describe("stopTimer", () => {
         utbmsCode: "A101",
         billable: "on",
         privileged: "on",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
 
@@ -287,44 +271,31 @@ describe("stopTimer", () => {
     await startTimer({ matterId });
     const res = await stopTimer(
       timeEntryInitialState,
-      await buildStopForm({ activity: SECRET, privileged: "on" })
+      await buildStopForm({ activity: SECRET, privileged: "on" }),
     );
     expect(res.status).toBe("ok");
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { type: "time_entry" },
     });
     expect(log.detail).toBeNull();
-    expect(JSON.stringify(await prisma.activityLog.findMany())).not.toContain(
-      SECRET
-    );
+    expect(JSON.stringify(await prisma.activityLog.findMany())).not.toContain(SECRET);
 
     // Non-privileged stop still records it.
     await startTimer({ matterId });
-    await stopTimer(
-      timeEntryInitialState,
-      await buildStopForm({ activity: "Routine call" })
-    );
-    expect(
-      await prisma.activityLog.count({ where: { detail: "Routine call" } })
-    ).toBe(1);
+    await stopTimer(timeEntryInitialState, await buildStopForm({ activity: "Routine call" }));
+    expect(await prisma.activityLog.count({ where: { detail: "Routine call" } })).toBe(1);
   });
 
   test("the entry date is stored as UTC midnight of the posted day (ADR-012)", async () => {
     await startTimer({ matterId });
-    await stopTimer(
-      timeEntryInitialState,
-      await buildStopForm({ date: "2026-07-06" })
-    );
+    await stopTimer(timeEntryInitialState, await buildStopForm({ date: "2026-07-06" }));
     const entry = await prisma.timeEntry.findFirstOrThrow();
     expect(entry.date.toISOString()).toBe("2026-07-06T00:00:00.000Z");
   });
 
   test("an impossible date is a field error and the timer keeps running", async () => {
     await startTimer({ matterId });
-    const res = await stopTimer(
-      timeEntryInitialState,
-      await buildStopForm({ date: "2026-02-31" })
-    );
+    const res = await stopTimer(timeEntryInitialState, await buildStopForm({ date: "2026-02-31" }));
     expect(res.status).toBe("error");
     expect(res.errors?.date).toBeTruthy();
     expect(await prisma.timeEntry.count()).toBe(0);
@@ -334,17 +305,12 @@ describe("stopTimer", () => {
   test("gates on time_entries.create", async () => {
     await startTimer({ matterId });
     await stopTimer(timeEntryInitialState, await buildStopForm());
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "time_entries.create"
-    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith("time_entries.create");
   });
 
   test("matter is REQUIRED — empty matterId is a field error", async () => {
     await startTimer();
-    const res = await stopTimer(
-      timeEntryInitialState,
-      await buildStopForm({ matterId: "" })
-    );
+    const res = await stopTimer(timeEntryInitialState, await buildStopForm({ matterId: "" }));
     expect(res.status).toBe("error");
     expect(res.errors?.matterId?.length).toBeGreaterThan(0);
     expect(await prisma.timeEntry.count()).toBe(0);
@@ -355,16 +321,13 @@ describe("stopTimer", () => {
   test("rejects a matter that doesn't exist", async () => {
     await startTimer();
     await expect(
-      stopTimer(timeEntryInitialState, await buildStopForm({ matterId: "nope" }))
+      stopTimer(timeEntryInitialState, await buildStopForm({ matterId: "nope" })),
     ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
   });
 
   test("rejects an unknown UTBMS code", async () => {
     await startTimer({ matterId });
-    const res = await stopTimer(
-      timeEntryInitialState,
-      await buildStopForm({ utbmsCode: "X999" })
-    );
+    const res = await stopTimer(timeEntryInitialState, await buildStopForm({ utbmsCode: "X999" }));
     expect(res.status).toBe("error");
     expect(res.errors?.utbmsCode?.length).toBeGreaterThan(0);
     expect(await prisma.timeEntry.count()).toBe(0);
@@ -388,10 +351,7 @@ describe("stopTimer", () => {
     await startTimer({ activity: "New", replace: true });
     const fresh = await getSession();
 
-    const res = await stopTimer(
-      timeEntryInitialState,
-      await buildStopForm({ sessionId: old!.id })
-    );
+    const res = await stopTimer(timeEntryInitialState, await buildStopForm({ sessionId: old!.id }));
     expect(res.status).toBe("error");
     expect(res.errors?.activity?.[0]).toMatch(/no running timer/i);
     expect(await prisma.timeEntry.count()).toBe(0);

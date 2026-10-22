@@ -21,8 +21,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
-  const mod =
-    await importOriginal<typeof import("@/lib/google/gmail-client")>();
+  const mod = await importOriginal<typeof import("@/lib/google/gmail-client")>();
   return { ...mod, gmailFetch: vi.fn() };
 });
 
@@ -36,11 +35,7 @@ import {
   seedPracticeArea,
   seedUser,
 } from "@/test/integration-helpers";
-import type {
-  GmailMessage,
-  GmailMessagePart,
-  GmailThread,
-} from "./gmail-message-parse";
+import type { GmailMessage, GmailMessagePart, GmailThread } from "./gmail-message-parse";
 import {
   backfillEmailAccount,
   FULL_SYNC_MAX_AGE_DAYS,
@@ -117,13 +112,11 @@ function gmailMsg(opts: {
     mimeType: "multipart/alternative",
     parts: bodyParts,
   };
-  const attachmentParts: GmailMessagePart[] = (opts.attachments ?? []).map(
-    (a) => ({
-      mimeType: "application/pdf",
-      filename: a.filename,
-      body: { attachmentId: a.attachmentId, size: a.size ?? 1000 },
-    })
-  );
+  const attachmentParts: GmailMessagePart[] = (opts.attachments ?? []).map((a) => ({
+    mimeType: "application/pdf",
+    filename: a.filename,
+    body: { attachmentId: a.attachmentId, size: a.size ?? 1000 },
+  }));
   return {
     id: opts.id,
     threadId: opts.threadId,
@@ -270,12 +263,8 @@ describe("syncEmailAccount — full sync (no cursor)", () => {
     });
 
     // Age cap rides the list call as a Gmail query.
-    const listCall = requestedPaths().find((p) =>
-      p.startsWith("/users/me/threads?")
-    );
-    expect(listCall).toContain(
-      encodeURIComponent(`newer_than:${FULL_SYNC_MAX_AGE_DAYS}d`)
-    );
+    const listCall = requestedPaths().find((p) => p.startsWith("/users/me/threads?"));
+    expect(listCall).toContain(encodeURIComponent(`newer_than:${FULL_SYNC_MAX_AGE_DAYS}d`));
 
     const account = await prisma.emailAccount.findUniqueOrThrow({
       where: { id: accountId },
@@ -305,19 +294,13 @@ describe("syncEmailAccount — full sync (no cursor)", () => {
     // system + CATEGORY_* ids never become rows.
     expect(thread.labels.map((l) => l.label)).toEqual(["custom:clients_smith"]);
 
-    const [m1, m2] = thread.messages.sort((a, b) =>
-      a.sentAt.getTime() - b.sentAt.getTime()
-    );
+    const [m1, m2] = thread.messages.sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
     expect(m1.fromName).toBe("Jane Smith");
     expect(m1.fromEmail).toBe("jane@firm.com");
-    expect(JSON.parse(m1.toRecipients)).toEqual([
-      { name: "", email: "you@kosloskilaw.com" },
-    ]);
+    expect(JSON.parse(m1.toRecipients)).toEqual([{ name: "", email: "you@kosloskilaw.com" }]);
     expect(m1.body).toContain("Hello <strong>counsel</strong>");
     expect(m2.fromName).toBe("Smith, Ann");
-    expect(JSON.parse(m2.ccRecipients!)).toEqual([
-      { name: "Bob", email: "bob@x.co" },
-    ]);
+    expect(JSON.parse(m2.ccRecipients!)).toEqual([{ name: "Bob", email: "bob@x.co" }]);
     expect(m2.attachments).toHaveLength(1);
     expect(m2.attachments[0]).toMatchObject({
       filename: "exhibit-a.pdf",
@@ -393,7 +376,7 @@ describe("syncEmailAccount — full sync (no cursor)", () => {
           where: { accountId },
           select: { externalId: true },
         })
-      ).map((t) => t.externalId)
+      ).map((t) => t.externalId),
     );
     expect(externalIds.has("t0")).toBe(true);
     expect(externalIds.has(`t${cap}`)).toBe(false);
@@ -464,9 +447,7 @@ describe("syncEmailAccount — incremental (cursor present)", () => {
     const result = await syncEmailAccount(accountId);
     expect(result.ok).toBe(true);
     expect(result.threadsSynced).toBe(0);
-    expect(
-      await prisma.emailThread.count({ where: { accountId, externalId: "t-gone" } })
-    ).toBe(1);
+    expect(await prisma.emailThread.count({ where: { accountId, externalId: "t-gone" } })).toBe(1);
   });
 
   it("falls back to a FULL resync when the cursor expired (history 404)", async () => {
@@ -485,9 +466,7 @@ describe("syncEmailAccount — incremental (cursor present)", () => {
       where: { id: accountId },
     });
     expect(account.historyId).toBe("h-new");
-    expect(
-      requestedPaths().some((p) => p.startsWith("/users/me/threads?"))
-    ).toBe(true);
+    expect(requestedPaths().some((p) => p.startsWith("/users/me/threads?"))).toBe(true);
   });
 });
 
@@ -557,9 +536,8 @@ describe("re-upsert semantics", () => {
       ...m,
       labelIds: ["INBOX"],
     }));
-    updatedMessages[0].payload!.headers = updatedMessages[0].payload!.headers!.map(
-      (h) =>
-        h.name === "Subject" ? { ...h, value: "Discovery schedule (amended)" } : h
+    updatedMessages[0].payload!.headers = updatedMessages[0].payload!.headers!.map((h) =>
+      h.name === "Subject" ? { ...h, value: "Discovery schedule (amended)" } : h,
     );
     updated.messages = updatedMessages;
     await prisma.emailAccount.update({
@@ -580,16 +558,14 @@ describe("re-upsert semantics", () => {
     // …app-owned state intact.
     expect(after.matterId).toBe(matterId);
     expect(after.followUpAt).toEqual(followUpAt);
-    expect(
-      after.messages.find((m) => m.id === flaggedMessage.id)!.isPrivileged
-    ).toBe(true);
+    expect(after.messages.find((m) => m.id === flaggedMessage.id)!.isPrivileged).toBe(true);
     // custom:* namespace reconciled (label removed at Gmail),
     // app-vocabulary label untouched.
     expect(after.labels.map((l) => l.label)).toEqual(["privileged"]);
     // Downloaded attachment bytes keep their storage URL.
-    expect(
-      after.messages.flatMap((m) => m.attachments).map((a) => a.fileUrl)
-    ).toEqual(["https://storage.example/exhibit-a.pdf"]);
+    expect(after.messages.flatMap((m) => m.attachments).map((a) => a.fileUrl)).toEqual([
+      "https://storage.example/exhibit-a.pdf",
+    ]);
   });
 });
 
@@ -598,9 +574,7 @@ describe("re-upsert semantics", () => {
 describe("failure semantics", () => {
   it("GmailAuthError → account marked error, result ok:false, no throw", async () => {
     const accountId = await seedAccount();
-    mockedFetch.mockRejectedValue(
-      new GmailAuthError("Reconnect this mailbox.", accountId)
-    );
+    mockedFetch.mockRejectedValue(new GmailAuthError("Reconnect this mailbox.", accountId));
 
     const result = await syncEmailAccount(accountId);
     expect(result.ok).toBe(false);
@@ -663,9 +637,7 @@ describe("backfillEmailAccount", () => {
     return [
       {
         id: "t-anchor",
-        messages: [
-          gmailMsg({ id: "ma", threadId: "t-anchor", internalDate: ANCHOR_MS }),
-        ],
+        messages: [gmailMsg({ id: "ma", threadId: "t-anchor", internalDate: ANCHOR_MS })],
       },
       {
         id: "t-old1",
@@ -707,17 +679,13 @@ describe("backfillEmailAccount", () => {
 
     // The list query anchors on epoch SECONDS, rounded up so the
     // sub-second remainder can't skip mail.
-    const listCall = requestedPaths().find((p) =>
-      p.startsWith("/users/me/threads?")
-    );
+    const listCall = requestedPaths().find((p) => p.startsWith("/users/me/threads?"));
     expect(listCall).toContain(encodeURIComponent("before:1767000001"));
     // No now-relative operator sneaks into an anchored window.
     expect(listCall).not.toContain("newer_than");
 
     // Already-local anchor thread was skipped WITHOUT a refetch…
-    expect(
-      requestedPaths().some((p) => p.includes("/users/me/threads/t-anchor"))
-    ).toBe(false);
+    expect(requestedPaths().some((p) => p.includes("/users/me/threads/t-anchor"))).toBe(false);
     // …and both older threads landed.
     expect(await prisma.emailThread.count({ where: { accountId } })).toBe(3);
 
@@ -761,7 +729,7 @@ describe("backfillEmailAccount", () => {
           where: { accountId },
           select: { externalId: true },
         })
-      ).map((t) => t.externalId)
+      ).map((t) => t.externalId),
     );
     expect(externalIds.has("t-old1")).toBe(true); // newest of the window
     expect(externalIds.has("t-old2")).toBe(false); // next click's window
@@ -779,9 +747,7 @@ describe("backfillEmailAccount", () => {
   it("GmailAuthError → account marked error, ok:false, no throw", async () => {
     const accountId = await seedAccount();
     await seedLocalAnchor(accountId);
-    mockedFetch.mockRejectedValue(
-      new GmailAuthError("Reconnect this mailbox.", accountId)
-    );
+    mockedFetch.mockRejectedValue(new GmailAuthError("Reconnect this mailbox.", accountId));
 
     const result = await backfillEmailAccount(accountId);
     expect(result.ok).toBe(false);
@@ -803,9 +769,7 @@ describe("backfillEmailAccount", () => {
       failWith: { pathPrefix: "/users/me/labels", status: 500 },
     });
 
-    await expect(backfillEmailAccount(accountId)).rejects.toThrow(
-      GmailSyncError
-    );
+    await expect(backfillEmailAccount(accountId)).rejects.toThrow(GmailSyncError);
 
     const account = await prisma.emailAccount.findUniqueOrThrow({
       where: { id: accountId },
@@ -848,9 +812,7 @@ describe("syncEmailAccountsForUser", () => {
       error: "Reconnect required.",
     });
     // The other user's account was never touched…
-    expect(
-      mockedFetch.mock.calls.every(([accountId]) => accountId === mine)
-    ).toBe(true);
+    expect(mockedFetch.mock.calls.every(([accountId]) => accountId === mine)).toBe(true);
     // …and one transiently-failing mailbox doesn't block the pass
     // (covered implicitly: the broken account is skipped pre-Google).
   });
@@ -948,12 +910,8 @@ describe("poison-message isolation (F069)", () => {
 
     const result = await syncEmailAccount(accountId);
     expect(result).toMatchObject({ ok: true, mode: "incremental", threadsSynced: 1 });
-    expect(
-      await prisma.emailThread.count({ where: { accountId, externalId: "t-good" } })
-    ).toBe(1);
-    expect(
-      await prisma.emailThread.count({ where: { accountId, externalId: "t-bad" } })
-    ).toBe(0);
+    expect(await prisma.emailThread.count({ where: { accountId, externalId: "t-good" } })).toBe(1);
+    expect(await prisma.emailThread.count({ where: { accountId, externalId: "t-bad" } })).toBe(0);
 
     const account = await prisma.emailAccount.findUniqueOrThrow({
       where: { id: accountId },
@@ -970,8 +928,7 @@ describe("poison-message isolation (F069)", () => {
     installFakeGmail({ labels: [], threads: [good] });
     await syncEmailAccount(accountId);
     expect(
-      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
-        .syncError
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } })).syncError,
     ).toBeNull();
     errSpy.mockRestore();
   });
@@ -1028,7 +985,7 @@ describe("transient failures abort the pass (review of F069)", () => {
       new Prisma.PrismaClientKnownRequestError("Can't reach database server", {
         code: "P1001",
         clientVersion: "test",
-      })
+      }),
     );
     await expect(syncEmailAccount(accountId)).rejects.toThrow();
     spy.mockRestore();
@@ -1043,8 +1000,7 @@ describe("transient failures abort the pass (review of F069)", () => {
     const retry = await syncEmailAccount(accountId);
     expect(retry.threadsSynced).toBe(2);
     expect(
-      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
-        .historyId
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } })).historyId,
     ).toBe("h200");
   });
 
@@ -1055,13 +1011,12 @@ describe("transient failures abort the pass (review of F069)", () => {
       new Prisma.PrismaClientKnownRequestError("write conflict", {
         code: "P2034",
         clientVersion: "test",
-      })
+      }),
     );
     await expect(syncEmailAccount(accountId)).rejects.toThrow();
     spy.mockRestore();
     expect(
-      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
-        .historyId
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } })).historyId,
     ).toBe("h100");
   });
 
@@ -1074,8 +1029,7 @@ describe("transient failures abort the pass (review of F069)", () => {
     await expect(syncEmailAccount(accountId)).rejects.toThrow(/All 3 thread imports failed/);
     errSpy.mockRestore();
     expect(
-      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
-        .historyId
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } })).historyId,
     ).toBe("h100");
   });
 });
@@ -1155,7 +1109,7 @@ describe("drafts (F070)", () => {
     expect(
       await prisma.emailThread.count({
         where: { accountId, externalId: "t-draft-only" },
-      })
+      }),
     ).toBe(0);
   });
 });
@@ -1232,14 +1186,11 @@ describe("history-expired catch-up (F257)", () => {
     // More than the initial-import cap: the catch-up path ignores it.
     expect(result.threadsSynced).toBe(CAP + 5);
 
-    const listCall = requestedPaths().find((p) =>
-      p.startsWith("/users/me/threads?")
-    )!;
+    const listCall = requestedPaths().find((p) => p.startsWith("/users/me/threads?"))!;
     const q = new URLSearchParams(listCall.split("?")[1]).get("q");
     expect(q).toBe(`after:${Math.floor(lastSyncAt.getTime() / 1000) - 86400}`);
     expect(
-      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
-        .historyId
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } })).historyId,
     ).toBe("h-new");
   }, 30_000);
 
@@ -1255,11 +1206,9 @@ describe("history-expired catch-up (F257)", () => {
       fullSyncMaxThreads: CAP,
     });
     expect(result.threadsSynced).toBe(CAP);
-    const listCall = requestedPaths().find((p) =>
-      p.startsWith("/users/me/threads?")
-    )!;
+    const listCall = requestedPaths().find((p) => p.startsWith("/users/me/threads?"))!;
     expect(new URLSearchParams(listCall.split("?")[1]).get("q")).toBe(
-      `newer_than:${FULL_SYNC_MAX_AGE_DAYS}d`
+      `newer_than:${FULL_SYNC_MAX_AGE_DAYS}d`,
     );
   }, 30_000);
 });
@@ -1280,8 +1229,7 @@ describe("catch-up truncation (review of F257)", () => {
       ],
     }));
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const fullFetches = () =>
-      requestedPaths().filter((p) => p.endsWith("format=full")).length;
+    const fullFetches = () => requestedPaths().filter((p) => p.endsWith("format=full")).length;
 
     // Pass 1: cap 4 of 10.
     installFakeGmail({ profileHistoryId: "h-new", labels: [], threads, history: { status: 404 } });
@@ -1299,7 +1247,9 @@ describe("catch-up truncation (review of F257)", () => {
     const r2 = await syncEmailAccount(accountId, { catchUpMaxThreads: 4 });
     expect(r2.threadsSynced).toBe(4);
     expect(fullFetches()).toBe(4); // only the 4 NEW ones got a full fetch
-    expect(requestedPaths().filter((p) => p.endsWith("format=minimal")).length).toBeGreaterThanOrEqual(4);
+    expect(
+      requestedPaths().filter((p) => p.endsWith("format=minimal")).length,
+    ).toBeGreaterThanOrEqual(4);
     account = await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } });
     expect(account.historyId).toBe("h-stale");
     expect(await prisma.emailThread.count({ where: { accountId } })).toBe(8);
@@ -1331,15 +1281,13 @@ describe("catch-up truncation (review of F257)", () => {
     await syncEmailAccount(accountId);
     // A reply lands at Gmail.
     threads[0].messages!.push(
-      gmailMsg({ id: "m0b", threadId: "t0", text: "b", internalDate: 1_767_000_900_000 })
+      gmailMsg({ id: "m0b", threadId: "t0", text: "b", internalDate: 1_767_000_900_000 }),
     );
     installFakeGmail({ profileHistoryId: "h-new2", labels: [], threads, history: { status: 404 } });
     // Cursor was advanced to h-new by pass 1; force the expired path again.
     await prisma.emailAccount.update({ where: { id: accountId }, data: { historyId: "h-stale" } });
     await syncEmailAccount(accountId);
-    expect(
-      await prisma.emailMessage.count({ where: { thread: { accountId } } })
-    ).toBe(2);
+    expect(await prisma.emailMessage.count({ where: { thread: { accountId } } })).toBe(2);
   });
 });
 
@@ -1404,9 +1352,9 @@ describe("backfill anchor protection (F259)", () => {
 
     const result = await syncEmailAccount(accountId);
     expect(result.threadsSynced).toBe(2);
-    const ids = (
-      await prisma.emailThread.findMany({ where: { accountId } })
-    ).map((t) => t.externalId);
+    const ids = (await prisma.emailThread.findMany({ where: { accountId } })).map(
+      (t) => t.externalId,
+    );
     expect(ids.sort()).toEqual(["t-known", "t-new"]);
 
     // The backfill anchor did not move.
@@ -1495,9 +1443,7 @@ describe("SPAM / TRASH threads (F258)", () => {
       threads: [restored],
       history: {
         historyId: "h300",
-        records: [
-          { labelsAdded: [{ message: { id: "mt", threadId: "t-trash" } }] },
-        ],
+        records: [{ labelsAdded: [{ message: { id: "mt", threadId: "t-trash" } }] }],
       },
     });
     const result = await syncEmailAccount(accountId);
@@ -1596,9 +1542,7 @@ describe("non-UTF-8 bodies (F256)", () => {
       ],
       // "café § " — 0xE9 é, 0xA7 §
       body: {
-        data: Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x20, 0xa7]).toString(
-          "base64url"
-        ),
+        data: Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x20, 0xa7]).toString("base64url"),
       },
     };
     installFakeGmail({
@@ -1650,10 +1594,7 @@ describe("per-account sync claim (F696/F728)", () => {
   it("two overlapping syncs of one account: exactly one runs", async () => {
     const accountId = await seedAccount();
     healthy();
-    const [a, b] = await Promise.all([
-      syncEmailAccount(accountId),
-      syncEmailAccount(accountId),
-    ]);
+    const [a, b] = await Promise.all([syncEmailAccount(accountId), syncEmailAccount(accountId)]);
     expect([a.mode, b.mode].sort()).toEqual(["full", "skipped"]);
   });
 });
@@ -1684,9 +1625,7 @@ describe("disconnect is never relabelled or resurrected (review of F691/F696)", 
         lastMessageAt: new Date(1_767_000_000_500),
       },
     });
-    mockedFetch.mockRejectedValue(
-      new GmailAuthError("Google authorization revoked.", accountId)
-    );
+    mockedFetch.mockRejectedValue(new GmailAuthError("Google authorization revoked.", accountId));
 
     const result = await backfillEmailAccount(accountId);
     expect(result.ok).toBe(false);
@@ -1754,9 +1693,7 @@ describe("message insert race (F696/F728)", () => {
 
     // Simulate the concurrent winner: the lookup reports nothing even
     // though the rows exist, so the engine goes down the create path.
-    const spy = vi
-      .spyOn(prisma.emailMessage, "findMany")
-      .mockResolvedValueOnce([]);
+    const spy = vi.spyOn(prisma.emailMessage, "findMany").mockResolvedValueOnce([]);
     await prisma.emailAccount.update({
       where: { id: accountId },
       data: { historyId: null },
@@ -1833,7 +1770,7 @@ describe("bounded incremental pass", () => {
     expect(result).toMatchObject({ ok: true, mode: "full", threadsSynced: 5 });
     const listCall = requestedPaths().find((p) => p.startsWith("/users/me/threads?"))!;
     expect(new URLSearchParams(listCall.split("?")[1]).get("q")).toBe(
-      `after:${Math.floor(lastSyncAt.getTime() / 1000) - 86400}`
+      `after:${Math.floor(lastSyncAt.getTime() / 1000) - 86400}`,
     );
     warnSpy.mockRestore();
   }, 30_000);

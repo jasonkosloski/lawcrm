@@ -11,14 +11,7 @@
  */
 
 import Link from "next/link";
-import {
-  Calendar,
-  CircleAlert,
-  ListTodo,
-  Mail,
-  Phone,
-  StickyNote,
-} from "lucide-react";
+import { Calendar, CircleAlert, ListTodo, Mail, Phone, StickyNote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { EntitySource } from "@/lib/queries/matter-detail";
 
@@ -84,7 +77,7 @@ export function EntitySourceChip({
       className={cn(
         "inline-flex items-center gap-1 max-w-full text-2xs px-1.5 py-0.5 rounded border border-line bg-paper-2/60 text-ink-3",
         "hover:border-brand-300 hover:bg-brand-soft hover:text-brand-700 transition-colors",
-        className
+        className,
       )}
     >
       <Icon size={9} className="shrink-0 text-ink-4" />

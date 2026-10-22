@@ -50,19 +50,32 @@ export function FindBar({
         className="h-6 min-w-0 flex-1 bg-transparent text-xs outline-none"
       />
       <span className="font-mono text-2xs text-ink-3" aria-live="polite">
-        {query.trim() === ""
-          ? ""
-          : total === 0
-            ? "No matches"
-            : `${current + 1} of ${total}`}
+        {query.trim() === "" ? "" : total === 0 ? "No matches" : `${current + 1} of ${total}`}
       </span>
-      <button type="button" aria-label="Previous match" onClick={onPrev} disabled={total === 0} className="text-ink-3 hover:text-ink disabled:opacity-40">
+      <button
+        type="button"
+        aria-label="Previous match"
+        onClick={onPrev}
+        disabled={total === 0}
+        className="text-ink-3 hover:text-ink disabled:opacity-40"
+      >
         <ChevronUp className="h-3.5 w-3.5" aria-hidden />
       </button>
-      <button type="button" aria-label="Next match" onClick={onNext} disabled={total === 0} className="text-ink-3 hover:text-ink disabled:opacity-40">
+      <button
+        type="button"
+        aria-label="Next match"
+        onClick={onNext}
+        disabled={total === 0}
+        className="text-ink-3 hover:text-ink disabled:opacity-40"
+      >
         <ChevronDown className="h-3.5 w-3.5" aria-hidden />
       </button>
-      <button type="button" aria-label="Close find" onClick={onClose} className="text-ink-3 hover:text-ink">
+      <button
+        type="button"
+        aria-label="Close find"
+        onClick={onClose}
+        className="text-ink-3 hover:text-ink"
+      >
         <X className="h-3.5 w-3.5" aria-hidden />
       </button>
     </div>

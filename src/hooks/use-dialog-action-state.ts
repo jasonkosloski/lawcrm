@@ -41,12 +41,8 @@ export function useDialogActionState<State, Payload = FormData>(
   action: (state: Awaited<State>, payload: Payload) => State | Promise<State>,
   initialState: Awaited<State>,
   /** The dialog's `open` prop or the composer's `expanded` flag. */
-  open: boolean
-): [
-  state: Awaited<State>,
-  formAction: (payload: Payload) => void,
-  isPending: boolean,
-] {
+  open: boolean,
+): [state: Awaited<State>, formAction: (payload: Payload) => void, isPending: boolean] {
   const [, anchor] = useState(0);
   const anchoredAction = useCallback(
     async (prev: Awaited<State>, payload: Payload) => {
@@ -64,13 +60,10 @@ export function useDialogActionState<State, Payload = FormData>(
       anchor((n) => n + 1);
       return next;
     },
-    [action]
+    [action],
   );
 
-  const [state, formAction, isPending] = useActionState(
-    anchoredAction,
-    initialState
-  );
+  const [state, formAction, isPending] = useActionState(anchoredAction, initialState);
 
   // Baseline = the action state that already existed when `open`
   // last flipped. Re-captured on BOTH transitions during render

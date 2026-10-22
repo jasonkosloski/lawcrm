@@ -79,15 +79,19 @@ const logCallSchema = z.object({
     .or(z.literal(""))
     .refine(
       (v) => !v || (/^\d+$/.test(v.trim()) && Number(v.trim()) <= 24 * 60),
-      "Duration must be whole minutes (max 1440)"
+      "Duration must be whole minutes (max 1440)",
     ),
   matterId: z.string().optional().or(z.literal("")),
-  summary: z.string().max(4000, "Keep the summary under 4000 characters").optional().or(z.literal("")),
+  summary: z
+    .string()
+    .max(4000, "Keep the summary under 4000 characters")
+    .optional()
+    .or(z.literal("")),
 });
 
 export async function logCall(
   _prev: CallLogFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<CallLogFormState> {
   await requirePermission("communication.log_call");
   const userId = await getCurrentUserId();
@@ -141,16 +145,12 @@ export async function logCall(
       return {
         status: "error",
         errors: {
-          phone: [
-            "Enter a valid phone number (10 digits, or start with + for international).",
-          ],
+          phone: ["Enter a valid phone number (10 digits, or start with + for international)."],
         },
       };
     }
   } else {
-    contactPhone =
-      normalizePhone(contact.phone) ??
-      normalizePhone(contact.phones[0]?.number);
+    contactPhone = normalizePhone(contact.phone) ?? normalizePhone(contact.phones[0]?.number);
     if (!contactPhone) {
       const hasUnusable = !!(contact.phone || contact.phones[0]?.number);
       return {
@@ -181,11 +181,7 @@ export async function logCall(
   // Outcome shapes the duration: a call nobody answered has none.
   const answered = input.outcome === "answered";
   const durationSec =
-    answered && input.durationMin
-      ? Number(input.durationMin.trim()) * 60
-      : answered
-        ? null
-        : 0;
+    answered && input.durationMin ? Number(input.durationMin.trim()) * 60 : answered ? null : 0;
 
   const account = await getOrCreateLoggingAccount();
 
@@ -231,9 +227,7 @@ export async function logCall(
             // Backfill contact resolution on threads created from raw
             // webhook traffic (contactId is null here, or already ours).
             contactId: contact.id,
-            ...(occurredAt > thread.lastItemAt
-              ? { lastItemAt: occurredAt }
-              : {}),
+            ...(occurredAt > thread.lastItemAt ? { lastItemAt: occurredAt } : {}),
           },
         });
       }
@@ -244,10 +238,8 @@ export async function logCall(
           providerEventId: `manual-${randomUUID()}`,
           kind: "call",
           direction: input.direction,
-          fromNumber:
-            input.direction === "inbound" ? contactPhone : account.phoneNumber,
-          toNumber:
-            input.direction === "inbound" ? account.phoneNumber : contactPhone,
+          fromNumber: input.direction === "inbound" ? contactPhone : account.phoneNumber,
+          toNumber: input.direction === "inbound" ? account.phoneNumber : contactPhone,
           body: input.summary?.trim() || null,
           callDurationSec: durationSec,
           callStatus: input.outcome,
@@ -319,7 +311,7 @@ const updateCallSchema = logCallSchema
 
 export async function updateCallLog(
   _prev: CallLogFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<CallLogFormState> {
   await requirePermission("communication.edit_call");
   const userId = await getCurrentUserId();
@@ -396,11 +388,7 @@ export async function updateCallLog(
   // Same duration derivation as logCall — unanswered calls have none.
   const answered = input.outcome === "answered";
   const durationSec =
-    answered && input.durationMin
-      ? Number(input.durationMin.trim()) * 60
-      : answered
-        ? null
-        : 0;
+    answered && input.durationMin ? Number(input.durationMin.trim()) * 60 : answered ? null : 0;
 
   // Direction flip swaps the endpoints; the numbers themselves are
   // fixed by the thread (contact side) + account (firm side).
@@ -483,19 +471,13 @@ export async function updateCallLog(
     });
   }
 
-  revalidateCallSurfaces([
-    item.matterId,
-    matterId,
-    item.thread.defaultMatterId,
-  ]);
+  revalidateCallSurfaces([item.matterId, matterId, item.thread.defaultMatterId]);
   return { status: "ok" };
 }
 
 // ── Delete ──────────────────────────────────────────────────────────────
 
-export async function deleteCallLog(
-  itemId: string
-): Promise<{ ok: boolean; error?: string }> {
+export async function deleteCallLog(itemId: string): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("communication.delete_call");
   const userId = await getCurrentUserId();
   const tz = await getCurrentUserTimeZone();
@@ -540,8 +522,7 @@ export async function deleteCallLog(
   // calls auto-assigned it to every thread they created, so keeping
   // such threads would leave a blank, preview-less conversation in
   // the messenger inbox after the only call is deleted.
-  const threadHasState =
-    item.thread.followUpAt !== null || item.thread.isPinned;
+  const threadHasState = item.thread.followUpAt !== null || item.thread.isPinned;
 
   try {
     await prisma.$transaction(async (tx) => {

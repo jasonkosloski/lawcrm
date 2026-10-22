@@ -48,8 +48,7 @@ export const PORTAL_DAILY_UPLOAD_CAP = 100;
 const SEND_INSTEAD = "Please send PDFs, photos or Office documents.";
 
 export type PortalUploadCheck =
-  | { ok: true; contentType: string; maxBytes: number }
-  | { ok: false; error: string };
+  { ok: true; contentType: string; maxBytes: number } | { ok: false; error: string };
 
 export function checkPortalUpload(filename: string): PortalUploadCheck {
   const name = filename.trim();
@@ -66,8 +65,6 @@ export function checkPortalUpload(filename: string): PortalUploadCheck {
   return {
     ok: true,
     contentType,
-    maxBytes: isMediaType(contentType)
-      ? MAX_MEDIA_UPLOAD_BYTES
-      : MAX_STANDARD_UPLOAD_BYTES,
+    maxBytes: isMediaType(contentType) ? MAX_MEDIA_UPLOAD_BYTES : MAX_STANDARD_UPLOAD_BYTES,
   };
 }

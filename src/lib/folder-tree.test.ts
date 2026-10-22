@@ -19,12 +19,12 @@ import {
   type FolderRecord,
 } from "./folder-tree";
 
-const row = (
-  id: string,
-  parentId: string | null,
-  name = id,
-  order = 0
-): FolderRecord => ({ id, parentId, name, order });
+const row = (id: string, parentId: string | null, name = id, order = 0): FolderRecord => ({
+  id,
+  parentId,
+  name,
+  order,
+});
 
 /**
  * root-a
@@ -56,11 +56,7 @@ describe("buildFolderTree", () => {
       row("a", null, "Alpha", 0),
       row("c", null, "AAA-but-later", 5),
     ]);
-    expect(tree.map((n) => n.name)).toEqual([
-      "Alpha",
-      "Bravo",
-      "AAA-but-later",
-    ]);
+    expect(tree.map((n) => n.name)).toEqual(["Alpha", "Bravo", "AAA-but-later"]);
   });
 
   test("orphaned parentId is treated as a root, not dropped", () => {
@@ -143,20 +139,13 @@ describe("nextAvailableFolderName", () => {
   });
 
   test("collision suffixes with (2), then (3)…", () => {
-    expect(nextAvailableFolderName("Exhibits", new Set(["exhibits"]))).toBe(
-      "Exhibits (2)"
+    expect(nextAvailableFolderName("Exhibits", new Set(["exhibits"]))).toBe("Exhibits (2)");
+    expect(nextAvailableFolderName("Exhibits", new Set(["exhibits", "exhibits (2)"]))).toBe(
+      "Exhibits (3)",
     );
-    expect(
-      nextAvailableFolderName(
-        "Exhibits",
-        new Set(["exhibits", "exhibits (2)"])
-      )
-    ).toBe("Exhibits (3)");
   });
 
   test("collision check is case-insensitive", () => {
-    expect(nextAvailableFolderName("EXHIBITS", new Set(["exhibits"]))).toBe(
-      "EXHIBITS (2)"
-    );
+    expect(nextAvailableFolderName("EXHIBITS", new Set(["exhibits"]))).toBe("EXHIBITS (2)");
   });
 });

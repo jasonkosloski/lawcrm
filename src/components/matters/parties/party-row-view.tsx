@@ -83,26 +83,16 @@ export function PartyRowView({
             {party.name}
           </Link>
           {party.isPrimaryClient && (
-            <Badge
-              title="This matter's primary client — set via Matter → Edit"
-            >
-              Primary
-            </Badge>
+            <Badge title="This matter's primary client — set via Matter → Edit">Primary</Badge>
           )}
-          {party.conflictStatus === "flagged" && (
-            <Badge variant="warn">
-              conflict flagged
-            </Badge>
-          )}
+          {party.conflictStatus === "flagged" && <Badge variant="warn">conflict flagged</Badge>}
         </div>
       </TableCell>
       <TableCell className="text-2xs text-ink-3 capitalize">
         {party.role ? party.role.replace(/_/g, " ") : "—"}
       </TableCell>
       {showsOrganization && (
-        <TableCell className="text-xs text-ink-3">
-          {party.organization ?? "—"}
-        </TableCell>
+        <TableCell className="text-xs text-ink-3">{party.organization ?? "—"}</TableCell>
       )}
       <TableCell className="text-xs text-ink-3">
         <div className="flex flex-col leading-tight">
@@ -111,28 +101,17 @@ export function PartyRowView({
             party.phones.map((p) => (
               <span
                 key={p.id}
-                className={cn(
-                  "font-mono text-2xs",
-                  p.isPrimary ? "text-ink-3" : "text-ink-4"
-                )}
+                className={cn("font-mono text-2xs", p.isPrimary ? "text-ink-3" : "text-ink-4")}
               >
-                {p.label && (
-                  <span className="text-ink-4 mr-1 font-sans">
-                    {p.label}
-                  </span>
-                )}
+                {p.label && <span className="text-ink-4 mr-1 font-sans">{p.label}</span>}
                 {formatPhone(p.number)}
                 {p.isPrimary && party.phones.length > 1 && (
-                  <span className="text-3xs text-brand-700 ml-1 font-sans">
-                    primary
-                  </span>
+                  <span className="text-3xs text-brand-700 ml-1 font-sans">primary</span>
                 )}
               </span>
             ))
           ) : party.phone ? (
-            <span className="font-mono text-2xs text-ink-4">
-              {formatPhone(party.phone)}
-            </span>
+            <span className="font-mono text-2xs text-ink-4">{formatPhone(party.phone)}</span>
           ) : null}
           {!party.email && party.phones.length === 0 && !party.phone && "—"}
         </div>
@@ -142,9 +121,7 @@ export function PartyRowView({
           <RepresentationCell party={party} />
         </TableCell>
       )}
-      <TableCell className="text-xs text-ink-3 max-w-xs truncate">
-        {party.notes ?? "—"}
-      </TableCell>
+      <TableCell className="text-xs text-ink-3 max-w-xs truncate">{party.notes ?? "—"}</TableCell>
       <TableCell className="pr-4">
         <div className="inline-flex items-center gap-0.5">
           {canEdit && (
@@ -155,17 +132,14 @@ export function PartyRowView({
               aria-label={`Edit ${party.name}`}
               className={cn(
                 "inline-flex items-center justify-center w-7 h-7 rounded-md",
-                "text-ink-3 hover:text-brand-700 hover:bg-brand-soft transition-colors"
+                "text-ink-3 hover:text-brand-700 hover:bg-brand-soft transition-colors",
               )}
             >
               <Pencil size={12} />
             </button>
           )}
           {canDelete && !party.isPrimaryClient && (
-            <PartyRowActions
-              matterContactId={party.id}
-              name={party.name}
-            />
+            <PartyRowActions matterContactId={party.id} name={party.name} />
           )}
         </div>
       </TableCell>
@@ -175,11 +149,7 @@ export function PartyRowView({
 
 function RepresentationCell({ party }: { party: PartyRow }) {
   if (party.isRepresented === false) {
-    return (
-      <Badge variant="neutral">
-        Pro se
-      </Badge>
-    );
+    return <Badge variant="neutral">Pro se</Badge>;
   }
   if (party.isRepresented === true && party.representationName) {
     // When the rep is a real Contact (preferred), the name links to
@@ -195,17 +165,13 @@ function RepresentationCell({ party }: { party: PartyRow }) {
         {party.representationName}
       </Link>
     ) : (
-      <span className="text-ink font-medium truncate">
-        {party.representationName}
-      </span>
+      <span className="text-ink font-medium truncate">{party.representationName}</span>
     );
     return (
       <div className="flex flex-col leading-tight">
         {nameNode}
         {party.representationFirm && (
-          <span className="text-2xs text-ink-3 truncate">
-            {party.representationFirm}
-          </span>
+          <span className="text-2xs text-ink-3 truncate">{party.representationFirm}</span>
         )}
         {party.representationEmail && (
           <EmailLink
@@ -222,11 +188,7 @@ function RepresentationCell({ party }: { party: PartyRow }) {
     );
   }
   if (party.isRepresented === true) {
-    return (
-      <span className="text-2xs text-ink-4 italic">
-        Represented (details unknown)
-      </span>
-    );
+    return <span className="text-2xs text-ink-4 italic">Represented (details unknown)</span>;
   }
   return <span className="text-ink-4">—</span>;
 }

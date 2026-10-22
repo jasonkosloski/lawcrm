@@ -22,11 +22,7 @@ export const metadata: Metadata = {
 // session, so nothing here may be prerendered at build time.
 export const dynamic = "force-dynamic";
 
-export default async function PortalLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const [firm, identity] = await Promise.all([
     prisma.firm.findFirst({
       select: {
@@ -48,9 +44,7 @@ export default async function PortalLayout({
   const cityLine = [firm?.city, [firm?.state, firm?.zip].filter(Boolean).join(" ")]
     .filter(Boolean)
     .join(", ");
-  const address = [firm?.addressLine1, firm?.addressLine2, cityLine]
-    .filter(Boolean)
-    .join(", ");
+  const address = [firm?.addressLine1, firm?.addressLine2, cityLine].filter(Boolean).join(", ");
 
   return (
     <div className="flex min-h-dvh flex-col bg-paper-2 text-ink">
@@ -72,9 +66,7 @@ export default async function PortalLayout({
               <span className="block truncate font-display text-lg leading-tight font-medium tracking-tight sm:text-xl">
                 {firmName}
               </span>
-              <span className="block text-xs text-brand-200">
-                Client portal
-              </span>
+              <span className="block text-xs text-brand-200">Client portal</span>
             </span>
           </Link>
           {identity ? (
@@ -115,10 +107,7 @@ export default async function PortalLayout({
               {firm?.email ? (
                 <li className="flex items-center gap-1.5">
                   <Mail className="size-3.5 text-ink-4" aria-hidden="true" />
-                  <a
-                    href={`mailto:${firm.email}`}
-                    className="hover:text-ink hover:underline"
-                  >
+                  <a href={`mailto:${firm.email}`} className="hover:text-ink hover:underline">
                     {firm.email}
                   </a>
                 </li>
@@ -132,8 +121,8 @@ export default async function PortalLayout({
             </ul>
           ) : null}
           <p className="text-ink-4">
-            Information in this portal is confidential and meant only for
-            you. Please don&rsquo;t share your sign-in links.
+            Information in this portal is confidential and meant only for you. Please don&rsquo;t
+            share your sign-in links.
           </p>
         </div>
       </footer>

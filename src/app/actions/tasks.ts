@@ -33,23 +33,14 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { assertChildMatterAccess } from "@/lib/matter-access";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
-import {
-  TASK_STATUSES,
-  type TaskStatus,
-  isTaskClosed,
-} from "@/lib/constants/task-status";
+import { TASK_STATUSES, type TaskStatus, isTaskClosed } from "@/lib/constants/task-status";
 import type { UpdateTaskFormState } from "@/lib/task-form";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { isAssignableUser, notifyTaskAssigned } from "@/lib/task-assignment";
 import { dateOnlyKey, parseDateOnly, todayKey } from "@/lib/format-date";
-import {
-  optionalScopeOf,
-  scopeOf,
-  scopePaths,
-  scopeRequestPagePattern,
-} from "@/lib/record-scope";
+import { optionalScopeOf, scopeOf, scopePaths, scopeRequestPagePattern } from "@/lib/record-scope";
 import {
   checkFollowUpReopen,
   lockRecordsRequest,
@@ -89,10 +80,7 @@ async function revalidateRequestPaths(requestId: string): Promise<void> {
 /** Path-revalidate every surface that displays this task: its
  *  matter's or intake lead's Tasks tab + overview (firm-wide tasks
  *  have neither) and the dashboard. */
-function revalidateForTask(task: {
-  matterId: string | null;
-  leadId: string | null;
-}): void {
+function revalidateForTask(task: { matterId: string | null; leadId: string | null }): void {
   for (const path of scopePaths(optionalScopeOf(task), "tasks")) {
     revalidatePath(path);
   }
@@ -161,15 +149,12 @@ export async function setTaskStatus(
           data,
         });
         return {
-          rolled:
-            w.count > 0
-              ? await rollOnFollowUpDone(tx, task, actorId, today)
-              : false,
+          rolled: w.count > 0 ? await rollOnFollowUpDone(tx, task, actorId, today) : false,
         };
       }
       await tx.task.update({ where: { id: taskId }, data });
       return { rolled: false };
-    }
+    },
   );
   if (outcome.error) return { ok: false, error: outcome.error };
   const rolled = outcome.rolled;
@@ -254,9 +239,7 @@ export async function setTaskOwner(
 
 // ── Delete ──────────────────────────────────────────────────────────────
 
-export async function deleteTask(
-  taskId: string,
-): Promise<{ ok: boolean; error?: string }> {
+export async function deleteTask(taskId: string): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("tasks.delete");
   await assertChildMatterAccess("task", taskId);
   const userId = await getCurrentUserId();
@@ -275,9 +258,7 @@ export async function deleteTask(
     userId,
     type: "task",
     title: "Task deleted",
-    detail: task.dueDate
-      ? `${task.title} (was due ${dateOnlyKey(task.dueDate)})`
-      : task.title,
+    detail: task.dueDate ? `${task.title} (was due ${dateOnlyKey(task.dueDate)})` : task.title,
   });
 
   revalidateForTask(task);
@@ -323,9 +304,7 @@ export async function updateTask(
   // Date-only (ADR-012): empty clears the due date; anything else
   // must be a real YYYY-MM-DD or the save is refused — a malformed
   // value must never silently wipe an existing date.
-  const dueDate = parsed.data.dueDate
-    ? parseDateOnly(parsed.data.dueDate)
-    : null;
+  const dueDate = parsed.data.dueDate ? parseDateOnly(parsed.data.dueDate) : null;
   if (parsed.data.dueDate && !dueDate) {
     return {
       status: "error",
@@ -357,13 +336,10 @@ export async function updateTask(
 
   // Optimistic-concurrency guard (see the schema comment); re-checked
   // in the write's WHERE below so a race can't slip through.
-  const expected = parsed.data.expectedUpdatedAt
-    ? new Date(parsed.data.expectedUpdatedAt)
-    : null;
+  const expected = parsed.data.expectedUpdatedAt ? new Date(parsed.data.expectedUpdatedAt) : null;
   if (
     expected &&
-    (Number.isNaN(expected.getTime()) ||
-      expected.getTime() !== task.updatedAt.getTime())
+    (Number.isNaN(expected.getTime()) || expected.getTime() !== task.updatedAt.getTime())
   ) {
     revalidateForTask(task);
     return { status: "error", errors: { _form: [STALE_MESSAGE] } };
@@ -377,8 +353,7 @@ export async function updateTask(
       : parsed.data.ownerId === ""
         ? null
         : parsed.data.ownerId;
-  const ownerChanged =
-    nextOwnerId !== undefined && nextOwnerId !== task.ownerId;
+  const ownerChanged = nextOwnerId !== undefined && nextOwnerId !== task.ownerId;
   if (ownerChanged && nextOwnerId && !(await isAssignableUser(nextOwnerId))) {
     return {
       status: "error",
@@ -411,9 +386,7 @@ export async function updateTask(
         id: taskId,
         ...(expected ? { updatedAt: expected } : {}),
         // Follow-up completion: only the write that flips it rolls.
-        ...(completing && task.recordsRequestId
-          ? { status: { not: "done" } }
-          : {}),
+        ...(completing && task.recordsRequestId ? { status: { not: "done" } } : {}),
       },
       data: {
         title: parsed.data.title,

@@ -51,11 +51,7 @@ export function itemDayKeys(item: CalendarItem, tz: string): DayKey[] {
 }
 
 /** True when `item` occupies the calendar day `dayKey`. */
-export function itemIsOnDay(
-  item: CalendarItem,
-  dayKey: DayKey,
-  tz: string
-): boolean {
+export function itemIsOnDay(item: CalendarItem, dayKey: DayKey, tz: string): boolean {
   return itemDayKeys(item, tz).includes(dayKey);
 }
 
@@ -63,7 +59,7 @@ export function itemIsOnDay(
  *  day follows the input order. */
 export function bucketItemsByDay(
   items: readonly CalendarItem[],
-  tz: string
+  tz: string,
 ): Map<DayKey, CalendarItem[]> {
   const byDay = new Map<DayKey, CalendarItem[]>();
   for (const item of items) {

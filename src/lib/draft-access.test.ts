@@ -6,11 +6,7 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
-import {
-  assertDraftAccess,
-  canAccessDraft,
-  draftAccessWhere,
-} from "@/lib/draft-access";
+import { assertDraftAccess, canAccessDraft, draftAccessWhere } from "@/lib/draft-access";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
 const NOT_FOUND = /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/;
@@ -36,8 +32,7 @@ beforeEach(async () => {
     data: { firmId, name: "plain", description: "x" },
     select: { id: true },
   });
-  const mk = async (roleIds: string[]) =>
-    (await seedUser({ firmId, roleIds })).userId;
+  const mk = async (roleIds: string[]) => (await seedUser({ firmId, roleIds })).userId;
   creator = await mk([role.id]);
   lead = await mk([role.id]);
   seat = await mk([role.id]);
@@ -85,9 +80,7 @@ describe("assertDraftAccess", () => {
 describe("draftAccessWhere", () => {
   test("filters a list by creator / lead / team; Admin sees all", async () => {
     const ids = async (u: string, a: boolean) =>
-      (await prisma.matterDraft.findMany({ where: draftAccessWhere(u, a) })).map(
-        (d) => d.id
-      );
+      (await prisma.matterDraft.findMany({ where: draftAccessWhere(u, a) })).map((d) => d.id);
     expect(await ids(seat, false)).toEqual([draftId]);
     expect(await ids(outsider, false)).toEqual([]);
     expect(await ids(admin, true)).toEqual([draftId]);

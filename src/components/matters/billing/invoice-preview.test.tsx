@@ -115,16 +115,8 @@ const invoice = (over: Partial<InvoiceDetail> = {}): InvoiceDetail => ({
 
 const render_ = (
   props: Partial<React.ComponentProps<typeof InvoicePreview>> = {},
-  inv: InvoiceDetail = invoice()
-) =>
-  render(
-    <InvoicePreview
-      invoice={inv}
-      firm={firm}
-      timeZone="America/Denver"
-      {...props}
-    />
-  );
+  inv: InvoiceDetail = invoice(),
+) => render(<InvoicePreview invoice={inv} firm={firm} timeZone="America/Denver" {...props} />);
 
 describe("InvoicePreview — editable gating", () => {
   test("not editable: every line is the static row", () => {
@@ -206,11 +198,7 @@ describe("InvoicePreview — voided invoices", () => {
 
   test("an open invoice still shows its balance", () => {
     render_({}, invoice({ status: "sent", balance: 350, paidAmount: 100 }));
-    expect(screen.getByText("Balance").nextElementSibling).toHaveTextContent(
-      "$350.00"
-    );
-    expect(screen.getByText("Total due").nextElementSibling).toHaveTextContent(
-      "$350.00"
-    );
+    expect(screen.getByText("Balance").nextElementSibling).toHaveTextContent("$350.00");
+    expect(screen.getByText("Total due").nextElementSibling).toHaveTextContent("$350.00");
   });
 });

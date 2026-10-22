@@ -33,9 +33,7 @@ const upd = (over: Partial<ClientStatusUpdateRow>): ClientStatusUpdateRow => ({
   ...over,
 });
 
-const renderCard = (
-  over: Partial<React.ComponentProps<typeof ClientStatusCard>> = {},
-) =>
+const renderCard = (over: Partial<React.ComponentProps<typeof ClientStatusCard>> = {}) =>
   render(
     <ClientStatusCard
       matterId="m1"
@@ -73,12 +71,8 @@ describe("ClientStatusCard", () => {
   test("prefills the stage from the latest update, email ticked by default", async () => {
     renderCard();
     await userEvent.click(screen.getByRole("button", { name: "Post update" }));
-    expect((screen.getByLabelText("Stage") as HTMLInputElement).value).toBe(
-      "Mediation",
-    );
-    expect(
-      (screen.getByLabelText(/Email the client/) as HTMLInputElement).checked,
-    ).toBe(true);
+    expect((screen.getByLabelText("Stage") as HTMLInputElement).value).toBe("Mediation");
+    expect((screen.getByLabelText(/Email the client/) as HTMLInputElement).checked).toBe(true);
     await userEvent.type(screen.getByLabelText("What's next"), "Hi");
     await userEvent.click(
       within(screen.getByRole("dialog")).getByRole("button", {
@@ -96,9 +90,7 @@ describe("ClientStatusCard", () => {
 
   test("shows the no-access hint when nobody has live access", () => {
     renderCard({ data: { updates: [], hasLiveAccess: false } });
-    expect(
-      screen.getByText("No one has portal access on this matter yet."),
-    ).toBeTruthy();
+    expect(screen.getByText("No one has portal access on this matter yet.")).toBeTruthy();
   });
 
   test("a warning result is shown as an inline notice", async () => {
@@ -114,17 +106,13 @@ describe("ClientStatusCard", () => {
         name: "Post update",
       }),
     );
-    expect(
-      await screen.findByText("Posted, but the email could not be sent."),
-    ).toBeTruthy();
+    expect(await screen.findByText("Posted, but the email could not be sent.")).toBeTruthy();
   });
 
   test("Edit opens prefilled without the email checkbox", async () => {
     renderCard();
     await userEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
-    expect((screen.getByLabelText("Stage") as HTMLInputElement).value).toBe(
-      "Mediation",
-    );
+    expect((screen.getByLabelText("Stage") as HTMLInputElement).value).toBe("Mediation");
     expect(screen.queryByLabelText(/Email the client/)).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>

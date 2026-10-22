@@ -78,11 +78,7 @@ const UID_SEP = "\u001f";
  *  the same name) must not share one — pass a `uid` that is unique
  *  per rendered row (e.g. `recent:matter:<id>`). The uid is stripped
  *  again by splitPaletteValue and never takes part in matching. */
-export function paletteValue(
-  kind: PaletteValueKind,
-  text: string,
-  uid?: string
-): string {
+export function paletteValue(kind: PaletteValueKind, text: string, uid?: string): string {
   return `$${kind}$ ${text}${uid ? `${UID_SEP}${uid}` : ""}`;
 }
 
@@ -106,10 +102,7 @@ export function splitPaletteValue(value: string): {
 }
 
 /** Which value kinds survive under each scope. */
-export function scopeAllowsKind(
-  scope: PaletteScope,
-  kind: PaletteValueKind | null
-): boolean {
+export function scopeAllowsKind(scope: PaletteScope, kind: PaletteValueKind | null): boolean {
   if (kind === null) return false;
   switch (scope) {
     case "matters":

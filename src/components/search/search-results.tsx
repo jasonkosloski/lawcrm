@@ -37,10 +37,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { formatTimecode } from "@/lib/transcription/timecode";
 import { SearchSnippet } from "./snippet";
 
-export const TYPE_META: Record<
-  SearchHitType,
-  { label: string; icon: LucideIcon }
-> = {
+export const TYPE_META: Record<SearchHitType, { label: string; icon: LucideIcon }> = {
   matter: { label: "Matters", icon: Gavel },
   contact: { label: "Contacts", icon: User },
   lead: { label: "Leads", icon: Inbox },
@@ -143,8 +140,8 @@ function GroupSection({
         )}
         {expanded && group.total > group.hits.length && (
           <div className="px-3 py-2 text-2xs text-ink-4">
-            Showing the first {group.hits.length} of {group.total} — refine the
-            query to narrow further.
+            Showing the first {group.hits.length} of {group.total} — refine the query to narrow
+            further.
           </div>
         )}
       </div>

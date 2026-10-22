@@ -27,8 +27,7 @@ export function PipelineCard({ report }: { report: PipelineReport }) {
         <CardTitle className="text-sm font-semibold flex items-center gap-2">
           Pipeline
           <span className="text-2xs font-mono font-normal text-ink-4">
-            {report.totalActiveLeads} leads · {report.totalOpenMatters} open
-            matters
+            {report.totalActiveLeads} leads · {report.totalOpenMatters} open matters
           </span>
           <Badge variant="ok" className="ml-auto font-mono">
             {report.convertedThisQuarter} converted this quarter
@@ -38,26 +37,22 @@ export function PipelineCard({ report }: { report: PipelineReport }) {
       <CardContent className="px-4 pb-4 flex flex-col gap-4">
         {/* Intake funnel */}
         <div className="flex flex-col gap-1.5">
-          <div className="text-2xs font-medium text-ink-3">
-            Intake queue
-          </div>
+          <div className="text-2xs font-medium text-ink-3">Intake queue</div>
           {report.totalActiveLeads === 0 ? (
-            <div className="py-2 text-xs text-ink-4">
-              No active leads in the queue.
-            </div>
+            <div className="py-2 text-xs text-ink-4">No active leads in the queue.</div>
           ) : (
             report.leadsByStage.map((s) => (
               <div key={s.stage} className="flex items-center gap-2">
-                <span className="w-20 shrink-0 text-2xs text-ink-3">
-                  {s.label}
-                </span>
+                <span className="w-20 shrink-0 text-2xs text-ink-3">{s.label}</span>
                 <div className="flex-1 h-1.5 bg-paper-2 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-brand-700 rounded-full"
                     style={{ width: `${(s.count / leadScale) * 100}%` }}
                   />
                 </div>
-                <span className={`w-6 shrink-0 text-right text-2xs font-mono ${s.count === 0 ? "text-ink-4" : "text-ink"}`}>
+                <span
+                  className={`w-6 shrink-0 text-right text-2xs font-mono ${s.count === 0 ? "text-ink-4" : "text-ink"}`}
+                >
                   {s.count}
                 </span>
               </div>
@@ -67,9 +62,7 @@ export function PipelineCard({ report }: { report: PipelineReport }) {
 
         {/* Open matters by area × stage */}
         <div className="flex flex-col gap-2">
-          <div className="text-2xs font-medium text-ink-3">
-            Open matters by practice area
-          </div>
+          <div className="text-2xs font-medium text-ink-3">Open matters by practice area</div>
           {report.areas.length === 0 ? (
             <div className="py-2 text-xs text-ink-4">No open matters.</div>
           ) : (
@@ -89,9 +82,7 @@ export function PipelineCard({ report }: { report: PipelineReport }) {
                   >
                     {area.label}
                   </Link>
-                  <span className="ml-auto text-2xs font-mono text-ink-3">
-                    {area.total}
-                  </span>
+                  <span className="ml-auto text-2xs font-mono text-ink-3">{area.total}</span>
                 </div>
                 <div className="flex flex-wrap gap-1 pl-3.5">
                   {area.stages.map((s) => (

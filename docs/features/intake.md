@@ -4,6 +4,7 @@ Lead queue, new-intake form, lead detail with Overview / Time / Notes / Tasks / 
 Related: [ADR-049](../decisions/049-restricted-intake-is-an-opt-in-wall-carried-to-the-matter.md), [ADR-044](../decisions/044-intake-notes-share-the-note-table-scoped.md), [ADR-045](../decisions/045-intake-tasks-and-events-reuse-task-and.md), [ADR-046](../decisions/046-intake-documents-share-document-and-documentfolder-scoped.md), [ADR-019](../decisions/019-deadline-rules-task-lists-as-firm-libraries.md), [ADR-026](../decisions/026-conflict-matcher-scope-own-contact-exclusion-inactive.md), [records-requests.md](records-requests.md)
 
 ## Open work
+
 - [ ] **Lead scoring — deep dive** (P2) — score composition, liability/damages factor breakdown, recompute on field changes. Nothing computes scores yet.
 - [ ] **Intake queue — split-view reader pane** (P2) — lead list left, detail right (alternative to separate routes).
 - [ ] **New intake form leftovers** (P2) — phone-number matching (stored phones aren't normalised), initial stage, intake-coordinator assignment.
@@ -12,6 +13,7 @@ Related: [ADR-049](../decisions/049-restricted-intake-is-an-opt-in-wall-carried-
 - Out of scope for intake documents: Evidence-model changes, a firm-wide documents view.
 
 ## Shipped
+
 - [x] **Restricted intake (lead ethical walls)** (2026-10-19, ADR-049) — opt-in `Lead.restricted` with a `LeadTeamMember` team. A restricted lead and everything on it (tabs, downloads, uploads, by-id actions, search, Cmd+K, queue + counts, dashboard tasks/agenda, calendar as Busy, activity feeds) is visible only to its team, `intake.view_restricted` holders and Admins; everyone else gets 404. Lead Overview "Access" card (`intake.restrict`): Restrict / Open to firm (actor auto-added), add/remove members with a matter-team role, last member can't be removed; lock badge in the header and queue. Conversion copies the flag to `Matter.restricted` and the team to the matter team (converter stays lead). Open leads behave exactly as before.
 - [x] **Conversion originating-document gate** (2026-10-20, ADR-056) — with the firm switch on, `convertLeadToMatter` requires a signed originating document (one of the lead's existing documents; the dialog has no new upload); off, nothing changes.
 - [x] **Intake queue — v1 list** — sortable table; active leads first: unscored (fresh) leads newest-first, then scored by score desc (`sortIntakeQueue`). Lists every open lead (a notice appears past the 1,000-lead safety bound); closed history pages behind them (`?page=N`, 200 per page); statute column is a live countdown; Decline / Convert buttons depend on role.
@@ -30,6 +32,7 @@ Related: [ADR-049](../decisions/049-restricted-intake-is-an-opt-in-wall-carried-
 - [x] **Intake Records tab** — see [records-requests.md](records-requests.md).
 
 ## Notes
+
 - Scope pattern: lead-scoped records use "exactly one of (matterId, leadId)" (tasks/events: at most one) and a `RecordScope`; revalidation via `scopePaths(scope, ...)`. All lead tabs refuse writes on converted leads and carry their records forward in `convertLeadToMatter`.
 - Template generation on a lead: `resolveMergeContext` accepts a lead; `client.*` comes from the lead's contact, `matter.*` fields resolve to null and render as the engine's visible "[… — not on file]" placeholder (reported missing); `firm.*`, `user.*`, `today` unchanged.
 - On lead documents, matter-only links (evidence links on flags) are hidden. Every reader of `Document.matterId` / `DocumentFolder.matterId` must tolerate null (search, `CHILD_RESOLVERS` in `matter-access.ts`, email-attachment and copy paths, flagged-moment queries).

@@ -36,25 +36,14 @@ vi.mock("@/app/actions/email-attachments", () => ({
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ open, children }: { open: boolean; children: ReactNode }) =>
     open ? <div data-testid="dialog">{children}</div> : null,
-  DialogContent: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogDescription: ({ children }: { children: ReactNode }) => (
-    <p>{children}</p>
-  ),
-  DialogFooter: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogHeader: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
+  DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogDescription: ({ children }: { children: ReactNode }) => <p>{children}</p>,
+  DialogFooter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
 }));
 
-import {
-  fileAttachmentToMatter,
-  listMatterFolders,
-} from "@/app/actions/email-attachments";
+import { fileAttachmentToMatter, listMatterFolders } from "@/app/actions/email-attachments";
 
 const mockedFile = vi.mocked(fileAttachmentToMatter);
 const mockedFolders = vi.mocked(listMatterFolders);
@@ -69,8 +58,7 @@ const attachments = [
   {
     id: "a-doc",
     filename: "contract.docx",
-    contentType:
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     fileSize: 512,
   },
 ];
@@ -94,7 +82,7 @@ function renderChips(opts?: { canFile?: boolean }) {
       canFile={opts?.canFile ?? true}
       defaultMatter={defaultMatter}
       matterOptions={matterOptions}
-    />
+    />,
   );
 }
 
@@ -102,9 +90,8 @@ function renderChips(opts?: { canFile?: boolean }) {
 const foldersLoaded = () =>
   waitFor(() =>
     expect(
-      (screen.getByText("File to matter").closest("button") as HTMLButtonElement)
-        .disabled
-    ).toBe(false)
+      (screen.getByText("File to matter").closest("button") as HTMLButtonElement).disabled,
+    ).toBe(false),
   );
 
 describe("chip row", () => {
@@ -123,7 +110,7 @@ describe("chip row", () => {
         canFile
         defaultMatter={null}
         matterOptions={matterOptions}
-      />
+      />,
     );
     expect(container.innerHTML).toBe("");
   });
@@ -131,9 +118,7 @@ describe("chip row", () => {
   test("download links hit the byte route with a download attribute", () => {
     renderChips();
     const link = screen.getByLabelText("Download brief.pdf");
-    expect(link.getAttribute("href")).toBe(
-      "/api/email-attachments/a-pdf/download"
-    );
+    expect(link.getAttribute("href")).toBe("/api/email-attachments/a-pdf/download");
     expect(link.getAttribute("download")).toBe("brief.pdf");
   });
 
@@ -142,18 +127,14 @@ describe("chip row", () => {
     // pdf is on the shared allowlist → viewable in a new tab.
     const view = screen.getByLabelText("View brief.pdf");
     expect(view.getAttribute("target")).toBe("_blank");
-    expect(view.getAttribute("href")).toBe(
-      "/api/email-attachments/a-pdf/download"
-    );
+    expect(view.getAttribute("href")).toBe("/api/email-attachments/a-pdf/download");
     // docx would be served `attachment` — no View affordance.
     expect(screen.queryByLabelText("View contract.docx")).toBeNull();
   });
 
   test("file-to-matter affordance is hidden without documents.upload", () => {
     renderChips({ canFile: false });
-    expect(
-      screen.queryByLabelText("File brief.pdf to matter")
-    ).toBeNull();
+    expect(screen.queryByLabelText("File brief.pdf to matter")).toBeNull();
   });
 });
 
@@ -175,9 +156,7 @@ describe("filing dialog", () => {
     await waitFor(() => expect(mockedFolders).toHaveBeenCalledWith("m2"));
     await foldersLoaded();
     fireEvent.click(screen.getByText("File to matter"));
-    await waitFor(() =>
-      expect(mockedFile).toHaveBeenCalledWith("a-pdf", "m2", null)
-    );
+    await waitFor(() => expect(mockedFile).toHaveBeenCalledWith("a-pdf", "m2", null));
     await waitFor(() => expect(screen.queryByTestId("dialog")).toBeNull());
   });
 
@@ -187,9 +166,7 @@ describe("filing dialog", () => {
     fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
     await foldersLoaded();
     fireEvent.click(screen.getByText("File to matter"));
-    expect(
-      await screen.findByText(/Already filed to this matter/)
-    ).toBeDefined();
+    expect(await screen.findByText(/Already filed to this matter/)).toBeDefined();
     expect(screen.getByTestId("dialog")).toBeDefined();
   });
 
@@ -199,9 +176,7 @@ describe("filing dialog", () => {
     fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
     await foldersLoaded();
     fireEvent.click(screen.getByText("File to matter"));
-    expect(
-      await screen.findByText("Folder not found in this matter.")
-    ).toBeDefined();
+    expect(await screen.findByText("Folder not found in this matter.")).toBeDefined();
   });
 
   test("a rejected filing action shows an error instead of throwing to the error boundary", async () => {
@@ -210,9 +185,7 @@ describe("filing dialog", () => {
     fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
     await foldersLoaded();
     fireEvent.click(screen.getByText("File to matter"));
-    expect(
-      await screen.findByText(/Couldn't file the attachment/)
-    ).toBeDefined();
+    expect(await screen.findByText(/Couldn't file the attachment/)).toBeDefined();
     expect(screen.getByTestId("dialog")).toBeDefined();
   });
 });
@@ -225,11 +198,9 @@ describe("filing dialog - matter visibility", () => {
     expect(screen.getByText("Filing to: Smith v. Jones")).toBeDefined();
     const row = screen.getByText("Smith v. Jones").closest("button")!;
     expect(row.getAttribute("aria-pressed")).toBe("true");
-    expect(
-      screen.getByText("Estate of Doe").closest("button")!.getAttribute(
-        "aria-pressed"
-      )
-    ).toBe("false");
+    expect(screen.getByText("Estate of Doe").closest("button")!.getAttribute("aria-pressed")).toBe(
+      "false",
+    );
   });
 
   test("a default matter missing from the open-matter list (closed) is still named", async () => {
@@ -239,7 +210,7 @@ describe("filing dialog - matter visibility", () => {
         canFile
         defaultMatter={{ id: "m-closed", name: "Old Case" }}
         matterOptions={matterOptions}
-      />
+      />,
     );
     fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
     expect(screen.getByText("Filing to: Old Case (closed)")).toBeDefined();
@@ -252,14 +223,12 @@ describe("filing dialog - folder loading", () => {
     mockedFolders.mockReturnValue(
       new Promise((resolve) => {
         resolveFolders = resolve;
-      })
+      }),
     );
     renderChips();
     fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
     expect(screen.getByText("Loading folders…")).toBeDefined();
-    expect(
-      screen.getByText("File to matter").closest("button")!.disabled
-    ).toBe(true);
+    expect(screen.getByText("File to matter").closest("button")!.disabled).toBe(true);
 
     resolveFolders([]);
     await foldersLoaded();
@@ -270,22 +239,16 @@ describe("filing dialog - folder loading", () => {
     mockedFolders.mockRejectedValueOnce(new Error("boom"));
     renderChips();
     fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
-    expect(
-      await screen.findByText(/Couldn't load folders/)
-    ).toBeDefined();
+    expect(await screen.findByText(/Couldn't load folders/)).toBeDefined();
 
     mockedFolders.mockResolvedValue([]);
     fireEvent.click(screen.getByText("Retry"));
-    await waitFor(() =>
-      expect(screen.queryByText(/Couldn't load folders/)).toBeNull()
-    );
+    await waitFor(() => expect(screen.queryByText(/Couldn't load folders/)).toBeNull());
     expect(mockedFolders).toHaveBeenCalledTimes(2);
   });
 
   test("re-clicking the already-picked matter keeps the folder list usable (no stuck Loading)", async () => {
-    mockedFolders.mockResolvedValue([
-      { id: "f1", name: "Pleadings", depth: 1, parentId: null },
-    ]);
+    mockedFolders.mockResolvedValue([{ id: "f1", name: "Pleadings", depth: 1, parentId: null }]);
     renderChips();
     fireEvent.click(screen.getByLabelText("File brief.pdf to matter"));
     await foldersLoaded();
@@ -296,9 +259,7 @@ describe("filing dialog - folder loading", () => {
 
     expect(screen.queryByText("Loading folders…")).toBeNull();
     expect(screen.getByText("Pleadings")).toBeDefined();
-    expect(
-      screen.getByText("File to matter").closest("button")!.disabled
-    ).toBe(false);
+    expect(screen.getByText("File to matter").closest("button")!.disabled).toBe(false);
     expect(mockedFolders).toHaveBeenCalledTimes(1);
   });
 });

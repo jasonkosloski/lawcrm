@@ -116,8 +116,7 @@ describe("blockedMigrations", () => {
   it("does not flag the add-only migrations that shipped on 2026-10-20", () => {
     const dir = path.join(process.cwd(), "prisma", "migrations");
     const names = readdirSync(dir).filter(
-      (n) =>
-        n.startsWith("20261020214030_venues") || n.startsWith("20261020225241_matter_drafts")
+      (n) => n.startsWith("20261020214030_venues") || n.startsWith("20261020225241_matter_drafts"),
     );
     expect(names).toHaveLength(2);
     const blocked = blockedMigrations(
@@ -125,7 +124,7 @@ describe("blockedMigrations", () => {
         name,
         sql: readFileSync(path.join(dir, name, "migration.sql"), "utf8"),
         allowDestructive: false,
-      }))
+      })),
     );
     expect(blocked).toEqual([]);
   });

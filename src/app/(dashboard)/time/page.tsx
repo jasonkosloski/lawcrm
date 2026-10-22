@@ -43,11 +43,7 @@ import { calendarWeekInTz, dateKeyInTz } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { getFirmGoals } from "@/lib/firm";
 import { formatHours } from "@/lib/time-entry-constants";
-import {
-  getMyDayTime,
-  getMyRunningTimer,
-  getMyWeekTime,
-} from "@/lib/queries/time";
+import { getMyDayTime, getMyRunningTimer, getMyWeekTime } from "@/lib/queries/time";
 import { requireUser } from "@/lib/current-user";
 
 export default async function TimePage({ searchParams }: PageProps<"/time">) {
@@ -93,10 +89,7 @@ export default async function TimePage({ searchParams }: PageProps<"/time">) {
   // dates become the date-only keys the query groups by.
   const week = calendarWeekInTz(focal, userTz);
   const dayKeys = week.days.map(dayKeyFromNoonUtc);
-  const [weekTime, goals] = await Promise.all([
-    getMyWeekTime(dayKeys),
-    getFirmGoals(),
-  ]);
+  const [weekTime, goals] = await Promise.all([getMyWeekTime(dayKeys), getFirmGoals()]);
   const todayKey = dateKeyInTz(new Date(), userTz);
 
   return (
@@ -107,11 +100,7 @@ export default async function TimePage({ searchParams }: PageProps<"/time">) {
       />
       <div className="flex-1 flex flex-col min-h-0 animate-page-enter">
         <TimeToolbar view={view} focal={focal} userTz={userTz} />
-        <TimeWeekView
-          week={weekTime}
-          todayKey={todayKey}
-          dailyHoursGoal={goals.dailyHoursGoal}
-        />
+        <TimeWeekView week={weekTime} todayKey={todayKey} dailyHoursGoal={goals.dailyHoursGoal} />
       </div>
     </>
   );

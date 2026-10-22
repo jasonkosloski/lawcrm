@@ -8,10 +8,7 @@
 
 import type { OutgoingEmail } from "@/lib/email/drivers";
 import { escapeHtml as esc } from "@/lib/email/escape";
-import {
-  NOTIFICATION_CATEGORIES,
-  categoryOf,
-} from "@/lib/notification-categories";
+import { NOTIFICATION_CATEGORIES, categoryOf } from "@/lib/notification-categories";
 
 type Body = Omit<OutgoingEmail, "to">;
 
@@ -53,10 +50,7 @@ export function instantNotificationEmail(item: EmailItem, baseUrl: string): Body
   return { subject: item.title, text, html };
 }
 
-export function digestNotificationEmail(
-  items: EmailItem[],
-  baseUrl: string
-): Body {
+export function digestNotificationEmail(items: EmailItem[], baseUrl: string): Body {
   const n = items.length;
   const textParts: string[] = [];
   const htmlParts: string[] = [];
@@ -70,13 +64,11 @@ export function digestNotificationEmail(
       textParts.push(
         [`- ${i.title}`, i.body ? `  ${i.body}` : null, url ? `  ${url}` : null]
           .filter((l) => l !== null)
-          .join("\n")
+          .join("\n"),
       );
-      const title = url
-        ? `<a href="${esc(url)}">${esc(i.title)}</a>`
-        : esc(i.title);
+      const title = url ? `<a href="${esc(url)}">${esc(i.title)}</a>` : esc(i.title);
       htmlParts.push(
-        `<li>${title}${i.body ? `<br><span style="color:#555">${esc(i.body)}</span>` : ""}</li>`
+        `<li>${title}${i.body ? `<br><span style="color:#555">${esc(i.body)}</span>` : ""}</li>`,
       );
     }
     htmlParts.push("</ul>");

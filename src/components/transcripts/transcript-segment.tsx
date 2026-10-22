@@ -152,48 +152,49 @@ export const TranscriptSegmentView = memo(function TranscriptSegmentView({
           onClose={() => setEditing(false)}
         />
       ) : (
-      <p className="text-sm leading-relaxed text-ink" onClick={onClick}>
-        {words.map((w, i) => {
-          const tint = decor?.tints[i] ?? null;
-          const marked = decor?.markers[i];
-          const inFind = find?.words.has(i) ?? false;
-          const isFindCurrent = find?.current?.has(i) ?? false;
-          return (
-            <span key={i}>
-              {i > 0 ? " " : null}
-              {marked?.map((flagId) => (
-                <button
-                  key={flagId}
-                  type="button"
-                  aria-label="Flagged moment"
-                  data-flag-marker={flagId}
-                  onClick={() => onMarkerClick?.(flagId)}
-                  className="mr-0.5 inline-flex align-middle text-warn"
+        <p className="text-sm leading-relaxed text-ink" onClick={onClick}>
+          {words.map((w, i) => {
+            const tint = decor?.tints[i] ?? null;
+            const marked = decor?.markers[i];
+            const inFind = find?.words.has(i) ?? false;
+            const isFindCurrent = find?.current?.has(i) ?? false;
+            return (
+              <span key={i}>
+                {i > 0 ? " " : null}
+                {marked?.map((flagId) => (
+                  <button
+                    key={flagId}
+                    type="button"
+                    aria-label="Flagged moment"
+                    data-flag-marker={flagId}
+                    onClick={() => onMarkerClick?.(flagId)}
+                    className="mr-0.5 inline-flex align-middle text-warn"
+                  >
+                    <Flag className="h-3 w-3" aria-hidden />
+                  </button>
+                ))}
+                <span
+                  data-i={i}
+                  data-s={w.s}
+                  data-e={w.e}
+                  data-flag-category={tint ?? undefined}
+                  data-find={isFindCurrent ? "current" : inFind ? "match" : undefined}
+                  aria-current={activeIndex === i ? "true" : undefined}
+                  className={cn(
+                    "cursor-pointer rounded-sm hover:bg-brand-50",
+                    tint && flagCategoryTintClass(tint),
+                    inFind && "bg-yellow-200 text-ink",
+                    isFindCurrent && "bg-orange-300 text-ink",
+                    activeIndex === i &&
+                      "underline decoration-brand-500 decoration-2 underline-offset-2",
+                  )}
                 >
-                  <Flag className="h-3 w-3" aria-hidden />
-                </button>
-              ))}
-              <span
-                data-i={i}
-                data-s={w.s}
-                data-e={w.e}
-                data-flag-category={tint ?? undefined}
-                data-find={isFindCurrent ? "current" : inFind ? "match" : undefined}
-                aria-current={activeIndex === i ? "true" : undefined}
-                className={cn(
-                  "cursor-pointer rounded-sm hover:bg-brand-50",
-                  tint && flagCategoryTintClass(tint),
-                  inFind && "bg-yellow-200 text-ink",
-                  isFindCurrent && "bg-orange-300 text-ink",
-                  activeIndex === i && "underline decoration-brand-500 decoration-2 underline-offset-2",
-                )}
-              >
-                {w.w}
+                  {w.w}
+                </span>
               </span>
-            </span>
-          );
-        })}
-      </p>
+            );
+          })}
+        </p>
       )}
       {edited && showOriginal && (
         <div className="mt-1 flex items-start gap-2 text-xs text-ink-3">

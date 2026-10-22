@@ -44,7 +44,13 @@ beforeEach(() => vi.clearAllMocks());
 describe("LeadAccessCard", () => {
   test("an open lead offers Restrict behind a confirm", async () => {
     render(
-      <LeadAccessCard leadId="l1" restricted={false} members={[]} userOptions={options} canManage />
+      <LeadAccessCard
+        leadId="l1"
+        restricted={false}
+        members={[]}
+        userOptions={options}
+        canManage
+      />,
     );
     expect(screen.getByText(/everyone at the firm can see/i)).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: /restrict/i }));
@@ -55,7 +61,7 @@ describe("LeadAccessCard", () => {
   test("a cancelled confirm changes nothing", async () => {
     vi.mocked(confirmAction).mockResolvedValueOnce(false);
     render(
-      <LeadAccessCard leadId="l1" restricted members={[alice]} userOptions={options} canManage />
+      <LeadAccessCard leadId="l1" restricted members={[alice]} userOptions={options} canManage />,
     );
     await userEvent.click(screen.getByRole("button", { name: /open to firm/i }));
     expect(setLeadRestricted).not.toHaveBeenCalled();
@@ -63,17 +69,23 @@ describe("LeadAccessCard", () => {
 
   test("the last member of a restricted lead can't be removed", () => {
     render(
-      <LeadAccessCard leadId="l1" restricted members={[alice]} userOptions={options} canManage />
+      <LeadAccessCard leadId="l1" restricted members={[alice]} userOptions={options} canManage />,
     );
     expect(
-      (screen.getByRole("button", { name: "Remove Alice Attorney" }) as HTMLButtonElement).disabled
+      (screen.getByRole("button", { name: "Remove Alice Attorney" }) as HTMLButtonElement).disabled,
     ).toBe(true);
   });
 
   test("removing one of two members calls the action; errors show inline", async () => {
     vi.mocked(removeLeadTeamMember).mockResolvedValueOnce({ ok: false, error: "Nope." });
     render(
-      <LeadAccessCard leadId="l1" restricted members={[alice, bob]} userOptions={options} canManage />
+      <LeadAccessCard
+        leadId="l1"
+        restricted
+        members={[alice, bob]}
+        userOptions={options}
+        canManage
+      />,
     );
     await userEvent.click(screen.getByRole("button", { name: "Remove Bob Paralegal" }));
     await waitFor(() => expect(removeLeadTeamMember).toHaveBeenCalledWith("l1", "u2"));
@@ -82,7 +94,7 @@ describe("LeadAccessCard", () => {
 
   test("add posts the picked user and role; existing members aren't offered", async () => {
     render(
-      <LeadAccessCard leadId="l1" restricted members={[alice]} userOptions={options} canManage />
+      <LeadAccessCard leadId="l1" restricted members={[alice]} userOptions={options} canManage />,
     );
     const [userSelect, roleSelect] = screen.getAllByRole("combobox") as HTMLSelectElement[];
     expect([...userSelect.options].map((o) => o.value)).toEqual(["", "u3"]);
@@ -103,7 +115,7 @@ describe("LeadAccessCard", () => {
         members={[alice, bob]}
         userOptions={[]}
         canManage={false}
-      />
+      />,
     );
     expect(screen.getByText("Bob Paralegal")).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();

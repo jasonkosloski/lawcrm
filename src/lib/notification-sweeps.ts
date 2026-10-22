@@ -57,12 +57,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { NotificationType } from "@/lib/notifications";
-import {
-  DAY_MS,
-  daysBetweenKeys,
-  dateOnlyKey,
-  todayKey,
-} from "@/lib/format-date";
+import { DAY_MS, daysBetweenKeys, dateOnlyKey, todayKey } from "@/lib/format-date";
 
 /** First heads-up: deadline due within a week. */
 export const DEADLINE_SOON_THRESHOLD_DAYS = 7;
@@ -80,7 +75,6 @@ export type SweepResult = {
   /** Notification rows actually written this run. */
   created: number;
 };
-
 
 /** Arbitrary constant key for the sweep's advisory lock. */
 const SWEEP_LOCK_KEY = 7_302_026;
@@ -151,14 +145,12 @@ export async function runDeadlineNotificationSweep(
      *  true) — Next refuses revalidatePath during a page render,
      *  which is where the dashboard's fire-and-forget call runs. */
     revalidate?: boolean;
-  } = {}
+  } = {},
 ): Promise<SweepResult> {
   // Widest window across recipient zones: "today" can be a day ahead
   // of (or behind) UTC, so over-fetch by two days and let the
   // per-recipient day math decide.
-  const soonCutoff = new Date(
-    now.getTime() + (DEADLINE_SOON_THRESHOLD_DAYS + 2) * DAY_MS
-  );
+  const soonCutoff = new Date(now.getTime() + (DEADLINE_SOON_THRESHOLD_DAYS + 2) * DAY_MS);
 
   const result = await prisma.$transaction(
     async (tx): Promise<SweepResult> => {
@@ -266,12 +258,8 @@ export async function runDeadlineNotificationSweep(
         },
         select: { userId: true, type: true, link: true },
       });
-      const seen = new Set(
-        existing.map((e) => `${e.userId}|${e.type}|${e.link}`)
-      );
-      const fresh = candidates.filter(
-        (c) => !seen.has(`${c.userId}|${c.type}|${c.link}`)
-      );
+      const seen = new Set(existing.map((e) => `${e.userId}|${e.type}|${e.link}`));
+      const fresh = candidates.filter((c) => !seen.has(`${c.userId}|${c.type}|${c.link}`));
 
       if (fresh.length > 0) {
         await tx.notification.createMany({ data: fresh });
@@ -280,7 +268,7 @@ export async function runDeadlineNotificationSweep(
     },
     // Waiting on the advisory lock counts against the interactive
     // transaction's clock; a sweep is a handful of queries.
-    { timeout: 30_000, maxWait: 30_000 }
+    { timeout: 30_000, maxWait: 30_000 },
   );
 
   // Without revalidation (dashboard path) the bell's 60s poll still
@@ -306,12 +294,9 @@ export function resetSweepThrottleForTests(): void {
  * never take down the page.
  */
 export async function maybeRunDeadlineNotificationSweep(
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Promise<SweepResult & { ran: boolean }> {
-  if (
-    lastSweepStartedAt !== null &&
-    now.getTime() - lastSweepStartedAt < SWEEP_MIN_INTERVAL_MS
-  ) {
+  if (lastSweepStartedAt !== null && now.getTime() - lastSweepStartedAt < SWEEP_MIN_INTERVAL_MS) {
     return { ran: false, scanned: 0, created: 0 };
   }
   // Stamp BEFORE running so concurrent page loads don't stampede and

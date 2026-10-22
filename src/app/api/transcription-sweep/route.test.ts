@@ -27,11 +27,7 @@ function call(auth = true) {
   );
 }
 
-async function transcript(opts: {
-  status: string;
-  ageMs: number;
-  jobId: string | null;
-}) {
+async function transcript(opts: { status: string; ageMs: number; jobId: string | null }) {
   const { documentId } = await seedDocument({ matterId, contentType: "audio/mpeg" });
   return prisma.transcript.create({
     data: {
@@ -119,7 +115,9 @@ describe("transcription sweep", () => {
     const t = await transcript({ status: "queued", ageMs: 11 * MIN, jobId: null });
     const body = await (await call()).json();
     expect(body.failed).toBe(1);
-    expect((await prisma.transcript.findUniqueOrThrow({ where: { id: t.id } })).status).toBe("failed");
+    expect((await prisma.transcript.findUniqueOrThrow({ where: { id: t.id } })).status).toBe(
+      "failed",
+    );
   });
 
   test("drains purges: deletes done, increments refused, gives up after 7 days", async () => {

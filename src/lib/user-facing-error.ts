@@ -16,11 +16,7 @@ export class UserFacingError extends Error {
 /** Message to return to the client for a caught error. User-facing
  *  errors pass through verbatim; everything else is console.error'd
  *  (with `context` for the log line) and replaced by `fallback`. */
-export function toUserMessage(
-  err: unknown,
-  fallback: string,
-  context: string
-): string {
+export function toUserMessage(err: unknown, fallback: string, context: string): string {
   if (err instanceof UserFacingError) return err.message;
   console.error(`[${context}]`, err);
   return fallback;

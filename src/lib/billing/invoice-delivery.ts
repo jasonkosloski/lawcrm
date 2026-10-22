@@ -9,17 +9,11 @@ import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { todayDateOnly } from "@/app/actions/billing/helpers";
 import { getInvoiceById } from "@/lib/queries/billing";
 import { resolvePortalSendTarget } from "@/lib/queries/portal-billing";
-import {
-  invoiceEmail,
-  portalInvoiceUrl,
-  type InvoiceEmailKind,
-} from "@/lib/billing/invoice-email";
+import { invoiceEmail, portalInvoiceUrl, type InvoiceEmailKind } from "@/lib/billing/invoice-email";
 import { invoicePdfFilename, renderInvoicePdf } from "@/lib/billing/invoice-pdf";
 import { fileInvoicePdf } from "@/lib/billing/invoice-filing";
 
-export type DeliveryResult =
-  | { ok: true }
-  | { ok: false; warning: string; emailSent: boolean };
+export type DeliveryResult = { ok: true } | { ok: false; warning: string; emailSent: boolean };
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -173,7 +167,7 @@ async function deliver(input: {
     warnings.push(
       result.ok
         ? "The invoice was emailed, but a copy couldn't be saved to Documents."
-        : "A copy also couldn't be saved to Documents."
+        : "A copy also couldn't be saved to Documents.",
     );
   }
   if (warnings.length === 0) return { ok: true };

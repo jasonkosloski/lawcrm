@@ -72,7 +72,9 @@ describe("assemblyai webhook", () => {
   test("right secret finishes the job", async () => {
     const res = await POST(req({ transcript_id: "job-new" }, "sec") as never);
     expect(res.status).toBe(200);
-    expect((await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } })).status).toBe("completed");
+    expect(
+      (await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } })).status,
+    ).toBe("completed");
   });
 
   test("repeat webhook on a completed transcript: 200, no writes", async () => {
@@ -87,7 +89,9 @@ describe("assemblyai webhook", () => {
     const res = await POST(req({ transcript_id: "job-old" }, "sec") as never);
     expect(res.status).toBe(200);
     expect(fetchJob).not.toHaveBeenCalled();
-    expect((await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } })).status).toBe("processing");
+    expect(
+      (await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } })).status,
+    ).toBe("processing");
   });
 
   test("webhook after the document was deleted: 200, nothing written", async () => {
@@ -101,9 +105,7 @@ describe("assemblyai webhook", () => {
   });
 
   test("malformed body: 200 no-op", async () => {
-    const res = await POST(
-      new Request("http://x", { method: "POST", body: "not json" }) as never,
-    );
+    const res = await POST(new Request("http://x", { method: "POST", body: "not json" }) as never);
     expect(res.status).toBe(200);
   });
 });

@@ -78,10 +78,7 @@ async function emailClientsThrottled(matterId: string, threadId: string): Promis
   return failed;
 }
 
-export async function sendStaffPortalMessage(
-  matterId: string,
-  body: string
-): Promise<Result> {
+export async function sendStaffPortalMessage(matterId: string, body: string): Promise<Result> {
   const gate = await requirePermissionResult("portal.send_messages");
   if (!gate.ok) return { ok: false, error: gate.error };
   await assertMatterAccess(matterId);

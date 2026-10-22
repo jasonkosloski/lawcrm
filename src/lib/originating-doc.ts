@@ -16,9 +16,7 @@ export const AGREEMENT_STATUS_LABEL: Record<AgreementStatus, string> = {
 
 const DEFAULT_LABEL = "Fee agreement";
 
-export function originatingDocLabel(
-  area: { originatingDocLabel: string | null } | null
-): string {
+export function originatingDocLabel(area: { originatingDocLabel: string | null } | null): string {
   const v = area?.originatingDocLabel?.trim();
   return v ? v : DEFAULT_LABEL;
 }
@@ -39,7 +37,7 @@ function isRealDate(s: string): boolean {
 
 export function agreementGateErrors(
   input: AgreementInput,
-  opts: { required: boolean; label: string; today: string }
+  opts: { required: boolean; label: string; today: string },
 ): Partial<Record<GateField, string>> {
   const errors: Partial<Record<GateField, string>> = {};
   const { required, label, today } = opts;

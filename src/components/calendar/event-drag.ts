@@ -55,7 +55,7 @@ export type CalendarEventDragData = {
  */
 export function allDayDropSchedule(
   data: Pick<CalendarEventDragData, "isAllDay" | "startTimeIso" | "endTimeIso">,
-  dayKey: DayKey
+  dayKey: DayKey,
 ): { isAllDay: true; start: Date; end: Date } | null {
   let span = 0;
   if (data.isAllDay) {

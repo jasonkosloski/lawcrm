@@ -9,8 +9,7 @@ export function PortalOff() {
       <CircleAlert aria-hidden="true" className="text-ink-3" />
       <AlertTitle>The client portal is not available right now.</AlertTitle>
       <AlertDescription className="text-ink-3">
-        If you need something from your legal team, please call or email
-        the office.
+        If you need something from your legal team, please call or email the office.
       </AlertDescription>
     </Alert>
   );

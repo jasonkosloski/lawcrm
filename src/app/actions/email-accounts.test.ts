@@ -71,13 +71,11 @@ afterEach(() => {
 });
 
 function stubRevoke(response: () => Promise<Response>) {
-  const fetchMock = vi.fn(
-    async (...args: [input: RequestInfo | URL, init?: RequestInit]) => {
-      const [input] = args;
-      expect(String(input)).toBe(GOOGLE_REVOKE_ENDPOINT);
-      return response();
-    }
-  );
+  const fetchMock = vi.fn(async (...args: [input: RequestInfo | URL, init?: RequestInit]) => {
+    const [input] = args;
+    expect(String(input)).toBe(GOOGLE_REVOKE_ENDPOINT);
+    return response();
+  });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }

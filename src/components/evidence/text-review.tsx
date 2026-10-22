@@ -83,9 +83,7 @@ export function TextReview({
   children: React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [composerAnchor, setComposerAnchor] = useState<ComposerAnchor | null>(
-    null
-  );
+  const [composerAnchor, setComposerAnchor] = useState<ComposerAnchor | null>(null);
   /** Live selection inside the container → floating button. */
   const [selection, setSelection] = useState<{
     quote: string;
@@ -133,8 +131,7 @@ export function TextReview({
       });
     };
     document.addEventListener("selectionchange", onSelectionChange);
-    return () =>
-      document.removeEventListener("selectionchange", onSelectionChange);
+    return () => document.removeEventListener("selectionchange", onSelectionChange);
   }, [canCreate]);
 
   const showNotice = useCallback((message: string) => {
@@ -178,11 +175,11 @@ export function TextReview({
 
       const notFound = () =>
         showNotice(
-          "Quote not found in the current render — the document text may have changed since it was flagged."
+          "Quote not found in the current render — the document text may have changed since it was flagged.",
         );
       const loc = locateQuote(
         nodes.map((n) => n.data),
-        quote
+        quote,
       );
       if (!loc) {
         notFound();
@@ -213,7 +210,7 @@ export function TextReview({
         CSS.highlights.set(HIGHLIGHT_NAME, new Highlight(range));
         highlightTimer.current = setTimeout(
           () => CSS.highlights.delete(HIGHLIGHT_NAME),
-          HIGHLIGHT_MS
+          HIGHLIGHT_MS,
         );
       } else {
         // Fallback: select the match — native, visible everywhere,
@@ -228,7 +225,7 @@ export function TextReview({
         }, 400);
       }
     },
-    [showNotice, walkTextNodes]
+    [showNotice, walkTextNodes],
   );
 
   // ?flag= deep link — relocate + highlight on mount (the body is
@@ -264,7 +261,7 @@ export function TextReview({
       if (noticeTimer.current) clearTimeout(noticeTimer.current);
       if (highlightTimer.current) clearTimeout(highlightTimer.current);
     },
-    []
+    [],
   );
 
   const navigate = (m: RailMoment) => {

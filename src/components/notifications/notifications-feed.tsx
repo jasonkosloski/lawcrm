@@ -32,10 +32,7 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/empty-state";
 import { formatDate, formatRelative } from "@/lib/format-date";
 import { notificationTypeMeta } from "@/lib/notification-type-meta";
-import {
-  markAllNotificationsRead,
-  markNotificationRead,
-} from "@/app/actions/notifications";
+import { markAllNotificationsRead, markNotificationRead } from "@/app/actions/notifications";
 import type { NotificationRow } from "@/lib/queries/notifications";
 
 export function NotificationsFeed({
@@ -60,9 +57,7 @@ export function NotificationsFeed({
    *  and restore the counter. Only the affected rows are touched, so
    *  a concurrent click on another row isn't clobbered. */
   const rollback = (ids: Set<string>, restoreUnread: (n: number) => number) => {
-    setRows((prev) =>
-      prev.map((r) => (ids.has(r.id) ? { ...r, isRead: false } : r))
-    );
+    setRows((prev) => prev.map((r) => (ids.has(r.id) ? { ...r, isRead: false } : r)));
     setUnread(restoreUnread);
     setError("Couldn't update your notifications. Please try again.");
   };
@@ -70,9 +65,7 @@ export function NotificationsFeed({
   const handleMarkOne = (row: NotificationRow) => {
     if (row.isRead) return;
     setError(null);
-    setRows((prev) =>
-      prev.map((r) => (r.id === row.id ? { ...r, isRead: true } : r))
-    );
+    setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, isRead: true } : r)));
     setUnread((n) => Math.max(0, n - 1));
     startTransition(async () => {
       try {
@@ -106,11 +99,7 @@ export function NotificationsFeed({
     <div className="rounded-md border border-line bg-white">
       <div className="border-b border-line px-3 py-2 flex items-center justify-between">
         <div className="text-2xs font-medium text-ink-3">
-          {unread > 0 ? (
-            <span className="text-warn">{unread} unread</span>
-          ) : (
-            "All caught up"
-          )}
+          {unread > 0 ? <span className="text-warn">{unread} unread</span> : "All caught up"}
         </div>
         {unread > 0 && (
           <button
@@ -124,10 +113,7 @@ export function NotificationsFeed({
       </div>
 
       {error && (
-        <div
-          role="alert"
-          className="border-b border-line px-3 py-2 text-2xs text-warn"
-        >
+        <div role="alert" className="border-b border-line px-3 py-2 text-2xs text-warn">
           {error}
         </div>
       )}
@@ -142,12 +128,7 @@ export function NotificationsFeed({
       ) : (
         <ul>
           {rows.map((r) => (
-            <FeedRow
-              key={r.id}
-              row={r}
-              tz={tz}
-              onMarkRead={() => handleMarkOne(r)}
-            />
+            <FeedRow key={r.id} row={r} tz={tz} onMarkRead={() => handleMarkOne(r)} />
           ))}
         </ul>
       )}
@@ -171,24 +152,19 @@ function FeedRow({
       <div
         className={cn(
           "shrink-0 mt-0.5 w-7 h-7 rounded-md flex items-center justify-center bg-paper-2",
-          tone
+          tone,
         )}
       >
         <Icon size={14} />
       </div>
       <div className="flex-1 min-w-0">
         <div
-          className={cn(
-            "text-xs leading-snug",
-            row.isRead ? "text-ink-2" : "text-ink font-medium"
-          )}
+          className={cn("text-xs leading-snug", row.isRead ? "text-ink-2" : "text-ink font-medium")}
         >
           {row.title}
         </div>
         {row.body && (
-          <div className="text-2xs text-ink-3 leading-snug mt-0.5 line-clamp-2">
-            {row.body}
-          </div>
+          <div className="text-2xs text-ink-3 leading-snug mt-0.5 line-clamp-2">{row.body}</div>
         )}
         <div className="flex items-center gap-2 mt-1 text-2xs text-ink-4 font-mono">
           {row.matterName && (
@@ -198,10 +174,7 @@ function FeedRow({
           )}
           {/* "5m ago" reads the clock, so server and client can differ
               at a minute boundary — that mismatch is expected. */}
-          <span
-            title={formatDate(row.createdAt, "medium", tz)}
-            suppressHydrationWarning
-          >
+          <span title={formatDate(row.createdAt, "medium", tz)} suppressHydrationWarning>
             {formatRelative(row.createdAt, tz)}
           </span>
         </div>
@@ -221,7 +194,7 @@ function FeedRow({
       className={cn(
         "border-b border-line/60 last:border-b-0 hover:bg-paper-2 transition-colors",
         !row.isRead && "bg-brand-tint/30",
-        (row.link || !row.isRead) && "cursor-pointer"
+        (row.link || !row.isRead) && "cursor-pointer",
       )}
       // Linked rows: the click bubbles up from the (focusable) Link.
       // Link-less rows get their own button below so keyboard and

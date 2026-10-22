@@ -41,7 +41,7 @@ describe("ResendInvoiceDialog", () => {
     render(<ResendInvoiceDialog {...props} open onOpenChange={vi.fn()} />);
     expect(screen.getByText("Re-send invoice INV-001")).toBeInTheDocument();
     expect(
-      screen.getByText("Emails the current invoice as a PDF. Nothing else changes.")
+      screen.getByText("Emails the current invoice as a PDF. Nothing else changes."),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/recipient/i)).toHaveValue("client@x.com");
   });

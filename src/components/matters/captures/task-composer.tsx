@@ -20,39 +20,16 @@
 
 import { useState } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
-import {
-  createLeadTask,
-  createTaskWithCaptures,
-} from "@/app/actions/captures";
+import { createLeadTask, createTaskWithCaptures } from "@/app/actions/captures";
 import type { RecordScope } from "@/lib/record-scope";
-import {
-  captureInitialState,
-  type CaptureFormState,
-} from "@/lib/capture-schemas";
-import {
-  TASK_PRIORITIES,
-  type CaptureKind,
-  type NoteCapture,
-} from "@/lib/note-constants";
+import { captureInitialState, type CaptureFormState } from "@/lib/capture-schemas";
+import { TASK_PRIORITIES, type CaptureKind, type NoteCapture } from "@/lib/note-constants";
 import { TASK_PRIORITY_LABEL } from "@/lib/constants/priority";
-import {
-  AssigneeSelect,
-  type AssigneeOption,
-} from "@/components/tasks/assignee-select";
+import { AssigneeSelect, type AssigneeOption } from "@/components/tasks/assignee-select";
 import { CaptureComposerShell } from "./capture-composer-shell";
-import {
-  DateField,
-  SelectField,
-  TextField,
-  TextareaField,
-} from "./primary-fields";
+import { DateField, SelectField, TextField, TextareaField } from "./primary-fields";
 
-const SIBLING_KINDS: CaptureKind[] = [
-  "event",
-  "deadline",
-  "time",
-  "note_sibling",
-];
+const SIBLING_KINDS: CaptureKind[] = ["event", "deadline", "time", "note_sibling"];
 
 export function TaskComposer({
   scope,
@@ -82,16 +59,16 @@ export function TaskComposer({
   // expand, so a failed attempt's field/attachment errors don't
   // reappear when the composer is re-expanded. See
   // src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    CaptureFormState,
-    FormData
-  >(action, captureInitialState, expanded);
+  const [state, formAction, isPending] = useDialogActionState<CaptureFormState, FormData>(
+    action,
+    captureInitialState,
+    expanded,
+  );
 
   const [captures, setCaptures] = useState<NoteCapture[]>([]);
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [priority, setPriority] =
-    useState<(typeof TASK_PRIORITIES)[number]>("normal");
+  const [priority, setPriority] = useState<(typeof TASK_PRIORITIES)[number]>("normal");
   const [ownerId, setOwnerId] = useState(currentUserId);
   const [description, setDescription] = useState("");
 
@@ -136,9 +113,7 @@ export function TaskComposer({
       captures={captures}
       onCapturesChange={setCaptures}
       attachmentErrors={state.attachmentErrors}
-      allowedKinds={SIBLING_KINDS.filter(
-        (k) => !siblingKinds || siblingKinds.includes(k)
-      )}
+      allowedKinds={SIBLING_KINDS.filter((k) => !siblingKinds || siblingKinds.includes(k))}
       canPin={canPin}
       formError={errs._form?.[0]}
     >
@@ -163,9 +138,7 @@ export function TaskComposer({
           <SelectField
             name="priority"
             value={priority}
-            onChange={(v) =>
-              setPriority(v as (typeof TASK_PRIORITIES)[number])
-            }
+            onChange={(v) => setPriority(v as (typeof TASK_PRIORITIES)[number])}
             ariaLabel="Priority"
             options={TASK_PRIORITIES.map((p) => ({
               value: p,

@@ -99,8 +99,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       {
         key: "matters.expense.view",
         label: "View matter expenses",
-        description:
-          "See logged expenses on a matter (filing fees, expert costs, travel, etc.).",
+        description: "See logged expenses on a matter (filing fees, expert costs, travel, etc.).",
       },
       {
         key: "matters.expense.create",
@@ -123,8 +122,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       {
         key: "matters.settlement.view",
         label: "View settlements",
-        description:
-          "See the gross→fees→costs→liens→client-net waterfall on contingency matters.",
+        description: "See the gross→fees→costs→liens→client-net waterfall on contingency matters.",
       },
       {
         key: "matters.settlement.edit",
@@ -172,7 +170,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "intake.restrict",
         label: "Restrict intakes",
         description:
-          "Mark an intake restricted and choose who can see it (its intake team). Everyone else gets \"not found\" on the lead and everything on it. Logged.",
+          'Mark an intake restricted and choose who can see it (its intake team). Everyone else gets "not found" on the lead and everything on it. Logged.',
       },
       {
         key: "intake.view_restricted",
@@ -207,8 +205,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       {
         key: "billing.approve_invoice",
         label: "Approve invoices",
-        description:
-          "Move a draft invoice to approved (the gate before sending).",
+        description: "Move a draft invoice to approved (the gate before sending).",
       },
       {
         key: "billing.send_invoice",
@@ -219,14 +216,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       {
         key: "billing.delete_draft",
         label: "Delete draft invoices",
-        description:
-          "Hard-delete a draft invoice. Time entries return to billable WIP.",
+        description: "Hard-delete a draft invoice. Time entries return to billable WIP.",
       },
       {
         key: "billing.void_invoice",
         label: "Void invoices",
-        description:
-          "Soft-kill an approved or sent invoice (no payments recorded).",
+        description: "Soft-kill an approved or sent invoice (no payments recorded).",
       },
       {
         key: "billing.record_payment",
@@ -249,8 +244,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       {
         key: "trust.record_transaction",
         label: "Record trust transactions",
-        description:
-          "Add trust deposits, disbursements, or refunds via the matter trust composer.",
+        description: "Add trust deposits, disbursements, or refunds via the matter trust composer.",
       },
     ],
   },
@@ -273,14 +267,12 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       {
         key: "firm.manage_permissions",
         label: "Set role permissions",
-        description:
-          "Toggle the matrix on this page — controls who else can grant access to what.",
+        description: "Toggle the matrix on this page — controls who else can grant access to what.",
       },
       {
         key: "firm.edit_info",
         label: "Edit firm profile",
-        description:
-          "Edit firm name, EIN, contact info, address, logo, and other identity fields.",
+        description: "Edit firm name, EIN, contact info, address, logo, and other identity fields.",
       },
       {
         key: "firm.manage_practice_areas",
@@ -350,8 +342,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       {
         key: "portal.add_requests",
         label: "Request documents from clients",
-        description:
-          "Create document requests on a matter that appear in the client's portal.",
+        description: "Create document requests on a matter that appear in the client's portal.",
       },
       {
         key: "portal.edit_requests",
@@ -362,8 +353,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       {
         key: "portal.delete_requests",
         label: "Delete document requests",
-        description:
-          "Delete a document request. Files the client already uploaded are kept.",
+        description: "Delete a document request. Files the client already uploaded are kept.",
       },
       {
         key: "portal.add_updates",
@@ -438,8 +428,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       {
         key: "documents.folder.edit",
         label: "Rename folders",
-        description:
-          "Rename or reorder folders in a matter's document tree.",
+        description: "Rename or reorder folders in a matter's document tree.",
       },
       {
         key: "documents.folder.delete",
@@ -589,7 +578,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
         key: "automations.deadline_rule.create",
         label: "Create deadline rules",
         description:
-          "Add a reusable deadline rule (\"N days after/before an anchor date\") to the firm library.",
+          'Add a reusable deadline rule ("N days after/before an anchor date") to the firm library.',
       },
       {
         key: "automations.deadline_rule.edit",
@@ -617,8 +606,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       {
         key: "automations.task_list.delete",
         label: "Delete task lists",
-        description:
-          "Permanently remove a task list. Tasks it created stay on their matters.",
+        description: "Permanently remove a task list. Tasks it created stay on their matters.",
       },
       {
         key: "automations.defaults.create",
@@ -670,8 +658,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       {
         key: "time_entries.create",
         label: "Log time",
-        description:
-          "Log billable or non-billable time on a matter, task, or firm-level activity.",
+        description: "Log billable or non-billable time on a matter, task, or firm-level activity.",
       },
       {
         key: "time_entries.edit_any",
@@ -706,8 +693,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       {
         key: "parties.delete",
         label: "Remove parties from matters",
-        description:
-          "Detach a contact from a matter. The underlying Contact record is preserved.",
+        description: "Detach a contact from a matter. The underlying Contact record is preserved.",
       },
     ],
   },
@@ -724,8 +710,7 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
       {
         key: "events.edit",
         label: "Edit events",
-        description:
-          "Change date, time, type, location, or invitees on an existing event.",
+        description: "Change date, time, type, location, or invitees on an existing event.",
       },
       {
         key: "events.delete",
@@ -855,8 +840,8 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
 /// layer to validate input, by the seed-friendly migration helper
 /// to clean up dropped keys, and as the source-of-truth set for
 /// the matrix UI.
-export const PERMISSION_KEYS: string[] = PERMISSION_CATEGORIES.flatMap(
-  (c) => c.permissions.map((p) => p.key)
+export const PERMISSION_KEYS: string[] = PERMISSION_CATEGORIES.flatMap((c) =>
+  c.permissions.map((p) => p.key),
 );
 
 export const PERMISSION_KEYS_SET = new Set(PERMISSION_KEYS);

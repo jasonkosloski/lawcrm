@@ -6,6 +6,7 @@
 **Context:** Line-item editing was allowed until an invoice was `sent`, so an approver could sign off on a total that then changed, and it was gated only on authorship. Computed amounts (hours x rate, line and invoice totals, payments, trust applications) were stored unrounded, so sub-cent values leaked into totals and aggregates.
 
 **Decision:**
+
 - Approved invoices are not editable in place: line items (hours / rate) can be changed only while the invoice is `draft`, under `billing.generate_invoice` (plus author-or-`time_entries.edit_any`), with the status re-checked under a row lock and an activity-log row written. To change an approved or sent invoice, void it and regenerate from WIP.
 - Paying from trust (`recordInvoicePayment` source `trust`) needs `billing.apply_trust`, the same key as the dedicated apply-trust path.
 - Every persisted computed amount goes through `roundMoney` (`src/lib/money.ts`): `ROUND_HALF_UP` to 2 dp, applied per line before summing, so the invoice total is the sum of displayed line amounts. Hours are validated to 2 dp on new input.
@@ -14,6 +15,7 @@
 - Status transitions use a status predicate (`updateMany where id and status = expected`); 0 rows is a conflict error. WIP generation links only still-unbilled entries and aborts on a count mismatch.
 
 **Trade-offs:**
+
 - (+) What the approver sees is what is billed; totals reconcile to the cent
 - (+) Concurrent approve/send/void/edit can't silently overwrite each other
 - (-) Fixing a typo on an approved invoice costs a void and regenerate

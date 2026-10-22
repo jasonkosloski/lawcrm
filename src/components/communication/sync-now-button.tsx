@@ -32,7 +32,7 @@ export function SyncNowButton() {
     () => () => {
       if (clearTimer.current) clearTimeout(clearTimer.current);
     },
-    []
+    [],
   );
 
   const showNote = (next: Note) => {
@@ -51,10 +51,7 @@ export function SyncNowButton() {
           // Another sync already holds every account: nothing ran.
           showNote({ tone: "ok", text: "Sync already in progress" });
         } else if (res.ok) {
-          const threads = res.results.reduce(
-            (sum, r) => sum + r.threadsSynced,
-            0
-          );
+          const threads = res.results.reduce((sum, r) => sum + r.threadsSynced, 0);
           showNote({
             tone: "ok",
             text: threads > 0 ? `Synced ${plural(threads, "thread")}` : "Up to date",
@@ -76,7 +73,7 @@ export function SyncNowButton() {
           role="status"
           className={cn(
             "text-2xs truncate max-w-56",
-            note.tone === "ok" ? "text-ink-3" : "text-warn"
+            note.tone === "ok" ? "text-ink-3" : "text-warn",
           )}
         >
           {note.text}

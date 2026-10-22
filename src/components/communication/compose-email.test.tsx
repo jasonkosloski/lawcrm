@@ -54,11 +54,7 @@ vi.mock("next/navigation", () => ({
 // next/link renders fine in happy-dom, but keep it a plain anchor so
 // the no-account state can assert on href without router context.
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -91,14 +87,9 @@ const TWO_ACCOUNTS = [
 ];
 
 const field = (name: string): HTMLInputElement | HTMLTextAreaElement =>
-  document.querySelector(`[name="${name}"]`) as
-    | HTMLInputElement
-    | HTMLTextAreaElement;
+  document.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLTextAreaElement;
 
-async function openAndFill(
-  user: ReturnType<typeof setupUser>,
-  over?: { to?: string }
-) {
+async function openAndFill(user: ReturnType<typeof setupUser>, over?: { to?: string }) {
   await user.click(screen.getByRole("button", { name: /compose/i }));
   await screen.findByText("New email");
   await user.type(field("to"), over?.to ?? "alice@example.com");
@@ -117,15 +108,20 @@ describe("ComposeEmailButton — account states", () => {
     // an accessible name to getByRole here — query by text + closest.
     const link = screen.getByText(/connect gmail/i).closest("a");
     expect(link).toHaveAttribute("href", "/settings/integrations");
-    expect(
-      screen.queryByRole("button", { name: /compose/i })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /compose/i })).not.toBeInTheDocument();
   });
 
   test("single account → no From picker, sends from it", async () => {
     const user = setupUser();
     mockedSendEmail.mockResolvedValue({ ok: true, threadId: "t1" });
-    render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={ONE_ACCOUNT}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
 
     await openAndFill(user);
     expect(document.querySelector('[name="accountId"]')).toBeNull();
@@ -142,14 +138,21 @@ describe("ComposeEmailButton — account states", () => {
         bodyHtml: "Hi Alice",
         scope: SCOPE,
         attachmentDocumentIds: [],
-      })
+      }),
     );
   });
 
   test("rich body round-trip: editor HTML up as bodyHtml, htmlToText as bodyText", async () => {
     const user = setupUser();
     mockedSendEmail.mockResolvedValue({ ok: true, threadId: "t1" });
-    render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={ONE_ACCOUNT}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
 
     await openAndFill(user);
     const richHtml =
@@ -164,20 +167,25 @@ describe("ComposeEmailButton — account states", () => {
           bodyHtml: richHtml, // raw — sanitizing is the action's job
           bodyText:
             "Hi Alice,\n\nNext steps:\n\n- Sign the retainer (https://firm.com/retainer)\n- Send documents",
-        })
-      )
+        }),
+      ),
     );
   });
 
   test("multiple accounts → From picker, chosen account is used", async () => {
     const user = setupUser();
     mockedSendEmail.mockResolvedValue({ ok: true, threadId: "t1" });
-    render(<ComposeEmailButton accounts={TWO_ACCOUNTS} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={TWO_ACCOUNTS}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
 
     await openAndFill(user);
-    const picker = document.querySelector(
-      '[name="accountId"]'
-    ) as HTMLSelectElement;
+    const picker = document.querySelector('[name="accountId"]') as HTMLSelectElement;
     expect(picker).not.toBeNull();
     await user.selectOptions(picker, "acc-2");
 
@@ -185,8 +193,8 @@ describe("ComposeEmailButton — account states", () => {
     await waitFor(() =>
       expect(mockedSendEmail).toHaveBeenCalledWith(
         "acc-2",
-        expect.objectContaining({ to: ["alice@example.com"] })
-      )
+        expect.objectContaining({ to: ["alice@example.com"] }),
+      ),
     );
   });
 });
@@ -195,28 +203,45 @@ describe("ComposeEmailButton — stale From account", () => {
   test("when the chosen account drops out of `accounts`, Send uses a live one", async () => {
     const user = setupUser();
     mockedSendEmail.mockResolvedValue({ ok: true, threadId: "t1" });
-    const { rerender } = render(<ComposeEmailButton accounts={TWO_ACCOUNTS} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    const { rerender } = render(
+      <ComposeEmailButton
+        accounts={TWO_ACCOUNTS}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
     await user.click(screen.getByRole("button", { name: /compose/i }));
     await screen.findByText("New email");
     // Default is acc-1; its grant then fails and the launcher
     // re-filters it out while this component stays mounted.
     rerender(
-      <ComposeEmailButton accounts={[{ id: "acc-2", emailAddress: "litigation@firm.com" }]} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />
+      <ComposeEmailButton
+        accounts={[{ id: "acc-2", emailAddress: "litigation@firm.com" }]}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
     );
     await user.type(field("to"), "alice@example.com");
     await user.type(field("body"), "Hi");
     await user.click(screen.getByRole("button", { name: /^send$/i }));
 
-    await waitFor(() =>
-      expect(mockedSendEmail).toHaveBeenCalledWith("acc-2", expect.anything())
-    );
+    await waitFor(() => expect(mockedSendEmail).toHaveBeenCalledWith("acc-2", expect.anything()));
   });
 });
 
 describe("ComposeEmailButton — validation + draft preservation", () => {
   test("invalid To address blocks the send with an inline error", async () => {
     const user = setupUser();
-    render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={ONE_ACCOUNT}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
 
     await openAndFill(user, { to: "not-an-email" });
     await user.click(screen.getByRole("button", { name: /^send$/i }));
@@ -231,14 +256,19 @@ describe("ComposeEmailButton — validation + draft preservation", () => {
       ok: false,
       error: "Gmail rejected the send (HTTP 429). Your draft is untouched.",
     });
-    render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={ONE_ACCOUNT}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
 
     await openAndFill(user);
     await user.click(screen.getByRole("button", { name: /^send$/i }));
 
-    expect(
-      await screen.findByText(/gmail rejected the send/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/gmail rejected the send/i)).toBeInTheDocument();
     // Every field keeps what was typed.
     expect(field("to").value).toBe("alice@example.com");
     expect(field("subject").value).toBe("Retainer");
@@ -249,15 +279,20 @@ describe("ComposeEmailButton — validation + draft preservation", () => {
   test("success closes the dialog, clears the draft, refreshes the list", async () => {
     const user = setupUser();
     mockedSendEmail.mockResolvedValue({ ok: true, threadId: "t1" });
-    render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={ONE_ACCOUNT}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
 
     await openAndFill(user);
     await user.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => expect(refresh).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(screen.queryByText("New email")).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByText("New email")).not.toBeInTheDocument());
 
     // Reopen: the draft is gone (it was sent, not stashed).
     await user.click(screen.getByRole("button", { name: /compose/i }));
@@ -269,14 +304,19 @@ describe("ComposeEmailButton — validation + draft preservation", () => {
   test("a REJECTED send keeps the draft and shows a check-Sent message (no throw)", async () => {
     const user = setupUser();
     mockedSendEmail.mockRejectedValue(new Error("Failed to persist sent thread"));
-    render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={ONE_ACCOUNT}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
 
     await openAndFill(user);
     await user.click(screen.getByRole("button", { name: /^send$/i }));
 
-    expect(
-      await screen.findByText(/couldn't confirm the send/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/couldn't confirm the send/i)).toBeInTheDocument();
     expect(field("to").value).toBe("alice@example.com");
     expect(field("body").value).toBe("Hi Alice");
     expect(refresh).not.toHaveBeenCalled();
@@ -285,7 +325,14 @@ describe("ComposeEmailButton — validation + draft preservation", () => {
   test("Enter in To / Cc / Subject does NOT send the email", async () => {
     const user = setupUser();
     mockedSendEmail.mockResolvedValue({ ok: true, threadId: "t1" });
-    render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={ONE_ACCOUNT}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
 
     await openAndFill(user);
     await user.type(screen.getByLabelText("Cc"), "bob@example.com{Enter}");
@@ -304,9 +351,16 @@ describe("ComposeEmailButton — validation + draft preservation", () => {
     mockedSendEmail.mockReturnValue(
       new Promise((resolve) => {
         settle = resolve;
-      })
+      }),
     );
-    render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={ONE_ACCOUNT}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
 
     await openAndFill(user);
     await user.click(screen.getByRole("button", { name: /^send$/i }));
@@ -323,7 +377,14 @@ describe("ComposeEmailButton — validation + draft preservation", () => {
 
   test("To, Cc and Subject carry persistent accessible labels", async () => {
     const user = setupUser();
-    render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={ONE_ACCOUNT}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
     await openAndFill(user);
     expect(screen.getByLabelText("To")).toHaveValue("alice@example.com");
     expect(screen.getByLabelText("Cc")).toHaveValue("");
@@ -332,7 +393,14 @@ describe("ComposeEmailButton — validation + draft preservation", () => {
 
   test("Send stays disabled without a recipient or body", async () => {
     const user = setupUser();
-    render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={ONE_ACCOUNT}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: /compose/i }));
     await screen.findByText("New email");
@@ -347,7 +415,14 @@ describe("ComposeEmailButton — validation + draft preservation", () => {
 
   test("empty-document scaffolding (<p></p>) keeps Send disabled", async () => {
     const user = setupUser();
-    render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={ONE_ACCOUNT}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: /compose/i }));
     await screen.findByText("New email");
@@ -373,15 +448,22 @@ describe("ComposeEmailButton - required record", () => {
     await waitFor(() =>
       expect(mockedSendEmail).toHaveBeenCalledWith(
         "acc-1",
-        expect.objectContaining({ scope: { kind: "lead", leadId: "l1" } })
-      )
+        expect.objectContaining({ scope: { kind: "lead", leadId: "l1" } }),
+      ),
     );
   });
 
   test("initialScope prefills the record and stays editable", async () => {
     const user = setupUser();
     mockedSendEmail.mockResolvedValue({ ok: true, threadId: "t1" });
-    render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={ONE_ACCOUNT}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
 
     await openAndFill(user);
     expect(screen.getByText("Matter or lead")).toBeVisible();
@@ -393,8 +475,8 @@ describe("ComposeEmailButton - required record", () => {
     await waitFor(() =>
       expect(mockedSendEmail).toHaveBeenCalledWith(
         "acc-1",
-        expect.objectContaining({ scope: { kind: "matter", matterId: "m2" } })
-      )
+        expect.objectContaining({ scope: { kind: "matter", matterId: "m2" } }),
+      ),
     );
   });
 
@@ -405,7 +487,14 @@ describe("ComposeEmailButton - required record", () => {
       threadId: "t1",
       notice: "Added to an existing thread filed to Estate of Doe.",
     });
-    render(<ComposeEmailButton accounts={ONE_ACCOUNT} matters={MATTERS} leads={LEADS} initialScope={SCOPE} />);
+    render(
+      <ComposeEmailButton
+        accounts={ONE_ACCOUNT}
+        matters={MATTERS}
+        leads={LEADS}
+        initialScope={SCOPE}
+      />,
+    );
 
     await openAndFill(user);
     await user.click(screen.getByRole("button", { name: /change/i }));
@@ -414,8 +503,8 @@ describe("ComposeEmailButton - required record", () => {
 
     await waitFor(() =>
       expect(notifySuccess).toHaveBeenCalledWith(
-        "Added to an existing thread filed to Estate of Doe."
-      )
+        "Added to an existing thread filed to Estate of Doe.",
+      ),
     );
     await user.click(screen.getByRole("button", { name: /compose/i }));
     await screen.findByText("New email");

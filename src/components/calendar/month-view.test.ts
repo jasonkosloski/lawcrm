@@ -28,18 +28,12 @@ describe("compactHourInTz", () => {
 
   it("handles noon and midnight in the user's TZ", () => {
     // 06:00 UTC = midnight in Denver; 18:00 UTC = noon.
-    expect(
-      compactHourInTz(new Date("2026-07-06T06:00:00Z"), "America/Denver")
-    ).toBe("12am");
-    expect(
-      compactHourInTz(new Date("2026-07-06T18:00:00Z"), "America/Denver")
-    ).toBe("12pm");
+    expect(compactHourInTz(new Date("2026-07-06T06:00:00Z"), "America/Denver")).toBe("12am");
+    expect(compactHourInTz(new Date("2026-07-06T18:00:00Z"), "America/Denver")).toBe("12pm");
   });
 
   it("respects DST — a standard-time instant shifts by an hour", () => {
     // Denver is UTC-7 in January (MST): 15:00 UTC = 8am.
-    expect(
-      compactHourInTz(new Date("2026-01-06T15:00:00Z"), "America/Denver")
-    ).toBe("8am");
+    expect(compactHourInTz(new Date("2026-01-06T15:00:00Z"), "America/Denver")).toBe("8am");
   });
 });

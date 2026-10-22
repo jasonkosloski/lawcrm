@@ -25,9 +25,7 @@ export type StaffPortalMessage = {
  * or a thread whose first message insert failed, is an empty conversation.
  * `unread` counts client messages newer than the viewer's own read marker.
  */
-export async function getPortalConversation(
-  matterId: string
-): Promise<{
+export async function getPortalConversation(matterId: string): Promise<{
   messages: StaffPortalMessage[];
   hasLiveAccess: boolean;
   unread: number;
@@ -96,7 +94,7 @@ type ThreadExtras = { id: string; snippet: string | null; unread: number };
  * come from one parameterized query, not one per thread.
  */
 export async function listPortalThreadsForViewer(
-  page: number
+  page: number,
 ): Promise<{ rows: PortalThreadRow[]; total: number }> {
   if (!(await currentUserHasPermission("portal.view_messages"))) {
     return { rows: [], total: 0 };

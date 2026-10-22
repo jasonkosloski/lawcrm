@@ -17,7 +17,11 @@ import {
   seedPracticeArea,
   seedUser,
 } from "@/test/integration-helpers";
-import { FILE_TREE_MAX_DOCUMENTS, getDocumentForViewer, getViewerFileTree } from "./document-viewer";
+import {
+  FILE_TREE_MAX_DOCUMENTS,
+  getDocumentForViewer,
+  getViewerFileTree,
+} from "./document-viewer";
 
 const M = (matterId: string) => ({ kind: "matter" as const, matterId });
 let matterId: string;
@@ -145,7 +149,16 @@ describe("getDocumentForViewer — prev/next within the folder", () => {
   });
 
   test("the keyset walk agrees with the database ORDER BY for mixed-case and punctuated names (F848/F1008)", async () => {
-    for (const name of ["B.pdf", "a.pdf", "Ab.pdf", "a-1.pdf", "a_1.pdf", "Z.pdf", "10.pdf", "2.pdf"]) {
+    for (const name of [
+      "B.pdf",
+      "a.pdf",
+      "Ab.pdf",
+      "a-1.pdf",
+      "a_1.pdf",
+      "Z.pdf",
+      "10.pdf",
+      "2.pdf",
+    ]) {
       await seedDoc({ name });
     }
     const ordered = await prisma.document.findMany({
@@ -188,11 +201,18 @@ describe("getDocumentForViewer — prev/next within the folder", () => {
 
 describe("getViewerFileTree — the viewer's left-hand file list", () => {
   test("this matter's files only, by name, lightweight columns", async () => {
-    const folder = await prisma.documentFolder.create({ data: { matterId, name: "Discovery" }, select: { id: true } });
+    const folder = await prisma.documentFolder.create({
+      data: { matterId, name: "Discovery" },
+      select: { id: true },
+    });
     await seedDoc({ name: "b-report.pdf", folderId: folder.id });
     await seedDoc({ name: "a-retainer.pdf" });
     const area = await seedPracticeArea({ name: "Elsewhere" });
-    const other = await seedMatter({ practiceAreaId: area.areaId, stageId: area.stageId, leadUserId: userId });
+    const other = await seedMatter({
+      practiceAreaId: area.areaId,
+      stageId: area.stageId,
+      leadUserId: userId,
+    });
     await seedDoc({ matterId: other.matterId, name: "other-matter.pdf" });
 
     const { documents, complete } = await getViewerFileTree(M(matterId), null);
@@ -210,7 +230,10 @@ describe("getViewerFileTree — the viewer's left-hand file list", () => {
   });
 
   test("over the cap → only the current folder, flagged incomplete", async () => {
-    const folder = await prisma.documentFolder.create({ data: { matterId, name: "Production" }, select: { id: true } });
+    const folder = await prisma.documentFolder.create({
+      data: { matterId, name: "Production" },
+      select: { id: true },
+    });
     await prisma.document.createMany({
       data: Array.from({ length: FILE_TREE_MAX_DOCUMENTS + 1 }, (_, i) => ({
         matterId,
@@ -236,7 +259,13 @@ describe("lead scope", () => {
     const matterDoc = await seedDoc({ name: "m.pdf" });
     const leadDoc = (
       await prisma.document.create({
-        data: { leadId, name: "l.pdf", contentType: "application/pdf", fileUrl: "key-l", fileSize: 1 },
+        data: {
+          leadId,
+          name: "l.pdf",
+          contentType: "application/pdf",
+          fileUrl: "key-l",
+          fileSize: 1,
+        },
         select: { id: true },
       })
     ).id;

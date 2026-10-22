@@ -74,9 +74,7 @@ export function flagAnchorKind(flag: FlagAnchorFields): FlagAnchorKind {
 function quoteSnippet(quote: string): string {
   const q = quote.trim();
   const snippet =
-    q.length > QUOTE_SNIPPET_CHARS
-      ? `${q.slice(0, QUOTE_SNIPPET_CHARS - 1).trimEnd()}…`
-      : q;
+    q.length > QUOTE_SNIPPET_CHARS ? `${q.slice(0, QUOTE_SNIPPET_CHARS - 1).trimEnd()}…` : q;
   return `“${snippet}”`;
 }
 
@@ -93,8 +91,7 @@ function quoteSnippet(quote: string): string {
  */
 export function flagAnchorLabel(flag: FlagAnchorFields): string {
   switch (flagAnchorKind(flag)) {
-    case "time":
-    {
+    case "time": {
       const span = formatMediaSpan(flag.timeSeconds as number, flag.endSeconds);
       return flag.quote ? `${span} ${quoteSnippet(flag.quote)}` : span;
     }

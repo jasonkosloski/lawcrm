@@ -45,9 +45,7 @@ export default async function SearchPage({
   const sp = await searchParams;
   // Same cap globalSearch and createSavedSearch apply, so the saved
   // strip's (q, type) comparison and the Save button stay consistent.
-  const q = normalizeSearchQuery(
-    (firstParam(sp.q)) ?? ""
-  );
+  const q = normalizeSearchQuery(firstParam(sp.q) ?? "");
   const rawType = firstParam(sp.type);
   const expandedType = isSearchHitType(rawType) ? rawType : null;
 
@@ -64,20 +62,15 @@ export default async function SearchPage({
   // on the query — matching the search's own case-insensitivity and
   // the create action's dedupe rule.
   const activeSavedId = longEnough
-    ? (savedSearches.find(
-        (s) => s.q.toLowerCase() === q.toLowerCase() && s.type === expandedType
-      )?.id ?? null)
+    ? (savedSearches.find((s) => s.q.toLowerCase() === q.toLowerCase() && s.type === expandedType)
+        ?.id ?? null)
     : null;
 
   return (
     <>
       <TopBar
         title="Search"
-        crumbs={
-          longEnough
-            ? `Search · ${totalHits} result${totalHits === 1 ? "" : "s"}`
-            : "Search"
-        }
+        crumbs={longEnough ? `Search · ${totalHits} result${totalHits === 1 ? "" : "s"}` : "Search"}
       />
 
       <div className="flex-1 overflow-y-auto p-3 sm:p-6 animate-page-enter">
@@ -87,11 +80,7 @@ export default async function SearchPage({
               <SearchForm initialQuery={q} />
             </div>
             {longEnough && (
-              <SaveSearchButton
-                query={q}
-                type={expandedType}
-                savedId={activeSavedId}
-              />
+              <SaveSearchButton query={q} type={expandedType} savedId={activeSavedId} />
             )}
           </div>
 

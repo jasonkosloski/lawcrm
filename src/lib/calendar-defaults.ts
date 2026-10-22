@@ -33,7 +33,7 @@ export type EffectiveCalendarDefaults = {
  *  passes a matter id; we look up both the matter overrides and
  *  the matter's firm settings in one query. */
 export async function getEffectiveCalendarDefaults(
-  matterId: string
+  matterId: string,
 ): Promise<EffectiveCalendarDefaults> {
   const matter = await prisma.matter.findUnique({
     where: { id: matterId },
@@ -68,10 +68,8 @@ export async function getEffectiveCalendarDefaults(
     autoAddTeamToUpcomingEvents: false,
   };
   return {
-    autoAddTeamToNewEvents:
-      matter.autoAddTeamToNewEvents ?? firmDefaults.autoAddTeamToNewEvents,
+    autoAddTeamToNewEvents: matter.autoAddTeamToNewEvents ?? firmDefaults.autoAddTeamToNewEvents,
     autoAddTeamToUpcomingEvents:
-      matter.autoAddTeamToUpcomingEvents ??
-      firmDefaults.autoAddTeamToUpcomingEvents,
+      matter.autoAddTeamToUpcomingEvents ?? firmDefaults.autoAddTeamToUpcomingEvents,
   };
 }

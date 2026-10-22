@@ -30,7 +30,7 @@ const firmSchema = z.object({
 
 export async function updateFirmCalendarDefaults(
   _prev: { status: "idle" | "ok" | "error"; error?: string },
-  formData: FormData
+  formData: FormData,
 ): Promise<{ status: "idle" | "ok" | "error"; error?: string }> {
   const userId = await requirePermission("firm.edit_info");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -43,21 +43,14 @@ export async function updateFirmCalendarDefaults(
     where: { id: firm.id },
     data: {
       autoAddTeamToNewEvents: parsed.data.autoAddTeamToNewEvents === "on",
-      autoAddTeamToUpcomingEvents:
-        parsed.data.autoAddTeamToUpcomingEvents === "on",
+      autoAddTeamToUpcomingEvents: parsed.data.autoAddTeamToUpcomingEvents === "on",
     },
   });
-  await logSettingsChange(
-    userId,
-    "Firm calendar defaults updated",
-    [
-      `Auto-add team to new events: ${
-        parsed.data.autoAddTeamToNewEvents === "on" ? "on" : "off"
-      }; to upcoming events: ${
-        parsed.data.autoAddTeamToUpcomingEvents === "on" ? "on" : "off"
-      }`,
-    ]
-  );
+  await logSettingsChange(userId, "Firm calendar defaults updated", [
+    `Auto-add team to new events: ${
+      parsed.data.autoAddTeamToNewEvents === "on" ? "on" : "off"
+    }; to upcoming events: ${parsed.data.autoAddTeamToUpcomingEvents === "on" ? "on" : "off"}`,
+  ]);
   // Calendar defaults touch the matter edit pages + every event-
   // create + team-add. Layout revalidation is the cheapest sweep.
   revalidatePath("/", "layout");
@@ -77,7 +70,7 @@ const triToBool = (v: "inherit" | "true" | "false"): boolean | null =>
 export async function updateMatterCalendarDefaults(
   matterId: string,
   _prev: { status: "idle" | "ok" | "error"; error?: string },
-  formData: FormData
+  formData: FormData,
 ): Promise<{ status: "idle" | "ok" | "error"; error?: string }> {
   const userId = await requirePermission("matters.edit");
   await assertMatterAccess(matterId);
@@ -95,9 +88,7 @@ export async function updateMatterCalendarDefaults(
     where: { id: matterId },
     data: {
       autoAddTeamToNewEvents: triToBool(parsed.data.autoAddTeamToNewEvents),
-      autoAddTeamToUpcomingEvents: triToBool(
-        parsed.data.autoAddTeamToUpcomingEvents
-      ),
+      autoAddTeamToUpcomingEvents: triToBool(parsed.data.autoAddTeamToUpcomingEvents),
     },
   });
   await logAuditEntry({

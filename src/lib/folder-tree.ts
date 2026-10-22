@@ -82,7 +82,7 @@ export function buildFolderTree(rows: FolderRecord[]): FolderNode[] {
         recordsRequestId: r.recordsRequestId ?? null,
         sourceTitle: r.sourceTitle ?? null,
       },
-    ])
+    ]),
   );
   const roots: FolderNode[] = [];
   for (const r of [...rows].sort(byOrderThenName)) {
@@ -96,10 +96,7 @@ export function buildFolderTree(rows: FolderRecord[]): FolderNode[] {
 
 /** Depth-first flatten with 1-based depth — picker + tree-rail
  *  ordering matches the visual nesting. */
-export function flattenFolderTree(
-  nodes: FolderNode[],
-  depth = 1
-): FlatFolder[] {
+export function flattenFolderTree(nodes: FolderNode[], depth = 1): FlatFolder[] {
   const out: FlatFolder[] = [];
   for (const n of nodes) {
     out.push({ id: n.id, parentId: n.parentId, name: n.name, depth });
@@ -153,10 +150,7 @@ type FolderRef = { id: string; parentId: string | null };
 
 /** Every id underneath `id` (NOT including `id` itself). Move-cycle
  *  check: a folder may not move under itself or a descendant. */
-export function collectDescendantIds(
-  rows: FolderRef[],
-  id: string
-): Set<string> {
+export function collectDescendantIds(rows: FolderRef[], id: string): Set<string> {
   const childrenOf = new Map<string, string[]>();
   for (const r of rows) {
     if (!r.parentId) continue;
@@ -178,7 +172,7 @@ export function collectDescendantIds(
 /** Root → folder breadcrumb path (inclusive). Empty for unknown ids. */
 export function folderPath(
   rows: (FolderRef & { name: string })[],
-  id: string
+  id: string,
 ): { id: string; name: string }[] {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const path: { id: string; name: string }[] = [];
@@ -196,10 +190,7 @@ export function folderPath(
  *  already taken among the destination's siblings: "Exhibits",
  *  "Exhibits (2)", "Exhibits (3)", … Used when deleting a folder
  *  re-parents a child into a sibling-name collision. */
-export function nextAvailableFolderName(
-  name: string,
-  takenLowercase: Set<string>
-): string {
+export function nextAvailableFolderName(name: string, takenLowercase: Set<string>): string {
   if (!takenLowercase.has(name.toLowerCase())) return name;
   for (let n = 2; ; n++) {
     const candidate = `${name} (${n})`;

@@ -23,23 +23,17 @@ export default function DashboardNotFound() {
                 <FileQuestion size={20} />
               </div>
               <div className="flex-1 min-w-0">
-                <h1 className="text-lg font-display font-medium text-ink mb-1">
-                  Not found.
-                </h1>
+                <h1 className="text-lg font-display font-medium text-ink mb-1">Not found.</h1>
                 <p className="text-sm text-ink-3 leading-relaxed mb-4">
-                  This page doesn&apos;t exist — or the matter, lead, or
-                  contact you tried to open has been deleted or moved.
+                  This page doesn&apos;t exist — or the matter, lead, or contact you tried to open
+                  has been deleted or moved.
                 </p>
                 <div className="flex items-center gap-2">
                   <Button size="sm" render={<Link href="/" />}>
                     <Home />
                     Back to dashboard
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    render={<Link href="/matters" />}
-                  >
+                  <Button variant="outline" size="sm" render={<Link href="/matters" />}>
                     Browse matters
                   </Button>
                 </div>

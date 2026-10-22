@@ -47,11 +47,9 @@ export type DocumentRow = {
 /** Batch-resolve uploader initials + names (one query, no N+1) and
  *  shape raw Document rows into DocumentRow. */
 export async function shapeDocumentRows(
-  rows: Awaited<ReturnType<typeof prisma.document.findMany>>
+  rows: Awaited<ReturnType<typeof prisma.document.findMany>>,
 ): Promise<DocumentRow[]> {
-  const uploaderIds = [
-    ...new Set(rows.map((d) => d.uploadedBy).filter((v): v is string => !!v)),
-  ];
+  const uploaderIds = [...new Set(rows.map((d) => d.uploadedBy).filter((v): v is string => !!v))];
   const uploaders =
     uploaderIds.length > 0
       ? await prisma.user.findMany({
@@ -86,16 +84,13 @@ export async function shapeDocumentRows(
     contentType: d.contentType,
     hasFile: !!d.fileUrl,
     uploadedBy: d.uploadedBy,
-    uploaderInitials: d.uploadedBy
-      ? byUser.get(d.uploadedBy)?.initials ?? null
-      : null,
-    uploaderName: d.uploadedBy ? byUser.get(d.uploadedBy)?.name ?? null : null,
+    uploaderInitials: d.uploadedBy ? (byUser.get(d.uploadedBy)?.initials ?? null) : null,
+    uploaderName: d.uploadedBy ? (byUser.get(d.uploadedBy)?.name ?? null) : null,
     folderId: d.folderId,
     parentDocumentId: d.parentDocumentId,
     clientShare: canViewPortal ? d.clientShare : null,
-    portalUploaderName: canViewPortal && d.portalUploaderId
-      ? (portalNames.get(d.portalUploaderId) ?? null)
-      : null,
+    portalUploaderName:
+      canViewPortal && d.portalUploaderId ? (portalNames.get(d.portalUploaderId) ?? null) : null,
     clientNote: canViewPortal ? d.clientNote : null,
     createdAt: d.createdAt,
   }));
@@ -104,9 +99,7 @@ export async function shapeDocumentRows(
 /** The matter's whole folder tree as FLAT rows in ONE query — tree
  *  building (nesting, breadcrumbs, depth math) happens in JS via
  *  src/lib/folder-tree.ts. */
-export async function getDocumentFolders(
-  scope: RecordScope
-): Promise<
+export async function getDocumentFolders(scope: RecordScope): Promise<
   {
     id: string;
     parentId: string | null;
@@ -144,7 +137,7 @@ export async function getDocumentFolders(
  *  The root's count lives under the `root` key (groupBy can't key a
  *  Record on null). Drives the count badges on the tree rail. */
 export async function getFolderDocumentCounts(
-  scope: RecordScope
+  scope: RecordScope,
 ): Promise<{ counts: Record<string, number>; rootCount: number }> {
   // An email counts once — its attachments list under it.
   const grouped = await prisma.document.groupBy({

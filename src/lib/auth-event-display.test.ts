@@ -15,10 +15,7 @@ describe("describeUserAgent", () => {
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36 Edg/141.0",
       "Edge on Windows",
     ],
-    [
-      "Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0",
-      "Firefox on Linux",
-    ],
+    ["Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0", "Firefox on Linux"],
   ])("%s", (ua, expected) => {
     expect(describeUserAgent(ua)).toBe(expected);
   });
@@ -30,16 +27,16 @@ describe("describeUserAgent", () => {
 
 describe("describeAuthDetail", () => {
   test("reason, IP and agent become plain words, agent first", () => {
-    expect(
-      describeAuthDetail(`revoked by admin — IP 203.0.113.9 · ${MAC_CHROME}`)
-    ).toBe("Chrome on macOS · revoked by admin · IP 203.0.113.9");
+    expect(describeAuthDetail(`revoked by admin — IP 203.0.113.9 · ${MAC_CHROME}`)).toBe(
+      "Chrome on macOS · revoked by admin · IP 203.0.113.9",
+    );
   });
 
   test("webhook session ids and Clerk id prefixes are dropped, reasons kept", () => {
     expect(describeAuthDetail("Session sess_2abc")).toBeNull();
-    expect(
-      describeAuthDetail("Clerk user user_9xyz: no matching member — IP ::1")
-    ).toBe("no matching member · IP ::1");
+    expect(describeAuthDetail("Clerk user user_9xyz: no matching member — IP ::1")).toBe(
+      "no matching member · IP ::1",
+    );
   });
 
   test("null / empty stay null", () => {

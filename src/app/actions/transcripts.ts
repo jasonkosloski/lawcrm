@@ -7,11 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { assertChildMatterAccess } from "@/lib/matter-access";
 import { logActivity } from "@/lib/activity-log";
-import {
-  activeStorageDriver,
-  readStoredFile,
-  signedBlobUrl,
-} from "@/lib/file-storage";
+import { activeStorageDriver, readStoredFile, signedBlobUrl } from "@/lib/file-storage";
 import { scopeBasePath, scopeOf, scopeWhere } from "@/lib/record-scope";
 import { DEFAULT_TIME_ZONE } from "@/lib/current-user-tz";
 import { resolveDocumentRenderer } from "@/components/documents-viewer/resolve-renderer";
@@ -110,15 +106,17 @@ export async function requestTranscript(
   // corrected) copy would silently undo that. A failed row that never
   // completed has nothing of its own either.
   const mayReuse = !existing || (existing.status === "failed" && !existing.completedAt);
-  const source = !mayReuse ? null : await prisma.transcript.findFirst({
-    where: {
-      status: "completed",
-      documentId: { not: documentId },
-      document: { fileUrl: doc.fileUrl, ...scopeWhere(scope) },
-    },
-    orderBy: { completedAt: "desc" },
-    include: { segments: { orderBy: { index: "asc" } } },
-  });
+  const source = !mayReuse
+    ? null
+    : await prisma.transcript.findFirst({
+        where: {
+          status: "completed",
+          documentId: { not: documentId },
+          document: { fileUrl: doc.fileUrl, ...scopeWhere(scope) },
+        },
+        orderBy: { completedAt: "desc" },
+        include: { segments: { orderBy: { index: "asc" } } },
+      });
   if (source) {
     const now = new Date();
     const copied = await prisma.$transaction(async (tx) => {
@@ -329,10 +327,7 @@ export type SegmentEditResult =
       current?: { text: string; revision: number };
     };
 
-function conflictResult(current?: {
-  text: string;
-  revision: number;
-}): SegmentEditResult {
+function conflictResult(current?: { text: string; revision: number }): SegmentEditResult {
   return {
     ok: false,
     conflict: true,
@@ -454,42 +449,40 @@ async function writeSegment(
   data: Prisma.TranscriptSegmentUpdateManyMutationInput,
   speakerLabel?: string,
 ): Promise<SegmentEditResult> {
-  const result = await prisma.$transaction(
-    async (tx): Promise<SegmentEditResult> => {
-      await tx.$queryRaw`SELECT id FROM transcripts WHERE id = ${ctx.transcript.id} FOR UPDATE`;
-      const fresh = await tx.transcript.findUniqueOrThrow({
-        where: { id: ctx.transcript.id },
-        select: { status: true, speakers: true },
+  const result = await prisma.$transaction(async (tx): Promise<SegmentEditResult> => {
+    await tx.$queryRaw`SELECT id FROM transcripts WHERE id = ${ctx.transcript.id} FOR UPDATE`;
+    const fresh = await tx.transcript.findUniqueOrThrow({
+      where: { id: ctx.transcript.id },
+      select: { status: true, speakers: true },
+    });
+    if (fresh.status !== "completed") return NOT_READY;
+    let speakers: Prisma.InputJsonValue | undefined;
+    if (speakerLabel !== undefined) {
+      const resolved = resolveSpeakerLabel(speakerMap(fresh.speakers), speakerLabel);
+      if (!resolved) return { ok: false, error: "Unknown speaker." };
+      speakers = resolved.speakers;
+    }
+    const res = await tx.transcriptSegment.updateMany({
+      where: { id: ctx.seg.id, revision },
+      data: { ...data, revision: { increment: 1 } },
+    });
+    if (res.count === 0) {
+      const now = await tx.transcriptSegment.findUnique({
+        where: { id: ctx.seg.id },
+        select: { text: true, revision: true },
       });
-      if (fresh.status !== "completed") return NOT_READY;
-      let speakers: Prisma.InputJsonValue | undefined;
-      if (speakerLabel !== undefined) {
-        const resolved = resolveSpeakerLabel(speakerMap(fresh.speakers), speakerLabel);
-        if (!resolved) return { ok: false, error: "Unknown speaker." };
-        speakers = resolved.speakers;
-      }
-      const res = await tx.transcriptSegment.updateMany({
-        where: { id: ctx.seg.id, revision },
-        data: { ...data, revision: { increment: 1 } },
-      });
-      if (res.count === 0) {
-        const now = await tx.transcriptSegment.findUnique({
-          where: { id: ctx.seg.id },
-          select: { text: true, revision: true },
-        });
-        return conflictResult(now ?? undefined);
-      }
-      await tx.transcript.update({
-        where: { id: ctx.transcript.id },
-        data: {
-          ...(speakers ? { speakers } : {}),
-          correctedAt: new Date(),
-          correctedBy: { connect: { id: ctx.userId } },
-        },
-      });
-      return { ok: true, revision: revision + 1 };
-    },
-  );
+      return conflictResult(now ?? undefined);
+    }
+    await tx.transcript.update({
+      where: { id: ctx.transcript.id },
+      data: {
+        ...(speakers ? { speakers } : {}),
+        correctedAt: new Date(),
+        correctedBy: { connect: { id: ctx.userId } },
+      },
+    });
+    return { ok: true, revision: revision + 1 };
+  });
   if (result.ok) revalidatePath(ctx.viewerPath);
   return result;
 }
@@ -684,7 +677,8 @@ export async function changeSpeakerForSelection(
       where: { id: t.id },
       select: { status: true, speakers: true },
     });
-    if (fresh.status !== "completed") return { ok: false, error: "The transcript isn't ready to edit." };
+    if (fresh.status !== "completed")
+      return { ok: false, error: "The transcript isn't ready to edit." };
     const resolved = resolveSpeakerLabel(speakerMap(fresh.speakers), input.speaker);
     if (!resolved) return { ok: false, error: "Unknown speaker." };
 
@@ -706,7 +700,15 @@ export async function changeSpeakerForSelection(
     const windowRows = await tx.transcriptSegment.findMany({
       where: { id: { in: meta.slice(lo, hi + 1).map((r) => r.id) } },
       orderBy: { index: "asc" },
-      select: { id: true, index: true, speaker: true, text: true, words: true, originalText: true, revision: true },
+      select: {
+        id: true,
+        index: true,
+        speaker: true,
+        text: true,
+        words: true,
+        originalText: true,
+        revision: true,
+      },
     });
     const rows = windowRows.map((r) => ({ ...r, words: (r.words as Word[]) ?? [] }));
 

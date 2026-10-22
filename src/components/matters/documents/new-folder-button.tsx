@@ -37,12 +37,7 @@ export function NewFolderButton({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        type="button"
-        onClick={() => setOpen(true)}
-      >
+      <Button variant="outline" size="sm" type="button" onClick={() => setOpen(true)}>
         <FolderPlus size={13} />
         New folder
       </Button>
@@ -102,10 +97,8 @@ export function NewFolderDialog({
             <DialogTitle>New folder</DialogTitle>
             <DialogDescription>
               Created inside{" "}
-              <span className="font-medium text-ink-2">
-                {parentName ?? "All documents"}
-              </span>
-              . Names must be unique within their parent.
+              <span className="font-medium text-ink-2">{parentName ?? "All documents"}</span>. Names
+              must be unique within their parent.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -127,17 +120,10 @@ export function NewFolderDialog({
             />
             <FormErrorBanner message={error} />
             <DialogFooter>
-              <Button
-                variant="outline"
-                type="button"
-                onClick={() => setOpen(false)}
-              >
+              <Button variant="outline" type="button" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                disabled={pending || name.trim().length === 0}
-              >
+              <Button type="submit" disabled={pending || name.trim().length === 0}>
                 <FolderPlus size={12} />
                 {pending ? "Creating…" : "Create"}
               </Button>

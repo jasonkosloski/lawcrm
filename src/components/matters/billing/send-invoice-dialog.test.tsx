@@ -50,8 +50,8 @@ describe("SendInvoiceDialog", () => {
     expect(screen.getByText("Send invoice INV-001")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Email sends the invoice as a PDF from the firm; replies come to you. Client portal posts it for the client to view and emails them a notice. US mail is coming soon."
-      )
+        "Email sends the invoice as a PDF from the firm; replies come to you. Client portal posts it for the client to view and emails them a notice. US mail is coming soon.",
+      ),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/nothing is emailed/i);
   });
@@ -75,9 +75,7 @@ describe("SendInvoiceDialog", () => {
     const onOpenChange = vi.fn();
     render(<SendInvoiceDialog {...baseProps} open onOpenChange={onOpenChange} />);
 
-    expect(screen.getByLabelText(/sent to \(email\)/i)).toHaveValue(
-      "client@example.com"
-    );
+    expect(screen.getByLabelText(/sent to \(email\)/i)).toHaveValue("client@example.com");
     await user.click(screen.getByRole("button", { name: /^send email$/i }));
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
@@ -89,20 +87,11 @@ describe("SendInvoiceDialog", () => {
   });
 
   test("the apply-trust option needs billing.apply_trust", () => {
-    const { unmount } = render(
-      <SendInvoiceDialog {...baseProps} open onOpenChange={vi.fn()} />
-    );
+    const { unmount } = render(<SendInvoiceDialog {...baseProps} open onOpenChange={vi.fn()} />);
     expect(trustCheckbox()).not.toBeInTheDocument();
     unmount();
 
-    render(
-      <SendInvoiceDialog
-        {...baseProps}
-        canApplyTrust
-        open
-        onOpenChange={vi.fn()}
-      />
-    );
+    render(<SendInvoiceDialog {...baseProps} canApplyTrust open onOpenChange={vi.fn()} />);
     expect(trustCheckbox()).toBeInTheDocument();
   });
 
@@ -114,7 +103,7 @@ describe("SendInvoiceDialog", () => {
         canApplyTrust
         open
         onOpenChange={vi.fn()}
-      />
+      />,
     );
     expect(trustCheckbox()).not.toBeInTheDocument();
     unmount();
@@ -125,27 +114,18 @@ describe("SendInvoiceDialog", () => {
         canApplyTrust
         open
         onOpenChange={vi.fn()}
-      />
+      />,
     );
     expect(trustCheckbox()).not.toBeInTheDocument();
   });
 
   test("ticking apply-trust defaults to MIN(trust, balance) and posts it", async () => {
     const user = setupUser();
-    render(
-      <SendInvoiceDialog
-        {...baseProps}
-        canApplyTrust
-        open
-        onOpenChange={vi.fn()}
-      />
-    );
+    render(<SendInvoiceDialog {...baseProps} canApplyTrust open onOpenChange={vi.fn()} />);
     await user.click(trustCheckbox()!);
     const amount = screen.getByLabelText(/^amount/i) as HTMLInputElement;
     expect(amount.value).toBe("500.00");
-    await user.click(
-      screen.getByRole("button", { name: /send \+ apply trust/i })
-    );
+    await user.click(screen.getByRole("button", { name: /send \+ apply trust/i }));
     await waitFor(() => expect(mockedAction).toHaveBeenCalledOnce());
     const fd = mockedAction.mock.calls[0][2] as FormData;
     expect(fd.get("applyTrust")).toBe("true");
@@ -162,7 +142,7 @@ describe("SendInvoiceDialog", () => {
         canApplyTrust
         open
         onOpenChange={vi.fn()}
-      />
+      />,
     );
     await user.click(trustCheckbox()!);
     const amount = screen.getByLabelText(/^amount/i);
@@ -173,29 +153,18 @@ describe("SendInvoiceDialog", () => {
     await user.clear(amount);
     await user.type(amount, "4,500");
     expect(screen.getByText(/capped at \$4,000\.00/i)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /send email|send \+/i })
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: /send email|send \+/i })).toBeDisabled();
   });
 
   test("unparseable trust text is called out and blocks submit", async () => {
     const user = setupUser();
-    render(
-      <SendInvoiceDialog
-        {...baseProps}
-        canApplyTrust
-        open
-        onOpenChange={vi.fn()}
-      />
-    );
+    render(<SendInvoiceDialog {...baseProps} canApplyTrust open onOpenChange={vi.fn()} />);
     await user.click(trustCheckbox()!);
     const amount = screen.getByLabelText(/^amount/i);
     await user.clear(amount);
     await user.type(amount, "lots");
     expect(screen.getByText("Enter a valid amount.")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /send email|send \+/i })
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: /send email|send \+/i })).toBeDisabled();
   });
 
   test("trust that covers the whole balance relabels the submit", async () => {
@@ -207,12 +176,10 @@ describe("SendInvoiceDialog", () => {
         canApplyTrust
         open
         onOpenChange={vi.fn()}
-      />
+      />,
     );
     await user.click(trustCheckbox()!);
-    expect(
-      screen.getByRole("button", { name: /send \+ pay from trust/i })
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: /send \+ pay from trust/i })).toBeEnabled();
   });
 
   test("a server error is shown and the edited recipient survives", async () => {
@@ -228,9 +195,7 @@ describe("SendInvoiceDialog", () => {
     await user.click(screen.getByRole("button", { name: /^send email$/i }));
 
     expect(await screen.findByText("Invoice changed.")).toBeInTheDocument();
-    expect(screen.getByLabelText(/sent to \(email\)/i)).toHaveValue(
-      "other@example.com"
-    );
+    expect(screen.getByLabelText(/sent to \(email\)/i)).toHaveValue("other@example.com");
   });
 
   test("US mail is disabled", () => {
@@ -248,12 +213,10 @@ describe("SendInvoiceDialog", () => {
         }}
         open
         onOpenChange={vi.fn()}
-      />
+      />,
     );
     expect(screen.getByRole("button", { name: /client portal/i })).toBeDisabled();
-    expect(
-      screen.getByText(/billed client doesn't have portal access/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/billed client doesn't have portal access/i)).toBeInTheDocument();
   });
 
   test("the portal option submits method=portal without a recipient", async () => {
@@ -265,13 +228,11 @@ describe("SendInvoiceDialog", () => {
         portalSend={{ available: true, reason: null }}
         open
         onOpenChange={vi.fn()}
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: /client portal/i }));
     expect(screen.queryByLabelText(/sent to \(email\)/i)).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: /send via client portal/i })
-    );
+    await user.click(screen.getByRole("button", { name: /send via client portal/i }));
     await waitFor(() => expect(mockedAction).toHaveBeenCalled());
     const fd = mockedAction.mock.calls[0][2] as FormData;
     expect(fd.get("method")).toBe("portal");

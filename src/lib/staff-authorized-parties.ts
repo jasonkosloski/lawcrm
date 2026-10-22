@@ -46,10 +46,7 @@ export function staffAuthorizedParties(): string[] {
       if (o) origins.add(o);
     }
   } else {
-    const portal = (process.env.PORTAL_HOST ?? "")
-      .trim()
-      .toLowerCase()
-      .replace(/:\d+$/, "");
+    const portal = (process.env.PORTAL_HOST ?? "").trim().toLowerCase().replace(/:\d+$/, "");
     const candidates = [
       ["VERCEL_BRANCH_URL", true],
       ["VERCEL_URL", true],
@@ -71,7 +68,7 @@ export function staffAuthorizedParties(): string[] {
     if (!warned) {
       warned = true;
       console.error(
-        "[staff-auth] no staff origins configured (set STAFF_ORIGINS); rejecting all session tokens"
+        "[staff-auth] no staff origins configured (set STAFF_ORIGINS); rejecting all session tokens",
       );
     }
     return [NOTHING_CONFIGURED];
@@ -87,7 +84,7 @@ export function staffAuthorizedParties(): string[] {
  */
 export function staffAppUrl(): string | null {
   const real = staffAuthorizedParties().find(
-    (o) => o !== NOTHING_CONFIGURED && !/^https?:\/\/localhost(:\d+)?$/.test(o)
+    (o) => o !== NOTHING_CONFIGURED && !/^https?:\/\/localhost(:\d+)?$/.test(o),
   );
   if (real) return real;
   return process.env.NODE_ENV !== "production" ? "http://localhost:3000" : null;

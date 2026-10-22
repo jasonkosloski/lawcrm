@@ -36,9 +36,7 @@ export const consoleDriver: EmailDriver = async (msg) => {
         .map((a) => `${a.filename} (${a.content.length} bytes)`)
         .join(", ")}`
     : "";
-  console.info(
-    `[email:console] to=${msg.to} subject=${msg.subject}\n${msg.text}${files}`,
-  );
+  console.info(`[email:console] to=${msg.to} subject=${msg.subject}\n${msg.text}${files}`);
   return { ok: true };
 };
 

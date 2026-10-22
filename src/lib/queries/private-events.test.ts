@@ -17,10 +17,7 @@ vi.mock("@/lib/current-user-tz", () => ({
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import {
-  getCalendarEventById,
-  getCalendarItems,
-} from "@/lib/queries/calendar";
+import { getCalendarEventById, getCalendarItems } from "@/lib/queries/calendar";
 import { getMatterEvents } from "@/lib/queries/matter-detail";
 import { globalSearch } from "@/lib/queries/search";
 import { getTodayAgenda } from "@/lib/queries/dashboard";

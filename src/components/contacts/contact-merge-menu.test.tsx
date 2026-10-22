@@ -22,10 +22,7 @@ vi.mock("@/app/actions/contacts", () => ({
   searchMergeCandidatesAction: vi.fn(),
 }));
 
-import {
-  mergeContacts,
-  searchMergeCandidatesAction,
-} from "@/app/actions/contacts";
+import { mergeContacts, searchMergeCandidatesAction } from "@/app/actions/contacts";
 import { ContactMergeMenu } from "./contact-merge-menu";
 
 const mockedMerge = vi.mocked(mergeContacts);
@@ -51,12 +48,8 @@ const smithDefendant = {
 const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
 
 async function openDialog(user: ReturnType<typeof setupUser>) {
-  await user.click(
-    screen.getByRole("button", { name: /more contact actions/i })
-  );
-  await user.click(
-    await screen.findByRole("menuitem", { name: /merge into another contact/i })
-  );
+  await user.click(screen.getByRole("button", { name: /more contact actions/i }));
+  await user.click(await screen.findByRole("menuitem", { name: /merge into another contact/i }));
   return screen.findByRole("textbox", {
     name: /search contacts to merge into/i,
   });
@@ -76,9 +69,7 @@ describe("ContactMergeMenu", () => {
     const input = await openDialog(user);
     await user.type(input, "smith");
 
-    await waitFor(() =>
-      expect(mockedSearch).toHaveBeenLastCalledWith("c1", "smith")
-    );
+    await waitFor(() => expect(mockedSearch).toHaveBeenLastCalledWith("c1", "smith"));
     const options = await screen.findAllByRole("option");
     expect(options).toHaveLength(2);
     // Same name, told apart by the extra detail.
@@ -95,9 +86,7 @@ describe("ContactMergeMenu", () => {
     await user.type(input, "smith");
     await user.click((await screen.findAllByRole("option"))[0]);
 
-    expect(
-      screen.getByRole("button", { name: /clear selected contact/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /clear selected contact/i })).toBeInTheDocument();
     expect(screen.getAllByText(/Client · \(303\) 555-0101/).length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: "Merge contacts" }));
@@ -123,9 +112,7 @@ describe("ContactMergeMenu", () => {
     await user.click((await screen.findAllByRole("option"))[1]);
     await user.click(screen.getByRole("button", { name: "Merge contacts" }));
 
-    expect(
-      await screen.findByText("These are on opposite sides of 1 matter.")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("These are on opposite sides of 1 matter.")).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Merge anyway" }));
@@ -148,9 +135,7 @@ describe("ContactMergeMenu", () => {
     await user.click(screen.getByRole("button", { name: "Merge contacts" }));
 
     expect(await screen.findByText("Contact not found")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Merge anyway" })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Merge anyway" })).not.toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
   });
 
@@ -168,7 +153,7 @@ describe("ContactMergeMenu", () => {
     const reopened = await openDialog(user);
     expect(reopened).toHaveValue("");
     expect(
-      screen.queryByRole("button", { name: /clear selected contact/i })
+      screen.queryByRole("button", { name: /clear selected contact/i }),
     ).not.toBeInTheDocument();
   });
 });

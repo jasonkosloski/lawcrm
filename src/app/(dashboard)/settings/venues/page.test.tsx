@@ -18,11 +18,25 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/firm", () => ({ getCurrentFirm: vi.fn(async () => ({ state: "WY" })) }));
 vi.mock("@/lib/queries/venues", () => ({
   listVenues: vi.fn(async () => [
-    { id: "v1", name: "Aurora", city: null, county: null, state: "CO", isActive: true, matterCount: 3 },
+    {
+      id: "v1",
+      name: "Aurora",
+      city: null,
+      county: null,
+      state: "CO",
+      isActive: true,
+      matterCount: 3,
+    },
   ]),
 }));
 vi.mock("@/components/settings/venue-editor", () => ({
-  VenueEditor: ({ venues, defaultState }: { venues: { name: string; matterCount: number }[]; defaultState: string }) => (
+  VenueEditor: ({
+    venues,
+    defaultState,
+  }: {
+    venues: { name: string; matterCount: number }[];
+    defaultState: string;
+  }) => (
     <ul data-state={defaultState}>
       {venues.map((v) => (
         <li key={v.name}>

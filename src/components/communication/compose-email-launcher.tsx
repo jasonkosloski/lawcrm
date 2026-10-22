@@ -21,10 +21,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { SENDABLE_EMAIL_STATUSES } from "@/lib/email-send-status";
 import { activeStorageDriver } from "@/lib/file-storage";
-import {
-  getFilingLeadOptions,
-  getFilingMatterOptions,
-} from "@/lib/queries/communication";
+import { getFilingLeadOptions, getFilingMatterOptions } from "@/lib/queries/communication";
 import type { RecordScope } from "@/lib/record-scope";
 import { ComposeEmailButton } from "./compose-email";
 

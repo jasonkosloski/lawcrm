@@ -14,11 +14,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -65,9 +61,7 @@ describe.each([
 
   test("a non-Error thrown value renders the card without throwing", () => {
     render(<Boundary error={"just a string"} retry={() => {}} />);
-    expect(
-      screen.getByRole("heading", { name: /something broke/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /something broke/i })).toBeInTheDocument();
   });
 });
 

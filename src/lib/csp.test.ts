@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  CSP_HEADER,
-  clerkFrontendApiOrigin,
-  createNonce,
-  fileRouteCsp,
-  pageCsp,
-} from "./csp";
+import { CSP_HEADER, clerkFrontendApiOrigin, createNonce, fileRouteCsp, pageCsp } from "./csp";
 
 describe("csp", () => {
   it("is report-only until the rollout flips it", () => {
@@ -35,12 +29,10 @@ describe("csp", () => {
       csp.split("; ").find((d) => d.startsWith(`${name} `)) ?? "";
 
     it("decodes the frontend API origin from the publishable key", () => {
-      expect(clerkFrontendApiOrigin(KEY)).toBe(
-        "https://foo-bar-1.clerk.accounts.dev"
+      expect(clerkFrontendApiOrigin(KEY)).toBe("https://foo-bar-1.clerk.accounts.dev");
+      expect(clerkFrontendApiOrigin("pk_live_" + btoa("clerk.example.com$"))).toBe(
+        "https://clerk.example.com",
       );
-      expect(
-        clerkFrontendApiOrigin("pk_live_" + btoa("clerk.example.com$"))
-      ).toBe("https://clerk.example.com");
     });
 
     it("returns null for missing or malformed keys", () => {
@@ -67,9 +59,7 @@ describe("csp", () => {
       const csp = pageCsp("abc", { isDev: false });
       expect(csp).not.toContain("clerk");
       expect(csp).not.toContain("cloudflare");
-      expect(
-        pageCsp("abc", { isDev: false, clerkPublishableKey: "junk" })
-      ).toBe(csp);
+      expect(pageCsp("abc", { isDev: false, clerkPublishableKey: "junk" })).toBe(csp);
     });
   });
 });

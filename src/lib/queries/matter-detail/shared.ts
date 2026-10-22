@@ -54,12 +54,9 @@ export function eventLabelForViewer(event: EventRef, viewerId: string): string {
     viewerId,
     createdById: event.createdById,
     eventVisibility: event.visibility,
-    creatorDefaultEventVisibility:
-      event.createdBy?.defaultEventVisibility ?? null,
+    creatorDefaultEventVisibility: event.createdBy?.defaultEventVisibility ?? null,
     matterId: event.matterId,
-    attendeeUserIds: event.attendees
-      .map((a) => a.userId)
-      .filter((id): id is string => !!id),
+    attendeeUserIds: event.attendees.map((a) => a.userId).filter((id): id is string => !!id),
     matterTeamUserIds: event.matter?.teamMembers.map((m) => m.userId) ?? [],
   });
   return canSee ? event.title : "Busy";
@@ -69,9 +66,7 @@ export function eventLabelForViewer(event: EventRef, viewerId: string): string {
  *  scrubbed for viewers who can't see the event. */
 export function scrubEventRef(
   event: EventRef | null,
-  viewerId: string
+  viewerId: string,
 ): { id: string; title: string } | null {
-  return event
-    ? { id: event.id, title: eventLabelForViewer(event, viewerId) }
-    : null;
+  return event ? { id: event.id, title: eventLabelForViewer(event, viewerId) } : null;
 }

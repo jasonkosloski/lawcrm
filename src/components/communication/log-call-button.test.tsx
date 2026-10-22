@@ -56,8 +56,7 @@ function withTz(ui: React.ReactNode) {
   return <UserTimeZoneProvider timeZone={TZ}>{ui}</UserTimeZoneProvider>;
 }
 
-const whenInput = () =>
-  screen.getByLabelText("When") as HTMLInputElement;
+const whenInput = () => screen.getByLabelText("When") as HTMLInputElement;
 
 describe("LogCallButton", () => {
   test("has an accessible name even when the text label is hidden (phones)", () => {
@@ -66,7 +65,7 @@ describe("LogCallButton", () => {
     // from an explicit label.
     expect(screen.getByRole("button", { name: "Log call" })).toHaveAttribute(
       "aria-label",
-      "Log call"
+      "Log call",
     );
   });
 });
@@ -85,7 +84,7 @@ describe("CallLogDialog - close on success", () => {
           fixedContact={edit ? undefined : contact}
           edit={edit}
         />
-      </>
+      </>,
     );
   }
 
@@ -94,16 +93,12 @@ describe("CallLogDialog - close on success", () => {
     render(<Harness />);
 
     await user.click(await screen.findByRole("button", { name: "Log call" }));
-    await waitFor(() =>
-      expect(screen.queryByText("Log a call")).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByText("Log a call")).not.toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: "reopen dialog" }));
     await user.click(await screen.findByRole("button", { name: "Log call" }));
 
-    await waitFor(() =>
-      expect(screen.queryByText("Log a call")).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByText("Log a call")).not.toBeInTheDocument());
     expect(logCall).toHaveBeenCalledTimes(2);
   });
 
@@ -111,21 +106,13 @@ describe("CallLogDialog - close on success", () => {
     const user = setupUser();
     render(<Harness edit={editable()} />);
 
-    await user.click(
-      await screen.findByRole("button", { name: "Save changes" })
-    );
-    await waitFor(() =>
-      expect(screen.queryByText("Edit call log")).not.toBeInTheDocument()
-    );
+    await user.click(await screen.findByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(screen.queryByText("Edit call log")).not.toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: "reopen dialog" }));
-    await user.click(
-      await screen.findByRole("button", { name: "Save changes" })
-    );
+    await user.click(await screen.findByRole("button", { name: "Save changes" }));
 
-    await waitFor(() =>
-      expect(screen.queryByText("Edit call log")).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByText("Edit call log")).not.toBeInTheDocument());
     expect(updateCallLog).toHaveBeenCalledTimes(2);
   });
 
@@ -138,20 +125,14 @@ describe("CallLogDialog - close on success", () => {
     render(<Harness />);
 
     await user.click(await screen.findByRole("button", { name: "Log call" }));
-    expect(
-      await screen.findByText("This contact has no phone on file")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("This contact has no phone on file")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() =>
-      expect(screen.queryByText("Log a call")).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByText("Log a call")).not.toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "reopen dialog" }));
 
     await screen.findByText("Log a call");
-    expect(
-      screen.queryByText("This contact has no phone on file")
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("This contact has no phone on file")).not.toBeInTheDocument();
   });
 });
 
@@ -174,11 +155,7 @@ function editable(overrides: Partial<EditableCallLog> = {}): EditableCallLog {
 describe("CallLogDialog - call time is posted as the real instant", () => {
   test("create: the typed wall-clock time is read in the profile zone", async () => {
     const user = setupUser();
-    render(
-      withTz(
-        <CallLogDialog open onOpenChange={() => {}} fixedContact={contact} />
-      )
-    );
+    render(withTz(<CallLogDialog open onOpenChange={() => {}} fixedContact={contact} />));
 
     fireEvent.change(whenInput(), { target: { value: "2026-06-10T14:30" } });
     await user.click(await screen.findByRole("button", { name: "Log call" }));
@@ -192,18 +169,12 @@ describe("CallLogDialog - call time is posted as the real instant", () => {
 
   test("edit: prefill shows profile-zone wall time and an unchanged save keeps the instant", async () => {
     const user = setupUser();
-    render(
-      withTz(
-        <CallLogDialog open onOpenChange={() => {}} edit={editable()} />
-      )
-    );
+    render(withTz(<CallLogDialog open onOpenChange={() => {}} edit={editable()} />));
 
     // Prefill is 2:30 PM Denver, not the UTC wall time (20:30).
     expect(whenInput().value).toBe("2026-06-10T14:30");
 
-    await user.click(
-      await screen.findByRole("button", { name: "Save changes" })
-    );
+    await user.click(await screen.findByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(updateCallLog).toHaveBeenCalledOnce());
     const fd = updateCallLog.mock.calls[0]![1] as FormData;
     // Round trip is stable: no drift by the UTC offset per edit.
@@ -221,15 +192,13 @@ describe("CallLogDialog - call time is posted as the real instant", () => {
           edit={editable({
             occurredAt: new Date("2026-06-10T20:30:42.000Z"),
           })}
-        />
-      )
+        />,
+      ),
     );
-    await user.click(
-      await screen.findByRole("button", { name: "Save changes" })
-    );
+    await user.click(await screen.findByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(updateCallLog).toHaveBeenCalledOnce());
     expect((updateCallLog.mock.calls[0]![1] as FormData).get("occurredAt")).toBe(
-      "2026-06-10T20:30:42.000Z"
+      "2026-06-10T20:30:42.000Z",
     );
     unmount();
 
@@ -242,26 +211,20 @@ describe("CallLogDialog - call time is posted as the real instant", () => {
           edit={editable({
             occurredAt: new Date("2026-06-10T20:30:42.000Z"),
           })}
-        />
-      )
+        />,
+      ),
     );
     fireEvent.change(whenInput(), { target: { value: "2026-06-10T15:00" } });
-    await user.click(
-      await screen.findByRole("button", { name: "Save changes" })
-    );
+    await user.click(await screen.findByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(updateCallLog).toHaveBeenCalledOnce());
     expect((updateCallLog.mock.calls[0]![1] as FormData).get("occurredAt")).toBe(
-      "2026-06-10T21:00:00.000Z"
+      "2026-06-10T21:00:00.000Z",
     );
   });
 
   test("a blank When field posts an empty instant (server reports the field error)", async () => {
     const user = setupUser();
-    render(
-      withTz(
-        <CallLogDialog open onOpenChange={() => {}} fixedContact={contact} />
-      )
-    );
+    render(withTz(<CallLogDialog open onOpenChange={() => {}} fixedContact={contact} />));
 
     fireEvent.change(whenInput(), { target: { value: "" } });
     await user.click(await screen.findByRole("button", { name: "Log call" }));

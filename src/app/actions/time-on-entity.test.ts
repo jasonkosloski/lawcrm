@@ -84,10 +84,8 @@ const seedTask = async () => {
   return t.id;
 };
 
-
 /** Every activity row's text, serialized — for "never leaked" checks. */
-const activityText = async () =>
-  JSON.stringify(await prisma.activityLog.findMany());
+const activityText = async () => JSON.stringify(await prisma.activityLog.findMany());
 
 const SECRET = "Strategy re: confidential settlement posture";
 
@@ -121,7 +119,7 @@ describe("time-on-entity action gates", () => {
     // requirePermission redirects (throws) on denial — simulate that.
     mockedRequirePermission.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
     await expect(
-      addTimeEntryToTask(taskId, noteAttachmentInitialState, buildTimeForm())
+      addTimeEntryToTask(taskId, noteAttachmentInitialState, buildTimeForm()),
     ).rejects.toThrow();
     expect(await prisma.timeEntry.count()).toBe(0);
   });
@@ -135,7 +133,7 @@ describe("addTimeEntryToTask — creation", () => {
     const res = await addTimeEntryToTask(
       taskId,
       noteAttachmentInitialState,
-      buildTimeForm({ hours: "1.5", activity: "Drafting" })
+      buildTimeForm({ hours: "1.5", activity: "Drafting" }),
     );
     expect(res.status).toBe("ok");
     const entry = await prisma.timeEntry.findFirstOrThrow({
@@ -183,7 +181,7 @@ describe("addTimeEntryToEmailMessage — mailbox ownership", () => {
     const res = await addTimeEntryToEmailMessage(
       messageId,
       noteAttachmentInitialState,
-      buildTimeForm()
+      buildTimeForm(),
     );
     expect(res.status).toBe("ok");
     const entry = await prisma.timeEntry.findFirstOrThrow({
@@ -201,7 +199,7 @@ describe("addTimeEntryToEmailMessage — mailbox ownership", () => {
     const res = await addTimeEntryToEmailMessage(
       messageId,
       noteAttachmentInitialState,
-      buildTimeForm({ activity: SECRET, privileged: "on" })
+      buildTimeForm({ activity: SECRET, privileged: "on" }),
     );
     expect(res.status).toBe("ok");
     const log = await prisma.activityLog.findFirstOrThrow({
@@ -225,7 +223,7 @@ describe("addTimeEntryToEmailMessage — mailbox ownership", () => {
     const res = await addTimeEntryToEmailMessage(
       messageId,
       noteAttachmentInitialState,
-      buildTimeForm()
+      buildTimeForm(),
     );
     expect(res.status).toBe("error");
     expect(await prisma.timeEntry.count()).toBe(0);
@@ -244,7 +242,7 @@ describe("time-on-entity — date-only input", () => {
     await addTimeEntryToTask(
       taskId,
       noteAttachmentInitialState,
-      buildTimeForm({ date: "2026-04-01" })
+      buildTimeForm({ date: "2026-04-01" }),
     );
     const entry = await prisma.timeEntry.findFirstOrThrow();
     expect(entry.date.toISOString()).toBe("2026-04-01T00:00:00.000Z");
@@ -255,7 +253,7 @@ describe("time-on-entity — date-only input", () => {
     const res = await addTimeEntryToTask(
       taskId,
       noteAttachmentInitialState,
-      buildTimeForm({ date: "2026-02-31" })
+      buildTimeForm({ date: "2026-02-31" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.date).toBeTruthy();
@@ -267,7 +265,7 @@ describe("time-on-entity — date-only input", () => {
     const res = await addTimeEntryToTask(
       taskId,
       noteAttachmentInitialState,
-      buildTimeForm({ hours: "25" })
+      buildTimeForm({ hours: "25" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.hours?.[0]).toMatch(/> 0 and ≤ 24/);
@@ -282,7 +280,7 @@ describe("privileged entries stay out of the activity feed", () => {
     await addTimeEntryToTask(
       taskId,
       noteAttachmentInitialState,
-      buildTimeForm({ activity: SECRET, privileged: "on" })
+      buildTimeForm({ activity: SECRET, privileged: "on" }),
     );
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { type: "time_entry" },
@@ -295,7 +293,7 @@ describe("privileged entries stay out of the activity feed", () => {
     await addTimeEntryToTask(
       taskId,
       noteAttachmentInitialState,
-      buildTimeForm({ activity: SECRET })
+      buildTimeForm({ activity: SECRET }),
     );
     expect(await activityText()).toContain(SECRET);
   });
@@ -308,7 +306,7 @@ describe("privileged entries stay out of the activity feed", () => {
     await addTimeEntryToDeadline(
       deadline.id,
       noteAttachmentInitialState,
-      buildTimeForm({ activity: SECRET, privileged: "on" })
+      buildTimeForm({ activity: SECRET, privileged: "on" }),
     );
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { type: "time_entry" },
@@ -320,11 +318,7 @@ describe("privileged entries stay out of the activity feed", () => {
 
 describe("addTimeEntryToTask — errors", () => {
   test("a missing task is a friendly error, nothing written", async () => {
-    const res = await addTimeEntryToTask(
-      "missing",
-      noteAttachmentInitialState,
-      buildTimeForm()
-    );
+    const res = await addTimeEntryToTask("missing", noteAttachmentInitialState, buildTimeForm());
     expect(res.status).toBe("error");
     expect(res.errors?.activity?.[0]).toMatch(/no longer exists/i);
     expect(await prisma.timeEntry.count()).toBe(0);
@@ -344,7 +338,7 @@ describe("addTimeEntryToDeadline", () => {
     const res = await addTimeEntryToDeadline(
       deadline.id,
       noteAttachmentInitialState,
-      buildTimeForm({ hours: "0.75", activity: "Prep answer" })
+      buildTimeForm({ hours: "0.75", activity: "Prep answer" }),
     );
     expect(res.status).toBe("ok");
     const entry = await prisma.timeEntry.findFirstOrThrow();
@@ -366,7 +360,7 @@ describe("addTimeEntryToDeadline", () => {
     const res = await addTimeEntryToDeadline(
       "missing",
       noteAttachmentInitialState,
-      buildTimeForm()
+      buildTimeForm(),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.activity?.[0]).toMatch(/no longer exists/i);
@@ -379,7 +373,7 @@ describe("addTimeEntryToEmailMessage — errors", () => {
     const res = await addTimeEntryToEmailMessage(
       "missing",
       noteAttachmentInitialState,
-      buildTimeForm()
+      buildTimeForm(),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.activity?.[0]).toMatch(/file the thread/i);
@@ -388,10 +382,7 @@ describe("addTimeEntryToEmailMessage — errors", () => {
 });
 
 describe("addTimeEntryToMessengerItem", () => {
-  async function seedItem(opts: {
-    itemMatterId?: string;
-    threadMatterId?: string;
-  }) {
+  async function seedItem(opts: { itemMatterId?: string; threadMatterId?: string }) {
     const account = await prisma.messengerAccount.create({
       data: { userId, phoneNumber: "+13035550100" },
       select: { id: true },
@@ -426,7 +417,7 @@ describe("addTimeEntryToMessengerItem", () => {
     const res = await addTimeEntryToMessengerItem(
       itemId,
       noteAttachmentInitialState,
-      buildTimeForm({ activity: "Text with client" })
+      buildTimeForm({ activity: "Text with client" }),
     );
     expect(res.status).toBe("ok");
     const entry = await prisma.timeEntry.findFirstOrThrow();
@@ -442,7 +433,7 @@ describe("addTimeEntryToMessengerItem", () => {
     const res = await addTimeEntryToMessengerItem(
       itemId,
       noteAttachmentInitialState,
-      buildTimeForm({ activity: SECRET, privileged: "on" })
+      buildTimeForm({ activity: SECRET, privileged: "on" }),
     );
     expect(res.status).toBe("ok");
     const log = await prisma.activityLog.findFirstOrThrow({
@@ -457,7 +448,7 @@ describe("addTimeEntryToMessengerItem", () => {
     const res = await addTimeEntryToMessengerItem(
       itemId,
       noteAttachmentInitialState,
-      buildTimeForm()
+      buildTimeForm(),
     );
     expect(res.status).toBe("ok");
     expect((await prisma.timeEntry.findFirstOrThrow()).matterId).toBe(matterId);
@@ -468,7 +459,7 @@ describe("addTimeEntryToMessengerItem", () => {
     const res = await addTimeEntryToMessengerItem(
       itemId,
       noteAttachmentInitialState,
-      buildTimeForm()
+      buildTimeForm(),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.activity?.[0]).toMatch(/isn't filed/i);
@@ -479,7 +470,7 @@ describe("addTimeEntryToMessengerItem", () => {
     const res = await addTimeEntryToMessengerItem(
       "missing",
       noteAttachmentInitialState,
-      buildTimeForm()
+      buildTimeForm(),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.activity?.[0]).toMatch(/not found/i);

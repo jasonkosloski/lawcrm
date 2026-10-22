@@ -14,8 +14,7 @@
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-const BLOB_KEY =
-  "https://abc123.private.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__file";
+const BLOB_KEY = "https://abc123.private.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__file";
 
 vi.mock("@/lib/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({
@@ -55,11 +54,11 @@ async function redirectFor(filename: string, declared: string | null) {
   } as never);
   vi.mocked(statFile).mockResolvedValue({ size: 10 });
   vi.mocked(signedBlobUrl).mockResolvedValue(
-    "https://abc123.private.blob.vercel-storage.com/signed"
+    "https://abc123.private.blob.vercel-storage.com/signed",
   );
   const res = await GET(
     new Request("http://localhost/api/email-attachments/a1/download") as never,
-    { params: Promise.resolve({ id: "a1" }) }
+    { params: Promise.resolve({ id: "a1" }) },
   );
   return res;
 }
@@ -72,35 +71,35 @@ describe("email attachment blob redirect uses the server-derived type", () => {
   test("invoice.html declaring application/pdf is forced to download", async () => {
     const res = await redirectFor("invoice.html", "application/pdf");
     expect(res.status).toBe(302);
-    expect(vi.mocked(signedBlobUrl)).toHaveBeenCalledWith(
-      expect.any(String),
-      { download: true, media: false }
-    );
+    expect(vi.mocked(signedBlobUrl)).toHaveBeenCalledWith(expect.any(String), {
+      download: true,
+      media: false,
+    });
   });
 
   test("a real .pdf declaring text/html is allowed inline", async () => {
     const res = await redirectFor("brief.pdf", "text/html");
     expect(res.status).toBe(302);
-    expect(vi.mocked(signedBlobUrl)).toHaveBeenCalledWith(
-      expect.any(String),
-      { download: false, media: false }
-    );
+    expect(vi.mocked(signedBlobUrl)).toHaveBeenCalledWith(expect.any(String), {
+      download: false,
+      media: false,
+    });
   });
 
   test("unknown / missing extension is download-only even if declared pdf", async () => {
     await redirectFor("report", "application/pdf");
-    expect(vi.mocked(signedBlobUrl)).toHaveBeenCalledWith(
-      expect.any(String),
-      { download: true, media: false }
-    );
+    expect(vi.mocked(signedBlobUrl)).toHaveBeenCalledWith(expect.any(String), {
+      download: true,
+      media: false,
+    });
   });
 
   test("svg (active content) is download-only regardless of declaration", async () => {
     await redirectFor("logo.svg", "image/png");
-    expect(vi.mocked(signedBlobUrl)).toHaveBeenCalledWith(
-      expect.any(String),
-      { download: true, media: false }
-    );
+    expect(vi.mocked(signedBlobUrl)).toHaveBeenCalledWith(expect.any(String), {
+      download: true,
+      media: false,
+    });
   });
 });
 
@@ -109,19 +108,19 @@ describe("email attachment blob redirect - TTL, caching and failure shapes", () 
     await redirectFor("voicemail.mp3", null);
     expect(vi.mocked(signedBlobUrl)).toHaveBeenLastCalledWith(
       expect.any(String),
-      expect.objectContaining({ media: true })
+      expect.objectContaining({ media: true }),
     );
     await redirectFor("clip.mp4", null);
     expect(vi.mocked(signedBlobUrl)).toHaveBeenLastCalledWith(
       expect.any(String),
-      expect.objectContaining({ media: true })
+      expect.objectContaining({ media: true }),
     );
   });
 
   test("the redirect (the auth boundary) is never cacheable and is not proxied", async () => {
     const res = await redirectFor("brief.pdf", null);
     expect(res.headers.get("Location")).toBe(
-      "https://abc123.private.blob.vercel-storage.com/signed"
+      "https://abc123.private.blob.vercel-storage.com/signed",
     );
     expect(res.headers.get("Cache-Control")).toContain("no-store");
   });
@@ -138,7 +137,7 @@ describe("email attachment blob redirect - TTL, caching and failure shapes", () 
     vi.mocked(statFile).mockResolvedValue(null);
     const res = await GET(
       new Request("http://localhost/api/email-attachments/a1/download") as never,
-      { params: Promise.resolve({ id: "a1" }) }
+      { params: Promise.resolve({ id: "a1" }) },
     );
     expect(res.status).toBe(410);
     expect(vi.mocked(signedBlobUrl)).not.toHaveBeenCalled();
@@ -150,13 +149,11 @@ describe("email attachment blob redirect - TTL, caching and failure shapes", () 
       id: "a1",
       filename: "brief.pdf",
     } as never);
-    vi.mocked(ensureAttachmentBytes).mockRejectedValue(
-      new Error("blob store down")
-    );
+    vi.mocked(ensureAttachmentBytes).mockRejectedValue(new Error("blob store down"));
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await GET(
       new Request("http://localhost/api/email-attachments/a1/download") as never,
-      { params: Promise.resolve({ id: "a1" }) }
+      { params: Promise.resolve({ id: "a1" }) },
     );
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({

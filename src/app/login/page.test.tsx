@@ -31,9 +31,7 @@ vi.mock("@/lib/staff-auth", () => ({ getStaffAuth: vi.fn() }));
 // Leaf components — we only care about the `next` prop the button
 // receives, not Clerk's provider or its markup.
 vi.mock("@/components/auth/staff-clerk-provider", () => ({
-  StaffClerkProvider: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
+  StaffClerkProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock("@/components/auth/google-sign-in-button", () => ({
   GoogleSignInButton: ({ next }: { next: string }) => (
@@ -75,17 +73,13 @@ afterEach(() => {
 describe("LoginPage — staff auth branches", () => {
   test("ok redirects to the sanitized next", async () => {
     signedIn();
-    await expect(LoginPage(props("/matters"))).rejects.toThrow(
-      REDIRECT_SENTINEL
-    );
+    await expect(LoginPage(props("/matters"))).rejects.toThrow(REDIRECT_SENTINEL);
     expect(mockedRedirect).toHaveBeenCalledWith("/matters");
   });
 
   test("no_access goes to /no-access, not back to the form", async () => {
     noAccess();
-    await expect(LoginPage(props("/matters"))).rejects.toThrow(
-      REDIRECT_SENTINEL
-    );
+    await expect(LoginPage(props("/matters"))).rejects.toThrow(REDIRECT_SENTINEL);
     expect(mockedRedirect).toHaveBeenCalledWith("/no-access");
   });
 
@@ -100,25 +94,19 @@ describe("LoginPage — staff auth branches", () => {
 describe("LoginPage — authenticated redirect", () => {
   test("absolute external URL in ?next= falls back to /", async () => {
     signedIn();
-    await expect(LoginPage(props("https://evil.example"))).rejects.toThrow(
-      REDIRECT_SENTINEL
-    );
+    await expect(LoginPage(props("https://evil.example"))).rejects.toThrow(REDIRECT_SENTINEL);
     expect(mockedRedirect).toHaveBeenCalledWith("/");
   });
 
   test("protocol-relative //evil.example falls back to /", async () => {
     signedIn();
-    await expect(LoginPage(props("//evil.example"))).rejects.toThrow(
-      REDIRECT_SENTINEL
-    );
+    await expect(LoginPage(props("//evil.example"))).rejects.toThrow(REDIRECT_SENTINEL);
     expect(mockedRedirect).toHaveBeenCalledWith("/");
   });
 
   test("same-origin relative path passes through", async () => {
     signedIn();
-    await expect(
-      LoginPage(props("/matters/abc?tab=notes"))
-    ).rejects.toThrow(REDIRECT_SENTINEL);
+    await expect(LoginPage(props("/matters/abc?tab=notes"))).rejects.toThrow(REDIRECT_SENTINEL);
     expect(mockedRedirect).toHaveBeenCalledWith("/matters/abc?tab=notes");
   });
 
@@ -140,9 +128,9 @@ describe("LoginPage — authenticated redirect", () => {
 
   test("repeated ?next= uses the first value, still sanitized", async () => {
     signedIn();
-    await expect(
-      LoginPage(props(["https://evil.example", "/tasks"]))
-    ).rejects.toThrow(REDIRECT_SENTINEL);
+    await expect(LoginPage(props(["https://evil.example", "/tasks"]))).rejects.toThrow(
+      REDIRECT_SENTINEL,
+    );
     expect(mockedRedirect).toHaveBeenCalledWith("/");
   });
 });
@@ -164,8 +152,6 @@ describe("LoginPage — signed-out button props", () => {
   test("button receives a valid relative next unchanged", async () => {
     signedOut();
     render(await LoginPage(props("/matters/abc")));
-    expect(screen.getByTestId("login-form").dataset.next).toBe(
-      "/matters/abc"
-    );
+    expect(screen.getByTestId("login-form").dataset.next).toBe("/matters/abc");
   });
 });

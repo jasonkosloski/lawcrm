@@ -58,7 +58,10 @@ export function DeleteDocumentDialog({
   const submit = () => {
     setError(null);
     startTransition(async () => {
-      const res = await deleteDocument(documentId, unsavedAttachments.length ? { attachments: choice } : {});
+      const res = await deleteDocument(
+        documentId,
+        unsavedAttachments.length ? { attachments: choice } : {},
+      );
       if (res.ok) onOpenChange(false);
       else setError(res.error ?? "Couldn't delete the document.");
     });
@@ -69,7 +72,7 @@ export function DeleteDocumentDialog({
     <label
       className={cn(
         "flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-xs",
-        choice === value ? "border-brand-300 bg-brand-soft" : "border-line bg-white"
+        choice === value ? "border-brand-300 bg-brand-soft" : "border-line bg-white",
       )}
     >
       <input
@@ -93,14 +96,16 @@ export function DeleteDocumentDialog({
         <DialogHeader>
           <DialogTitle>Delete “{name}”?</DialogTitle>
           <DialogDescription>
-            This can&apos;t be undone. Copies in other folders are separate documents and aren&apos;t affected.
+            This can&apos;t be undone. Copies in other folders are separate documents and
+            aren&apos;t affected.
           </DialogDescription>
         </DialogHeader>
 
         {n > 0 && (
           <div className="flex flex-col gap-2">
             <div className="text-xs text-ink-2">
-              {n === 1 ? "This attachment hasn't" : `These ${n} attachments haven't`} been copied anywhere else:
+              {n === 1 ? "This attachment hasn't" : `These ${n} attachments haven't`} been copied
+              anywhere else:
             </div>
             <ul className="flex max-h-32 flex-col gap-0.5 overflow-y-auto rounded-md border border-line bg-paper-2 p-2">
               {unsavedAttachments.map((a, i) => (
@@ -110,8 +115,16 @@ export function DeleteDocumentDialog({
                 </li>
               ))}
             </ul>
-            {option("delete", n === 1 ? "Delete it with the email" : "Delete them with the email", "Removed along with the email.")}
-            {option("keep", n === 1 ? "Keep it in this folder" : "Keep them in this folder", "They stay as ordinary documents, with their flags.")}
+            {option(
+              "delete",
+              n === 1 ? "Delete it with the email" : "Delete them with the email",
+              "Removed along with the email.",
+            )}
+            {option(
+              "keep",
+              n === 1 ? "Keep it in this folder" : "Keep them in this folder",
+              "They stay as ordinary documents, with their flags.",
+            )}
           </div>
         )}
 

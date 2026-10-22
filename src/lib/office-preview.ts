@@ -44,8 +44,7 @@ export type SpreadsheetSheet = {
 };
 
 export type SpreadsheetPreviewResult =
-  | { ok: true; sheets: SpreadsheetSheet[]; hiddenSheets: number }
-  | PreviewFailure;
+  { ok: true; sheets: SpreadsheetSheet[]; hiddenSheets: number } | PreviewFailure;
 
 export type EmailPreview = {
   subject: string;
@@ -62,10 +61,17 @@ export type EmailPreview = {
 
 export type EmailPreviewResult = { ok: true; email: EmailPreview } | PreviewFailure;
 
-const READ_FAILED: PreviewFailure = { ok: false, reason: "The file could not be read from storage." };
+const READ_FAILED: PreviewFailure = {
+  ok: false,
+  reason: "The file could not be read from storage.",
+};
 const MISSING: PreviewFailure = { ok: false, reason: "The file is missing from storage." };
 
-async function readWhole(key: string, maxBytes: number, label: string): Promise<{ ok: true; buffer: Buffer } | PreviewFailure> {
+async function readWhole(
+  key: string,
+  maxBytes: number,
+  label: string,
+): Promise<{ ok: true; buffer: Buffer } | PreviewFailure> {
   let stat: Awaited<ReturnType<typeof statFile>>;
   try {
     stat = await statFile(key);
@@ -134,7 +140,10 @@ export async function renderStoredSpreadsheet(key: string): Promise<SpreadsheetP
   if (!read.ok) return read;
   const bounds = checkZipBounds(read.buffer);
   if (!bounds.ok) {
-    return { ok: false, reason: "This spreadsheet expands to an unusually large size — download it to view." };
+    return {
+      ok: false,
+      reason: "This spreadsheet expands to an unusually large size — download it to view.",
+    };
   }
   let parsed: { sheet: string; data: unknown[][] }[];
   try {
@@ -142,7 +151,8 @@ export async function renderStoredSpreadsheet(key: string): Promise<SpreadsheetP
   } catch {
     return {
       ok: false,
-      reason: "The spreadsheet could not be read. It may be corrupt, password-protected, or an older .xls file.",
+      reason:
+        "The spreadsheet could not be read. It may be corrupt, password-protected, or an older .xls file.",
     };
   }
   const sheets = parsed.slice(0, SPREADSHEET_MAX_SHEETS).map((s) => shapeSheet(s.sheet, s.data));
@@ -207,7 +217,7 @@ export const EMAIL_INLINE_IMAGES_MAX_BYTES = 5 * 1024 * 1024;
  */
 export function inlineCidImages(
   html: string,
-  parts: { contentId?: string; mimeType: string; content: ArrayBuffer | Uint8Array | string }[]
+  parts: { contentId?: string; mimeType: string; content: ArrayBuffer | Uint8Array | string }[],
 ): { html: string; used: Set<string> } {
   const byCid = new Map<string, { mimeType: string; content: ArrayBuffer | Uint8Array }>();
   for (const p of parts) {
@@ -235,7 +245,11 @@ export type EmailFile = { name: string; mimeType: string | null; content: Uint8A
 type ParsedEmail = { email: EmailPreview; files: () => EmailFile[] };
 
 const toBytes = (c: ArrayBuffer | Uint8Array | string): Uint8Array =>
-  typeof c === "string" ? new TextEncoder().encode(c) : c instanceof Uint8Array ? c : new Uint8Array(c);
+  typeof c === "string"
+    ? new TextEncoder().encode(c)
+    : c instanceof Uint8Array
+      ? c
+      : new Uint8Array(c);
 
 export async function parseEml(buffer: Buffer): Promise<EmailPreview> {
   return (await parseEmlFull(buffer)).email;
@@ -250,7 +264,7 @@ async function parseEmlFull(buffer: Buffer): Promise<ParsedEmail> {
     !!cid && inlined.used.has(cid.replace(/^<|>$/g, "").trim().toLowerCase());
   // Parts shown in the body (cid images) aren't separate attachments.
   const listed = mail.attachments.filter(
-    (a) => !shownInBody(a.contentId) && (a.disposition !== "inline" || !a.contentId)
+    (a) => !shownInBody(a.contentId) && (a.disposition !== "inline" || !a.contentId),
   );
   const email: EmailPreview = {
     subject: mail.subject?.trim() || "(no subject)",
@@ -260,7 +274,10 @@ async function parseEmlFull(buffer: Buffer): Promise<ParsedEmail> {
     date: isoOrNull(mail.date),
     html: safeHtml(inlined.html),
     text: mail.text ?? "",
-    attachments: listed.map((a) => ({ name: a.filename || "(unnamed attachment)", size: byteSize(a.content) })),
+    attachments: listed.map((a) => ({
+      name: a.filename || "(unnamed attachment)",
+      size: byteSize(a.content),
+    })),
   };
   return {
     email,
@@ -288,8 +305,7 @@ function parseMsgFull(buffer: Buffer): ParsedEmail {
       .filter((r) => (r.recipType ?? "to") === type)
       .map((r) => mailbox(r.name, r.smtpAddress || r.email))
       .filter(Boolean);
-  const html =
-    data.bodyHtml ?? (data.html ? new TextDecoder().decode(data.html) : undefined);
+  const html = data.bodyHtml ?? (data.html ? new TextDecoder().decode(data.html) : undefined);
   const listed = (data.attachments ?? []).filter((a) => !a.attachmentHidden);
   const email: EmailPreview = {
     subject: data.subject?.trim() || "(no subject)",
@@ -328,7 +344,10 @@ export async function readEmailFiles(buffer: Buffer, kind: "eml" | "msg"): Promi
   return parsed.files();
 }
 
-export async function renderStoredEmail(key: string, kind: "eml" | "msg"): Promise<EmailPreviewResult> {
+export async function renderStoredEmail(
+  key: string,
+  kind: "eml" | "msg",
+): Promise<EmailPreviewResult> {
   const read = await readWhole(key, EMAIL_MAX_BYTES, "email");
   if (!read.ok) return read;
   try {
@@ -338,6 +357,9 @@ export async function renderStoredEmail(key: string, kind: "eml" | "msg"): Promi
     }
     return { ok: true, email };
   } catch {
-    return { ok: false, reason: "The email file could not be read. It may be corrupt or in an unsupported format." };
+    return {
+      ok: false,
+      reason: "The email file could not be read. It may be corrupt or in an unsupported format.",
+    };
   }
 }

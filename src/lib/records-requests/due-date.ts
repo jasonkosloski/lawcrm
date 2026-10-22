@@ -8,7 +8,6 @@ import { DAY_MS } from "@/lib/format-date";
 
 export type RecordsResponseUnit = "CALENDAR_DAYS" | "BUSINESS_DAYS";
 
-
 /** Shift a date-only value by whole calendar days (negative goes back). */
 export function addCalendarDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * DAY_MS);
@@ -24,11 +23,7 @@ function isWeekend(date: Date): boolean {
  * CALENDAR_DAYS counts straight through weekends. BUSINESS_DAYS counts
  * forward from the day after `sentAt`, skipping Saturdays and Sundays.
  */
-export function computeResponseDue(
-  sentAt: Date,
-  amount: number,
-  unit: RecordsResponseUnit,
-): Date {
+export function computeResponseDue(sentAt: Date, amount: number, unit: RecordsResponseUnit): Date {
   if (unit === "CALENDAR_DAYS") return addCalendarDays(sentAt, amount);
 
   let cursor = sentAt;

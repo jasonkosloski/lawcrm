@@ -100,8 +100,7 @@ describe("finishTranscriptJob", () => {
     const spy = vi.spyOn(prisma, "$transaction");
     await finishTranscriptJob(transcriptId);
     const opts = spy.mock.calls.map((c) => c[1]).find(Boolean) as
-      | { timeout?: number; maxWait?: number }
-      | undefined;
+      { timeout?: number; maxWait?: number } | undefined;
     expect(opts?.timeout).toBeGreaterThanOrEqual(30_000);
     expect(opts?.maxWait).toBeGreaterThanOrEqual(10_000);
     spy.mockRestore();
@@ -114,7 +113,7 @@ describe("finishTranscriptJob", () => {
       .mockRejectedValue(new Error("P2028 transaction timeout"));
     await expect(finishTranscriptJob(transcriptId)).rejects.toThrow("P2028");
     expect(
-      (await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } })).status
+      (await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } })).status,
     ).toBe("processing");
 
     await prisma.transcript.update({
@@ -178,7 +177,11 @@ describe("finishTranscriptJob", () => {
   test("queued row with no job id for over 10 minutes fails", async () => {
     await prisma.transcript.update({
       where: { id: transcriptId },
-      data: { status: "queued", providerJobId: null, requestedAt: new Date(Date.now() - 11 * 60_000) },
+      data: {
+        status: "queued",
+        providerJobId: null,
+        requestedAt: new Date(Date.now() - 11 * 60_000),
+      },
     });
     expect(await finishTranscriptJob(transcriptId)).toBe("failed");
     expect(fetchJob).not.toHaveBeenCalled();
@@ -215,7 +218,9 @@ describe("finishTranscriptJob", () => {
   test("still processing: pending, nothing written", async () => {
     vi.mocked(fetchJob).mockResolvedValue({ status: "processing" });
     expect(await finishTranscriptJob(transcriptId)).toBe("pending");
-    expect((await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } })).status).toBe("processing");
+    expect(
+      (await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } })).status,
+    ).toBe("processing");
   });
 
   test("pending over 6 hours: failed Timed out", async () => {

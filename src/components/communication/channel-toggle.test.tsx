@@ -9,9 +9,7 @@ describe("ChannelToggle", () => {
   });
 
   test("Portal option links to ?channel=portal when allowed", () => {
-    render(
-      <ChannelToggle basePath="/matters/m1/communication" active="portal" showPortal />
-    );
+    render(<ChannelToggle basePath="/matters/m1/communication" active="portal" showPortal />);
     const link = screen.getByRole("link", { name: /Portal/ });
     expect(link).toHaveAttribute("href", "/matters/m1/communication?channel=portal");
     expect(link).toHaveAttribute("aria-current", "page");

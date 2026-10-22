@@ -82,10 +82,7 @@ export type EventVisibility = (typeof EVENT_VISIBILITIES)[number];
 /** Event title as it may appear in the matter activity log. A private
  *  event's title must not reach the timeline, which every matter
  *  viewer reads, so it is replaced by a generic label. */
-export function auditEventTitle(
-  visibility: string | null | undefined,
-  title: string
-): string {
+export function auditEventTitle(visibility: string | null | undefined, title: string): string {
   return visibility === "private" ? "Private event" : title;
 }
 
@@ -217,7 +214,7 @@ export type LoadedEventForTouch = {
 export function viewerMayTouchLoadedEvent(
   viewerId: string,
   e: LoadedEventForTouch,
-  matterAccessible: boolean
+  matterAccessible: boolean,
 ): boolean {
   if (e.matterId && !matterAccessible) return false;
   if (e.visibility === "private") {

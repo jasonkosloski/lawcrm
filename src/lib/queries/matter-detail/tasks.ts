@@ -7,19 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { noteToPlainText } from "@/lib/note-text";
 import { getCurrentUserId } from "@/lib/current-user";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
-import {
-  resolveTz,
-  EVENT_REF_SELECT,
-  scrubEventRef,
-} from "./shared";
-import {
-  MatterListOptions,
-} from "./deadlines";
-import {
-  truncate,
-  prettyPhoneForLink,
-  capitalizeKind,
-} from "./notes";
+import { resolveTz, EVENT_REF_SELECT, scrubEventRef } from "./shared";
+import { MatterListOptions } from "./deadlines";
+import { truncate, prettyPhoneForLink, capitalizeKind } from "./notes";
 import { daysUntilDateOnly } from "@/lib/format-date";
 
 // ── Tasks ────────────────────────────────────────────────────────────────
@@ -78,7 +68,7 @@ export type AttachedNotePreview = {
 
 export async function getMatterTasks(
   matterId: string,
-  options: MatterListOptions = {}
+  options: MatterListOptions = {},
 ): Promise<TaskRow[]> {
   return getTaskRows({ matterId }, options);
 }
@@ -88,25 +78,20 @@ export async function getMatterTasks(
  *  so those come back empty. */
 export async function getLeadTasks(
   leadId: string,
-  options: MatterListOptions = {}
+  options: MatterListOptions = {},
 ): Promise<TaskRow[]> {
   return getTaskRows({ leadId }, options);
 }
 
 async function getTaskRows(
   scopeWhere: Prisma.TaskWhereInput,
-  options: MatterListOptions
+  options: MatterListOptions,
 ): Promise<TaskRow[]> {
-  const [viewerId, tz] = await Promise.all([
-    getCurrentUserId(),
-    resolveTz(options.tz),
-  ]);
+  const [viewerId, tz] = await Promise.all([getCurrentUserId(), resolveTz(options.tz)]);
   const rows = await prisma.task.findMany({
     where: {
       ...scopeWhere,
-      ...(options.openOnly
-        ? { status: { in: ["open", "in_progress"] } }
-        : {}),
+      ...(options.openOnly ? { status: { in: ["open", "in_progress"] } } : {}),
     },
     take: options.limit,
     include: {

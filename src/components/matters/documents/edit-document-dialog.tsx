@@ -84,8 +84,8 @@ export function EditDocumentDialog({
         <DialogHeader>
           <DialogTitle>Edit details</DialogTitle>
           <DialogDescription>
-            Change this document&apos;s display name or category. The file
-            itself isn&apos;t changed.
+            Change this document&apos;s display name or category. The file itself isn&apos;t
+            changed.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -120,7 +120,9 @@ export function EditDocumentDialog({
               className="w-full"
             >
               {!known && (
-                <NativeSelectOption value={category}>{documentCategoryLabel(category)}</NativeSelectOption>
+                <NativeSelectOption value={category}>
+                  {documentCategoryLabel(category)}
+                </NativeSelectOption>
               )}
               {DOCUMENT_CATEGORIES.map((c: DocumentCategory) => (
                 <NativeSelectOption key={c} value={c}>
@@ -131,17 +133,10 @@ export function EditDocumentDialog({
           </div>
           <FormErrorBanner message={error} />
           <DialogFooter>
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={pending || unchanged || newName.trim().length === 0}
-            >
+            <Button type="submit" disabled={pending || unchanged || newName.trim().length === 0}>
               {pending ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
@@ -165,12 +160,7 @@ export function EditDocumentButton({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button
-        variant="outline"
-        size="xs"
-        type="button"
-        onClick={() => setOpen(true)}
-      >
+      <Button variant="outline" size="xs" type="button" onClick={() => setOpen(true)}>
         <Pencil className="h-3.5 w-3.5" aria-hidden />
         Edit details
       </Button>

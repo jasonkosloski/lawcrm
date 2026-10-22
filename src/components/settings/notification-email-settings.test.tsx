@@ -37,7 +37,7 @@ const renderIt = (mutedMatters: { id: string; name: string }[] = []) =>
       modes={allInstant}
       mutedMatters={mutedMatters}
       timeZone="America/Denver"
-    />
+    />,
   );
 
 beforeEach(() => {
@@ -67,11 +67,9 @@ describe("NotificationEmailSettings", () => {
     renderIt();
     const group = screen.getByRole("radiogroup", { name: "Tasks email" });
     fireEvent.click(within(group).getByRole("radio", { name: "Daily digest" }));
-    await waitFor(() =>
-      expect(setNotificationEmailMode).toHaveBeenCalledWith("tasks", "digest")
-    );
+    await waitFor(() => expect(setNotificationEmailMode).toHaveBeenCalledWith("tasks", "digest"));
     expect(
-      within(group).getByRole("radio", { name: "Daily digest" }).getAttribute("aria-checked")
+      within(group).getByRole("radio", { name: "Daily digest" }).getAttribute("aria-checked"),
     ).toBe("true");
   });
 
@@ -83,8 +81,8 @@ describe("NotificationEmailSettings", () => {
     await waitFor(() => expect(notifyError).toHaveBeenCalledWith("nope"));
     await waitFor(() =>
       expect(
-        within(group).getByRole("radio", { name: "Instant" }).getAttribute("aria-checked")
-      ).toBe("true")
+        within(group).getByRole("radio", { name: "Instant" }).getAttribute("aria-checked"),
+      ).toBe("true"),
     );
   });
 
@@ -92,7 +90,7 @@ describe("NotificationEmailSettings", () => {
     vi.mocked(setMatterEmailMute).mockResolvedValue({ ok: true, muted: false });
     renderIt([{ id: "m1", name: "Smith v. Jones" }]);
     expect(screen.getByRole("link", { name: "Smith v. Jones" }).getAttribute("href")).toBe(
-      "/matters/m1"
+      "/matters/m1",
     );
     fireEvent.click(screen.getByRole("button", { name: "Unmute Smith v. Jones" }));
     await waitFor(() => expect(setMatterEmailMute).toHaveBeenCalledWith("m1", false));

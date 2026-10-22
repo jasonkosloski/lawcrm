@@ -12,10 +12,7 @@
 import { normalizeAreaBillingTypes } from "@/lib/billing-type";
 import { TopBar } from "@/components/layout/topbar";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  NewMatterForm,
-  type NewMatterDraft,
-} from "@/components/matters/new-matter-form";
+import { NewMatterForm, type NewMatterDraft } from "@/components/matters/new-matter-form";
 import { MatterDraftsList } from "@/components/matters/matter-drafts-list";
 import { redirect } from "next/navigation";
 import { loadAccessibleDraft } from "@/lib/draft-access";
@@ -30,10 +27,7 @@ import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { DEFAULT_MATTER_NAME_TEMPLATE } from "@/lib/matter-name-template";
 import { listVenues } from "@/lib/queries/venues";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 
 export default async function NewMatterPage({
   searchParams,
@@ -136,16 +130,13 @@ export default async function NewMatterPage({
         values: Object.fromEntries(
           Object.entries((draftRow.values ?? {}) as Record<string, unknown>).filter(
             ([, v]) =>
-              typeof v === "string" ||
-              (Array.isArray(v) && v.every((x) => typeof x === "string"))
-          )
+              typeof v === "string" || (Array.isArray(v) && v.every((x) => typeof x === "string")),
+          ),
         ) as NewMatterDraft["values"],
         files: draftFileRows,
       }
     : null;
-  const labelsByArea = Object.fromEntries(
-    areaRows.map((a) => [a.id, originatingDocLabel(a)])
-  );
+  const labelsByArea = Object.fromEntries(areaRows.map((a) => [a.id, originatingDocLabel(a)]));
   const venues = venueRows.map((v) => ({
     id: v.id,
     name: v.name,
@@ -156,16 +147,14 @@ export default async function NewMatterPage({
   }));
 
   // Calendar period (ADR-035) as one serializable value for the forms.
-  const areas = areaRows.map(
-    ({ statutePeriodAmount, statutePeriodUnit, ...a }) => {
-      // Stored as plain strings; drop anything that isn't a known type.
-      return {
-        ...a,
-        ...normalizeAreaBillingTypes(a),
-        statutePeriod: toSolPeriod(statutePeriodAmount, statutePeriodUnit),
-      };
-    }
-  );
+  const areas = areaRows.map(({ statutePeriodAmount, statutePeriodUnit, ...a }) => {
+    // Stored as plain strings; drop anything that isn't a known type.
+    return {
+      ...a,
+      ...normalizeAreaBillingTypes(a),
+      statutePeriod: toSolPeriod(statutePeriodAmount, statutePeriodUnit),
+    };
+  });
 
   return (
     <>
@@ -180,11 +169,7 @@ export default async function NewMatterPage({
               That draft is no longer available.
             </div>
           )}
-          <MatterDraftsList
-            drafts={drafts}
-            timeZone={timeZone}
-            openDraftId={draft?.id ?? null}
-          />
+          <MatterDraftsList drafts={drafts} timeZone={timeZone} openDraftId={draft?.id ?? null} />
           <Card>
             <CardContent className="p-5">
               <NewMatterForm

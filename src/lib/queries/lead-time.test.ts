@@ -29,7 +29,7 @@ describe("summarizeLeadTime", () => {
       summarizeLeadTime([
         { hours: 0.1, billable: true, noCharge: false },
         { hours: 0.2, billable: true, noCharge: false },
-      ])
+      ]),
     ).toEqual({ totalHours: 0.3, billableHours: 0.3 });
   });
 
@@ -38,7 +38,7 @@ describe("summarizeLeadTime", () => {
       summarizeLeadTime([
         { hours: 1, billable: true, noCharge: true },
         { hours: 0.5, billable: true, noCharge: false },
-      ])
+      ]),
     ).toEqual({ totalHours: 1.5, billableHours: 0.5 });
   });
 
@@ -47,7 +47,7 @@ describe("summarizeLeadTime", () => {
       summarizeLeadTime([
         { hours: 2, billable: false, noCharge: false },
         { hours: 0.25, billable: true, noCharge: false },
-      ])
+      ]),
     ).toEqual({ totalHours: 2.25, billableHours: 0.25 });
   });
 });
@@ -68,12 +68,7 @@ describe("getLeadTimeEntries", () => {
   test("returns only this lead's entries, newest day first, with the author id", async () => {
     const { leadId } = await seedLead({ name: "Priya Patel" });
     const other = await seedLead({ name: "Someone Else" });
-    const mk = (over: {
-      leadId?: string;
-      matterId?: string;
-      date: string;
-      activity: string;
-    }) =>
+    const mk = (over: { leadId?: string; matterId?: string; date: string; activity: string }) =>
       prisma.timeEntry.create({
         data: {
           userId,

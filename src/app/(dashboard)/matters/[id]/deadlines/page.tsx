@@ -31,11 +31,7 @@ import {
   DEADLINE_STATUS_LABEL,
   type DeadlineStatus,
 } from "@/lib/constants/deadline-status";
-import {
-  dateOnlyKey,
-  daysUntilDateOnly,
-  formatDateOnly,
-} from "@/lib/format-date";
+import { dateOnlyKey, daysUntilDateOnly, formatDateOnly } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
 import { getMatterDeadlines } from "@/lib/queries/matter-detail";
@@ -60,9 +56,7 @@ function KindChip({ kind }: { kind: string }) {
         ? "bg-brand-soft text-brand-700 border-brand-200"
         : "bg-paper-2 text-ink-3 border-line";
   return (
-    <span
-      className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${cls}`}
-    >
+    <span className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${cls}`}>
       {label}
     </span>
   );
@@ -77,17 +71,13 @@ function StatusChip({ status }: { status: string }) {
         ? "bg-paper-2 text-ink-4 border-line"
         : "bg-brand-soft text-brand-700 border-brand-200";
   return (
-    <span
-      className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${cls}`}
-    >
+    <span className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full border ${cls}`}>
       {label}
     </span>
   );
 }
 
-export default async function MatterDeadlinesPage({
-  params,
-}: PageProps<"/matters/[id]">) {
+export default async function MatterDeadlinesPage({ params }: PageProps<"/matters/[id]">) {
   await requireUser();
   const { id } = await params;
   await assertMatterAccess(id);
@@ -122,9 +112,7 @@ export default async function MatterDeadlinesPage({
     getCaptureAccess(),
   ]);
   const rules = canCreate ? allRules : [];
-  const updatedAtById = new Map(
-    versions.map((v) => [v.id, v.updatedAt.toISOString()])
-  );
+  const updatedAtById = new Map(versions.map((v) => [v.id, v.updatedAt.toISOString()]));
 
   // Open deadlines first, then completed/waived (the query's
   // alphabetical status order put "completed" above "open"); each
@@ -133,10 +121,7 @@ export default async function MatterDeadlinesPage({
     .map((d) => ({ ...d, daysLeft: daysUntilDateOnly(d.dueDate, tz) }))
     .sort((a, b) => {
       const rank = (x: { status: string }) => (x.status === "open" ? 0 : 1);
-      return (
-        rank(a) - rank(b) ||
-        a.dueDate.getTime() - b.dueDate.getTime()
-      );
+      return rank(a) - rank(b) || a.dueDate.getTime() - b.dueDate.getTime();
     });
 
   return (
@@ -165,115 +150,100 @@ export default async function MatterDeadlinesPage({
           className="py-6"
         />
       ) : (
-      <Card className="p-0 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-4">Deadline</TableHead>
-              <TableHead>Due</TableHead>
-              <TableHead className="text-right">Days</TableHead>
-              <TableHead>Kind</TableHead>
-              <TableHead>Source</TableHead>
-              <TableHead>Owner</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="pr-4 w-10"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {deadlines.map((d) => (
-              <TableRow key={d.id}>
-                <TableCell className="pl-4">
-                  <div className="flex flex-col leading-tight gap-0.5">
-                    <span className="font-medium text-ink">{d.title}</span>
-                    {d.description && (
-                      <span className="text-2xs text-ink-3 truncate max-w-md">
-                        {d.description}
-                      </span>
-                    )}
-                    <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                      {d.spawnedFrom && (
-                        <EntitySourceChip
-                          source={d.spawnedFrom}
-                          matterId={id}
-                        />
-                      )}
-                      <RowAttachedNotes
-                        notes={d.attachedNotes}
-                        matterId={id}
-                        compact
-                      />
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-xs text-ink-3">
-                  {formatDateOnly(d.dueDate)}
-                </TableCell>
-                <TableCell className="text-right font-mono text-2xs">
-                  {d.status !== "open" ? (
-                    <span className="text-ink-4">—</span>
-                  ) : d.daysLeft < 0 ? (
-                    <span className="text-warn font-medium">
-                      {Math.abs(d.daysLeft)}d late
-                    </span>
-                  ) : d.daysLeft === 0 ? (
-                    <span className="text-warn font-medium">Today</span>
-                  ) : d.daysLeft <= 7 ? (
-                    <span className="text-warn font-medium">{d.daysLeft}d</span>
-                  ) : (
-                    <span className="text-ink-3">{d.daysLeft}d</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <KindChip kind={d.kind} />
-                </TableCell>
-                <TableCell className="text-2xs font-mono text-ink-4">
-                  {d.sourceType === "deadline_rule"
-                    ? `Rule${d.sourceRef ? ` · ${d.sourceRef}` : ""}`
-                    : (d.sourceRef ?? d.sourceType ?? "—")}
-                </TableCell>
-                <TableCell>
-                  {d.ownerInitials ? (
-                    <span
-                      className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-50 text-2xs font-mono font-medium text-brand-700 border border-brand-100"
-                      title={d.ownerName ?? undefined}
-                    >
-                      {d.ownerInitials}
-                    </span>
-                  ) : (
-                    <span className="text-2xs text-ink-4">—</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <StatusChip status={d.status} />
-                </TableCell>
-                <TableCell className="pr-4">
-                  <DeadlineRowMenu
-                    canEdit={canEdit}
-                    canDelete={canDelete}
-                    canLogTime={canLogTime}
-                    canAddNote={canAddNote}
-                    deadline={{
-                      id: d.id,
-                      title: d.title,
-                      description: d.description,
-                      kind: d.kind,
-                      sourceRef: d.sourceRef,
-                      dueDateKey: dateOnlyKey(d.dueDate),
-                      updatedAt: updatedAtById.get(d.id) ?? "",
-                      sourceType: d.sourceType,
-                      // `overdue` is computed; persisted statuses are open/completed/waived.
-                      // Coerce overdue → open so the menu radio shows the underlying state.
-                      status: (d.status === "overdue"
-                        ? "open"
-                        : d.status) as DeadlineStatus,
-                    }}
-                  />
-                </TableCell>
+        <Card className="p-0 overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="pl-4">Deadline</TableHead>
+                <TableHead>Due</TableHead>
+                <TableHead className="text-right">Days</TableHead>
+                <TableHead>Kind</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Owner</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="pr-4 w-10"></TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
+            </TableHeader>
+            <TableBody>
+              {deadlines.map((d) => (
+                <TableRow key={d.id}>
+                  <TableCell className="pl-4">
+                    <div className="flex flex-col leading-tight gap-0.5">
+                      <span className="font-medium text-ink">{d.title}</span>
+                      {d.description && (
+                        <span className="text-2xs text-ink-3 truncate max-w-md">
+                          {d.description}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                        {d.spawnedFrom && <EntitySourceChip source={d.spawnedFrom} matterId={id} />}
+                        <RowAttachedNotes notes={d.attachedNotes} matterId={id} compact />
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-xs text-ink-3">{formatDateOnly(d.dueDate)}</TableCell>
+                  <TableCell className="text-right font-mono text-2xs">
+                    {d.status !== "open" ? (
+                      <span className="text-ink-4">—</span>
+                    ) : d.daysLeft < 0 ? (
+                      <span className="text-warn font-medium">{Math.abs(d.daysLeft)}d late</span>
+                    ) : d.daysLeft === 0 ? (
+                      <span className="text-warn font-medium">Today</span>
+                    ) : d.daysLeft <= 7 ? (
+                      <span className="text-warn font-medium">{d.daysLeft}d</span>
+                    ) : (
+                      <span className="text-ink-3">{d.daysLeft}d</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <KindChip kind={d.kind} />
+                  </TableCell>
+                  <TableCell className="text-2xs font-mono text-ink-4">
+                    {d.sourceType === "deadline_rule"
+                      ? `Rule${d.sourceRef ? ` · ${d.sourceRef}` : ""}`
+                      : (d.sourceRef ?? d.sourceType ?? "—")}
+                  </TableCell>
+                  <TableCell>
+                    {d.ownerInitials ? (
+                      <span
+                        className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-50 text-2xs font-mono font-medium text-brand-700 border border-brand-100"
+                        title={d.ownerName ?? undefined}
+                      >
+                        {d.ownerInitials}
+                      </span>
+                    ) : (
+                      <span className="text-2xs text-ink-4">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <StatusChip status={d.status} />
+                  </TableCell>
+                  <TableCell className="pr-4">
+                    <DeadlineRowMenu
+                      canEdit={canEdit}
+                      canDelete={canDelete}
+                      canLogTime={canLogTime}
+                      canAddNote={canAddNote}
+                      deadline={{
+                        id: d.id,
+                        title: d.title,
+                        description: d.description,
+                        kind: d.kind,
+                        sourceRef: d.sourceRef,
+                        dueDateKey: dateOnlyKey(d.dueDate),
+                        updatedAt: updatedAtById.get(d.id) ?? "",
+                        sourceType: d.sourceType,
+                        // `overdue` is computed; persisted statuses are open/completed/waived.
+                        // Coerce overdue → open so the menu radio shows the underlying state.
+                        status: (d.status === "overdue" ? "open" : d.status) as DeadlineStatus,
+                      }}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
       )}
     </div>
   );

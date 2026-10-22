@@ -8,7 +8,7 @@ describe("MatterNameTemplateField", () => {
   test("previews the default template with sample values", () => {
     render(<MatterNameTemplateField defaultValue={DEFAULT_MATTER_NAME_TEMPLATE} />);
     expect(screen.getByTestId("template-preview").textContent).toBe(
-      "Alvarez, Maria - 2026-CV-00481 - Aurora"
+      "Alvarez, Maria - 2026-CV-00481 - Aurora",
     );
   });
 
@@ -20,11 +20,7 @@ describe("MatterNameTemplateField", () => {
   });
 
   test("blank value previews the inherited placeholder", () => {
-    render(
-      <MatterNameTemplateField defaultValue="" placeholder="{client_full} - {year}" />
-    );
-    expect(screen.getByTestId("template-preview").textContent).toMatch(
-      /^Maria Alvarez - \d{4}$/
-    );
+    render(<MatterNameTemplateField defaultValue="" placeholder="{client_full} - {year}" />);
+    expect(screen.getByTestId("template-preview").textContent).toMatch(/^Maria Alvarez - \d{4}$/);
   });
 });

@@ -32,14 +32,8 @@ import {
   verifyOAuthState,
 } from "./oauth";
 
-const ENV_KEYS = [
-  "GOOGLE_CLIENT_ID",
-  "GOOGLE_CLIENT_SECRET",
-  "AUTH_SECRET",
-  "AUTH_URL",
-] as const;
-const savedEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> =
-  {};
+const ENV_KEYS = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "AUTH_SECRET", "AUTH_URL"] as const;
+const savedEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
 
 beforeEach(() => {
   for (const key of ENV_KEYS) savedEnv[key] = process.env[key];
@@ -108,18 +102,18 @@ describe("OAuth state (CSRF)", () => {
 
 describe("resolveGoogleRedirectUri", () => {
   it("derives from the request origin by default", () => {
-    expect(
-      resolveGoogleRedirectUri("https://app.example.com/api/anything?x=1")
-    ).toBe("https://app.example.com/api/integrations/google/callback");
+    expect(resolveGoogleRedirectUri("https://app.example.com/api/anything?x=1")).toBe(
+      "https://app.example.com/api/integrations/google/callback",
+    );
     expect(resolveGoogleRedirectUri("http://localhost:3000/foo")).toBe(
-      "http://localhost:3000/api/integrations/google/callback"
+      "http://localhost:3000/api/integrations/google/callback",
     );
   });
 
   it("prefers AUTH_URL when set (behind-a-proxy deploys)", () => {
     process.env.AUTH_URL = "https://crm.kosloskilaw.com";
     expect(resolveGoogleRedirectUri("http://10.0.0.5:3000/internal")).toBe(
-      "https://crm.kosloskilaw.com/api/integrations/google/callback"
+      "https://crm.kosloskilaw.com/api/integrations/google/callback",
     );
   });
 });
@@ -131,16 +125,12 @@ describe("buildGoogleAuthUrl", () => {
       buildGoogleAuthUrl({
         redirectUri: "https://app.example.com/api/integrations/google/callback",
         state,
-      })
+      }),
     );
-    expect(url.origin + url.pathname).toBe(
-      "https://accounts.google.com/o/oauth2/v2/auth"
-    );
-    expect(url.searchParams.get("client_id")).toBe(
-      "test-client-id.apps.googleusercontent.com"
-    );
+    expect(url.origin + url.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
+    expect(url.searchParams.get("client_id")).toBe("test-client-id.apps.googleusercontent.com");
     expect(url.searchParams.get("redirect_uri")).toBe(
-      "https://app.example.com/api/integrations/google/callback"
+      "https://app.example.com/api/integrations/google/callback",
     );
     expect(url.searchParams.get("response_type")).toBe("code");
     expect(url.searchParams.get("scope")).toBe(GMAIL_SCOPES.join(" "));
@@ -161,8 +151,8 @@ describe("token endpoint calls (fetch mocked)", () => {
           expires_in: 3599,
           refresh_token: "1//refresh",
         }),
-        { status: 200 }
-      )
+        { status: 200 },
+      ),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -172,15 +162,13 @@ describe("token endpoint calls (fetch mocked)", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       GOOGLE_TOKEN_ENDPOINT,
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
     const body = fetchMock.mock.calls[0][1].body as URLSearchParams;
     expect(body.get("grant_type")).toBe("authorization_code");
     expect(body.get("code")).toBe("auth-code");
     expect(body.get("redirect_uri")).toBe("https://x/cb");
-    expect(body.get("client_id")).toBe(
-      "test-client-id.apps.googleusercontent.com"
-    );
+    expect(body.get("client_id")).toBe("test-client-id.apps.googleusercontent.com");
   });
 
   it("maps Google's error body to a typed code — message stays token-free", async () => {
@@ -192,9 +180,9 @@ describe("token endpoint calls (fetch mocked)", () => {
             error: "invalid_grant",
             error_description: "Token has been revoked.",
           }),
-          { status: 400 }
-        )
-      )
+          { status: 400 },
+        ),
+      ),
     );
     const err = await refreshGoogleAccessToken("1//dead").catch((e) => e);
     expect(err).toBeInstanceOf(GoogleOAuthError);
@@ -206,41 +194,27 @@ describe("token endpoint calls (fetch mocked)", () => {
   it("rejects a success response with a missing access_token", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }))
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({}), { status: 200 })),
     );
-    await expect(refreshGoogleAccessToken("1//rt")).rejects.toBeInstanceOf(
-      GoogleOAuthError
-    );
+    await expect(refreshGoogleAccessToken("1//rt")).rejects.toBeInstanceOf(GoogleOAuthError);
   });
 
   it("fetchGoogleUserInfo returns the email, null when absent", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ email: "User@Gmail.com" }))
-      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ email: "User@Gmail.com" })))
       .mockResolvedValueOnce(new Response(JSON.stringify({ sub: "123" })));
     vi.stubGlobal("fetch", fetchMock);
     expect((await fetchGoogleUserInfo("tok")).email).toBe("User@Gmail.com");
     expect((await fetchGoogleUserInfo("tok")).email).toBeNull();
     // Bearer auth, not a query param (tokens must stay out of URLs).
-    expect(fetchMock.mock.calls[0][1].headers.authorization).toBe(
-      "Bearer tok"
-    );
+    expect(fetchMock.mock.calls[0][1].headers.authorization).toBe("Bearer tok");
   });
 
   it("revokeGoogleToken is best-effort: false on failure, never throws", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockRejectedValue(new Error("network down"))
-    );
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
     await expect(revokeGoogleToken("tok")).resolves.toBe(false);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response("", { status: 200 }))
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 200 })));
     await expect(revokeGoogleToken("tok")).resolves.toBe(true);
   });
 });
@@ -252,24 +226,19 @@ describe("hasGmailScopes", () => {
     expect(hasGmailScopes("openid email")).toBe(false);
     expect(hasGmailScopes(`openid ${GMAIL_MODIFY_SCOPE}`)).toBe(false);
     expect(hasGmailScopes(`openid ${GMAIL_SEND_SCOPE}`)).toBe(false);
-    expect(hasGmailScopes(`${GMAIL_MODIFY_SCOPE}   ${GMAIL_SEND_SCOPE}`)).toBe(
-      true
-    );
+    expect(hasGmailScopes(`${GMAIL_MODIFY_SCOPE}   ${GMAIL_SEND_SCOPE}`)).toBe(true);
   });
 });
 
 describe("OAuth endpoint calls carry a timeout signal", () => {
   it("token, userinfo and revoke calls abort instead of hanging forever", async () => {
     const signals: Array<AbortSignal | null | undefined> = [];
-    const fetchMock = vi.fn(
-      async (...args: [RequestInfo | URL, RequestInit?]) => {
-        signals.push(args[1]?.signal);
-        return new Response(
-          JSON.stringify({ access_token: "a", expires_in: 3599, email: "x@y.z" }),
-          { status: 200 }
-        );
-      }
-    );
+    const fetchMock = vi.fn(async (...args: [RequestInfo | URL, RequestInit?]) => {
+      signals.push(args[1]?.signal);
+      return new Response(JSON.stringify({ access_token: "a", expires_in: 3599, email: "x@y.z" }), {
+        status: 200,
+      });
+    });
     vi.stubGlobal("fetch", fetchMock);
     await refreshGoogleAccessToken("rt");
     await fetchGoogleUserInfo("tok");

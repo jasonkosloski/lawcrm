@@ -15,8 +15,7 @@ import userEvent from "@testing-library/user-event";
 const createDeadlineFromEmail = vi.fn();
 const createTaskFromEmail = vi.fn();
 vi.mock("@/app/actions/inbox-actions", () => ({
-  createDeadlineFromEmail: (...args: unknown[]) =>
-    createDeadlineFromEmail(...args),
+  createDeadlineFromEmail: (...args: unknown[]) => createDeadlineFromEmail(...args),
   createDeadlineFromMessage: vi.fn(),
   createNoteFromEmail: vi.fn(),
   createNoteFromMessage: vi.fn(),
@@ -24,10 +23,7 @@ vi.mock("@/app/actions/inbox-actions", () => ({
   createTaskFromMessage: vi.fn(),
 }));
 
-import {
-  InboxActionButtons,
-  type InboxSource,
-} from "./inbox-action-buttons";
+import { InboxActionButtons, type InboxSource } from "./inbox-action-buttons";
 
 const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
 
@@ -48,25 +44,16 @@ describe("permission gating", () => {
     render(<InboxActionButtons source={source} isFiled />);
     expect(screen.getByRole("button", { name: "Save as note" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Create task" })).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Create deadline" })
-    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create deadline" })).toBeVisible();
   });
 
   test("each button is hidden without its own permission", () => {
     render(
-      <InboxActionButtons
-        source={source}
-        isFiled
-        canCreateNote={false}
-        canCreateTask={false}
-      />
+      <InboxActionButtons source={source} isFiled canCreateNote={false} canCreateTask={false} />,
     );
     expect(screen.queryByRole("button", { name: "Save as note" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Create task" })).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Create deadline" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create deadline" })).toBeInTheDocument();
   });
 
   test("renders nothing when the viewer can use none of them", () => {
@@ -77,7 +64,7 @@ describe("permission gating", () => {
         canCreateNote={false}
         canCreateTask={false}
         canCreateDeadline={false}
-      />
+      />,
     );
     expect(container).toBeEmptyDOMElement();
   });
@@ -93,9 +80,7 @@ describe("dialog field errors", () => {
     render(<InboxActionButtons source={source} isFiled />);
 
     await user.click(screen.getByRole("button", { name: "Create deadline" }));
-    const submit = (
-      await screen.findAllByRole("button", { name: "Create deadline" })
-    ).at(-1)!;
+    const submit = (await screen.findAllByRole("button", { name: "Create deadline" })).at(-1)!;
     // The date input is `required`, so a real browser blocks the
     // submit natively; dispatch the submit event directly to prove the
     // server-side message is rendered when it does get through.
@@ -114,13 +99,10 @@ describe("dialog field errors", () => {
     render(<InboxActionButtons source={source} isFiled />);
 
     await user.click(screen.getByRole("button", { name: "Create task" }));
-    const submit = (await screen.findAllByRole("button", { name: "Create task" }))
-      .at(-1)!;
+    const submit = (await screen.findAllByRole("button", { name: "Create task" })).at(-1)!;
     await user.click(submit);
 
-    await waitFor(() =>
-      expect(screen.getByText("Details are too long")).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByText("Details are too long")).toBeInTheDocument());
   });
 });
 
@@ -132,7 +114,7 @@ describe("Save as note prefill", () => {
     await user.click(screen.getByRole("button", { name: "Save as note" }));
     const textarea = (await screen.findByRole("textbox")) as HTMLTextAreaElement;
     expect(textarea.value).toBe(
-      "From email: Re: Discovery cutoff\n\n> Hi Jason, can we move the cutoff?"
+      "From email: Re: Discovery cutoff\n\n> Hi Jason, can we move the cutoff?",
     );
   });
 });

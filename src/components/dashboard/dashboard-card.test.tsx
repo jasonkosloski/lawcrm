@@ -23,18 +23,14 @@ describe("DashboardCard", () => {
 
   test("view all link is named after its card", () => {
     render(<DashboardCard title="Deadlines" viewAllHref="/x" />);
-    expect(
-      screen.getByRole("link", { name: "View all Deadlines" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "View all Deadlines" })).toBeTruthy();
   });
 
   test("view all link present with href, absent otherwise", () => {
-    const { rerender } = render(
-      <DashboardCard title="T" viewAllHref="/calendar?show=deadlines" />,
+    const { rerender } = render(<DashboardCard title="T" viewAllHref="/calendar?show=deadlines" />);
+    expect(screen.getByRole("link", { name: /view all/i }).getAttribute("href")).toBe(
+      "/calendar?show=deadlines",
     );
-    expect(
-      screen.getByRole("link", { name: /view all/i }).getAttribute("href"),
-    ).toBe("/calendar?show=deadlines");
     rerender(<DashboardCard title="T" />);
     expect(screen.queryByRole("link", { name: /view all/i })).toBeNull();
   });

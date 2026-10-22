@@ -34,9 +34,7 @@ vi.mock("@/lib/queries/communication", () => ({
 // Leaf components — we only assert the form mounted with the
 // fetched options, not its markup.
 vi.mock("@/components/layout/topbar", () => ({
-  TopBar: ({ title }: { title: string }) => (
-    <div data-testid="topbar" data-title={title} />
-  ),
+  TopBar: ({ title }: { title: string }) => <div data-testid="topbar" data-title={title} />,
 }));
 vi.mock("@/components/calendar/new-event-form", () => ({
   NewEventForm: ({ matters }: { matters: FilingMatterOption[] }) => (
@@ -73,10 +71,7 @@ describe("NewEventPage — access guard", () => {
 
   test("viewer with events.create gets the form + matter options", async () => {
     mockedHasPermission.mockResolvedValue(true);
-    mockedGetMatters.mockResolvedValue([
-      matterOption("m1"),
-      matterOption("m2"),
-    ]);
+    mockedGetMatters.mockResolvedValue([matterOption("m1"), matterOption("m2")]);
     render(await NewEventPage());
     const form = screen.getByTestId("new-form");
     expect(form.dataset.matterCount).toBe("2");

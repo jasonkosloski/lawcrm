@@ -10,7 +10,7 @@ describe("isTransientInfraError", () => {
     "treats Prisma %s as transient",
     (code) => {
       expect(isTransientInfraError(known(code))).toBe(true);
-    }
+    },
   );
 
   it("treats data-level Prisma errors as deterministic", () => {
@@ -18,17 +18,15 @@ describe("isTransientInfraError", () => {
     expect(isTransientInfraError(known("P2000"))).toBe(false);
     expect(
       isTransientInfraError(
-        new Prisma.PrismaClientValidationError("bad date", { clientVersion: "t" })
-      )
+        new Prisma.PrismaClientValidationError("bad date", { clientVersion: "t" }),
+      ),
     ).toBe(false);
   });
 
   it("treats initialization failures as transient", () => {
-    expect(
-      isTransientInfraError(
-        new Prisma.PrismaClientInitializationError("down", "t")
-      )
-    ).toBe(true);
+    expect(isTransientInfraError(new Prisma.PrismaClientInitializationError("down", "t"))).toBe(
+      true,
+    );
   });
 
   it("recognizes driver-level socket / SQLSTATE codes, also on a cause", () => {

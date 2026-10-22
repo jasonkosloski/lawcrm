@@ -98,9 +98,7 @@ function editForm(attendeeUserId: string) {
   fd.set("endTime", "2026-05-01T10:00");
   fd.set(
     "attendees",
-    JSON.stringify([
-      { kind: "user", userId: attendeeUserId, name: "U", email: "" },
-    ])
+    JSON.stringify([{ kind: "user", userId: attendeeUserId, name: "U", email: "" }]),
   );
   return fd;
 }
@@ -122,7 +120,7 @@ describe("private event (Busy to everyone but its creator)", () => {
     const updated = await updateCalendarEvent(
       eventId,
       updateCalendarEventInitialState,
-      editForm(bob)
+      editForm(bob),
     );
     expect(updated.status).toBe("error");
 
@@ -155,15 +153,11 @@ describe("matter wall", () => {
       matterId: matterA,
       startTime: new Date("2026-05-01T15:00:00Z"),
     });
-    await expect(moveCalendarEvent(eventId, move)).rejects.toThrow(
-      "NEXT_NOT_FOUND"
-    );
+    await expect(moveCalendarEvent(eventId, move)).rejects.toThrow("NEXT_NOT_FOUND");
     await expect(
-      updateCalendarEvent(eventId, updateCalendarEventInitialState, editForm(bob))
+      updateCalendarEvent(eventId, updateCalendarEventInitialState, editForm(bob)),
     ).rejects.toThrow("NEXT_NOT_FOUND");
-    await expect(deleteCalendarEvent(eventId)).rejects.toThrow(
-      "NEXT_NOT_FOUND"
-    );
+    await expect(deleteCalendarEvent(eventId)).rejects.toThrow("NEXT_NOT_FOUND");
     expect(await prisma.calendarEvent.count()).toBe(1);
   });
 
@@ -173,18 +167,15 @@ describe("matter wall", () => {
       f.set("matterId", matterId);
       return f;
     };
-    await expect(
-      createCalendarEvent(createCalendarEventInitialState, fd(matterA))
-    ).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(createCalendarEvent(createCalendarEventInitialState, fd(matterA))).rejects.toThrow(
+      "NEXT_NOT_FOUND",
+    );
     expect(await prisma.calendarEvent.count()).toBe(0);
 
     mockedUser.mockResolvedValue(alice);
     const f = editForm(alice);
     f.set("matterId", matterA);
-    const res = await createCalendarEvent(
-      createCalendarEventInitialState,
-      f
-    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, f);
     expect(res.status).toBe("ok");
     expect(await prisma.calendarEvent.count()).toBe(1);
   });

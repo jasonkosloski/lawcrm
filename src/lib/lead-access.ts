@@ -31,38 +31,34 @@ export type LeadAccessScope = {
   active: boolean;
 };
 
-const resolveLeadScope = cache(
-  async (userId: string): Promise<LeadAccessScope> => {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        isActive: true,
-        userRoles: {
-          select: {
-            role: {
-              select: {
-                name: true,
-                permissions: {
-                  where: { permission: INTAKE_VIEW_RESTRICTED },
-                  select: { permission: true },
-                },
+const resolveLeadScope = cache(async (userId: string): Promise<LeadAccessScope> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      isActive: true,
+      userRoles: {
+        select: {
+          role: {
+            select: {
+              name: true,
+              permissions: {
+                where: { permission: INTAKE_VIEW_RESTRICTED },
+                select: { permission: true },
               },
             },
           },
         },
       },
-    });
-    if (!user || !user.isActive) return { all: false, active: false };
-    const all = user.userRoles.some(
-      (ur) => ur.role.name === ADMIN_ROLE_NAME || ur.role.permissions.length > 0
-    );
-    return { all, active: true };
-  }
-);
+    },
+  });
+  if (!user || !user.isActive) return { all: false, active: false };
+  const all = user.userRoles.some(
+    (ur) => ur.role.name === ADMIN_ROLE_NAME || ur.role.permissions.length > 0,
+  );
+  return { all, active: true };
+});
 
-export async function getLeadAccessScope(
-  userId: string
-): Promise<LeadAccessScope> {
+export async function getLeadAccessScope(userId: string): Promise<LeadAccessScope> {
   return resolveLeadScope(userId);
 }
 
@@ -83,9 +79,7 @@ const anyRestrictedLead = cache(async (): Promise<boolean> => {
  * for view_restricted holders and Admins. AND it into every lead
  * list, count and search.
  */
-export async function leadAccessWhere(
-  userId: string
-): Promise<Prisma.LeadWhereInput> {
+export async function leadAccessWhere(userId: string): Promise<Prisma.LeadWhereInput> {
   const scope = await resolveLeadScope(userId);
   if (!scope.active) return NO_LEADS;
   if (scope.all || !(await anyRestrictedLead())) return {};
@@ -97,17 +91,14 @@ export async function leadAccessWhere(
 /** The same restriction for a child with a `lead` relation:
  *  `{ lead: … }`, or `{}` when unrestricted. */
 export async function leadRelationAccessWhere(
-  userId: string
+  userId: string,
 ): Promise<{ lead?: Prisma.LeadWhereInput }> {
   const where = await leadAccessWhere(userId);
   return Object.keys(where).length === 0 ? {} : { lead: where };
 }
 
 /** True when `userId` may see `leadId`. Unknown lead → false. */
-export async function canAccessLead(
-  userId: string,
-  leadId: string
-): Promise<boolean> {
+export async function canAccessLead(userId: string, leadId: string): Promise<boolean> {
   const where = await leadAccessWhere(userId);
   const hit = await prisma.lead.findFirst({
     where: { AND: [{ id: leadId }, where] },
@@ -129,7 +120,7 @@ export async function assertLeadAccess(leadId: string): Promise<string> {
 /** Filter lead ids down to the ones the user may see. */
 export async function filterAccessibleLeadIds(
   userId: string,
-  leadIds: readonly string[]
+  leadIds: readonly string[],
 ): Promise<Set<string>> {
   const unique = [...new Set(leadIds)];
   if (unique.length === 0) return new Set();

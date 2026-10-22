@@ -20,37 +20,25 @@
  */
 
 import { Card } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MemberRow } from "@/components/settings/member-row";
 import { InviteMemberComposer } from "@/components/settings/invite-member-composer";
 import { requireUser } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserPermissions } from "@/lib/permission-check";
-import {
-  getPrivilegedRoleIds,
-  listFirmUsers,
-  listRolePickerOptions,
-} from "@/lib/queries/team";
+import { getPrivilegedRoleIds, listFirmUsers, listRolePickerOptions } from "@/lib/queries/team";
 
 export default async function TeamSettingsPage() {
   const currentUserId = await requireUser();
   const firm = await getCurrentFirm();
-  const [members, resolved, rolePickerOptions, privilegedIds] =
-    await Promise.all([
-      listFirmUsers(currentUserId),
-      getCurrentUserPermissions(),
-      listRolePickerOptions(),
-      getPrivilegedRoleIds(firm.id),
-    ]);
+  const [members, resolved, rolePickerOptions, privilegedIds] = await Promise.all([
+    listFirmUsers(currentUserId),
+    getCurrentUserPermissions(),
+    listRolePickerOptions(),
+    getPrivilegedRoleIds(firm.id),
+  ]);
   const viewerIsAdmin = resolved.isAdmin;
-  const canManageDirectory =
-    viewerIsAdmin || resolved.granted.has("firm.manage_team_directory");
+  const canManageDirectory = viewerIsAdmin || resolved.granted.has("firm.manage_team_directory");
   // Roles only an Admin may hand out; the forms lock them for a
   // delegated manager (the server refuses them regardless).
   const privilegedRoleIds = [...privilegedIds];
@@ -65,8 +53,7 @@ export default async function TeamSettingsPage() {
         <p className="text-xs text-ink-3 mt-1">
           Firm members, job titles, and role assignments.{" "}
           <span className="text-ink-4">
-            {activeCount} active · {adminCount}{" "}
-            {adminCount === 1 ? "admin" : "admins"}
+            {activeCount} active · {adminCount} {adminCount === 1 ? "admin" : "admins"}
           </span>
         </p>
       </div>

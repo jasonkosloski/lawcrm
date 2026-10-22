@@ -33,12 +33,7 @@ import {
   isBillingType,
   type BillingType,
 } from "@/lib/billing-type";
-import {
-  SOL_PERIOD_UNITS,
-  formatStatutePeriod,
-  toSolPeriod,
-  type SolPeriod,
-} from "@/lib/sol";
+import { SOL_PERIOD_UNITS, formatStatutePeriod, toSolPeriod, type SolPeriod } from "@/lib/sol";
 import { logSettingsChange } from "@/lib/audit-entry";
 import { parseTemplate } from "@/lib/matter-name-template";
 import { isRequiredMatterField } from "@/lib/matter-required-fields";
@@ -73,76 +68,65 @@ function formatPeriodOrNone(period: SolPeriod | null): string {
 
 // ── Practice area ───────────────────────────────────────────────────────
 
-const practiceAreaSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "Name is required")
-    .max(80, "Name is too long"),
-  label: z.string().trim().max(120).optional().or(z.literal("")),
-  color: z
-    .string()
-    .trim()
-    .regex(/^#[0-9a-fA-F]{6}$/, "Color must be a 6-digit hex (e.g. #2563a8)"),
-  /** When "on", matters in this area surface a statute-of-limitations
-   *  card on the Overview tab and expose SOL fields on the new/edit
-   *  forms. */
-  hasStatuteOfLimitations: z.literal("on").optional(),
-  /** Statute period (ADR-035): an amount + a unit, stored as-is and
-   *  applied with calendar arithmetic. Both blank = "not configured".
-   *  A positive whole number is required when the amount is present, and
-   *  the unit must then be one of DAYS | MONTHS | YEARS. The action
-   *  ignores both when hasStatuteOfLimitations isn't set. */
-  statutePeriodAmount: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal("")),
-  statutePeriodUnit: z.enum(SOL_PERIOD_UNITS).optional().or(z.literal("")),
-  /** Citation for the statute period — "C.R.S. § 13-80-102" etc.
-   *  Surfaced on the SOL card so the lawyer can verify the firm's
-   *  configuration against the actual statute. */
-  statuteSourceCitation: z
-    .string()
-    .trim()
-    .max(120)
-    .optional()
-    .or(z.literal("")),
-  /** Default billing type for new matters; checked against the allowed
-   *  list in `billingTypeErrors` (not a zod enum, so a stale value
-   *  reports on the right field). */
-  defaultBillingType: z.string().trim().optional(),
-  /** Per-area matter-name template; blank = use the firm default. */
-  matterNameTemplate: z.string().trim().max(300).optional().or(z.literal("")),
-  /** Name of this area's originating document ("Retainer agreement");
-   *  blank = the default "Fee agreement". Omitted on update = unchanged. */
-  originatingDocLabel: z.string().trim().max(80).optional().or(z.literal("")),
-}).superRefine((v, ctx) => {
-  if (v.hasStatuteOfLimitations !== "on") return;
-  const raw = v.statutePeriodAmount ?? "";
-  if (raw === "") return;
-  if (!/^\d{1,4}$/.test(raw) || parseInt(raw, 10) < 1) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["statutePeriodAmount"],
-      message: "Enter a whole number of 1 or more",
-    });
-    return;
-  }
-  if (!v.statutePeriodUnit) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["statutePeriodUnit"],
-      message: "Choose days, months or years",
-    });
-  }
-});
+const practiceAreaSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(80, "Name is too long"),
+    label: z.string().trim().max(120).optional().or(z.literal("")),
+    color: z
+      .string()
+      .trim()
+      .regex(/^#[0-9a-fA-F]{6}$/, "Color must be a 6-digit hex (e.g. #2563a8)"),
+    /** When "on", matters in this area surface a statute-of-limitations
+     *  card on the Overview tab and expose SOL fields on the new/edit
+     *  forms. */
+    hasStatuteOfLimitations: z.literal("on").optional(),
+    /** Statute period (ADR-035): an amount + a unit, stored as-is and
+     *  applied with calendar arithmetic. Both blank = "not configured".
+     *  A positive whole number is required when the amount is present, and
+     *  the unit must then be one of DAYS | MONTHS | YEARS. The action
+     *  ignores both when hasStatuteOfLimitations isn't set. */
+    statutePeriodAmount: z.string().trim().optional().or(z.literal("")),
+    statutePeriodUnit: z.enum(SOL_PERIOD_UNITS).optional().or(z.literal("")),
+    /** Citation for the statute period — "C.R.S. § 13-80-102" etc.
+     *  Surfaced on the SOL card so the lawyer can verify the firm's
+     *  configuration against the actual statute. */
+    statuteSourceCitation: z.string().trim().max(120).optional().or(z.literal("")),
+    /** Default billing type for new matters; checked against the allowed
+     *  list in `billingTypeErrors` (not a zod enum, so a stale value
+     *  reports on the right field). */
+    defaultBillingType: z.string().trim().optional(),
+    /** Per-area matter-name template; blank = use the firm default. */
+    matterNameTemplate: z.string().trim().max(300).optional().or(z.literal("")),
+    /** Name of this area's originating document ("Retainer agreement");
+     *  blank = the default "Fee agreement". Omitted on update = unchanged. */
+    originatingDocLabel: z.string().trim().max(80).optional().or(z.literal("")),
+  })
+  .superRefine((v, ctx) => {
+    if (v.hasStatuteOfLimitations !== "on") return;
+    const raw = v.statutePeriodAmount ?? "";
+    if (raw === "") return;
+    if (!/^\d{1,4}$/.test(raw) || parseInt(raw, 10) < 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["statutePeriodAmount"],
+        message: "Enter a whole number of 1 or more",
+      });
+      return;
+    }
+    if (!v.statutePeriodUnit) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["statutePeriodUnit"],
+        message: "Choose days, months or years",
+      });
+    }
+  });
 
 /** Template + required-field validation shared by create and update.
  *  Returns field errors, or null when valid. */
 function matterFieldErrors(
   template: string | undefined,
-  required: string[]
+  required: string[],
 ): Record<string, string[]> | null {
   const errors: Record<string, string[]> = {};
   if (template) {
@@ -162,7 +146,7 @@ function matterFieldErrors(
 function billingTypeInput(
   formData: FormData,
   defaultPosted: string | undefined,
-  stored?: { allowed: string[]; default: string }
+  stored?: { allowed: string[]; default: string },
 ): {
   present: boolean;
   allowed: BillingType[];
@@ -179,9 +163,8 @@ function billingTypeInput(
     errors.allowedBillingTypes = ["Allow at least one billing type"];
   }
   const allowed = BILLING_TYPES.filter((t) => posted.includes(t));
-  const effective: string[] = present || allowed.length > 0
-    ? allowed
-    : (stored?.allowed ?? [...BILLING_TYPES]);
+  const effective: string[] =
+    present || allowed.length > 0 ? allowed : (stored?.allowed ?? [...BILLING_TYPES]);
   const def = defaultPosted || null;
   if (def !== null) {
     if (!isBillingType(def)) {
@@ -206,9 +189,7 @@ function billingTypeInput(
 }
 
 function describeBillingTypes(types: readonly string[]): string {
-  return types
-    .map((t) => BILLING_TYPE_LABEL[t as BillingType] ?? t)
-    .join(", ");
+  return types.map((t) => BILLING_TYPE_LABEL[t as BillingType] ?? t).join(", ");
 }
 
 function describeRequired(keys: readonly string[]): string {
@@ -236,7 +217,7 @@ function periodFromForm(data: {
  *  lifecycle. Redirects to the detail page on success. */
 export async function createPracticeArea(
   _prev: PracticeAreaFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<PracticeAreaFormState> {
   const userId = await requirePermission("firm.manage_practice_areas");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -303,9 +284,7 @@ export async function createPracticeArea(
         ? periodColumns(periodFromForm(data))
         : periodColumns(null)),
       statuteSourceCitation:
-        data.hasStatuteOfLimitations === "on"
-          ? data.statuteSourceCitation || null
-          : null,
+        data.hasStatuteOfLimitations === "on" ? data.statuteSourceCitation || null : null,
       // Column defaults (all types, contingency) apply unless the form
       // posts them; the create form doesn't expose a picker.
       ...(billing.present ? { allowedBillingTypes: billing.allowed } : {}),
@@ -332,7 +311,7 @@ export async function createPracticeArea(
 export async function updatePracticeArea(
   id: string,
   _prev: PracticeAreaFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<PracticeAreaFormState> {
   const userId = await requirePermission("firm.manage_practice_areas");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -387,9 +366,7 @@ export async function updatePracticeArea(
   if (billing.errors) {
     return { status: "error", errors: billing.errors, values: raw };
   }
-  const newAllowed: string[] = billing.present
-    ? billing.allowed
-    : before.allowedBillingTypes;
+  const newAllowed: string[] = billing.present ? billing.allowed : before.allowedBillingTypes;
   const newDefault = billing.default ?? before.defaultBillingType;
 
   const collision = await prisma.practiceArea.findFirst({
@@ -404,8 +381,7 @@ export async function updatePracticeArea(
     };
   }
 
-  const colorChanged =
-    before.color.toLowerCase() !== data.color.toLowerCase();
+  const colorChanged = before.color.toLowerCase() !== data.color.toLowerCase();
   const updateArea = prisma.practiceArea.update({
     where: { id },
     data: {
@@ -460,51 +436,49 @@ export async function updatePracticeArea(
     await updateArea;
   }
 
-  const beforePeriod = toSolPeriod(
-    before.statutePeriodAmount,
-    before.statutePeriodUnit
-  );
-  const newPeriod =
-    data.hasStatuteOfLimitations === "on"
-      ? periodFromForm(data)
-      : beforePeriod;
+  const beforePeriod = toSolPeriod(before.statutePeriodAmount, before.statutePeriodUnit);
+  const newPeriod = data.hasStatuteOfLimitations === "on" ? periodFromForm(data) : beforePeriod;
   const newCitation =
     data.hasStatuteOfLimitations === "on"
       ? data.statuteSourceCitation || null
       : before.statuteSourceCitation;
-  await logSettingsChange(userId, `Practice area updated — ${data.name}`, [
-    before.name !== data.name ? `name "${before.name}" → "${data.name}"` : null,
-    (before.label ?? "") !== (data.label ?? "") ? "label" : null,
-    colorChanged
-      ? `color ${before.color} → ${data.color} (${recoloredMatters} matter${recoloredMatters === 1 ? "" : "s"} recoloured)`
-      : null,
-    before.hasStatuteOfLimitations !== (data.hasStatuteOfLimitations === "on")
-      ? `SOL tracking ${before.hasStatuteOfLimitations ? "on" : "off"} → ${
-          data.hasStatuteOfLimitations === "on" ? "on" : "off"
-        }`
-      : null,
-    formatPeriodOrNone(beforePeriod) !== formatPeriodOrNone(newPeriod)
-      ? `SOL period ${formatPeriodOrNone(beforePeriod)} → ${formatPeriodOrNone(newPeriod)}`
-      : null,
-    before.statuteSourceCitation !== newCitation ? "SOL citation" : null,
-    describeBillingTypes(before.allowedBillingTypes) !==
-      describeBillingTypes(newAllowed) ||
-    before.defaultBillingType !== newDefault
-      ? `Billing types: ${describeBillingTypes(before.allowedBillingTypes)} → ${describeBillingTypes(newAllowed)}; default ${describeBillingTypes([before.defaultBillingType])} → ${describeBillingTypes([newDefault])}`
-      : null,
-    data.matterNameTemplate !== undefined &&
-    (before.matterNameTemplate ?? "") !== data.matterNameTemplate
-      ? `Matter name template: "${before.matterNameTemplate ?? "firm default"}" → "${data.matterNameTemplate || "firm default"}"`
-      : null,
-    data.originatingDocLabel !== undefined &&
-    (before.originatingDocLabel ?? "") !== data.originatingDocLabel
-      ? `Originating document: "${before.originatingDocLabel ?? DEFAULT_DOC_LABEL}" → "${data.originatingDocLabel || DEFAULT_DOC_LABEL}"`
-      : null,
-    requiredPosted &&
-    describeRequired(before.requiredMatterFields ?? []) !== describeRequired(requiredFields)
-      ? `Required fields: ${describeRequired(before.requiredMatterFields ?? [])} → ${describeRequired(requiredFields)}`
-      : null,
-  ], true);
+  await logSettingsChange(
+    userId,
+    `Practice area updated — ${data.name}`,
+    [
+      before.name !== data.name ? `name "${before.name}" → "${data.name}"` : null,
+      (before.label ?? "") !== (data.label ?? "") ? "label" : null,
+      colorChanged
+        ? `color ${before.color} → ${data.color} (${recoloredMatters} matter${recoloredMatters === 1 ? "" : "s"} recoloured)`
+        : null,
+      before.hasStatuteOfLimitations !== (data.hasStatuteOfLimitations === "on")
+        ? `SOL tracking ${before.hasStatuteOfLimitations ? "on" : "off"} → ${
+            data.hasStatuteOfLimitations === "on" ? "on" : "off"
+          }`
+        : null,
+      formatPeriodOrNone(beforePeriod) !== formatPeriodOrNone(newPeriod)
+        ? `SOL period ${formatPeriodOrNone(beforePeriod)} → ${formatPeriodOrNone(newPeriod)}`
+        : null,
+      before.statuteSourceCitation !== newCitation ? "SOL citation" : null,
+      describeBillingTypes(before.allowedBillingTypes) !== describeBillingTypes(newAllowed) ||
+      before.defaultBillingType !== newDefault
+        ? `Billing types: ${describeBillingTypes(before.allowedBillingTypes)} → ${describeBillingTypes(newAllowed)}; default ${describeBillingTypes([before.defaultBillingType])} → ${describeBillingTypes([newDefault])}`
+        : null,
+      data.matterNameTemplate !== undefined &&
+      (before.matterNameTemplate ?? "") !== data.matterNameTemplate
+        ? `Matter name template: "${before.matterNameTemplate ?? "firm default"}" → "${data.matterNameTemplate || "firm default"}"`
+        : null,
+      data.originatingDocLabel !== undefined &&
+      (before.originatingDocLabel ?? "") !== data.originatingDocLabel
+        ? `Originating document: "${before.originatingDocLabel ?? DEFAULT_DOC_LABEL}" → "${data.originatingDocLabel || DEFAULT_DOC_LABEL}"`
+        : null,
+      requiredPosted &&
+      describeRequired(before.requiredMatterFields ?? []) !== describeRequired(requiredFields)
+        ? `Required fields: ${describeRequired(before.requiredMatterFields ?? [])} → ${describeRequired(requiredFields)}`
+        : null,
+    ],
+    true,
+  );
 
   revalidatePath("/", "layout");
   return { status: "ok", values: raw };
@@ -512,7 +486,7 @@ export async function updatePracticeArea(
 
 export async function setPracticeAreaActive(
   id: string,
-  isActive: boolean
+  isActive: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("firm.manage_practice_areas");
   if (!isActive) {
@@ -538,7 +512,7 @@ export async function setPracticeAreaActive(
   await logSettingsChange(
     userId,
     `Practice area ${isActive ? "restored" : "archived"} — ${area.name}`,
-    []
+    [],
   );
   revalidatePath("/", "layout");
   return { ok: true };
@@ -548,7 +522,7 @@ export async function setPracticeAreaActive(
  *  swap with the adjacent neighbour so `order` values stay dense. */
 export async function movePracticeArea(
   id: string,
-  direction: "up" | "down"
+  direction: "up" | "down",
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("firm.manage_practice_areas");
   const row = await prisma.practiceArea.findUnique({
@@ -577,8 +551,8 @@ export async function movePracticeArea(
       prisma.practiceArea.update({
         where: { id: u.id },
         data: { order: u.order },
-      })
-    )
+      }),
+    ),
   );
 
   // Pure reorders are deliberately NOT audited: every click would write a
@@ -591,18 +565,14 @@ export async function movePracticeArea(
 // ── Stages ──────────────────────────────────────────────────────────────
 
 const stageSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "Name is required")
-    .max(80, "Name is too long"),
+  name: z.string().trim().min(1, "Name is required").max(80, "Name is too long"),
   isTerminal: z.literal("on").optional(),
 });
 
 export async function createStage(
   practiceAreaId: string,
   _prev: StageFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<StageFormState> {
   const userId = await requirePermission("firm.manage_practice_areas");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -645,11 +615,9 @@ export async function createStage(
     },
   });
 
-  await logSettingsChange(
-    userId,
-    `Stage created — ${parsed.data.name}`,
-    [parsed.data.isTerminal === "on" ? "terminal stage" : null]
-  );
+  await logSettingsChange(userId, `Stage created — ${parsed.data.name}`, [
+    parsed.data.isTerminal === "on" ? "terminal stage" : null,
+  ]);
 
   revalidatePath("/", "layout");
   return { status: "ok" };
@@ -658,7 +626,7 @@ export async function createStage(
 export async function updateStage(
   stageId: string,
   _prev: StageFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<StageFormState> {
   const userId = await requirePermission("firm.manage_practice_areas");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -709,16 +677,19 @@ export async function updateStage(
     },
   });
 
-  await logSettingsChange(userId, `Stage updated — ${parsed.data.name}`, [
-    stage.name !== parsed.data.name
-      ? `name "${stage.name}" → "${parsed.data.name}"`
-      : null,
-    stage.isTerminal !== (parsed.data.isTerminal === "on")
-      ? `terminal ${stage.isTerminal ? "yes" : "no"} → ${
-          parsed.data.isTerminal === "on" ? "yes" : "no"
-        } (reclassifies matters as open/closed)`
-      : null,
-  ], true);
+  await logSettingsChange(
+    userId,
+    `Stage updated — ${parsed.data.name}`,
+    [
+      stage.name !== parsed.data.name ? `name "${stage.name}" → "${parsed.data.name}"` : null,
+      stage.isTerminal !== (parsed.data.isTerminal === "on")
+        ? `terminal ${stage.isTerminal ? "yes" : "no"} → ${
+            parsed.data.isTerminal === "on" ? "yes" : "no"
+          } (reclassifies matters as open/closed)`
+        : null,
+    ],
+    true,
+  );
 
   revalidatePath("/", "layout");
   return { status: "ok", values: raw };
@@ -726,7 +697,7 @@ export async function updateStage(
 
 export async function setStageActive(
   stageId: string,
-  isActive: boolean
+  isActive: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("firm.manage_practice_areas");
   if (!isActive) {
@@ -748,7 +719,7 @@ export async function setStageActive(
   await logSettingsChange(
     userId,
     `Stage ${isActive ? "restored" : "archived"} — ${stage.name}`,
-    []
+    [],
   );
   revalidatePath("/", "layout");
   return { ok: true };
@@ -756,7 +727,7 @@ export async function setStageActive(
 
 export async function moveStage(
   stageId: string,
-  direction: "up" | "down"
+  direction: "up" | "down",
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("firm.manage_practice_areas");
   const stage = await prisma.matterStage.findUnique({
@@ -787,8 +758,8 @@ export async function moveStage(
       prisma.matterStage.update({
         where: { id: u.id },
         data: { order: u.order },
-      })
-    )
+      }),
+    ),
   );
 
   // Not audited — see movePracticeArea.

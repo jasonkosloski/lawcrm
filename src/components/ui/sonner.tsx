@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import { Toaster as Sonner, type ToasterProps } from "sonner"
-import { CircleAlert, CircleCheck, Info, Loader2, TriangleAlert } from "lucide-react"
+import { Toaster as Sonner, type ToasterProps } from "sonner";
+import { CircleAlert, CircleCheck, Info, Loader2, TriangleAlert } from "lucide-react";
 
 /**
  * App-wide toast region (shadcn "sonner", brand-styled). Mounted once in
@@ -30,7 +30,7 @@ function Toaster(props: ToasterProps) {
       }}
       {...props}
     />
-  )
+  );
 }
 
-export { Toaster }
+export { Toaster };

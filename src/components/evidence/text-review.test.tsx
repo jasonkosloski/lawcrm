@@ -17,9 +17,7 @@ import { TextReview } from "./text-review";
 import { VIEWER_CONTENT_READY_EVENT } from "@/components/documents-viewer/content-ready-event";
 
 vi.mock("./review-panel", () => ({
-  ReviewPanel: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
+  ReviewPanel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
 const BASE_PROPS = {
@@ -48,8 +46,8 @@ const settleFrames = () =>
   act(
     () =>
       new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-      )
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
   );
 
 describe("TextReview — initialQuote relocation timing", () => {
@@ -57,7 +55,7 @@ describe("TextReview — initialQuote relocation timing", () => {
     render(
       <TextReview {...BASE_PROPS} initialQuote="brown fox">
         <p>The quick brown fox jumps over the lazy dog.</p>
-      </TextReview>
+      </TextReview>,
     );
     await waitFor(() => expect(scrollSpy).toHaveBeenCalled());
   });
@@ -65,26 +63,20 @@ describe("TextReview — initialQuote relocation timing", () => {
   test("awaitContentReady: does NOT relocate until the body announces readiness", async () => {
     const { container } = render(
       <TextReview {...BASE_PROPS} initialQuote="brown fox" awaitContentReady>
-        <div data-testid="async-body">
-          The quick brown fox jumps over the lazy dog.
-        </div>
-      </TextReview>
+        <div data-testid="async-body">The quick brown fox jumps over the lazy dog.</div>
+      </TextReview>,
     );
     await settleFrames();
     // Text is present, but no ready event yet — the deferred path
     // must not have walked the container.
     expect(scrollSpy).not.toHaveBeenCalled();
-    expect(
-      screen.queryByText(/quote not found in the current render/i)
-    ).toBeNull();
+    expect(screen.queryByText(/quote not found in the current render/i)).toBeNull();
 
     // The async body announces (bubbling, like DocxPreviewRenderer).
     act(() => {
       container
         .querySelector('[data-testid="async-body"]')!
-        .dispatchEvent(
-          new CustomEvent(VIEWER_CONTENT_READY_EVENT, { bubbles: true })
-        );
+        .dispatchEvent(new CustomEvent(VIEWER_CONTENT_READY_EVENT, { bubbles: true }));
     });
     await waitFor(() => expect(scrollSpy).toHaveBeenCalled());
   });
@@ -93,24 +85,18 @@ describe("TextReview — initialQuote relocation timing", () => {
     const { container } = render(
       <TextReview {...BASE_PROPS} initialQuote="never in the render" awaitContentReady>
         <div data-testid="async-body">Completely different text.</div>
-      </TextReview>
+      </TextReview>,
     );
     await settleFrames();
-    expect(
-      screen.queryByText(/quote not found in the current render/i)
-    ).toBeNull();
+    expect(screen.queryByText(/quote not found in the current render/i)).toBeNull();
 
     act(() => {
       container
         .querySelector('[data-testid="async-body"]')!
-        .dispatchEvent(
-          new CustomEvent(VIEWER_CONTENT_READY_EVENT, { bubbles: true })
-        );
+        .dispatchEvent(new CustomEvent(VIEWER_CONTENT_READY_EVENT, { bubbles: true }));
     });
     await waitFor(() =>
-      expect(
-        screen.getByText(/quote not found in the current render/i)
-      ).toBeInTheDocument()
+      expect(screen.getByText(/quote not found in the current render/i)).toBeInTheDocument(),
     );
     expect(scrollSpy).not.toHaveBeenCalled();
   });
@@ -119,19 +105,15 @@ describe("TextReview — initialQuote relocation timing", () => {
     const { container } = render(
       <TextReview {...BASE_PROPS} initialQuote={null} awaitContentReady>
         <div data-testid="async-body">Some text.</div>
-      </TextReview>
+      </TextReview>,
     );
     act(() => {
       container
         .querySelector('[data-testid="async-body"]')!
-        .dispatchEvent(
-          new CustomEvent(VIEWER_CONTENT_READY_EVENT, { bubbles: true })
-        );
+        .dispatchEvent(new CustomEvent(VIEWER_CONTENT_READY_EVENT, { bubbles: true }));
     });
     await settleFrames();
     expect(scrollSpy).not.toHaveBeenCalled();
-    expect(
-      screen.queryByText(/quote not found in the current render/i)
-    ).toBeNull();
+    expect(screen.queryByText(/quote not found in the current render/i)).toBeNull();
   });
 });

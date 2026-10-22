@@ -48,11 +48,7 @@ export function messengerListHref(filter: MessengerFilter): string {
 
 /** A row's href; keeps `?page=` so opening a thread doesn't reset the
  *  list to page 1. */
-export function messengerRowHref(
-  threadId: string,
-  filter: MessengerFilter,
-  page = 1
-): string {
+export function messengerRowHref(threadId: string, filter: MessengerFilter, page = 1): string {
   const params = new URLSearchParams();
   params.set("view", "messages");
   if (filter !== "all") params.set("filter", filter);
@@ -66,13 +62,12 @@ export function messengerRowHref(
 function previewIcon(
   kind: MessengerThreadRow["lastKind"],
   direction: MessengerThreadRow["lastDirection"],
-  missed: boolean
+  missed: boolean,
 ) {
   if (kind === "voicemail") return <Voicemail size={11} className="text-ink-4" />;
   if (kind === "call") {
     if (missed) return <PhoneMissed size={11} className="text-warn" />;
-    if (direction === "inbound")
-      return <PhoneIncoming size={11} className="text-ink-4" />;
+    if (direction === "inbound") return <PhoneIncoming size={11} className="text-ink-4" />;
     return <PhoneOutgoing size={11} className="text-ink-4" />;
   }
   return <MessageSquare size={11} className="text-ink-4" />;
@@ -138,8 +133,7 @@ export function MessengerThreadList({
             // (and why busy/failed don't) is documented on
             // MISSED_CALL_STATUSES in @/lib/queries/messenger.
             const missedCall =
-              t.lastKind === "call" &&
-              isMissedCall(t.lastDirection, t.lastCallStatus);
+              t.lastKind === "call" && isMissedCall(t.lastDirection, t.lastCallStatus);
             return (
               <li key={t.id}>
                 <Link
@@ -148,7 +142,7 @@ export function MessengerThreadList({
                     "flex items-start gap-3 px-4 py-2.5 border-b border-line transition-colors",
                     active
                       ? "bg-paper-2 shadow-[inset_2px_0_0_var(--color-ink)]"
-                      : "hover:bg-paper-2/60 bg-white"
+                      : "hover:bg-paper-2/60 bg-white",
                   )}
                 >
                   {/* Avatar / matter color dot */}
@@ -167,15 +161,11 @@ export function MessengerThreadList({
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      {t.isPinned && (
-                        <Pin size={10} className="text-ink-4 shrink-0" />
-                      )}
+                      {t.isPinned && <Pin size={10} className="text-ink-4 shrink-0" />}
                       <span
                         className={cn(
                           "text-xs truncate",
-                          t.unreadCount > 0
-                            ? "font-semibold text-ink"
-                            : "font-medium text-ink"
+                          t.unreadCount > 0 ? "font-semibold text-ink" : "font-medium text-ink",
                         )}
                       >
                         {t.contactName ?? (formatPhone(t.contactPhone) || t.contactPhone)}
@@ -194,7 +184,7 @@ export function MessengerThreadList({
                             ? "text-warn"
                             : t.unreadCount > 0
                               ? "text-ink-2 font-medium"
-                              : "text-ink-3"
+                              : "text-ink-3",
                         )}
                       >
                         {t.lastBody ?? "—"}
@@ -212,9 +202,7 @@ export function MessengerThreadList({
                           className="w-1.5 h-1.5 rounded-full shrink-0"
                           style={{ background: t.defaultMatterColor ?? "var(--color-ink-3)" }}
                         />
-                        <span className="text-3xs text-ink-4 truncate">
-                          {t.defaultMatterName}
-                        </span>
+                        <span className="text-3xs text-ink-4 truncate">{t.defaultMatterName}</span>
                       </div>
                     )}
                   </div>

@@ -30,10 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  deleteSavedSearch,
-  renameSavedSearch,
-} from "@/app/actions/saved-searches";
+import { deleteSavedSearch, renameSavedSearch } from "@/app/actions/saved-searches";
 import { SAVED_SEARCH_NAME_MAX } from "@/lib/constants/search";
 import type { SavedSearchRow } from "@/lib/queries/saved-searches";
 import { TYPE_META } from "./search-results";
@@ -55,29 +52,17 @@ export function SavedSearchChips({
 }) {
   return (
     <section aria-label="Saved searches" className="flex flex-col gap-1.5">
-      <div className="text-2xs font-medium text-ink-3 px-1">
-        Saved
-      </div>
+      <div className="text-2xs font-medium text-ink-3 px-1">Saved</div>
       <div className="flex flex-wrap gap-1.5">
         {rows.map((row) => (
-          <SavedSearchChip
-            key={row.id}
-            row={row}
-            active={row.id === activeId}
-          />
+          <SavedSearchChip key={row.id} row={row} active={row.id === activeId} />
         ))}
       </div>
     </section>
   );
 }
 
-function SavedSearchChip({
-  row,
-  active,
-}: {
-  row: SavedSearchRow;
-  active: boolean;
-}) {
+function SavedSearchChip({ row, active }: { row: SavedSearchRow; active: boolean }) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -109,7 +94,7 @@ function SavedSearchChip({
         pending && "opacity-50",
         active
           ? "border-brand-300 bg-brand-50 text-brand-700"
-          : "border-line-2 bg-white text-ink-2 hover:border-brand-300"
+          : "border-line-2 bg-white text-ink-2 hover:border-brand-300",
       )}
     >
       <Link
@@ -211,17 +196,10 @@ function RenameDialog({
             className="w-full h-9 px-3 rounded-md border border-line-2 bg-white text-sm text-ink focus:outline-none focus:border-brand-300 transition-colors"
           />
           <DialogFooter>
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={pending}
-            >
+            <Button type="submit" disabled={pending}>
               Save
             </Button>
           </DialogFooter>

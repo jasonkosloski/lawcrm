@@ -9,7 +9,7 @@ import { prisma } from "@/lib/prisma";
  * the browser). Null when signed out or without live access. Never redirects.
  */
 export async function getPortalRequestStatus(
-  requestId: string
+  requestId: string,
 ): Promise<{ status: string } | null> {
   const identity = await getPortalIdentity();
   if (!identity) return null;

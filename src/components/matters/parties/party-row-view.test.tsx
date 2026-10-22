@@ -49,42 +49,34 @@ function renderRow(props: { canEdit?: boolean; canDelete?: boolean } = {}) {
           {...props}
         />
       </tbody>
-    </table>
+    </table>,
   );
 }
 
 describe("PartyRowView", () => {
   test("shows edit and remove by default, naming the party", () => {
     renderRow();
-    expect(
-      screen.getByRole("button", { name: "Edit Dana Defendant" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Remove Dana Defendant" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit Dana Defendant" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove Dana Defendant" })).toBeInTheDocument();
   });
 
   test("hides the edit pencil without parties.edit", () => {
     renderRow({ canEdit: false });
     expect(screen.queryByRole("button", { name: /^edit /i })).toBeNull();
-    expect(
-      screen.getByRole("button", { name: /^remove /i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^remove /i })).toBeInTheDocument();
   });
 
   test("hides remove without parties.delete", () => {
     renderRow({ canDelete: false });
     expect(screen.queryByRole("button", { name: /^remove /i })).toBeNull();
-    expect(
-      screen.getByRole("button", { name: /^edit /i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^edit /i })).toBeInTheDocument();
   });
 
   test("the party name links to the contact record", () => {
     renderRow();
     expect(screen.getByRole("link", { name: "Dana Defendant" })).toHaveAttribute(
       "href",
-      "/contacts/c1"
+      "/contacts/c1",
     );
   });
 });

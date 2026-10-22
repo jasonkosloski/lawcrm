@@ -57,7 +57,11 @@ function form(files: [string, string][], fields: Record<string, string> = {}) {
 
 let n = 0;
 beforeEach(() => {
-  vi.mocked(getPortalIdentity).mockResolvedValue({ identityId: "i1", contactId: "c1", email: "a@b.c" });
+  vi.mocked(getPortalIdentity).mockResolvedValue({
+    identityId: "i1",
+    contactId: "c1",
+    email: "a@b.c",
+  });
   vi.mocked(storeStream).mockImplementation(async (stream: Readable) => {
     let size = 0;
     for await (const chunk of stream) size += (chunk as Buffer).length;
@@ -106,7 +110,12 @@ describe("POST portal /api/documents/upload/local (dev multipart)", () => {
   });
 
   test("a disallowed type fails the batch and removes files already stored", async () => {
-    const res = await POST(await form([["a.pdf", "ok"], ["b.zip", "zz"]]));
+    const res = await POST(
+      await form([
+        ["a.pdf", "ok"],
+        ["b.zip", "zz"],
+      ]),
+    );
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: "We can't accept .zip files. Please send PDFs, photos or Office documents.",
@@ -116,14 +125,23 @@ describe("POST portal /api/documents/upload/local (dev multipart)", () => {
   });
 
   test("the cap check counts every file in the batch", async () => {
-    await POST(await form([["a.pdf", "1"], ["b.pdf", "2"]]));
+    await POST(
+      await form([
+        ["a.pdf", "1"],
+        ["b.pdf", "2"],
+      ]),
+    );
     const calls = vi.mocked(checkPortalUploadTarget).mock.calls.map((c) => c[0].adding);
     expect(calls.at(-1)).toBe(2);
   });
 
   test("hands each stored file to recordPortalUpload with the session identity", async () => {
     const res = await POST(
-      await form([["Lease.PDF", "hello"]], { requestId: "r1", note: " lease ", identityId: "evil" })
+      await form([["Lease.PDF", "hello"]], {
+        requestId: "r1",
+        note: " lease ",
+        identityId: "evil",
+      }),
     );
     expect(res.status).toBe(200);
     expect(recordPortalUpload).toHaveBeenCalledWith({
@@ -155,7 +173,13 @@ describe("POST portal /api/documents/upload/local (dev multipart)", () => {
     vi.mocked(recordPortalUpload)
       .mockResolvedValueOnce({ ok: true, documentId: "d1", requestClosed: false })
       .mockRejectedValueOnce(new Error("db down"));
-    const res = await POST(await form([["a.pdf", "1"], ["b.pdf", "2"], ["c.pdf", "3"]]));
+    const res = await POST(
+      await form([
+        ["a.pdf", "1"],
+        ["b.pdf", "2"],
+        ["c.pdf", "3"],
+      ]),
+    );
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: "Upload failed." });
     const removed = vi.mocked(deleteFile).mock.calls.map((c) => c[0]);
@@ -168,7 +192,12 @@ describe("POST portal /api/documents/upload/local (dev multipart)", () => {
   test("a throw after the row was written keeps that file's bytes", async () => {
     vi.mocked(recordPortalUpload).mockRejectedValueOnce(new Error("log failed"));
     findFirst.mockResolvedValueOnce({ id: "d1" });
-    const res = await POST(await form([["a.pdf", "1"], ["b.pdf", "2"]]));
+    const res = await POST(
+      await form([
+        ["a.pdf", "1"],
+        ["b.pdf", "2"],
+      ]),
+    );
     expect(res.status).toBe(500);
     const removed = vi.mocked(deleteFile).mock.calls.map((c) => c[0]);
     const [first] = vi.mocked(recordPortalUpload).mock.calls.map((c) => c[0].storageKey);

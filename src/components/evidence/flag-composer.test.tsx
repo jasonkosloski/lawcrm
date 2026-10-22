@@ -56,12 +56,10 @@ describe("FlagComposer — re-capture while open (F399)", () => {
         editing={null}
         createAnchor={quoteAnchor("passage A")}
         onClose={() => {}}
-      />
+      />,
     );
     const note = screen.getByLabelText("Note") as HTMLTextAreaElement;
-    expect(
-      (screen.getByLabelText("Quoted text") as HTMLTextAreaElement).value
-    ).toBe("passage A");
+    expect((screen.getByLabelText("Quoted text") as HTMLTextAreaElement).value).toBe("passage A");
     // Typed note survives the re-capture.
     note.focus();
     rerender(
@@ -70,11 +68,9 @@ describe("FlagComposer — re-capture while open (F399)", () => {
         editing={null}
         createAnchor={quoteAnchor("passage B")}
         onClose={() => {}}
-      />
+      />,
     );
-    expect(
-      (screen.getByLabelText("Quoted text") as HTMLTextAreaElement).value
-    ).toBe("passage B");
+    expect((screen.getByLabelText("Quoted text") as HTMLTextAreaElement).value).toBe("passage B");
   });
 
   test("switching from a whole-document capture to a selection seeds the quote", () => {
@@ -84,7 +80,7 @@ describe("FlagComposer — re-capture while open (F399)", () => {
         editing={null}
         createAnchor={{ kind: "document" }}
         onClose={() => {}}
-      />
+      />,
     );
     expect(screen.queryByLabelText("Quoted text")).toBeNull();
     rerender(
@@ -93,11 +89,11 @@ describe("FlagComposer — re-capture while open (F399)", () => {
         editing={null}
         createAnchor={quoteAnchor("selected text")}
         onClose={() => {}}
-      />
+      />,
     );
-    expect(
-      (screen.getByLabelText("Quoted text") as HTMLTextAreaElement).value
-    ).toBe("selected text");
+    expect((screen.getByLabelText("Quoted text") as HTMLTextAreaElement).value).toBe(
+      "selected text",
+    );
   });
 
   test("a hint from the capture is announced", () => {
@@ -107,7 +103,7 @@ describe("FlagComposer — re-capture while open (F399)", () => {
         editing={null}
         createAnchor={{ kind: "quote", quote: "x", hint: "appears 3 times" }}
         onClose={() => {}}
-      />
+      />,
     );
     expect(screen.getByRole("status")).toHaveTextContent("appears 3 times");
   });
@@ -123,14 +119,14 @@ describe("FlagComposer — submit", () => {
         editing={null}
         createAnchor={{ kind: "document" }}
         onClose={onClose}
-      />
+      />,
     );
     await userEvent.type(screen.getByLabelText("Note"), "important");
     await userEvent.click(screen.getByRole("button", { name: "Add flag" }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(createFlaggedMoment).toHaveBeenCalledWith(
       "d1",
-      expect.objectContaining({ description: "important" })
+      expect.objectContaining({ description: "important" }),
     );
     expect(refresh).not.toHaveBeenCalled();
   });
@@ -144,17 +140,13 @@ describe("FlagComposer — submit", () => {
         editing={null}
         createAnchor={{ kind: "document" }}
         onClose={onClose}
-      />
+      />,
     );
     await userEvent.type(screen.getByLabelText("Note"), "keep me");
     await userEvent.click(screen.getByRole("button", { name: "Add flag" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      /couldn't save/i
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(/couldn't save/i);
     expect(onClose).not.toHaveBeenCalled();
-    expect((screen.getByLabelText("Note") as HTMLTextAreaElement).value).toBe(
-      "keep me"
-    );
+    expect((screen.getByLabelText("Note") as HTMLTextAreaElement).value).toBe("keep me");
   });
 
   test("a 'Flag not found' result is shown inline", async () => {
@@ -167,18 +159,16 @@ describe("FlagComposer — submit", () => {
           timeSeconds: null,
           endSeconds: null,
           pageNumber: null,
-      endPageNumber: null,
+          endPageNumber: null,
           quote: null,
           category: "emphasis",
           description: "old",
         }}
         createAnchor={null}
         onClose={() => {}}
-      />
+      />,
     );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save changes" })
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Flag not found");
     // Nothing was revalidated server-side — the client re-reads.
     expect(refresh).toHaveBeenCalledTimes(1);
@@ -201,7 +191,7 @@ describe("FlagComposer — accessibility (F1003)", () => {
           createAnchor={{ kind: "time", timeSeconds: 9 }}
           onClose={() => {}}
         />
-      </>
+      </>,
     );
     const ids = Array.from(document.querySelectorAll("[id]")).map((e) => e.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -219,7 +209,7 @@ describe("MomentsRail — delete", () => {
     timeSeconds: null,
     endSeconds: null,
     pageNumber: null,
-      endPageNumber: null,
+    endPageNumber: null,
     quote: null,
     category: "emphasis",
     description: "note",
@@ -243,7 +233,7 @@ describe("MomentsRail — delete", () => {
         canEditAny={false}
         canDeleteAny={false}
         emptyHint=""
-      />
+      />,
     );
     await openDelete();
     await waitFor(() => expect(confirmAction).toHaveBeenCalledTimes(1));
@@ -260,7 +250,7 @@ describe("MomentsRail — delete", () => {
         canEditAny={false}
         canDeleteAny={false}
         emptyHint=""
-      />
+      />,
     );
     await openDelete();
     await waitFor(() => expect(deleteFlaggedMoment).toHaveBeenCalledWith("f1"));
@@ -277,7 +267,7 @@ describe("MomentsRail — delete", () => {
         canEditAny={false}
         canDeleteAny={false}
         emptyHint=""
-      />
+      />,
     );
     await openDelete();
     expect(await screen.findByRole("alert")).toHaveTextContent("Flag not found");
@@ -293,7 +283,7 @@ describe("MomentsRail — delete", () => {
         canEditAny={false}
         canDeleteAny={false}
         emptyHint=""
-      />
+      />,
     );
     await openDelete();
     expect(await screen.findByRole("alert")).toHaveTextContent(/couldn't delete/i);

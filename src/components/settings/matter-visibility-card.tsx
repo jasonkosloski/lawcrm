@@ -27,25 +27,19 @@ export function MatterVisibilityCard({
   thinTotal: number;
   thinRows: ThinTeamRow[];
 }) {
-  const [state, formAction, pending] = useActionState(
-    updateMatterVisibilityAction,
-    initial
-  );
+  const [state, formAction, pending] = useActionState(updateMatterVisibilityAction, initial);
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-semibold">
-          Matter visibility
-        </CardTitle>
+        <CardTitle className="text-sm font-semibold">Matter visibility</CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-4">
         <p className="text-xs text-ink-3 mb-3 leading-relaxed">
-          <strong>Everyone</strong>: any firm member can open any matter.{" "}
-          <strong>Team only</strong>: a matter, and everything on it, is
-          visible only to its active team, Admins, and roles granted{" "}
-          <em>View all matters</em>. Hidden matters look like they do not
-          exist. Grant <em>View all matters</em> to roles such as billing or
-          office manager, and fix thin teams below, before switching.
+          <strong>Everyone</strong>: any firm member can open any matter. <strong>Team only</strong>
+          : a matter, and everything on it, is visible only to its active team, Admins, and roles
+          granted <em>View all matters</em>. Hidden matters look like they do not exist. Grant{" "}
+          <em>View all matters</em> to roles such as billing or office manager, and fix thin teams
+          below, before switching.
         </p>
         <form action={formAction} className="flex flex-col gap-2">
           {(
@@ -69,13 +63,9 @@ export function MatterVisibilityCard({
             </label>
           ))}
           <div className="flex items-center justify-between pt-2 mt-1 border-t border-line">
-            {state.status === "ok" && (
-              <span className="text-2xs text-ok">Saved.</span>
-            )}
+            {state.status === "ok" && <span className="text-2xs text-ok">Saved.</span>}
             {state.status === "error" && (
-              <span className="text-2xs text-warn">
-                {state.error ?? "Couldn't save."}
-              </span>
+              <span className="text-2xs text-warn">{state.error ?? "Couldn't save."}</span>
             )}
             <Button type="submit" size="sm" disabled={pending} className="ml-auto">
               {pending ? "Saving…" : "Save visibility"}
@@ -86,25 +76,18 @@ export function MatterVisibilityCard({
         <div className="mt-4 pt-3 border-t border-line">
           <h3 className="text-xs font-semibold text-ink flex items-center gap-2">
             Thin teams
-            <span className="text-2xs font-mono font-normal text-ink-4">
-              {thinTotal}
-            </span>
+            <span className="text-2xs font-mono font-normal text-ink-4">{thinTotal}</span>
           </h3>
           <p className="text-2xs text-ink-3 mt-1 leading-relaxed">
-            Open matters with no active team member, or only the lead. Add
-            the people who work on them before switching to Team only.
+            Open matters with no active team member, or only the lead. Add the people who work on
+            them before switching to Team only.
           </p>
           {thinRows.length === 0 ? (
-            <div className="text-2xs text-ok mt-2">
-              Every open matter has a team.
-            </div>
+            <div className="text-2xs text-ok mt-2">Every open matter has a team.</div>
           ) : (
             <ul className="mt-2 flex flex-col divide-y divide-line">
               {thinRows.map((m) => (
-                <li
-                  key={m.id}
-                  className="py-1.5 flex items-center justify-between gap-2 text-xs"
-                >
+                <li key={m.id} className="py-1.5 flex items-center justify-between gap-2 text-xs">
                   <Link
                     href={`/matters/${m.id}/edit`}
                     className="text-ink hover:underline truncate"

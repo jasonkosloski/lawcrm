@@ -141,11 +141,7 @@ const buildEventForm = (overrides: Partial<Record<string, string>> = {}) => {
 describe("createEventWithCaptures — auto-add team", () => {
   test("attaches every active team member when autoAddTeamToNewEvents is on (firm default)", async () => {
     // Firm default is true (schema default); matter has no override.
-    const res = await createEventWithCaptures(
-      matterId,
-      captureInitialState,
-      buildEventForm()
-    );
+    const res = await createEventWithCaptures(matterId, captureInitialState, buildEventForm());
     expect(res.status).toBe("ok");
 
     const event = await prisma.calendarEvent.findFirstOrThrow({
@@ -170,11 +166,7 @@ describe("createEventWithCaptures — auto-add team", () => {
       where: { id: matterId },
       data: { autoAddTeamToNewEvents: false },
     });
-    const res = await createEventWithCaptures(
-      matterId,
-      captureInitialState,
-      buildEventForm()
-    );
+    const res = await createEventWithCaptures(matterId, captureInitialState, buildEventForm());
     expect(res.status).toBe("ok");
     const event = await prisma.calendarEvent.findFirstOrThrow({
       where: { matterId },
@@ -194,11 +186,7 @@ describe("createEventWithCaptures — auto-add team", () => {
       where: { id: firmId },
       data: { autoAddTeamToNewEvents: false },
     });
-    const res = await createEventWithCaptures(
-      matterId,
-      captureInitialState,
-      buildEventForm()
-    );
+    const res = await createEventWithCaptures(matterId, captureInitialState, buildEventForm());
     expect(res.status).toBe("ok");
     const event = await prisma.calendarEvent.findFirstOrThrow({
       where: { matterId },
@@ -220,11 +208,7 @@ describe("createEventWithCaptures — auto-add team", () => {
       where: { id: matterId },
       data: { autoAddTeamToNewEvents: true },
     });
-    const res = await createEventWithCaptures(
-      matterId,
-      captureInitialState,
-      buildEventForm()
-    );
+    const res = await createEventWithCaptures(matterId, captureInitialState, buildEventForm());
     expect(res.status).toBe("ok");
     const event = await prisma.calendarEvent.findFirstOrThrow({
       where: { matterId },
@@ -240,11 +224,7 @@ describe("createEventWithCaptures — auto-add team", () => {
     // "show_details" it goes firm-wide.
     const fd = buildEventForm();
     fd.set("visibility", "show_details");
-    const res = await createEventWithCaptures(
-      matterId,
-      captureInitialState,
-      fd
-    );
+    const res = await createEventWithCaptures(matterId, captureInitialState, fd);
     expect(res.status).toBe("ok");
     const event = await prisma.calendarEvent.findFirstOrThrow({
       where: { matterId },
@@ -253,11 +233,7 @@ describe("createEventWithCaptures — auto-add team", () => {
   });
 
   test("visibility defaults to 'default' when the form omits the field", async () => {
-    const res = await createEventWithCaptures(
-      matterId,
-      captureInitialState,
-      buildEventForm()
-    );
+    const res = await createEventWithCaptures(matterId, captureInitialState, buildEventForm());
     expect(res.status).toBe("ok");
     const event = await prisma.calendarEvent.findFirstOrThrow({
       where: { matterId },
@@ -271,11 +247,7 @@ describe("createEventWithCaptures — auto-add team", () => {
       where: { matterId, userId: coCounselUserId },
       data: { removedAt: new Date() },
     });
-    const res = await createEventWithCaptures(
-      matterId,
-      captureInitialState,
-      buildEventForm()
-    );
+    const res = await createEventWithCaptures(matterId, captureInitialState, buildEventForm());
     expect(res.status).toBe("ok");
     const event = await prisma.calendarEvent.findFirstOrThrow({
       where: { matterId },
@@ -331,9 +303,7 @@ describe("addMatterTeamMember — auto-add to upcoming events", () => {
     expect(past.attendees.find((a) => a.userId === outsideUserId)).toBeUndefined();
     // Future has the new member, marked accepted (auto-added
     // teammates skip the pending stage).
-    const futureRow = future.attendees.find(
-      (a) => a.userId === outsideUserId
-    );
+    const futureRow = future.attendees.find((a) => a.userId === outsideUserId);
     expect(futureRow).toBeDefined();
     expect(futureRow!.status).toBe("accepted");
   });

@@ -86,11 +86,7 @@ function normalizeHaystack(chunks: readonly string[]): NormalizedHaystack {
 }
 
 /** Map [start, end) in the joined original string to chunk/offset endpoints. */
-function toLocation(
-  chunks: readonly string[],
-  start: number,
-  end: number
-): QuoteLocation | null {
+function toLocation(chunks: readonly string[], start: number, end: number): QuoteLocation | null {
   let startChunk = -1;
   let startOffset = 0;
   let endChunk = -1;
@@ -119,10 +115,7 @@ function toLocation(
 
 /** First case/whitespace-insensitive occurrence of `quote` in the
  *  concatenation of `chunks`, or null when absent / empty. */
-export function locateQuote(
-  chunks: readonly string[],
-  quote: string
-): QuoteLocation | null {
+export function locateQuote(chunks: readonly string[], quote: string): QuoteLocation | null {
   const needle = normalizeNeedle(quote);
   if (needle === "") return null;
   const hay = normalizeHaystack(chunks);
@@ -134,10 +127,7 @@ export function locateQuote(
 /** Non-overlapping occurrences of `quote` under the same
  *  normalization as `locateQuote` — lets capture warn that a quote
  *  appears more than once (relocation always picks the first). */
-export function countQuoteOccurrences(
-  chunks: readonly string[],
-  quote: string
-): number {
+export function countQuoteOccurrences(chunks: readonly string[], quote: string): number {
   const needle = normalizeNeedle(quote);
   if (needle === "") return 0;
   const { text } = normalizeHaystack(chunks);

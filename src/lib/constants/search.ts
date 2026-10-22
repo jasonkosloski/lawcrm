@@ -27,9 +27,7 @@ export const SEARCH_HIT_TYPES = [
 export type SearchHitType = (typeof SEARCH_HIT_TYPES)[number];
 
 export function isSearchHitType(v: unknown): v is SearchHitType {
-  return (
-    typeof v === "string" && (SEARCH_HIT_TYPES as readonly string[]).includes(v)
-  );
+  return typeof v === "string" && (SEARCH_HIT_TYPES as readonly string[]).includes(v);
 }
 
 /** Queries shorter than this return no results (too noisy to scan). */

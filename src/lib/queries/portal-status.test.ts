@@ -16,11 +16,7 @@ vi.mock("@/lib/prisma", () => ({
 import { assertMatterAccess } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
-import {
-  getClientStatusCardData,
-  getEventPortalShareProp,
-  getEventShare,
-} from "./portal-status";
+import { getClientStatusCardData, getEventPortalShareProp, getEventShare } from "./portal-status";
 
 afterEach(() => vi.clearAllMocks());
 
@@ -73,7 +69,7 @@ describe("getClientStatusCardData", () => {
       expect.objectContaining({
         where: { matterId: "m1" },
         orderBy: [{ postedAt: "desc" }, { id: "desc" }],
-      })
+      }),
     );
   });
 });
@@ -124,7 +120,7 @@ describe("getEventPortalShareProp", () => {
 
   test("canShare follows portal.share_events", async () => {
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k === "portal.view"
+      async (k: string) => k === "portal.view",
     );
     vi.mocked(prisma.portalSharedEvent.findUnique).mockResolvedValue(null);
     expect(await getEventPortalShareProp("e1", "m1")).toEqual({

@@ -8,13 +8,9 @@ function TriageItem({ row }: { row: TriageRow }) {
     <DashboardRow href={row.href ?? undefined}>
       <div className="min-w-0 flex-1">
         <div className="truncate text-xs text-ink">{row.title}</div>
-        {row.context && (
-          <div className="truncate text-2xs text-ink-4">{row.context}</div>
-        )}
+        {row.context && <div className="truncate text-2xs text-ink-4">{row.context}</div>}
       </div>
-      {row.days !== null && (
-        <DueLabel dueDate={row.dueDate} days={row.days} className="shrink-0" />
-      )}
+      {row.days !== null && <DueLabel dueDate={row.dueDate} days={row.days} className="shrink-0" />}
     </DashboardRow>
   );
 }
@@ -43,9 +39,7 @@ export function TriageCard({ data }: { data: TriageData }) {
               {g.rows.map((r) => (
                 <TriageItem key={r.id} row={r} />
               ))}
-              {g.hidden > 0 && (
-                <div className="pt-2 text-2xs text-ink-4">+{g.hidden} more</div>
-              )}
+              {g.hidden > 0 && <div className="pt-2 text-2xs text-ink-4">+{g.hidden} more</div>}
             </div>
           </section>
         ))}

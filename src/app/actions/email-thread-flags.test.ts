@@ -23,10 +23,7 @@ vi.mock("@/lib/google/gmail-writeback", () => ({
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
-import {
-  writebackGmailMessages,
-  writebackGmailThread,
-} from "@/lib/google/gmail-writeback";
+import { writebackGmailMessages, writebackGmailThread } from "@/lib/google/gmail-writeback";
 import { prisma } from "@/lib/prisma";
 import {
   setEmailThreadArchived,
@@ -146,9 +143,7 @@ describe("toggleEmailThreadStar", () => {
       addLabelIds: ["STARRED"],
     });
     expect(mockedRevalidate).toHaveBeenCalledWith("/communication");
-    expect(mockedRevalidate).toHaveBeenCalledWith(
-      `/matters/${matterId}/communication`
-    );
+    expect(mockedRevalidate).toHaveBeenCalledWith(`/matters/${matterId}/communication`);
   });
 
   test("toggling again unstars and writes back `remove STARRED`", async () => {
@@ -189,9 +184,7 @@ describe("toggleEmailThreadStar", () => {
 
   test("throws (login redirect) before writing when there is no session", async () => {
     mockedGetUser.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
-    await expect(toggleEmailThreadStar(threadId)).rejects.toThrow(
-      "NEXT_REDIRECT"
-    );
+    await expect(toggleEmailThreadStar(threadId)).rejects.toThrow("NEXT_REDIRECT");
     const thread = await prisma.emailThread.findUniqueOrThrow({
       where: { id: threadId },
       select: { isStarred: true },
@@ -212,8 +205,7 @@ describe("setEmailThreadArchived", () => {
     expect(thread.isArchived).toBe(true);
     // Message-scoped (synced ids only), never the thread-wide modify.
     expect(mockedMessageWriteback).toHaveBeenCalledTimes(1);
-    const [calledAccount, calledIds, calledMods] =
-      mockedMessageWriteback.mock.calls[0];
+    const [calledAccount, calledIds, calledMods] = mockedMessageWriteback.mock.calls[0];
     expect(calledAccount).toBe(accountId);
     expect([...calledIds].sort()).toEqual(["gm-1", "gm-2"]);
     expect(calledMods).toEqual({ removeLabelIds: ["INBOX"] });
@@ -237,7 +229,7 @@ describe("setEmailThreadArchived", () => {
     expect(mockedMessageWriteback).toHaveBeenCalledWith(
       accountId,
       expect.arrayContaining(["gm-1", "gm-2"]),
-      { addLabelIds: ["INBOX"] }
+      { addLabelIds: ["INBOX"] },
     );
     expect(mockedWriteback).not.toHaveBeenCalled();
   });

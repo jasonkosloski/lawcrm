@@ -72,7 +72,13 @@ const paragraphs = async () =>
       where: { transcriptId },
       orderBy: { index: "asc" },
     })
-  ).map((s) => ({ index: s.index, speaker: s.speaker, text: s.text, id: s.id, revision: s.revision }));
+  ).map((s) => ({
+    index: s.index,
+    speaker: s.speaker,
+    text: s.text,
+    id: s.id,
+    revision: s.revision,
+  }));
 
 beforeAll(() => {
   expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
@@ -114,7 +120,9 @@ describe("changeSpeakerForSelection", () => {
     expect(p[4]!.id).toBe(ids[2]);
     const t = await prisma.transcript.findUniqueOrThrow({ where: { id: transcriptId } });
     expect(t.correctedById).toBe(userId);
-    expect(await prisma.activityLog.count({ where: { title: "Transcript speaker changed" } })).toBe(1);
+    expect(await prisma.activityLog.count({ where: { title: "Transcript speaker changed" } })).toBe(
+      1,
+    );
   });
 
   test("relabelling a middle paragraph merges its neighbours and closes the gap", async () => {
@@ -172,7 +180,9 @@ describe("changeSpeakerForSelection", () => {
       end: { segmentId: ids[0]!, word: 0 },
       revisions: { [ids[0]!]: 0 },
     };
-    expect(await changeSpeakerForSelection(transcriptId, { ...sel, speaker: "B" })).toMatchObject({ ok: false });
+    expect(await changeSpeakerForSelection(transcriptId, { ...sel, speaker: "B" })).toMatchObject({
+      ok: false,
+    });
     await prisma.transcript.update({ where: { id: transcriptId }, data: { status: "completed" } });
     expect(await changeSpeakerForSelection(transcriptId, { ...sel, speaker: "bob" })).toEqual({
       ok: false,
@@ -188,7 +198,7 @@ describe("changeSpeakerForSelection", () => {
         end: { segmentId: ids[0]!, word: 0 },
         speaker: "B",
         revisions: { [ids[0]!]: 0 },
-      })
+      }),
     ).rejects.toThrow("walled");
     expect((await paragraphs()).length).toBe(3);
   });
@@ -203,7 +213,12 @@ describe("changeSpeakerForSelection", () => {
     });
     expect(r).toEqual({ ok: true });
     const row = await prisma.transcriptSegment.findUniqueOrThrow({ where: { id: ids[1]! } });
-    expect(row).toMatchObject({ speaker: "C", text: "five sixx", originalText: "five six", revision: 2 });
+    expect(row).toMatchObject({
+      speaker: "C",
+      text: "five sixx",
+      originalText: "five six",
+      revision: 2,
+    });
   });
 
   test("whole paragraphs merged keep the first id and join their originals", async () => {
@@ -214,7 +229,10 @@ describe("changeSpeakerForSelection", () => {
       speaker: "A",
       revisions: { [ids[1]!]: 0 },
     });
-    const p = await prisma.transcriptSegment.findMany({ where: { transcriptId }, orderBy: { index: "asc" } });
+    const p = await prisma.transcriptSegment.findMany({
+      where: { transcriptId },
+      orderBy: { index: "asc" },
+    });
     expect(p).toHaveLength(1);
     expect(p[0]).toMatchObject({
       id: ids[0],

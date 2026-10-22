@@ -57,11 +57,7 @@ vi.mock("@/lib/staff-auth", async () => {
 });
 
 import { redirect } from "next/navigation";
-import {
-  getCurrentUserId,
-  getSession,
-  requireUser,
-} from "@/lib/current-user";
+import { getCurrentUserId, getSession, requireUser } from "@/lib/current-user";
 
 const mockedAuth = hoisted.staffAuth;
 const ok = (userId: string) =>
@@ -72,8 +68,7 @@ const ok = (userId: string) =>
     sessionId: "sess_1",
   }) as never;
 const signedOut = () => ({ status: "signed_out" }) as never;
-const noAccess = () =>
-  ({ status: "no_access", clerkUserId: "clerk_1" }) as never;
+const noAccess = () => ({ status: "no_access", clerkUserId: "clerk_1" }) as never;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -95,9 +90,7 @@ describe("getCurrentUserId", () => {
 
   test("redirects to /no-access when signed in without firm access", async () => {
     mockedAuth.mockResolvedValue(noAccess());
-    await expect(getCurrentUserId()).rejects.toThrow(
-      "__REDIRECT__:/no-access"
-    );
+    await expect(getCurrentUserId()).rejects.toThrow("__REDIRECT__:/no-access");
     expect(redirect).toHaveBeenCalledWith("/no-access");
   });
 

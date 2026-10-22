@@ -9,9 +9,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/staff-auth", () => ({ getStaffAuth: vi.fn() }));
 vi.mock("@/components/auth/staff-clerk-provider", () => ({
-  StaffClerkProvider: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
+  StaffClerkProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock("@clerk/nextjs", () => ({
   useClerk: () => ({ signOut: vi.fn() }),
@@ -34,15 +32,9 @@ describe("/no-access", () => {
       clerkUserId: "clerk_1",
     });
     render(await NoAccessPage());
-    expect(
-      screen.getByRole("heading", { name: "No access to LitGox" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/this account isn.t set up as a firm member/)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Sign out" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "No access to LitGox" })).toBeInTheDocument();
+    expect(screen.getByText(/this account isn.t set up as a firm member/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
     expect(redirect).not.toHaveBeenCalled();
   });
 
@@ -58,8 +50,6 @@ describe("/no-access", () => {
 
   test("a signed-out visitor is sent to /login", async () => {
     mockedAuth.mockResolvedValue({ status: "signed_out" });
-    await expect(NoAccessPage()).rejects.toThrow(
-      `${REDIRECT_SENTINEL}:/login`
-    );
+    await expect(NoAccessPage()).rejects.toThrow(`${REDIRECT_SENTINEL}:/login`);
   });
 });

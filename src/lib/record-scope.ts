@@ -11,9 +11,7 @@
  * Pure — imported by server actions and client composers alike.
  */
 
-export type RecordScope =
-  | { kind: "matter"; matterId: string }
-  | { kind: "lead"; leadId: string };
+export type RecordScope = { kind: "matter"; matterId: string } | { kind: "lead"; leadId: string };
 
 /** The scope of a stored task / event row, or null for a firm-wide
  *  task or personal event. Throws on a row with both set — a breach
@@ -24,7 +22,7 @@ export function optionalScopeOf(row: {
 }): RecordScope | null {
   if (row.matterId && row.leadId) {
     throw new Error(
-      "Record scope invariant: matterId and leadId are both set — a task or event belongs to at most one of a matter or a lead."
+      "Record scope invariant: matterId and leadId are both set — a task or event belongs to at most one of a matter or a lead.",
     );
   }
   if (row.matterId) return { kind: "matter", matterId: row.matterId };
@@ -35,36 +33,27 @@ export function optionalScopeOf(row: {
 /** The scope of a stored row that must have EXACTLY one of matterId /
  *  leadId (notes, documents, document folders). Throws on a both /
  *  neither row — a breach is a programming error, not user input. */
-export function scopeOf(row: {
-  matterId: string | null;
-  leadId: string | null;
-}): RecordScope {
+export function scopeOf(row: { matterId: string | null; leadId: string | null }): RecordScope {
   if (row.matterId && row.leadId) {
     throw new Error(
-      "Record scope invariant: matterId and leadId are both set — the record belongs to exactly one of a matter or a lead."
+      "Record scope invariant: matterId and leadId are both set — the record belongs to exactly one of a matter or a lead.",
     );
   }
   if (row.matterId) return { kind: "matter", matterId: row.matterId };
   if (row.leadId) return { kind: "lead", leadId: row.leadId };
   throw new Error(
-    "Record scope invariant: neither matterId nor leadId is set — the record must belong to a matter or a lead."
+    "Record scope invariant: neither matterId nor leadId is set — the record must belong to a matter or a lead.",
   );
 }
 
 /** Prisma `where` / `data` fragment for a scope. */
-export function scopeWhere(
-  scope: RecordScope
-): { matterId: string } | { leadId: string } {
-  return scope.kind === "matter"
-    ? { matterId: scope.matterId }
-    : { leadId: scope.leadId };
+export function scopeWhere(scope: RecordScope): { matterId: string } | { leadId: string } {
+  return scope.kind === "matter" ? { matterId: scope.matterId } : { leadId: scope.leadId };
 }
 
 /** The scope's record page: `/matters/{id}` or `/intake/{id}`. */
 export function scopeBasePath(scope: RecordScope): string {
-  return scope.kind === "matter"
-    ? `/matters/${scope.matterId}`
-    : `/intake/${scope.leadId}`;
+  return scope.kind === "matter" ? `/matters/${scope.matterId}` : `/intake/${scope.leadId}`;
 }
 
 /** The scope's record page and its tab for `tab` ("tasks", "events",

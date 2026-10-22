@@ -30,8 +30,7 @@ export function ContactReactivateButton({
     if (
       !(await confirmAction({
         title: `Reactivate "${contactName}"?`,
-        description:
-          "They will appear in the directory, pickers and conflict-check lists again.",
+        description: "They will appear in the directory, pickers and conflict-check lists again.",
         confirmLabel: "Reactivate contact",
       }))
     ) {
@@ -48,12 +47,7 @@ export function ContactReactivateButton({
   };
 
   return (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={onReactivate}
-      disabled={pending}
-    >
+    <Button size="sm" variant="outline" onClick={onReactivate} disabled={pending}>
       <RotateCcw />
       {pending ? "Reactivating…" : "Reactivate"}
     </Button>

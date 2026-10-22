@@ -196,7 +196,7 @@ describe("logActivity — fire-and-forget on failure", () => {
         userId: "no-such-user",
         type: "note",
         title: "doomed",
-      })
+      }),
     ).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
@@ -234,7 +234,7 @@ describe("logActivityTx — atomic with the mutation", () => {
           type: "note",
           title: "doomed",
         });
-      })
+      }),
     ).rejects.toThrow();
 
     const m = await prisma.matter.findUnique({ where: { id: matterId } });

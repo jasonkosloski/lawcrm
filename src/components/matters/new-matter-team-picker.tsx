@@ -9,14 +9,8 @@
 
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
-import {
-  MATTER_TEAM_ROLES,
-  MATTER_TEAM_ROLE_LABEL,
-} from "@/lib/matter-team-constants";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { MATTER_TEAM_ROLES, MATTER_TEAM_ROLE_LABEL } from "@/lib/matter-team-constants";
 import type { NewMatterTeamSeat } from "@/lib/new-matter-constants";
 
 const SEAT_ROLES = MATTER_TEAM_ROLES.filter((r) => r !== "lead");
@@ -115,18 +109,14 @@ export function NewMatterTeamPicker({
       {canAdd && (
         <button
           type="button"
-          onClick={() =>
-            setSeats((prev) => [...prev, { userId: "", role: "co_counsel" }])
-          }
+          onClick={() => setSeats((prev) => [...prev, { userId: "", role: "co_counsel" }])}
           className="self-start inline-flex items-center gap-1 text-2xs text-brand-700 hover:underline"
         >
           <Plus size={11} />
           Add team member
         </button>
       )}
-      {error?.length ? (
-        <div className="text-2xs text-warn">{error[0]}</div>
-      ) : null}
+      {error?.length ? <div className="text-2xs text-warn">{error[0]}</div> : null}
     </div>
   );
 }

@@ -77,10 +77,10 @@ describe("records request merge fields", () => {
   test("resolve from a request context (date-only fields on the UTC grid)", () => {
     const { text, missing } = mergeTemplate(
       "{{custodian.name}}|{{custodian.organization}}|{{custodian.address}}|{{custodian.email}}|{{custodian.phone}}|{{request.subject}}|{{request.description}}|{{request.type}}|{{request.dateRangeStart}}|{{request.responseDueDate}}|{{request.sentDate}}|{{request.dateRangeEnd}}",
-      recordsCtx
+      recordsCtx,
     );
     expect(text).toBe(
-      "Memorial Hospital|Memorial Health|1 Hospital Way, Denver, CO 80202|records@memorial.example|(303) 555-0111|Chart 2024|All charts and billing.|CORA|January 5, 2024|May 1, 2026|April 15, 2026|[request.dateRangeEnd — not on file]"
+      "Memorial Hospital|Memorial Health|1 Hospital Way, Denver, CO 80202|records@memorial.example|(303) 555-0111|Chart 2024|All charts and billing.|CORA|January 5, 2024|May 1, 2026|April 15, 2026|[request.dateRangeEnd — not on file]",
     );
     expect(missing).toEqual(["request.dateRangeEnd"]);
   });
@@ -88,11 +88,9 @@ describe("records request merge fields", () => {
   test("outside a request they render the not-on-file placeholder", () => {
     const { text, missing, unresolved } = mergeTemplate(
       "{{custodian.name}} {{request.subject}}",
-      ctx
+      ctx,
     );
-    expect(text).toBe(
-      "[custodian.name — not on file] [request.subject — not on file]"
-    );
+    expect(text).toBe("[custodian.name — not on file] [request.subject — not on file]");
     expect(missing).toEqual(["custodian.name", "request.subject"]);
     expect(unresolved).toEqual([]);
   });
@@ -102,11 +100,9 @@ describe("mergeTemplate", () => {
   test("replaces known tokens with resolved values", () => {
     const { text, unresolved, missing } = mergeTemplate(
       "Re: {{matter.name}}, No. {{matter.caseNumber}}\nDear {{client.name}},",
-      ctx
+      ctx,
     );
-    expect(text).toBe(
-      "Re: Alvarez v. City of Aurora, No. 2026-CV-00481\nDear Maria Alvarez,"
-    );
+    expect(text).toBe("Re: Alvarez v. City of Aurora, No. 2026-CV-00481\nDear Maria Alvarez,");
     expect(unresolved).toEqual([]);
     expect(missing).toEqual([]);
   });
@@ -119,11 +115,9 @@ describe("mergeTemplate", () => {
   test("formats dates long-style in the context time zone", () => {
     const { text } = mergeTemplate(
       "{{today}} / incident {{matter.incidentDate}} / SOL {{matter.solDate}}",
-      ctx
+      ctx,
     );
-    expect(text).toBe(
-      "April 15, 2026 / incident January 10, 2025 / SOL January 10, 2027"
-    );
+    expect(text).toBe("April 15, 2026 / incident January 10, 2025 / SOL January 10, 2027");
   });
 
   test("unknown tokens are left intact AND reported in unresolved", () => {
@@ -131,9 +125,7 @@ describe("mergeTemplate", () => {
     const { text, unresolved, missing } = mergeTemplate(body, ctx);
     // The typo'd token survives verbatim — never silently swallowed —
     // and is reported once despite appearing twice.
-    expect(text).toBe(
-      "Dear {{client.nmae}}, re Alvarez v. City of Aurora {{client.nmae}}"
-    );
+    expect(text).toBe("Dear {{client.nmae}}, re Alvarez v. City of Aurora {{client.nmae}}");
     expect(unresolved).toEqual(["client.nmae"]);
     expect(missing).toEqual([]);
   });
@@ -142,11 +134,9 @@ describe("mergeTemplate", () => {
     const noClient: MergeContext = { ...ctx, client: null };
     const { text, unresolved, missing } = mergeTemplate(
       "To {{client.name}} at {{client.email}}",
-      noClient
+      noClient,
     );
-    expect(text).toBe(
-      "To [client.name — not on file] at [client.email — not on file]"
-    );
+    expect(text).toBe("To [client.name — not on file] at [client.email — not on file]");
     expect(missing).toEqual(["client.name", "client.email"]);
     expect(unresolved).toEqual([]);
   });
@@ -172,10 +162,10 @@ describe("mergeTemplate", () => {
   test("malformed tokens (hyphen / space) stay literal AND are reported", () => {
     const res = mergeTemplate(
       "Dear {{client-name}}, {{ client name }} and {{client-name}} again; {{matter.name}}",
-      ctx
+      ctx,
     );
     expect(res.text).toBe(
-      "Dear {{client-name}}, {{ client name }} and {{client-name}} again; Alvarez v. City of Aurora"
+      "Dear {{client-name}}, {{ client name }} and {{client-name}} again; Alvarez v. City of Aurora",
     );
     expect(res.unresolved).toEqual(["client-name", "client name"]);
     expect(res.missing).toEqual([]);
@@ -199,23 +189,23 @@ describe("date-only fields (ADR-012)", () => {
   test.each(["America/Denver", "Pacific/Honolulu", "UTC", "Asia/Tokyo", null])(
     "incident/SOL dates print on the stored calendar day in %s",
     (timeZone) => {
-      const res = mergeTemplate(
-        "{{matter.incidentDate}} | {{matter.solDate}}",
-        { ...ctx, timeZone }
-      );
+      const res = mergeTemplate("{{matter.incidentDate}} | {{matter.solDate}}", {
+        ...ctx,
+        timeZone,
+      });
       expect(res.text).toBe("January 10, 2025 | January 10, 2027");
-    }
+    },
   );
 
   test("{{today}} still follows the user's zone (it is a real instant)", () => {
     // 2026-04-16 03:00Z is Apr 15 9 PM in Denver, Apr 16 in Tokyo.
     const late = { ...ctx, today: new Date("2026-04-16T03:00:00Z") };
-    expect(
-      mergeTemplate("{{today}}", { ...late, timeZone: "America/Denver" }).text
-    ).toBe("April 15, 2026");
-    expect(
-      mergeTemplate("{{today}}", { ...late, timeZone: "Asia/Tokyo" }).text
-    ).toBe("April 16, 2026");
+    expect(mergeTemplate("{{today}}", { ...late, timeZone: "America/Denver" }).text).toBe(
+      "April 15, 2026",
+    );
+    expect(mergeTemplate("{{today}}", { ...late, timeZone: "Asia/Tokyo" }).text).toBe(
+      "April 16, 2026",
+    );
   });
 });
 
@@ -266,9 +256,7 @@ describe("field catalog", () => {
 
 describe("composeCityStateZip", () => {
   test("all parts", () => {
-    expect(composeCityStateZip("Denver", "CO", "80202")).toBe(
-      "Denver, CO 80202"
-    );
+    expect(composeCityStateZip("Denver", "CO", "80202")).toBe("Denver, CO 80202");
   });
   test("partial parts", () => {
     expect(composeCityStateZip("Denver", null, null)).toBe("Denver");

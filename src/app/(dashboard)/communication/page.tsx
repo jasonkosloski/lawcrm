@@ -25,13 +25,13 @@ import { CommunicationTabs } from "@/components/communication/communication-tabs
 import { MailboxRail } from "@/components/communication/mailbox-rail";
 import { ThreadList } from "@/components/communication/thread-list";
 import { ThreadReader } from "@/components/communication/thread-reader";
-import { MessengerMailboxRail, type MessengerFilter } from "@/components/communication/messenger-mailbox-rail";
+import {
+  MessengerMailboxRail,
+  type MessengerFilter,
+} from "@/components/communication/messenger-mailbox-rail";
 import { MessengerThreadList } from "@/components/communication/messenger-thread-list";
 import { MessengerThreadReader } from "@/components/communication/messenger-thread-reader";
-import {
-  MailboxDrawer,
-  MailboxDrawerProvider,
-} from "@/components/communication/mailbox-drawer";
+import { MailboxDrawer, MailboxDrawerProvider } from "@/components/communication/mailbox-drawer";
 import {
   defaultEmailFilter,
   getCommunicationCounts,
@@ -75,7 +75,7 @@ function parseView(raw: string | string[] | undefined): View {
 
 function parseEmailFilter(
   raw: string | string[] | undefined,
-  fallback: CommunicationFilter
+  fallback: CommunicationFilter,
 ): CommunicationFilter {
   const v = firstParam(raw);
   if (
@@ -96,26 +96,20 @@ function parseEmailFilter(
   return fallback;
 }
 
-function parseMessengerFilter(
-  raw: string | string[] | undefined
-): MessengerFilter {
+function parseMessengerFilter(raw: string | string[] | undefined): MessengerFilter {
   const v = firstParam(raw);
-  if (v === "unread" || v === "unfiled" || v === "pinned" || v === "all")
-    return v;
+  if (v === "unread" || v === "unfiled" || v === "pinned" || v === "all") return v;
   return "all";
 }
 
-export default async function CommunicationPage({
-  searchParams,
-}: PageProps<"/communication">) {
+export default async function CommunicationPage({ searchParams }: PageProps<"/communication">) {
   await requireUser();
   const sp = await searchParams;
   // Started now; only a ?view=portal request must wait for it to pick the
   // view. The other views read it from their first parallel wave.
   const canViewPortalP = currentUserHasPermission("portal.view_messages");
   const parsedView = parseView(sp.view);
-  const view: View =
-    parsedView === "portal" && !(await canViewPortalP) ? "email" : parsedView;
+  const view: View = parsedView === "portal" && !(await canViewPortalP) ? "email" : parsedView;
   const rawThread = firstParam(sp.thread);
   const threadId = typeof rawThread === "string" ? rawThread : null;
 
@@ -126,11 +120,7 @@ export default async function CommunicationPage({
       getMessengerUnreadCount(),
       getCurrentUserTimeZone(),
     ]);
-    const win = pageWindow(
-      portal.total,
-      parsePageParam(sp.page),
-      PORTAL_PAGE_SIZE
-    );
+    const win = pageWindow(portal.total, parsePageParam(sp.page), PORTAL_PAGE_SIZE);
     return (
       <>
         <TopBar
@@ -193,7 +183,7 @@ export default async function CommunicationPage({
       // The matter option list feeds both the log-call composer and
       // the edit dialog's re-file select.
       Promise.all([canLogCallP, canEditCallP]).then(([log, edit]) =>
-        log || edit ? getFilingMatterOptions() : []
+        log || edit ? getFilingMatterOptions() : [],
       ),
       canViewPortalP,
     ]);
@@ -236,10 +226,7 @@ export default async function CommunicationPage({
             tz={tz}
             action={
               canLogCall ? (
-                <LogCallButton
-                  contacts={callContacts}
-                  matters={callMatterOptions}
-                />
+                <LogCallButton contacts={callContacts} matters={callMatterOptions} />
               ) : null
             }
           />
@@ -335,9 +322,7 @@ export default async function CommunicationPage({
           filter={filter}
           matterId={matterIdParam}
           matterLabel={
-            matterIdParam
-              ? (pinnedMatters.find((m) => m.id === matterIdParam)?.name ?? null)
-              : null
+            matterIdParam ? (pinnedMatters.find((m) => m.id === matterIdParam)?.name ?? null) : null
           }
           selectedThreadId={selectedThread?.id ?? null}
           tz={tz}

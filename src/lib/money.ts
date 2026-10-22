@@ -25,10 +25,7 @@ export function roundMoney(value: MoneyInput): Prisma.Decimal {
 
 /** True when `value` has at most `places` decimal places. Used to
  *  validate hours precision (2 dp) before multiplying by a rate. */
-export function hasAtMostDecimals(
-  value: string | number,
-  places: number
-): boolean {
+export function hasAtMostDecimals(value: string | number, places: number): boolean {
   let d: Prisma.Decimal;
   try {
     d = new Prisma.Decimal(value);

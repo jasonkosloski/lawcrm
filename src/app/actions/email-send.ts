@@ -54,24 +54,14 @@ import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
 import { assertScopeAccess, assertScopeWritable } from "@/lib/scope-access";
 import { optionalScopeOf, scopeWhere, type RecordScope } from "@/lib/record-scope";
-import {
-  fileEmailThread,
-  revalidationPathsFor,
-  sameScope,
-} from "@/lib/email-filing";
+import { fileEmailThread, revalidationPathsFor, sameScope } from "@/lib/email-filing";
 import { logActivity } from "@/lib/activity-log";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import { statFile } from "@/lib/file-storage";
 import { isSendableStatus, REPLY_NEEDS_FILER_ERROR } from "@/lib/email-send-status";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
-import {
-  loadSendAttachments,
-  type SendAttachment,
-} from "@/lib/email-send-attachments";
+import { loadSendAttachments, type SendAttachment } from "@/lib/email-send-attachments";
 import { GoogleOAuthError } from "@/lib/google/oauth";
 import {
   buildMimeMessage,
@@ -171,7 +161,7 @@ const UPLOAD_SEND_TIMEOUT_MS = 280_000;
 
 export async function sendEmail(
   accountId: string,
-  input: SendEmailInput
+  input: SendEmailInput,
 ): Promise<SendEmailResult> {
   const userId = await requirePermission("communication.send_email");
 
@@ -246,8 +236,7 @@ export async function sendEmail(
   const sentAt = new Date();
   // Outbound boundary: strip anything the note profile disallows
   // BEFORE the MIME builder sees it (see module header).
-  const bodyHtml =
-    sanitizeUserHtml(input.bodyHtml) || plainTextToHtml(input.bodyText);
+  const bodyHtml = sanitizeUserHtml(input.bodyHtml) || plainTextToHtml(input.bodyText);
   const raw = tryBuildRaw({
     from: { name: account.user.name, email: account.emailAddress },
     to: to.addresses,
@@ -298,7 +287,7 @@ export async function sendEmail(
       });
     }
     revalidateSendSurfaces(
-      optionalScopeOf({ matterId: persisted.matterId, leadId: persisted.leadId })
+      optionalScopeOf({ matterId: persisted.matterId, leadId: persisted.leadId }),
     );
     return {
       ok: true,
@@ -313,7 +302,7 @@ export async function sendEmail(
 
 export async function replyToThread(
   threadId: string,
-  input: ReplyToThreadInput
+  input: ReplyToThreadInput,
 ): Promise<SendEmailResult> {
   const userId = await requirePermission("communication.send_email");
 
@@ -393,7 +382,7 @@ export async function replyToThread(
         ccRecipients: parseStoredRecipients(m.ccRecipients),
       })),
       thread.account.emailAddress,
-      input.replyAll ?? false
+      input.replyAll ?? false,
     );
   let to: MimeAddress[];
   let cc: MimeAddress[];
@@ -446,8 +435,7 @@ export async function replyToThread(
   if (to.length === 0) {
     return {
       ok: false,
-      error:
-        "Couldn't determine who to reply to — edit the recipients and try again.",
+      error: "Couldn't determine who to reply to — edit the recipients and try again.",
     };
   }
 
@@ -463,16 +451,12 @@ export async function replyToThread(
     const blocked = await assertScopeWritable(fileTo);
     if (blocked) return { ok: false, error: blocked };
   }
-  const loaded = await loadSendAttachments(
-    attachScope,
-    input.attachmentDocumentIds
-  );
+  const loaded = await loadSendAttachments(attachScope, input.attachmentDocumentIds);
   if (!loaded.ok) return loaded;
   const attachments = loaded.attachments;
   const sentAt = new Date();
   // Same outbound sanitize boundary as sendEmail (module header).
-  const bodyHtml =
-    sanitizeUserHtml(input.bodyHtml) || plainTextToHtml(input.bodyText);
+  const bodyHtml = sanitizeUserHtml(input.bodyHtml) || plainTextToHtml(input.bodyText);
   const raw = tryBuildRaw({
     from: {
       name: thread.account.user.name,
@@ -554,7 +538,7 @@ export async function replyToThread(
       });
     }
     revalidateSendSurfaces(
-      optionalScopeOf({ matterId: persisted.matterId, leadId: persisted.leadId })
+      optionalScopeOf({ matterId: persisted.matterId, leadId: persisted.leadId }),
     );
     return {
       ok: true,
@@ -569,9 +553,7 @@ export async function replyToThread(
 
 // ── Internals ────────────────────────────────────────────────────────────
 
-type AddressValidation =
-  | { ok: true; addresses: MimeAddress[] }
-  | { ok: false; error: string };
+type AddressValidation = { ok: true; addresses: MimeAddress[] } | { ok: false; error: string };
 
 /** isValidEmailAddress is deliberately permissive (it is shared with the
  *  client composer); on the server we additionally refuse control
@@ -587,15 +569,12 @@ function isSendableAddress(email: string): boolean {
 /** Subject / body size limits; returns a friendly error or null. */
 function checkContentSize(
   subject: string,
-  input: { bodyHtml: string; bodyText: string }
+  input: { bodyHtml: string; bodyText: string },
 ): string | null {
   if (subject.trim().length > MAX_SUBJECT_LENGTH) {
     return `The subject is too long (max ${MAX_SUBJECT_LENGTH} characters).`;
   }
-  if (
-    input.bodyText.length > MAX_BODY_LENGTH ||
-    input.bodyHtml.length > MAX_BODY_LENGTH
-  ) {
+  if (input.bodyText.length > MAX_BODY_LENGTH || input.bodyHtml.length > MAX_BODY_LENGTH) {
     return "The message is too large to send.";
   }
   return null;
@@ -604,7 +583,7 @@ function checkContentSize(
 /** buildMimeMessage throws on a header it cannot encode; turn that
  *  into a draft-preserving failure. */
 function tryBuildRaw(
-  input: Parameters<typeof buildMimeMessage>[0]
+  input: Parameters<typeof buildMimeMessage>[0],
 ): { ok: true; message: string } | { ok: false; error: string } {
   try {
     return { ok: true, message: buildMimeMessage(input) };
@@ -618,10 +597,7 @@ function tryBuildRaw(
   }
 }
 
-function validateAddresses(
-  raw: string[],
-  opts?: { allowEmpty?: boolean }
-): AddressValidation {
+function validateAddresses(raw: string[], opts?: { allowEmpty?: boolean }): AddressValidation {
   const addresses: MimeAddress[] = [];
   const seen = new Set<string>();
   if (raw.length > MAX_RECIPIENTS_PER_FIELD) {
@@ -663,7 +639,7 @@ const GMAIL_UPLOAD_SEND_URL =
  *  expected failure into a draft-preserving `{ ok: false }`. */
 async function postGmailSend(
   accountId: string,
-  opts: { message: string; threadId?: string; viaUpload: boolean }
+  opts: { message: string; threadId?: string; viaUpload: boolean },
 ): Promise<GmailSendSuccess | { ok: false; error: string }> {
   const metadata = opts.threadId ? { threadId: opts.threadId } : {};
   let res: Response;
@@ -745,9 +721,7 @@ function parseStoredRecipients(raw: string | null): MimeAddress[] {
     if (!Array.isArray(v)) return [];
     return v.filter(
       (e): e is MimeAddress =>
-        typeof e === "object" &&
-        e !== null &&
-        typeof (e as { email?: unknown }).email === "string"
+        typeof e === "object" && e !== null && typeof (e as { email?: unknown }).email === "string",
     );
   } catch {
     return [];
@@ -756,7 +730,7 @@ function parseStoredRecipients(raw: string | null): MimeAddress[] {
 
 function serializeRecipients(list: MimeAddress[]): string {
   return JSON.stringify(
-    list.map((a) => (a.name ? { name: a.name, email: a.email } : { email: a.email }))
+    list.map((a) => (a.name ? { name: a.name, email: a.email } : { email: a.email })),
   );
 }
 
@@ -943,7 +917,7 @@ async function persistSentMessage(opts: {
                   // unlinked) while Gmail took the upload; never point
                   // at bytes that are gone.
                   fileUrl: (await storedBytesExist(a.fileUrl)) ? a.fileUrl : null,
-                }))
+                })),
               ),
             },
           }

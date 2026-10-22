@@ -40,9 +40,7 @@ export function wrapEmailSignature(stored: string | null): string | null {
 }
 
 /** The user's signature as composer-ready HTML, or null for none. */
-export async function getEmailSignature(
-  userId: string
-): Promise<string | null> {
+export async function getEmailSignature(userId: string): Promise<string | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { emailSignature: true },

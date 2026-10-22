@@ -29,9 +29,7 @@ const CLERK_PROTECT = "https://*.protect.clerk.com";
  * (`pk_test_`/`pk_live_` + base64 of `<host>$`). Null when the key is
  * missing or malformed, in which case no Clerk sources are allowed.
  */
-export function clerkFrontendApiOrigin(
-  publishableKey: string | undefined
-): string | null {
+export function clerkFrontendApiOrigin(publishableKey: string | undefined): string | null {
   const m = /^pk_(?:test|live)_(.+)$/.exec(publishableKey ?? "");
   if (!m) return null;
   let host: string;
@@ -57,7 +55,7 @@ export function nonceFromCsp(csp: string | null | undefined): string | undefined
  *  need the nonce. Dev adds what React's debugging and HMR need. */
 export function pageCsp(
   nonce: string,
-  opts: { isDev: boolean; clerkPublishableKey?: string }
+  opts: { isDev: boolean; clerkPublishableKey?: string },
 ): string {
   const clerk = clerkFrontendApiOrigin(opts.clerkPublishableKey);
   const clerkScript = clerk ? ` ${clerk} ${CLERK_CHALLENGES} ${CLERK_PROTECT}` : "";

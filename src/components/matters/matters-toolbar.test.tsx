@@ -10,13 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  within,
-} from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
 const router = { replace: vi.fn() };
 let search = "";
@@ -30,12 +24,7 @@ import { EMPTY_FILTER } from "@/lib/matters-filters";
 import { MattersToolbar } from "./matters-toolbar";
 import { MattersViewToggle } from "./matters-view-toggle";
 import { SortableHead, SortableHeader } from "./sortable-header";
-import {
-  Table,
-  TableBody,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 
 const options = {
   areas: ["§1983", "Housing/FHA"],
@@ -52,7 +41,7 @@ function renderToolbar(filter = EMPTY_FILTER) {
       view="table"
       visibleCount={3}
       totalCount={3}
-    />
+    />,
   );
 }
 
@@ -144,7 +133,8 @@ describe("MattersToolbar — Clear all visibility (F781)", () => {
   });
 
   test("clears every filter key but keeps sort and view", () => {
-    search = "q=a&area=x&stage=y&lead=1&fee=f&trust=has&deadline=overdue&archived=1&pinned=1&show_closed=1&sort=name&dir=asc&view=kanban";
+    search =
+      "q=a&area=x&stage=y&lead=1&fee=f&trust=has&deadline=overdue&archived=1&pinned=1&show_closed=1&sort=name&dir=asc&view=kanban";
     renderToolbar({ ...EMPTY_FILTER, q: "a" });
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(urls()).toEqual(["?sort=name&dir=asc&view=kanban"]);
@@ -179,9 +169,7 @@ describe("MattersViewToggle", () => {
 
 describe("SortableHeader — three-state cycle (F318, F785)", () => {
   test("asc -> desc -> cleared", () => {
-    const { rerender } = render(
-      <SortableHeader field="name">Matter</SortableHeader>
-    );
+    const { rerender } = render(<SortableHeader field="name">Matter</SortableHeader>);
     fireEvent.click(screen.getByRole("button", { name: "Matter" }));
     expect(urls().at(-1)).toBe("?sort=name&dir=asc");
 
@@ -230,24 +218,15 @@ describe("SortableHead — aria-sort (F782)", () => {
 
   test("none when the column is not the active sort", () => {
     render(head("name"));
-    expect(screen.getByRole("columnheader")).toHaveAttribute(
-      "aria-sort",
-      "none"
-    );
+    expect(screen.getByRole("columnheader")).toHaveAttribute("aria-sort", "none");
   });
 
   test("ascending / descending follow the URL", () => {
     search = "sort=name&dir=asc";
     const { rerender } = render(head("name"));
-    expect(screen.getByRole("columnheader")).toHaveAttribute(
-      "aria-sort",
-      "ascending"
-    );
+    expect(screen.getByRole("columnheader")).toHaveAttribute("aria-sort", "ascending");
     search = "sort=name&dir=desc";
     rerender(head("name"));
-    expect(screen.getByRole("columnheader")).toHaveAttribute(
-      "aria-sort",
-      "descending"
-    );
+    expect(screen.getByRole("columnheader")).toHaveAttribute("aria-sort", "descending");
   });
 });

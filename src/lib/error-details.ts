@@ -12,13 +12,11 @@ export function errorDetails(error: unknown): {
   message: string | null;
   digest: string | null;
 } {
-  const message =
-    error instanceof Error && error.message ? error.message : null;
+  const message = error instanceof Error && error.message ? error.message : null;
   const rawDigest =
     typeof error === "object" && error !== null && "digest" in error
       ? (error as { digest?: unknown }).digest
       : null;
-  const digest =
-    typeof rawDigest === "string" && rawDigest ? rawDigest : null;
+  const digest = typeof rawDigest === "string" && rawDigest ? rawDigest : null;
   return { message, digest };
 }

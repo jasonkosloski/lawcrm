@@ -9,10 +9,7 @@
  */
 
 /** "5 entries", "2 expenses" or "5 entries + 2 expenses". */
-export function bundleCountLabel(
-  entryCount: number,
-  expenseCount: number
-): string {
+export function bundleCountLabel(entryCount: number, expenseCount: number): string {
   const parts: string[] = [];
   if (entryCount > 0) {
     parts.push(`${entryCount} ${entryCount === 1 ? "entry" : "entries"}`);

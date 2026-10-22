@@ -131,10 +131,7 @@ describe("validation", () => {
   });
 
   test("rejects a non-numeric duration", async () => {
-    const res = await logCall(
-      callLogInitialState,
-      callForm({ durationMin: "5.5h" })
-    );
+    const res = await logCall(callLogInitialState, callForm({ durationMin: "5.5h" }));
     expect(res.status).toBe("error");
     expect(res.errors?.durationMin).toBeTruthy();
   });
@@ -144,26 +141,20 @@ describe("validation", () => {
       data: { name: "No Phone", type: "witness" },
       select: { id: true },
     });
-    const res = await logCall(
-      callLogInitialState,
-      callForm({ contactId: bare.id })
-    );
+    const res = await logCall(callLogInitialState, callForm({ contactId: bare.id }));
     expect(res.status).toBe("error");
     expect(res.errors?.phone?.[0]).toMatch(/no phone/i);
   });
 
   test("rejects an unknown matter", async () => {
     // Unknown == hidden: the matter wall answers with notFound().
-    await expect(
-      logCall(callLogInitialState, callForm({ matterId: "nope" }))
-    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
+    await expect(logCall(callLogInitialState, callForm({ matterId: "nope" }))).rejects.toThrow(
+      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/,
+    );
   });
 
   test("rejects a malformed occurredAt with a field error", async () => {
-    const res = await logCall(
-      callLogInitialState,
-      callForm({ occurredAt: "not-a-date" })
-    );
+    const res = await logCall(callLogInitialState, callForm({ occurredAt: "not-a-date" }));
     expect(res.status).toBe("error");
     expect(res.errors?.occurredAt).toBeTruthy();
   });
@@ -173,10 +164,7 @@ describe("validation", () => {
     // datetime-local value. `new Date("2026-06-10")` reads it as UTC
     // midnight - a day early for anyone west of UTC. It is pinned to
     // midnight of that day in the user's profile zone instead.
-    const res = await logCall(
-      callLogInitialState,
-      callForm({ occurredAt: "2026-06-10" })
-    );
+    const res = await logCall(callLogInitialState, callForm({ occurredAt: "2026-06-10" }));
     expect(res.status).toBe("ok");
     const item = await prisma.messengerItem.findFirst({
       select: { occurredAt: true },
@@ -185,30 +173,21 @@ describe("validation", () => {
   });
 
   test("rejects a junk typed phone instead of falling back to the number on file", async () => {
-    const res = await logCall(
-      callLogInitialState,
-      callForm({ phone: "n/a" })
-    );
+    const res = await logCall(callLogInitialState, callForm({ phone: "n/a" }));
     expect(res.status).toBe("error");
     expect(res.errors?.phone?.[0]).toMatch(/valid phone/i);
     expect(await prisma.messengerThread.count()).toBe(0);
   });
 
   test("rejects a 7-digit local number and an extension-only mess", async () => {
-    const res = await logCall(
-      callLogInitialState,
-      callForm({ phone: "555-0182" })
-    );
+    const res = await logCall(callLogInitialState, callForm({ phone: "555-0182" }));
     expect(res.status).toBe("error");
     expect(res.errors?.phone?.[0]).toMatch(/valid phone/i);
   });
 
   test("an extension on a typed number does not fork a new thread", async () => {
     await logCall(callLogInitialState, callForm());
-    const res = await logCall(
-      callLogInitialState,
-      callForm({ phone: "(303) 555-0182 x123" })
-    );
+    const res = await logCall(callLogInitialState, callForm({ phone: "(303) 555-0182 x123" }));
     expect(res.status).toBe("ok");
     expect(await prisma.messengerThread.count()).toBe(1);
   });
@@ -244,7 +223,7 @@ describe("occurredAt time zone (ADR-012)", () => {
       expect(prefill).toBe("2026-06-10T14:30");
       const res = await updateCallLog(
         callLogInitialState,
-        updateForm(item.id, { occurredAt: prefill, summary: `edit ${i}` })
+        updateForm(item.id, { occurredAt: prefill, summary: `edit ${i}` }),
       );
       expect(res.status).toBe("ok");
     }
@@ -259,10 +238,7 @@ describe("occurredAt time zone (ADR-012)", () => {
 
 describe("happy path", () => {
   test("bootstraps a manual account, thread, and call item", async () => {
-    const res = await logCall(
-      callLogInitialState,
-      callForm({ matterId })
-    );
+    const res = await logCall(callLogInitialState, callForm({ matterId }));
     expect(res.status).toBe("ok");
     expect(requirePermission).toHaveBeenCalledWith("communication.log_call");
 
@@ -305,9 +281,7 @@ describe("happy path", () => {
     // Matter surfaces refresh - including the Communication tab's
     // Phone channel.
     expect(revalidatePath).toHaveBeenCalledWith("/communication");
-    expect(revalidatePath).toHaveBeenCalledWith(
-      `/matters/${matterId}/communication`
-    );
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/communication`);
   });
 
   test("the first call filed to a matter does not make it the thread's default", async () => {
@@ -319,10 +293,7 @@ describe("happy path", () => {
     });
     // First call is filed to matter A; the second is "No matter (general)".
     await logCall(callLogInitialState, callForm({ matterId }));
-    await logCall(
-      callLogInitialState,
-      callForm({ occurredAt: "2026-06-11T09:00", matterId: "" })
-    );
+    await logCall(callLogInitialState, callForm({ occurredAt: "2026-06-11T09:00", matterId: "" }));
     const thread = await prisma.messengerThread.findFirstOrThrow();
     expect(thread.defaultMatterId).toBeNull();
 
@@ -338,7 +309,7 @@ describe("happy path", () => {
   test("missed calls store zero duration even when minutes were entered", async () => {
     const res = await logCall(
       callLogInitialState,
-      callForm({ outcome: "missed", durationMin: "10", direction: "inbound" })
+      callForm({ outcome: "missed", durationMin: "10", direction: "inbound" }),
     );
     expect(res.status).toBe("ok");
     const item = await prisma.messengerItem.findFirstOrThrow();
@@ -349,10 +320,7 @@ describe("happy path", () => {
   });
 
   test("a typed phone overrides the contact's number on file", async () => {
-    const res = await logCall(
-      callLogInitialState,
-      callForm({ phone: "720-555-0000" })
-    );
+    const res = await logCall(callLogInitialState, callForm({ phone: "720-555-0000" }));
     expect(res.status).toBe("ok");
     const thread = await prisma.messengerThread.findFirstOrThrow();
     expect(thread.contactPhone).toBe("+17205550000");
@@ -361,10 +329,7 @@ describe("happy path", () => {
 
 /** FormData for updateCallLog — same field names as the composer's
  *  edit mode. */
-function updateForm(
-  itemId: string,
-  overrides: Record<string, string> = {}
-): FormData {
+function updateForm(itemId: string, overrides: Record<string, string> = {}): FormData {
   const fd = new FormData();
   const defaults: Record<string, string> = {
     itemId,
@@ -419,7 +384,7 @@ describe("contact / number conflicts", () => {
     });
     const res = await logCall(
       callLogInitialState,
-      callForm({ contactId: other.id, occurredAt: "2026-06-11T09:00" })
+      callForm({ contactId: other.id, occurredAt: "2026-06-11T09:00" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.phone?.[0]).toMatch(/already linked to Maria Alvarez/);
@@ -431,16 +396,13 @@ describe("contact / number conflicts", () => {
     expect(
       await prisma.activityLog.count({
         where: { title: { contains: "Bob Reyes" } },
-      })
+      }),
     ).toBe(0);
   });
 
   test("the same contact may keep logging on their own number", async () => {
     await logCall(callLogInitialState, callForm());
-    const res = await logCall(
-      callLogInitialState,
-      callForm({ occurredAt: "2026-06-11T09:00" })
-    );
+    const res = await logCall(callLogInitialState, callForm({ occurredAt: "2026-06-11T09:00" }));
     expect(res.status).toBe("ok");
     expect(await prisma.messengerItem.count()).toBe(2);
   });
@@ -450,9 +412,7 @@ describe("messenger account selection", () => {
   test("prefers a real provider line over the manual placeholder, even if the placeholder is older", async () => {
     // First log bootstraps the manual placeholder (oldest, active)...
     await logCall(callLogInitialState, callForm());
-    expect((await prisma.messengerAccount.findFirstOrThrow()).provider).toBe(
-      "manual"
-    );
+    expect((await prisma.messengerAccount.findFirstOrThrow()).provider).toBe("manual");
     // ...then a real line is connected.
     const quo = await prisma.messengerAccount.create({
       data: { provider: "quo", phoneNumber: "+13035550100" },
@@ -461,10 +421,7 @@ describe("messenger account selection", () => {
       data: { name: "New Person", type: "client", phone: "720-555-0000" },
       select: { id: true },
     });
-    const res = await logCall(
-      callLogInitialState,
-      callForm({ contactId: other.id })
-    );
+    const res = await logCall(callLogInitialState, callForm({ contactId: other.id }));
     expect(res.status).toBe("ok");
     const thread = await prisma.messengerThread.findFirstOrThrow({
       where: { contactPhone: "+17205550000" },
@@ -474,19 +431,17 @@ describe("messenger account selection", () => {
 
   test("a concurrent bootstrap of the manual account is absorbed (P2002 -> re-read)", async () => {
     await prisma.firm.updateMany({ data: { phone: "(303) 555-0100" } });
-    const realCreate = prisma.messengerAccount.create.bind(
-      prisma.messengerAccount
-    );
-    const spy = vi
-      .spyOn(prisma.messengerAccount, "create")
-      .mockImplementationOnce((async (args: never) => {
-        // The racing request wins: its row exists, ours collides.
-        await realCreate(args);
-        throw new Prisma.PrismaClientKnownRequestError("dup", {
-          code: "P2002",
-          clientVersion: "test",
-        });
-      }) as never);
+    const realCreate = prisma.messengerAccount.create.bind(prisma.messengerAccount);
+    const spy = vi.spyOn(prisma.messengerAccount, "create").mockImplementationOnce((async (
+      args: never,
+    ) => {
+      // The racing request wins: its row exists, ours collides.
+      await realCreate(args);
+      throw new Prisma.PrismaClientKnownRequestError("dup", {
+        code: "P2002",
+        clientVersion: "test",
+      });
+    }) as never);
     const res = await logCall(callLogInitialState, callForm());
     expect(spy).toHaveBeenCalledTimes(1);
     expect(res.status).toBe("ok");
@@ -500,7 +455,7 @@ describe("messenger account selection", () => {
         new Prisma.PrismaClientKnownRequestError("dup", {
           code: "P2002",
           clientVersion: "test",
-        })
+        }),
       )) as never);
     // The retry falls through to the real implementation.
     const res = await logCall(callLogInitialState, callForm());
@@ -523,7 +478,7 @@ describe("updateCallLog", () => {
         durationMin: "12",
         matterId,
         summary: "Corrected: they called us",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     expect(requirePermission).toHaveBeenCalledWith("communication.edit_call");
@@ -549,9 +504,7 @@ describe("updateCallLog", () => {
 
     // Both the inbox and the newly-filed matter surfaces refresh.
     expect(revalidatePath).toHaveBeenCalledWith("/communication");
-    expect(revalidatePath).toHaveBeenCalledWith(
-      `/matters/${matterId}/communication`
-    );
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/communication`);
   });
 
   test("changing outcome to missed zeroes the duration", async () => {
@@ -560,7 +513,7 @@ describe("updateCallLog", () => {
 
     const res = await updateCallLog(
       callLogInitialState,
-      updateForm(item.id, { outcome: "missed", durationMin: "10" })
+      updateForm(item.id, { outcome: "missed", durationMin: "10" }),
     );
     expect(res.status).toBe("ok");
     const updated = await prisma.messengerItem.findUniqueOrThrow({
@@ -572,10 +525,7 @@ describe("updateCallLog", () => {
 
   test("recomputes lastItemAt when the newest call is edited earlier", async () => {
     await logCall(callLogInitialState, callForm()); // 06-10 14:30
-    await logCall(
-      callLogInitialState,
-      callForm({ occurredAt: "2026-06-11T09:00" })
-    );
+    await logCall(callLogInitialState, callForm({ occurredAt: "2026-06-11T09:00" }));
     const late = await prisma.messengerItem.findFirstOrThrow({
       where: { occurredAt: JUN11_0900 },
     });
@@ -584,7 +534,7 @@ describe("updateCallLog", () => {
     // fall back to the remaining newest item (06-10), not stay stale.
     const res = await updateCallLog(
       callLogInitialState,
-      updateForm(late.id, { occurredAt: "2026-06-05T08:00" })
+      updateForm(late.id, { occurredAt: "2026-06-05T08:00" }),
     );
     expect(res.status).toBe("ok");
     const thread = await prisma.messengerThread.findFirstOrThrow();
@@ -597,7 +547,7 @@ describe("updateCallLog", () => {
 
     await updateCallLog(
       callLogInitialState,
-      updateForm(item.id, { occurredAt: "2026-06-20T16:00" })
+      updateForm(item.id, { occurredAt: "2026-06-20T16:00" }),
     );
     const thread = await prisma.messengerThread.findFirstOrThrow();
     expect(thread.lastItemAt).toEqual(JUN20_1600);
@@ -607,7 +557,7 @@ describe("updateCallLog", () => {
     const { itemId } = await seedProviderCall();
     const res = await updateCallLog(
       callLogInitialState,
-      updateForm(itemId, { summary: "tamper attempt" })
+      updateForm(itemId, { summary: "tamper attempt" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.form?.[0]).toMatch(/manually logged/i);
@@ -623,18 +573,12 @@ describe("updateCallLog", () => {
     await logCall(callLogInitialState, callForm());
     const item = await prisma.messengerItem.findFirstOrThrow();
     await expect(
-      updateCallLog(
-        callLogInitialState,
-        updateForm(item.id, { matterId: "nope" })
-      )
+      updateCallLog(callLogInitialState, updateForm(item.id, { matterId: "nope" })),
     ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
   });
 
   test("errors cleanly on a vanished item", async () => {
-    const res = await updateCallLog(
-      callLogInitialState,
-      updateForm("gone")
-    );
+    const res = await updateCallLog(callLogInitialState, updateForm("gone"));
     expect(res.status).toBe("error");
     expect(res.errors?.form?.[0]).toMatch(/not found/i);
   });
@@ -646,7 +590,7 @@ describe("updateCallLog", () => {
       new Prisma.PrismaClientKnownRequestError("gone", {
         code: "P2025",
         clientVersion: "test",
-      })
+      }),
     );
     const res = await updateCallLog(callLogInitialState, updateForm(item.id));
     expect(res.status).toBe("error");
@@ -656,10 +600,7 @@ describe("updateCallLog", () => {
   test("a 'No matter' correction clears the filing and leaves nothing inherited", async () => {
     await logCall(callLogInitialState, callForm({ matterId }));
     const item = await prisma.messengerItem.findFirstOrThrow();
-    const res = await updateCallLog(
-      callLogInitialState,
-      updateForm(item.id, { matterId: "" })
-    );
+    const res = await updateCallLog(callLogInitialState, updateForm(item.id, { matterId: "" }));
     expect(res.status).toBe("ok");
     expect(await listMessengerItemsForMatter(matterId)).toHaveLength(0);
   });
@@ -669,7 +610,7 @@ describe("updateCallLog", () => {
     const item = await prisma.messengerItem.findFirstOrThrow();
     const res = await updateCallLog(
       callLogInitialState,
-      updateForm(item.id, { matterId: "", occurredAt: "2026-06-12T10:00" })
+      updateForm(item.id, { matterId: "", occurredAt: "2026-06-12T10:00" }),
     );
     expect(res.status).toBe("ok");
 
@@ -726,7 +667,7 @@ describe("updateCallLog", () => {
       updateForm(inherited.id, {
         matterId: matterB.matterId,
         occurredAt: "2026-06-01T08:00",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const moved = await prisma.activityLog.findFirstOrThrow({
@@ -739,23 +680,16 @@ describe("updateCallLog", () => {
 describe("deleteCallLog", () => {
   test("deletes and recomputes lastItemAt from the survivors", async () => {
     await logCall(callLogInitialState, callForm()); // 06-10 14:30
-    await logCall(
-      callLogInitialState,
-      callForm({ occurredAt: "2026-06-11T09:00" })
-    );
+    await logCall(callLogInitialState, callForm({ occurredAt: "2026-06-11T09:00" }));
     const late = await prisma.messengerItem.findFirstOrThrow({
       where: { occurredAt: JUN11_0900 },
     });
 
     const res = await deleteCallLog(late.id);
     expect(res.ok).toBe(true);
-    expect(requirePermission).toHaveBeenCalledWith(
-      "communication.delete_call"
-    );
+    expect(requirePermission).toHaveBeenCalledWith("communication.delete_call");
 
-    expect(
-      await prisma.messengerItem.findUnique({ where: { id: late.id } })
-    ).toBeNull();
+    expect(await prisma.messengerItem.findUnique({ where: { id: late.id } })).toBeNull();
     // lastItemAt no longer points at the deleted item.
     const thread = await prisma.messengerThread.findFirstOrThrow();
     expect(thread.lastItemAt).toEqual(JUN10_1430);
@@ -855,9 +789,7 @@ describe("deleteCallLog", () => {
     });
     const res = await deleteCallLog(only.id);
     expect(res.ok).toBe(true);
-    expect(
-      await prisma.messengerThread.findUnique({ where: { id: thread.id } })
-    ).toBeNull();
+    expect(await prisma.messengerThread.findUnique({ where: { id: thread.id } })).toBeNull();
   });
 
   test("a delete racing another delete returns 'not found', not a crash", async () => {
@@ -867,7 +799,7 @@ describe("deleteCallLog", () => {
       new Prisma.PrismaClientKnownRequestError("gone", {
         code: "P2025",
         clientVersion: "test",
-      })
+      }),
     );
     const res = await deleteCallLog(item.id);
     expect(res.ok).toBe(false);
@@ -915,12 +847,8 @@ describe("deleteCallLog", () => {
     const res = await deleteCallLog(itemId);
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/manually logged/i);
-    expect(
-      await prisma.messengerItem.findUnique({ where: { id: itemId } })
-    ).not.toBeNull();
-    expect(
-      await prisma.messengerThread.findUnique({ where: { id: threadId } })
-    ).not.toBeNull();
+    expect(await prisma.messengerItem.findUnique({ where: { id: itemId } })).not.toBeNull();
+    expect(await prisma.messengerThread.findUnique({ where: { id: threadId } })).not.toBeNull();
   });
 
   test("errors cleanly on a vanished item", async () => {
@@ -935,7 +863,7 @@ describe("thread reuse", () => {
     await logCall(callLogInitialState, callForm());
     const res = await logCall(
       callLogInitialState,
-      callForm({ occurredAt: "2026-06-11T09:00", summary: "Follow-up" })
+      callForm({ occurredAt: "2026-06-11T09:00", summary: "Follow-up" }),
     );
     expect(res.status).toBe("ok");
 
@@ -949,10 +877,7 @@ describe("thread reuse", () => {
 
   test("logging an older call does not regress lastItemAt", async () => {
     await logCall(callLogInitialState, callForm());
-    await logCall(
-      callLogInitialState,
-      callForm({ occurredAt: "2026-06-01T08:00" })
-    );
+    await logCall(callLogInitialState, callForm({ occurredAt: "2026-06-01T08:00" }));
     const thread = await prisma.messengerThread.findFirstOrThrow();
     expect(thread.lastItemAt).toEqual(JUN10_1430);
   });

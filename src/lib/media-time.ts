@@ -59,7 +59,7 @@ export function parseMediaTime(input: string): number | null {
 /** "0:42" or "0:42–1:05" — the rail/evidence-page span notation. */
 export function formatMediaSpan(
   timeSeconds: number,
-  endSeconds: number | null | undefined
+  endSeconds: number | null | undefined,
 ): string {
   const start = formatMediaTime(timeSeconds);
   if (endSeconds === null || endSeconds === undefined) return start;

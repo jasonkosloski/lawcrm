@@ -85,7 +85,7 @@ describe("createRecordsRequestType", () => {
   test("range checks on amount and follow-up days", async () => {
     const res = await createRecordsRequestType(
       IDLE,
-      fd({ responseAmount: "366", followUpDays: "0" })
+      fd({ responseAmount: "366", followUpDays: "0" }),
     );
     expect(res.errors?.responseAmount).toBeTruthy();
     expect(res.errors?.followUpDays).toBeTruthy();

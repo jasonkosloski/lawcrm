@@ -58,10 +58,7 @@ export function describeBundle(entryCount: number, expenseCount: number): string
  *  caller then retries by re-running its WHOLE transaction — a
  *  failed INSERT aborts the Postgres transaction (SQLSTATE 25P02),
  *  so a retry inside the same transaction can never succeed. */
-export async function nextInvoiceNumber(
-  tx: Tx,
-  year: string
-): Promise<string> {
+export async function nextInvoiceNumber(tx: Tx, year: string): Promise<string> {
   const prefix = `${year}-`;
   // MAX over the leading digits of the suffix, computed in the DB so
   // the year's invoices are never loaded. Non-numeric (hand-crafted)
@@ -85,16 +82,12 @@ export const INVOICE_NUMBER_ATTEMPTS = 5;
  *  INVOICE_NUMBER_ATTEMPTS times. Each run recomputes the number from
  *  committed rows. Generate locks are per-matter, so concurrent mints
  *  on different matters can race for the same number repeatedly. */
-export async function retryOnInvoiceNumberCollision<T>(
-  mint: () => Promise<T>
-): Promise<T> {
+export async function retryOnInvoiceNumberCollision<T>(mint: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await mint();
     } catch (err) {
-      const collided =
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002";
+      const collided = err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
       if (!collided || attempt >= INVOICE_NUMBER_ATTEMPTS) throw err;
     }
   }
@@ -106,7 +99,7 @@ export async function retryOnInvoiceNumberCollision<T>(
 export async function adjustTrustBalance(
   tx: Tx,
   matterId: string,
-  deltaDecimal: Prisma.Decimal
+  deltaDecimal: Prisma.Decimal,
 ): Promise<{ ok: boolean; error?: string }> {
   // Row-lock the matter before reading: the read-check-write on
   // trustBalance is a lost-update hazard under READ COMMITTED —
@@ -139,10 +132,7 @@ export async function adjustTrustBalance(
  *  READ COMMITTED; FOR UPDATE queues a competing disbursement until
  *  this transaction commits. Lock order is invoice → matter
  *  everywhere an invoice is involved, so deadlocks are impossible. */
-export async function lockMatterTrustBalance(
-  tx: Tx,
-  matterId: string
-): Promise<Prisma.Decimal> {
+export async function lockMatterTrustBalance(tx: Tx, matterId: string): Promise<Prisma.Decimal> {
   await tx.$queryRaw`SELECT id FROM matters WHERE id = ${matterId} FOR UPDATE`;
   const matter = await tx.matter.findUnique({
     where: { id: matterId },
@@ -170,7 +160,7 @@ export async function payInvoiceFromTrust(
     reference: string | null;
     paymentDescription: string | null;
     userId: string;
-  }
+  },
 ): Promise<string> {
   const { invoice, amount } = args;
   const trustTxn = await tx.trustTransaction.create({
@@ -208,12 +198,10 @@ export async function payInvoiceFromTrust(
 /** Sum of per-line amounts, each rounded to cents first (invoice
  *  convention: total = sum of the lines as printed). Null amounts
  *  (unpriced / contingent lines) contribute nothing. */
-export function sumLineAmounts(
-  amounts: ReadonlyArray<Prisma.Decimal | null>
-): Prisma.Decimal {
+export function sumLineAmounts(amounts: ReadonlyArray<Prisma.Decimal | null>): Prisma.Decimal {
   return amounts.reduce<Prisma.Decimal>(
     (acc, a) => (a ? acc.add(roundMoney(a)) : acc),
-    new Prisma.Decimal(0)
+    new Prisma.Decimal(0),
   );
 }
 
@@ -226,10 +214,10 @@ export async function linkWipToInvoice(
   tx: Tx,
   invoiceId: string,
   entries: ReadonlyArray<{ id: string }>,
-  expenseRows: ReadonlyArray<{ id: string }>
+  expenseRows: ReadonlyArray<{ id: string }>,
 ): Promise<void> {
   const changed = new UserFacingError(
-    "Billable time or expenses changed while the invoice was being created — refresh and try again."
+    "Billable time or expenses changed while the invoice was being created — refresh and try again.",
   );
   if (entries.length > 0) {
     const res = await tx.timeEntry.updateMany({

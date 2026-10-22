@@ -23,8 +23,8 @@ describe("buildFlagAnchor — time + transcript quote", () => {
       buildFlagAnchor(
         "time",
         text({ timeText: "1:15", endText: "2:30", quoteText: "  red light " }),
-        false
-      )
+        false,
+      ),
     ).toEqual({
       ok: true,
       anchor: { timeSeconds: 75, endSeconds: 150, quote: "red light" },
@@ -32,7 +32,7 @@ describe("buildFlagAnchor — time + transcript quote", () => {
     const res = buildFlagAnchor(
       "time",
       text({ timeText: "1:15", quoteText: "x".repeat(MAX_QUOTE_CHARS + 9) }),
-      false
+      false,
     );
     expect(res.ok && res.anchor.quote).toHaveLength(MAX_QUOTE_CHARS);
   });
@@ -52,9 +52,10 @@ describe("buildFlagAnchor — time", () => {
   });
 
   test("span with a later end", () => {
-    expect(
-      buildFlagAnchor("time", text({ timeText: "1:15", endText: "2:30" }), false)
-    ).toEqual({ ok: true, anchor: { timeSeconds: 75, endSeconds: 150 } });
+    expect(buildFlagAnchor("time", text({ timeText: "1:15", endText: "2:30" }), false)).toEqual({
+      ok: true,
+      anchor: { timeSeconds: 75, endSeconds: 150 },
+    });
   });
 
   test.each([
@@ -72,7 +73,9 @@ describe("buildFlagAnchor — time", () => {
 
 describe("buildFlagAnchor — page", () => {
   test("a quote selected on a page rides with the page", () => {
-    expect(buildFlagAnchor("page", text({ pageText: "4", quoteText: "  red light " }), false)).toEqual({
+    expect(
+      buildFlagAnchor("page", text({ pageText: "4", quoteText: "  red light " }), false),
+    ).toEqual({
       ok: true,
       anchor: { pageNumber: 4, quote: "red light" },
     });
@@ -134,28 +137,30 @@ describe("buildFlagAnchor — page", () => {
     "rejects page %s",
     (pageText) => {
       expect(buildFlagAnchor("page", text({ pageText }), false).ok).toBe(false);
-    }
+    },
   );
 
   test("the cap itself is accepted", () => {
-    expect(
-      buildFlagAnchor("page", text({ pageText: String(MAX_PDF_PAGE) }), false)
-    ).toEqual({ ok: true, anchor: { pageNumber: MAX_PDF_PAGE } });
+    expect(buildFlagAnchor("page", text({ pageText: String(MAX_PDF_PAGE) }), false)).toEqual({
+      ok: true,
+      anchor: { pageNumber: MAX_PDF_PAGE },
+    });
   });
 });
 
 describe("buildFlagAnchor — quote", () => {
   test("trims and keeps the text", () => {
-    expect(
-      buildFlagAnchor("quote", text({ quoteText: "  I don't recall.  " }), false)
-    ).toEqual({ ok: true, anchor: { quote: "I don't recall." } });
+    expect(buildFlagAnchor("quote", text({ quoteText: "  I don't recall.  " }), false)).toEqual({
+      ok: true,
+      anchor: { quote: "I don't recall." },
+    });
   });
 
   test("caps at MAX_QUOTE_CHARS", () => {
     const res = buildFlagAnchor(
       "quote",
       text({ quoteText: "x".repeat(MAX_QUOTE_CHARS + 50) }),
-      false
+      false,
     );
     expect(res.ok && res.anchor.quote).toHaveLength(MAX_QUOTE_CHARS);
   });

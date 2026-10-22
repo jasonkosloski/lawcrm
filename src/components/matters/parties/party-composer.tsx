@@ -65,8 +65,7 @@ export function PartyComposer({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [organization, setOrganization] = useState("");
-  const [representation, setRepresentation] =
-    useState<RepresentationChoice>("unknown");
+  const [representation, setRepresentation] = useState<RepresentationChoice>("unknown");
   // Representation picker — mirrors the main party picker pattern:
   // either select an existing Contact (repSelectedId) or type a name
   // to create a new one inline. The typed query doubles as the new
@@ -133,14 +132,10 @@ export function PartyComposer({
   };
 
   const errs = state.errors ?? {};
-  const selected = selectedId
-    ? contacts.find((c) => c.id === selectedId)
-    : null;
+  const selected = selectedId ? contacts.find((c) => c.id === selectedId) : null;
   const contactMode = selected ? PICK_EXISTING : CREATE_NEW;
   const hasContent = selected ? true : query.trim().length > 0;
-  const repSelected = repSelectedId
-    ? contacts.find((c) => c.id === repSelectedId)
-    : null;
+  const repSelected = repSelectedId ? contacts.find((c) => c.id === repSelectedId) : null;
   const repContactMode = repSelected ? PICK_EXISTING : CREATE_NEW;
 
   // Errors with no inline slot (subrole, notes, phone, org, email,
@@ -188,12 +183,8 @@ export function PartyComposer({
     <form onSubmit={onSubmit} className="flex flex-col gap-2">
       <input type="hidden" name="category" value={category} />
       <input type="hidden" name="contactMode" value={contactMode} />
-      {selected && (
-        <input type="hidden" name="contactId" value={selected.id} />
-      )}
-      {!selected && (
-        <input type="hidden" name="newContactName" value={query} />
-      )}
+      {selected && <input type="hidden" name="contactId" value={selected.id} />}
+      {!selected && <input type="hidden" name="newContactName" value={query} />}
 
       {/* Name / typeahead — or chip when an existing contact is picked. */}
       {selected ? (
@@ -216,15 +207,9 @@ export function PartyComposer({
             autoFocus={refocusName}
           />
           {errs.newContactName && (
-            <div className="text-2xs text-warn mt-0.5">
-              {errs.newContactName[0]}
-            </div>
+            <div className="text-2xs text-warn mt-0.5">{errs.newContactName[0]}</div>
           )}
-          {errs.contactId && (
-            <div className="text-2xs text-warn mt-0.5">
-              {errs.contactId[0]}
-            </div>
-          )}
+          {errs.contactId && <div className="text-2xs text-warn mt-0.5">{errs.contactId[0]}</div>}
         </div>
       )}
 
@@ -239,10 +224,7 @@ export function PartyComposer({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email (optional)"
-            className={cn(
-              inputClass(false, "xs"),
-              errs.newContactEmail && "border-warn"
-            )}
+            className={cn(inputClass(false, "xs"), errs.newContactEmail && "border-warn")}
           />
           <input
             type="tel"
@@ -265,7 +247,7 @@ export function PartyComposer({
             className={cn(
               inputClass(false, "xs"),
               "col-span-2",
-              errs.newContactOrganization && "border-warn"
+              errs.newContactOrganization && "border-warn",
             )}
           />
         </div>
@@ -298,55 +280,24 @@ export function PartyComposer({
       {/* Representation — non-client categories only. */}
       {showsRepresentation && (
         <>
-          <input
-            type="hidden"
-            name="representation"
-            value={representation}
-          />
+          <input type="hidden" name="representation" value={representation} />
           {representation === "yes" && (
             <>
-              <input
-                type="hidden"
-                name="representationContactMode"
-                value={repContactMode}
-              />
+              <input type="hidden" name="representationContactMode" value={repContactMode} />
               {repSelected ? (
-                <input
-                  type="hidden"
-                  name="representationContactId"
-                  value={repSelected.id}
-                />
+                <input type="hidden" name="representationContactId" value={repSelected.id} />
               ) : (
                 <>
-                  <input
-                    type="hidden"
-                    name="newRepresentationName"
-                    value={repQuery}
-                  />
-                  <input
-                    type="hidden"
-                    name="newRepresentationFirm"
-                    value={repFirm}
-                  />
-                  <input
-                    type="hidden"
-                    name="newRepresentationEmail"
-                    value={repEmail}
-                  />
-                  <input
-                    type="hidden"
-                    name="newRepresentationPhone"
-                    value={repPhone}
-                  />
+                  <input type="hidden" name="newRepresentationName" value={repQuery} />
+                  <input type="hidden" name="newRepresentationFirm" value={repFirm} />
+                  <input type="hidden" name="newRepresentationEmail" value={repEmail} />
+                  <input type="hidden" name="newRepresentationPhone" value={repPhone} />
                 </>
               )}
             </>
           )}
           <div className="pt-1">
-            <RepresentationToggle
-              value={representation}
-              onChange={setRepresentation}
-            />
+            <RepresentationToggle value={representation} onChange={setRepresentation} />
           </div>
           {representation === "yes" && (
             <div className="flex flex-col gap-2">
@@ -367,17 +318,12 @@ export function PartyComposer({
                     ariaLabel="Attorney name"
                     variant="attorney"
                     compact
-                    invalid={Boolean(
-                      errs.newRepresentationName ||
-                        errs.representationContactId
-                    )}
+                    invalid={Boolean(errs.newRepresentationName || errs.representationContactId)}
                     autoFocus={refocusRep}
                   />
-                  {(errs.newRepresentationName ||
-                    errs.representationContactId) && (
+                  {(errs.newRepresentationName || errs.representationContactId) && (
                     <div className="text-2xs text-warn mt-0.5">
-                      {errs.newRepresentationName?.[0] ??
-                        errs.representationContactId?.[0]}
+                      {errs.newRepresentationName?.[0] ?? errs.representationContactId?.[0]}
                     </div>
                   )}
                 </div>
@@ -406,7 +352,7 @@ export function PartyComposer({
                     placeholder="Email (optional)"
                     className={cn(
                       inputClass(false, "xs"),
-                      errs.newRepresentationEmail && "border-warn"
+                      errs.newRepresentationEmail && "border-warn",
                     )}
                   />
                   <input
@@ -459,11 +405,7 @@ export function PartyComposer({
         >
           Cancel
         </button>
-        <Button
-          size="xs"
-          type="submit"
-          disabled={isPending || !hasContent}
-        >
+        <Button size="xs" type="submit" disabled={isPending || !hasContent}>
           {isPending ? "Saving…" : "Add party"}
         </Button>
       </div>

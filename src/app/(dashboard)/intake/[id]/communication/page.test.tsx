@@ -53,18 +53,12 @@ vi.mock("@/components/communication/log-call-button", () => ({
 }));
 vi.mock("@/components/communication/compose-email-launcher", () => ({
   ComposeEmailLauncher: (props: { initialScope?: unknown }) => (
-    <div
-      data-testid="compose-launcher"
-      data-scope={JSON.stringify(props.initialScope)}
-    />
+    <div data-testid="compose-launcher" data-scope={JSON.stringify(props.initialScope)} />
   ),
 }));
 
 import { getLeadById } from "@/lib/queries/leads";
-import {
-  getThreadById,
-  listThreadsForLead,
-} from "@/lib/queries/communication";
+import { getThreadById, listThreadsForLead } from "@/lib/queries/communication";
 import LeadCommunicationPage from "./page";
 
 const mockedLead = vi.mocked(getLeadById);

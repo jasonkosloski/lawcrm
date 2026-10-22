@@ -30,10 +30,7 @@ vi.mock("@/lib/file-storage", () => ({
   deleteFile: vi.fn(),
 }));
 
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
 import { deleteFile, storeFile } from "@/lib/file-storage";
@@ -119,10 +116,7 @@ const buildForm = (over: Record<string, string> = {}) => {
   fd.set("name", over.name ?? "Demand letter");
   fd.set("category", over.category ?? "demand_letter");
   fd.set("description", over.description ?? "Standard demand");
-  fd.set(
-    "body",
-    over.body ?? "Dear {{client.name}}, re {{matter.name}}."
-  );
+  fd.set("body", over.body ?? "Dear {{client.name}}, re {{matter.name}}.");
   return fd;
 };
 
@@ -141,9 +135,7 @@ const seedTemplate = (over: Partial<{ body: string; isActive: boolean }> = {}) =
 describe("permission gates", () => {
   test("create asks for documents.template.create", async () => {
     await createDocumentTemplate(templateFormInitialState, buildForm());
-    expect(requirePermission).toHaveBeenCalledWith(
-      "documents.template.create"
-    );
+    expect(requirePermission).toHaveBeenCalledWith("documents.template.create");
   });
 
   test("update + archive ask for documents.template.edit", async () => {
@@ -159,9 +151,7 @@ describe("permission gates", () => {
   test("hard delete asks for documents.template.delete", async () => {
     const t = await seedTemplate();
     await deleteDocumentTemplate(t.id);
-    expect(requirePermission).toHaveBeenCalledWith(
-      "documents.template.delete"
-    );
+    expect(requirePermission).toHaveBeenCalledWith("documents.template.delete");
   });
 
   test("generate and preview share the documents.upload key", async () => {
@@ -177,7 +167,7 @@ describe("permission gates", () => {
   test("preview without documents.upload is refused and merges nothing", async () => {
     const t = await seedTemplate();
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key) => key !== "documents.upload"
+      async (key) => key !== "documents.upload",
     );
     const res = await previewDocumentFromTemplate(t.id, M);
     expect(res).toEqual({
@@ -189,10 +179,7 @@ describe("permission gates", () => {
 
 describe("library CRUD", () => {
   test("create persists the row with the creator attributed", async () => {
-    const res = await createDocumentTemplate(
-      templateFormInitialState,
-      buildForm()
-    );
+    const res = await createDocumentTemplate(templateFormInitialState, buildForm());
     expect(res.status).toBe("ok");
     const row = await prisma.documentTemplate.findFirstOrThrow();
     expect(row.name).toBe("Demand letter");
@@ -204,7 +191,7 @@ describe("library CRUD", () => {
   test("create rejects a category outside the curated list", async () => {
     const res = await createDocumentTemplate(
       templateFormInitialState,
-      buildForm({ category: "nonsense" })
+      buildForm({ category: "nonsense" }),
     );
     expect(res.status).toBe("error");
     expect(await prisma.documentTemplate.count()).toBe(0);
@@ -215,7 +202,7 @@ describe("library CRUD", () => {
     const res = await updateDocumentTemplate(
       t.id,
       templateFormInitialState,
-      buildForm({ name: "Demand letter v2", body: "{{today}}" })
+      buildForm({ name: "Demand letter v2", body: "{{today}}" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.documentTemplate.findUniqueOrThrow({
@@ -224,11 +211,7 @@ describe("library CRUD", () => {
     expect(row.name).toBe("Demand letter v2");
     expect(row.body).toBe("{{today}}");
 
-    const miss = await updateDocumentTemplate(
-      "nope",
-      templateFormInitialState,
-      buildForm()
-    );
+    const miss = await updateDocumentTemplate("nope", templateFormInitialState, buildForm());
     expect(miss.status).toBe("error");
   });
 
@@ -245,7 +228,7 @@ describe("library CRUD", () => {
     const kept = await updateDocumentTemplate(
       legacy.id,
       templateFormInitialState,
-      buildForm({ category: "intake", body: "typo fixed" })
+      buildForm({ category: "intake", body: "typo fixed" }),
     );
     expect(kept.status).toBe("ok");
     const row = await prisma.documentTemplate.findUniqueOrThrow({
@@ -257,7 +240,7 @@ describe("library CRUD", () => {
     const moved = await updateDocumentTemplate(
       legacy.id,
       templateFormInitialState,
-      buildForm({ category: "other-unknown" })
+      buildForm({ category: "other-unknown" }),
     );
     expect(moved.status).toBe("error");
   });
@@ -270,7 +253,7 @@ describe("library CRUD", () => {
         await prisma.documentTemplate.findUniqueOrThrow({
           where: { id: t.id },
         })
-      ).isActive
+      ).isActive,
     ).toBe(false);
 
     expect((await setDocumentTemplateActive(t.id, true)).ok).toBe(true);
@@ -279,7 +262,7 @@ describe("library CRUD", () => {
         await prisma.documentTemplate.findUniqueOrThrow({
           where: { id: t.id },
         })
-      ).isActive
+      ).isActive,
     ).toBe(true);
   });
 
@@ -293,8 +276,7 @@ describe("library CRUD", () => {
 describe("preview", () => {
   test("merges real matter context and reports missing fields without writing", async () => {
     const t = await seedTemplate({
-      body:
-        "Dear {{client.name}} ({{client.phone}}), re {{matter.name}} in {{matter.court}}. {{made.up}}",
+      body: "Dear {{client.name}} ({{client.phone}}), re {{matter.name}} in {{matter.court}}. {{made.up}}",
     });
     const res = await previewDocumentFromTemplate(t.id, M);
     expect(res.ok).toBe(true);
@@ -332,9 +314,7 @@ describe("generate", () => {
     // The bytes handed to storage are the MERGED text.
     expect(storeFile).toHaveBeenCalledOnce();
     const file = vi.mocked(storeFile).mock.calls[0]![0];
-    expect(await file.text()).toBe(
-      "Dear Maria Alvarez, re Alvarez v. City of Aurora."
-    );
+    expect(await file.text()).toBe("Dear Maria Alvarez, re Alvarez v. City of Aurora.");
     expect(file.type).toBe("text/markdown");
 
     const doc = await prisma.document.findFirstOrThrow({
@@ -369,9 +349,9 @@ describe("generate", () => {
   test("unknown matter / archived template error without writing", async () => {
     const t = await seedTemplate();
     // Unknown == hidden: the matter wall answers with notFound().
-    await expect(generateDocumentFromTemplate(t.id, { kind: "matter", matterId: "nope" })).rejects.toThrow(
-      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/
-    );
+    await expect(
+      generateDocumentFromTemplate(t.id, { kind: "matter", matterId: "nope" }),
+    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
 
     const archived = await seedTemplate({ isActive: false });
     const res = await generateDocumentFromTemplate(archived.id, M);
@@ -405,15 +385,11 @@ describe("matter dates (ADR-012 date-only)", () => {
     const preview = await previewDocumentFromTemplate(t.id, M);
     expect(preview.ok).toBe(true);
     if (!preview.ok) return;
-    expect(preview.text).toBe(
-      "On January 10, 2025 ... runs January 10, 2027"
-    );
+    expect(preview.text).toBe("On January 10, 2025 ... runs January 10, 2027");
 
     await generateDocumentFromTemplate(t.id, M);
     const file = vi.mocked(storeFile).mock.calls[0]![0];
-    expect(await file.text()).toBe(
-      "On January 10, 2025 ... runs January 10, 2027"
-    );
+    expect(await file.text()).toBe("On January 10, 2025 ... runs January 10, 2027");
   });
 });
 
@@ -431,7 +407,7 @@ describe("audit log", () => {
     await updateDocumentTemplate(
       t.id,
       templateFormInitialState,
-      buildForm({ name: "Demand letter v2", body: "{{today}}" })
+      buildForm({ name: "Demand letter v2", body: "{{today}}" }),
     );
     await setDocumentTemplateActive(t.id, false);
     await setDocumentTemplateActive(t.id, true);
@@ -447,9 +423,7 @@ describe("audit log", () => {
     ]);
     expect(rows.every((r) => r.userId === userId)).toBe(true);
     // Old -> new on the small fields; the body is never copied in.
-    expect(rows[1]!.detail).toContain(
-      'name "Demand letter" -> "Demand letter v2"'
-    );
+    expect(rows[1]!.detail).toContain('name "Demand letter" -> "Demand letter v2"');
     expect(rows[1]!.detail).toContain("body changed");
     expect(rows[1]!.detail).not.toContain("{{today}}");
   });
@@ -461,10 +435,7 @@ describe("audit log", () => {
   });
 
   test("a rejected save writes no entry", async () => {
-    await createDocumentTemplate(
-      templateFormInitialState,
-      buildForm({ category: "nonsense" })
-    );
+    await createDocumentTemplate(templateFormInitialState, buildForm({ category: "nonsense" }));
     expect(await firmEntries()).toHaveLength(0);
   });
 });
@@ -473,7 +444,7 @@ describe("generate failure handling", () => {
   test("a storage failure returns {ok:false} with a generic message and writes no row", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(storeFile).mockRejectedValueOnce(
-      new Error("BlobError: 503 at https://secret.internal/path")
+      new Error("BlobError: 503 at https://secret.internal/path"),
     );
     const t = await seedTemplate();
     const res = await generateDocumentFromTemplate(t.id, M);
@@ -609,7 +580,7 @@ describe("records request letters", () => {
     expect(request.parent?.name).toBe("Records Requests");
     const file = vi.mocked(storeFile).mock.calls.at(-1)![0] as File;
     expect(await file.text()).toBe(
-      "To Memorial Hospital (1 Hospital Way, Denver, CO 80202) re Chart 2024 from January 5, 2024"
+      "To Memorial Hospital (1 Hospital Way, Denver, CO 80202) re Chart 2024 from January 5, 2024",
     );
   });
 
@@ -650,9 +621,7 @@ describe("records request letters", () => {
   test("preview with a request needs records.view", async () => {
     const t = await seedTemplate({ body: "{{custodian.name}}" });
     const r = await seedRecordsRequest();
-    vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key) => key !== "records.view"
-    );
+    vi.mocked(currentUserHasPermission).mockImplementation(async (key) => key !== "records.view");
     const res = await previewDocumentFromTemplate(t.id, M, {
       recordsRequestId: r.id,
     });

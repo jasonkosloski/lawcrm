@@ -49,9 +49,7 @@ export type LeadTimeSummary = {
  *  convention as src/lib/queries/time.ts. */
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
-export async function getLeadTimeEntries(
-  leadId: string
-): Promise<LeadTimeEntryRow[]> {
+export async function getLeadTimeEntries(leadId: string): Promise<LeadTimeEntryRow[]> {
   const rows = await prisma.timeEntry.findMany({
     where: { leadId },
     include: { user: { select: { name: true, initials: true } } },
@@ -78,14 +76,12 @@ export async function getLeadTimeEntries(
 /** Totals over a fetched row list — callers already hold the rows,
  *  so this stays a pure sum instead of a second query. */
 export function summarizeLeadTime(
-  rows: Pick<LeadTimeEntryRow, "hours" | "billable" | "noCharge">[]
+  rows: Pick<LeadTimeEntryRow, "hours" | "billable" | "noCharge">[],
 ): LeadTimeSummary {
   return {
     totalHours: round2(rows.reduce((sum, r) => sum + r.hours, 0)),
     billableHours: round2(
-      rows
-        .filter((r) => r.billable && !r.noCharge)
-        .reduce((sum, r) => sum + r.hours, 0)
+      rows.filter((r) => r.billable && !r.noCharge).reduce((sum, r) => sum + r.hours, 0),
     ),
   };
 }

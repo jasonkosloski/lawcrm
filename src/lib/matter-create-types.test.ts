@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  MATTER_CREATE_ENTRIES,
-  MATTER_CREATE_PERMISSION,
-} from "@/lib/matter-create-types";
+import { MATTER_CREATE_ENTRIES, MATTER_CREATE_PERMISSION } from "@/lib/matter-create-types";
 import { isKnownPermission } from "@/lib/permissions";
 
 describe("MATTER_CREATE_PERMISSION", () => {
@@ -10,9 +7,7 @@ describe("MATTER_CREATE_PERMISSION", () => {
     for (const entry of MATTER_CREATE_ENTRIES) {
       const key = MATTER_CREATE_PERMISSION[entry.type];
       expect(key, `no permission for ${entry.type}`).toBeTruthy();
-      expect(isKnownPermission(key), `${key} is not a registered key`).toBe(
-        true
-      );
+      expect(isKnownPermission(key), `${key} is not a registered key`).toBe(true);
     }
   });
 

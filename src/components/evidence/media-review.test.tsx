@@ -51,7 +51,7 @@ const renderWith = (t: TranscriptView | null) =>
       transcriptionConfigured
       canDeleteTranscript={false}
       canEditTranscript={false}
-    />
+    />,
   );
 
 describe("MediaReview layout", () => {

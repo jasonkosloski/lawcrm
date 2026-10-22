@@ -35,16 +35,13 @@ export type NoteNode<N extends ThreadableNote> = {
  * order so a thread reads top-down. A visited set guards against a
  * hypothetical parent cycle.
  */
-export function buildTrees<N extends ThreadableNote>(
-  notes: N[]
-): NoteNode<N>[] {
+export function buildTrees<N extends ThreadableNote>(notes: N[]): NoteNode<N>[] {
   const ids = new Set(notes.map((n) => n.id));
   const childrenByParent = new Map<string, N[]>();
   const roots: N[] = [];
   for (const n of notes) {
     if (n.parentNoteId && ids.has(n.parentNoteId)) {
-      if (!childrenByParent.has(n.parentNoteId))
-        childrenByParent.set(n.parentNoteId, []);
+      if (!childrenByParent.has(n.parentNoteId)) childrenByParent.set(n.parentNoteId, []);
       childrenByParent.get(n.parentNoteId)!.push(n);
     } else {
       roots.push(n);
@@ -70,7 +67,7 @@ export function buildTrees<N extends ThreadableNote>(
  *  stays visible when any note in it matches the filters. */
 export function subtreeMatches<N extends ThreadableNote>(
   node: NoteNode<N>,
-  matches: (n: N) => boolean
+  matches: (n: N) => boolean,
 ): boolean {
   if (matches(node.note)) return true;
   return node.children.some((c) => subtreeMatches(c, matches));
@@ -84,9 +81,7 @@ export function countNodes<N extends ThreadableNote>(node: NoteNode<N>): number 
 /** True if any note in the subtree is still unread for the current
  *  user - drives the default collapse state so threads with fresh
  *  replies stay expanded on load. */
-export function subtreeHasUnread<N extends ThreadableNote>(
-  node: NoteNode<N>
-): boolean {
+export function subtreeHasUnread<N extends ThreadableNote>(node: NoteNode<N>): boolean {
   if (!node.note.isRead) return true;
   return node.children.some((c) => subtreeHasUnread(c));
 }
@@ -107,18 +102,15 @@ export type ThreadRollup = {
 export function summarizeRollup(r: ThreadRollup): string {
   const parts: string[] = [];
   if (r.tasks > 0) parts.push(`${r.tasks} ${r.tasks === 1 ? "task" : "tasks"}`);
-  if (r.deadlines > 0)
-    parts.push(`${r.deadlines} ${r.deadlines === 1 ? "deadline" : "deadlines"}`);
+  if (r.deadlines > 0) parts.push(`${r.deadlines} ${r.deadlines === 1 ? "deadline" : "deadlines"}`);
   if (r.timeEntries > 0)
     parts.push(
-      `${r.timeEntries} time ${r.timeEntries === 1 ? "entry" : "entries"} (${r.totalHours.toFixed(1)}h)`
+      `${r.timeEntries} time ${r.timeEntries === 1 ? "entry" : "entries"} (${r.totalHours.toFixed(1)}h)`,
     );
   return `${parts.join(" · ")} across ${r.notesWithAttachments} ${r.notesWithAttachments === 1 ? "reply" : "replies"}`;
 }
 
-export function rollupDescendants<N extends ThreadableNote>(
-  node: NoteNode<N>
-): ThreadRollup {
+export function rollupDescendants<N extends ThreadableNote>(node: NoteNode<N>): ThreadRollup {
   let tasks = 0;
   let deadlines = 0;
   let timeEntries = 0;
@@ -132,10 +124,7 @@ export function rollupDescendants<N extends ThreadableNote>(
       tasks += t;
       deadlines += d;
       timeEntries += e;
-      totalHours += child.note.attachedTimeEntries.reduce(
-        (s, x) => s + x.hours,
-        0
-      );
+      totalHours += child.note.attachedTimeEntries.reduce((s, x) => s + x.hours, 0);
       if (t + d + e > 0) notesWithAttachments++;
       walk(child);
     }

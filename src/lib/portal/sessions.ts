@@ -12,10 +12,7 @@ const SLIDE_AFTER_MS = 60 * 1000;
  * Cookie maxAge (seconds) for a session: its remaining absolute lifetime, so
  * the cookie survives browser restarts but never outlives the server cap.
  */
-export function sessionCookieMaxAge(
-  createdAt: Date,
-  now: Date = new Date()
-): number {
+export function sessionCookieMaxAge(createdAt: Date, now: Date = new Date()): number {
   const ms = createdAt.getTime() + ABSOLUTE_MS - now.getTime();
   return Math.max(0, Math.floor(ms / 1000));
 }
@@ -42,7 +39,7 @@ export async function createSession(identityId: string): Promise<string> {
  * createdAt + 30 days.
  */
 export async function resolveSession(
-  raw: string
+  raw: string,
 ): Promise<{ sessionId: string; identityId: string } | null> {
   const session = await prisma.portalSession.findUnique({
     where: { tokenHash: hashSecret(raw) },
@@ -55,10 +52,7 @@ export async function resolveSession(
   const slideBefore = new Date(now.getTime() - SLIDE_AFTER_MS);
   if (session.lastSeenAt < slideBefore) {
     const expiresAt = new Date(
-      Math.min(
-        now.getTime() + IDLE_MS,
-        session.createdAt.getTime() + ABSOLUTE_MS
-      )
+      Math.min(now.getTime() + IDLE_MS, session.createdAt.getTime() + ABSOLUTE_MS),
     );
     // updateMany: a concurrent logout/revoke may have deleted the row since
     // the read; that must not throw. The count is deliberately ignored.

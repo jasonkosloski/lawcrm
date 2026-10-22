@@ -14,18 +14,13 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import {
-  mergeLayout,
-  type DashboardLayout,
-} from "@/lib/dashboard-prefs";
+import { mergeLayout, type DashboardLayout } from "@/lib/dashboard-prefs";
 
 /**
  * Persist the full v3 layout for the current user. Returns the
  * sanitized layout so the caller can reconcile.
  */
-export async function saveDashboardLayout(
-  layout: unknown
-): Promise<DashboardLayout> {
+export async function saveDashboardLayout(layout: unknown): Promise<DashboardLayout> {
   // Authenticate first so an anonymous caller gets an auth error.
   const userId = await getCurrentUserId();
   if (typeof layout !== "object" || layout === null || Array.isArray(layout)) {

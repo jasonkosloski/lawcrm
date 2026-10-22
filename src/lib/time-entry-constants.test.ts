@@ -33,21 +33,15 @@ describe("roundElapsedToBillingIncrement", () => {
   });
 
   test("a few seconds bill as the minimum one increment", () => {
-    expect(roundElapsedToBillingIncrement(30_000)).toBe(
-      TIME_ENTRY_INCREMENT_HOURS
-    );
+    expect(roundElapsedToBillingIncrement(30_000)).toBe(TIME_ENTRY_INCREMENT_HOURS);
   });
 
   test("zero / negative / NaN clamp to the minimum increment", () => {
     // Clock skew (startedAt in the future) must not produce a 0 or
     // negative prefill the server would reject.
     expect(roundElapsedToBillingIncrement(0)).toBe(TIME_ENTRY_INCREMENT_HOURS);
-    expect(roundElapsedToBillingIncrement(-5000)).toBe(
-      TIME_ENTRY_INCREMENT_HOURS
-    );
-    expect(roundElapsedToBillingIncrement(Number.NaN)).toBe(
-      TIME_ENTRY_INCREMENT_HOURS
-    );
+    expect(roundElapsedToBillingIncrement(-5000)).toBe(TIME_ENTRY_INCREMENT_HOURS);
+    expect(roundElapsedToBillingIncrement(Number.NaN)).toBe(TIME_ENTRY_INCREMENT_HOURS);
   });
 });
 
@@ -91,8 +85,17 @@ describe("computeHoursFromTimeRange", () => {
 describe("UTBMS catalog", () => {
   test("activity set has the 11 standard A-codes", () => {
     expect(UTBMS_ACTIVITY_CODES.map((c) => c.code)).toEqual([
-      "A101", "A102", "A103", "A104", "A105", "A106",
-      "A107", "A108", "A109", "A110", "A111",
+      "A101",
+      "A102",
+      "A103",
+      "A104",
+      "A105",
+      "A106",
+      "A107",
+      "A108",
+      "A109",
+      "A110",
+      "A111",
     ]);
   });
 
@@ -148,12 +151,8 @@ describe("timeEntryStatusBadge", () => {
   });
 
   test("unknown / prototype-key statuses fall back to the draft chip", () => {
-    expect(timeEntryStatusBadge("mystery")).toEqual(
-      timeEntryStatusBadge("draft")
-    );
-    expect(timeEntryStatusBadge("constructor")).toEqual(
-      timeEntryStatusBadge("draft")
-    );
+    expect(timeEntryStatusBadge("mystery")).toEqual(timeEntryStatusBadge("draft"));
+    expect(timeEntryStatusBadge("constructor")).toEqual(timeEntryStatusBadge("draft"));
   });
 });
 

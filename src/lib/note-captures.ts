@@ -50,12 +50,7 @@ function tempIdOf(raw: unknown): string {
   return typeof id === "string" ? id : "unknown";
 }
 
-function addError(
-  errors: CaptureErrors,
-  tempId: string,
-  field: string,
-  message: string
-): void {
+function addError(errors: CaptureErrors, tempId: string, field: string, message: string): void {
   errors[tempId] ??= {};
   (errors[tempId][field] ??= []).push(message);
 }
@@ -79,10 +74,7 @@ export function parseCaptures(rawJson: string, tz: string): ParsedCaptures {
   for (const raw of rawList) {
     const result = captureSchema.safeParse(raw);
     if (!result.success) {
-      errors[tempIdOf(raw)] = result.error.flatten().fieldErrors as Record<
-        string,
-        string[]
-      >;
+      errors[tempIdOf(raw)] = result.error.flatten().fieldErrors as Record<string, string[]>;
       continue;
     }
     const cap = result.data;
@@ -117,11 +109,7 @@ export function parseCaptures(rawJson: string, tz: string): ParsedCaptures {
       if (!prepared.end) {
         addError(errors, cap.tempId, "endTime", "Invalid end time");
       }
-      if (
-        prepared.start &&
-        prepared.end &&
-        prepared.end.getTime() < prepared.start.getTime()
-      ) {
+      if (prepared.start && prepared.end && prepared.end.getTime() < prepared.start.getTime()) {
         addError(errors, cap.tempId, "endTime", "End must be after start");
       }
     }
@@ -192,7 +180,7 @@ export type CaptureCreateCtx = {
 export async function createCaptureRecord(
   tx: Tx,
   p: PreparedCapture,
-  ctx: CaptureCreateCtx
+  ctx: CaptureCreateCtx,
 ): Promise<void> {
   const { cap } = p;
   const { matterId, userId, noteId } = ctx;

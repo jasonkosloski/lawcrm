@@ -11,24 +11,22 @@ describe("assertTestDatabaseUrl", () => {
   });
 
   it("refuses a hosted database even when the name looks like a test db", () => {
-    expect(() =>
-      assertTestDatabaseUrl("postgresql://u:p@db.prisma.io:5432/lawcrm_test")
-    ).toThrow(/not localhost/);
+    expect(() => assertTestDatabaseUrl("postgresql://u:p@db.prisma.io:5432/lawcrm_test")).toThrow(
+      /not localhost/,
+    );
   });
 
   it("refuses a local database that is not a test database", () => {
-    expect(() =>
-      assertTestDatabaseUrl("postgresql://u:p@localhost:5432/lawcrm_dev")
-    ).toThrow(/lawcrm_test/);
-    expect(() =>
-      assertTestDatabaseUrl("postgresql://u:p@localhost:5432/postgres")
-    ).toThrow(/lawcrm_test/);
+    expect(() => assertTestDatabaseUrl("postgresql://u:p@localhost:5432/lawcrm_dev")).toThrow(
+      /lawcrm_test/,
+    );
+    expect(() => assertTestDatabaseUrl("postgresql://u:p@localhost:5432/postgres")).toThrow(
+      /lawcrm_test/,
+    );
     // Prefix alone is not enough: "lawcrm_testing" or "lawcrm_test-prod".
+    expect(() => assertTestDatabaseUrl("postgresql://u:p@localhost:5432/lawcrm_testing")).toThrow();
     expect(() =>
-      assertTestDatabaseUrl("postgresql://u:p@localhost:5432/lawcrm_testing")
-    ).toThrow();
-    expect(() =>
-      assertTestDatabaseUrl("postgresql://u:p@localhost:5432/lawcrm_test-prod")
+      assertTestDatabaseUrl("postgresql://u:p@localhost:5432/lawcrm_test-prod"),
     ).toThrow();
   });
 

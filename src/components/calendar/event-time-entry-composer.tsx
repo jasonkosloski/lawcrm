@@ -16,10 +16,7 @@ import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createTimeEntry } from "@/app/actions/time-entries";
-import {
-  timeEntryInitialState,
-  type TimeEntryFormState,
-} from "@/lib/time-entry-constants";
+import { timeEntryInitialState, type TimeEntryFormState } from "@/lib/time-entry-constants";
 import { todayKey } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { useEventAttachmentsViewer } from "./event-attachments-context";
@@ -74,10 +71,11 @@ export function EventTimeEntryComposer({
   // Wrapped useActionState: masks state left over from a previous
   // expand, so a failed attempt's errors don't reappear when the
   // composer is re-expanded. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    TimeEntryFormState,
-    FormData
-  >(action, timeEntryInitialState, expanded);
+  const [state, formAction, isPending] = useDialogActionState<TimeEntryFormState, FormData>(
+    action,
+    timeEntryInitialState,
+    expanded,
+  );
 
   const errs = state.errors ?? {};
   const hasContent = hours.trim().length > 0 && activity.trim().length > 0;
@@ -117,9 +115,7 @@ export function EventTimeEntryComposer({
             aria-label="Date"
             className={inputClass(!!errs.date, "xs")}
           />
-          {errs.date && (
-            <div className="text-2xs text-warn">{errs.date[0]}</div>
-          )}
+          {errs.date && <div className="text-2xs text-warn">{errs.date[0]}</div>}
         </div>
         <div className="flex flex-col gap-0.5">
           <input
@@ -131,9 +127,7 @@ export function EventTimeEntryComposer({
             inputMode="decimal"
             className={cn(inputClass(!!errs.hours, "xs"), "w-20 font-mono")}
           />
-          {errs.hours && (
-            <div className="text-2xs text-warn">{errs.hours[0]}</div>
-          )}
+          {errs.hours && <div className="text-2xs text-warn">{errs.hours[0]}</div>}
         </div>
         <div className="flex flex-col gap-0.5 min-w-0">
           <input
@@ -144,9 +138,7 @@ export function EventTimeEntryComposer({
             placeholder="Activity (e.g. 'Hearing attendance')"
             className={cn(inputClass(!!errs.activity, "xs"), "w-full")}
           />
-          {errs.activity && (
-            <div className="text-2xs text-warn">{errs.activity[0]}</div>
-          )}
+          {errs.activity && <div className="text-2xs text-warn">{errs.activity[0]}</div>}
         </div>
       </div>
 
@@ -204,11 +196,7 @@ export function EventTimeEntryComposer({
           >
             Cancel
           </button>
-          <Button
-            size="xs"
-            type="submit"
-            disabled={isPending || !hasContent}
-          >
+          <Button size="xs" type="submit" disabled={isPending || !hasContent}>
             {isPending ? "Saving…" : "Log time"}
           </Button>
         </div>

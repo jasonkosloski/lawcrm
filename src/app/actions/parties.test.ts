@@ -29,10 +29,7 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn(),
 }));
 
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
   createMatterContact,
@@ -71,9 +68,7 @@ beforeEach(async () => {
   const { firmId } = await seedFirm();
   userId = (await seedUser({ firmId })).userId;
   const { areaId, stageId } = await seedPracticeArea();
-  matterId = (
-    await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId })
-  ).matterId;
+  matterId = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId })).matterId;
   mockedRequirePermission.mockResolvedValue(userId);
   mockedHasPermission.mockResolvedValue(true);
 });
@@ -100,7 +95,7 @@ describe("createMatterContact re-add", () => {
         category: "opposing",
         contactMode: "__existing__",
         contactId,
-      })
+      }),
     );
 
     expect(res.status).toBe("error");
@@ -129,7 +124,7 @@ describe("createMatterContact re-add", () => {
         category: "expert_witness",
         contactMode: "__existing__",
         contactId,
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     expect(await prisma.matterContact.count({ where: { matterId } })).toBe(2);
@@ -144,7 +139,7 @@ describe("createMatterContact re-add", () => {
         contactMode: "__new__",
         newContactName: "Officer J. Doe",
         role: "Defendant",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const entry = await prisma.activityLog.findFirstOrThrow({
@@ -227,7 +222,7 @@ describe("createMatterContact — conflict gate on opposing parties (ADR-054)", 
         ...fields,
         conflictAck: first.conflict!.fingerprint,
         conflictOverrideReason: "Waiver on file",
-      })
+      }),
     );
     expect(ok.status).toBe("ok");
     expect(await opposingRows()).toBe(1);
@@ -243,7 +238,7 @@ describe("createMatterContact — conflict gate on opposing parties (ADR-054)", 
     const res = await createMatterContact(
       matterId,
       partyInitialState,
-      form({ category: "opposing", contactMode: "__existing__", contactId })
+      form({ category: "opposing", contactMode: "__existing__", contactId }),
     );
     expect(res.conflict?.severity).toBe("conflict");
   });
@@ -261,7 +256,7 @@ describe("createMatterContact — conflict gate on opposing parties (ADR-054)", 
         representationContactMode: "__new__",
         newRepresentationName: "Carla Counsel",
         newRepresentationFirm: "Acme LLP",
-      })
+      }),
     );
     expect(res.conflict?.severity).toBe("conflict");
   });
@@ -272,11 +267,14 @@ describe("createMatterContact — conflict gate on opposing parties (ADR-054)", 
     // Another active matter makes Own Legacy a "current client" too.
     const { areaId, stageId } = await seedPracticeArea();
     const other = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId });
-    await prisma.matter.update({ where: { id: other.matterId }, data: { clientId: own.contactId } });
+    await prisma.matter.update({
+      where: { id: other.matterId },
+      data: { clientId: own.contactId },
+    });
     const res = await createMatterContact(
       matterId,
       partyInitialState,
-      form({ category: "opposing", contactMode: "__new__", newContactName: "Own Legacy" })
+      form({ category: "opposing", contactMode: "__new__", newContactName: "Own Legacy" }),
     );
     expect(res.status).toBe("ok");
   });
@@ -302,7 +300,7 @@ describe("createMatterContact — conflict gate on opposing parties (ADR-054)", 
         ...fields,
         conflictAck: first.conflict!.fingerprint,
         conflictOverrideReason: "Waiver on file",
-      })
+      }),
     );
     expect(refused.errors?.contactId?.[0]).toMatch(/inactive/);
     expect(refused.conflict?.fingerprint).toBe(first.conflict!.fingerprint);
@@ -313,7 +311,7 @@ describe("createMatterContact — conflict gate on opposing parties (ADR-054)", 
     const res = await createMatterContact(
       matterId,
       partyInitialState,
-      form({ category: "lay_witness", contactMode: "__new__", newContactName: "Wit Ness" })
+      form({ category: "lay_witness", contactMode: "__new__", newContactName: "Wit Ness" }),
     );
     expect(res.status).toBe("ok");
   });
@@ -331,10 +329,8 @@ describe("updateMatterContact", () => {
       partyInitialState,
       editForm({
         notes: "Prefers texts",
-        phones: JSON.stringify([
-          { label: "", number: "(303) 555-0182", isPrimary: true },
-        ]),
-      })
+        phones: JSON.stringify([{ label: "", number: "(303) 555-0182", isPrimary: true }]),
+      }),
     );
     expect(res.status).toBe("ok");
     const c = await prisma.contact.findUniqueOrThrow({
@@ -354,7 +350,7 @@ describe("updateMatterContact", () => {
     const res = await updateMatterContact(
       matterContactId,
       partyInitialState,
-      editForm({ phones: "[]" })
+      editForm({ phones: "[]" }),
     );
     expect(res.status).toBe("ok");
     const c = await prisma.contact.findUniqueOrThrow({
@@ -372,7 +368,7 @@ describe("updateMatterContact", () => {
     const res = await updateMatterContact(
       matterContactId,
       partyInitialState,
-      editForm({ phones: "[]" })
+      editForm({ phones: "[]" }),
     );
     expect(res.status).toBe("error");
     const c = await prisma.contact.findUniqueOrThrow({
@@ -389,10 +385,8 @@ describe("updateMatterContact", () => {
       matterContactId,
       partyInitialState,
       editForm({
-        phones: JSON.stringify([
-          { label: "", number: "(303) 555-0182", isPrimary: true },
-        ]),
-      })
+        phones: JSON.stringify([{ label: "", number: "(303) 555-0182", isPrimary: true }]),
+      }),
     );
     expect(res.status).toBe("ok");
     const c = await prisma.contact.findUniqueOrThrow({
@@ -418,7 +412,7 @@ describe("updateMatterContact", () => {
           { label: "", number: "(303) 555-0100", isPrimary: true },
           { label: "", number: "(303) 555-0101", isPrimary: false },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const mc = await prisma.matterContact.findUniqueOrThrow({
@@ -438,10 +432,8 @@ describe("updateMatterContact", () => {
       editForm({
         contactName: "Renamed Firm-Wide",
         notes: "new note",
-        phones: JSON.stringify([
-          { label: "", number: "(303) 555-0100", isPrimary: true },
-        ]),
-      })
+        phones: JSON.stringify([{ label: "", number: "(303) 555-0100", isPrimary: true }]),
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.contactName?.[0]).toMatch(/contacts\.edit/);
@@ -467,10 +459,8 @@ describe("updateMatterContact", () => {
       editForm({
         role: "Plaintiff",
         notes: "ok",
-        phones: JSON.stringify([
-          { label: "", number: "(303) 555-0100", isPrimary: true },
-        ]),
-      })
+        phones: JSON.stringify([{ label: "", number: "(303) 555-0100", isPrimary: true }]),
+      }),
     );
     expect(res.status).toBe("ok");
     expect(mockedHasPermission).not.toHaveBeenCalled();
@@ -485,7 +475,7 @@ describe("updateMatterContact", () => {
     const res = await updateMatterContact(
       matterContactId,
       partyInitialState,
-      editForm({ contactEmail: "new@example.com" })
+      editForm({ contactEmail: "new@example.com" }),
     );
     expect(res.status).toBe("ok");
     const c = await prisma.contact.findUniqueOrThrow({

@@ -48,9 +48,7 @@ export function ChannelToggle({
             aria-current={isActive ? "page" : undefined}
             className={cn(
               "inline-flex items-center gap-1.5 h-6 px-2 rounded-[5px] text-2xs font-medium transition-colors",
-              isActive
-                ? "bg-white text-ink shadow-sm"
-                : "text-ink-3 hover:text-ink"
+              isActive ? "bg-white text-ink shadow-sm" : "text-ink-3 hover:text-ink",
             )}
           >
             <Icon size={12} />

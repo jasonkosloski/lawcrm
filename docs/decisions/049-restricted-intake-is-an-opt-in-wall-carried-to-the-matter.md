@@ -6,6 +6,7 @@
 **Context:** ADR-039 walled matters by team, but intake had no wall: any signed-in user could open any lead, its documents (the download route returned true for lead documents), records, notes, tasks and time by id. A sensitive intake could not be restricted. Most intake is a shared triage pool, where new web leads have no owner yet.
 
 **Decision:**
+
 - **Opt-in, not team-everywhere.** `Lead.restricted` (default false). An open lead is visible to every active user, as before. A restricted lead and everything on it is visible only to its `LeadTeamMember`s, holders of the new `intake.view_restricted` key, and Admins. A team on every lead was rejected: unassigned new leads would vanish from the queue.
 - **One module.** `src/lib/lead-access.ts` mirrors `matter-access.ts`: `leadAccessWhere` (lists), `assertLeadAccess` / `canAccessLead` (details, actions, routes), `filterAccessibleLeadIds`, cached per request. Hidden == missing: 404, never 403.
 - **Central routing, not per-call-site checks.** `assertScopeAccess` (lead branch), `assertChildMatterAccess` (child resolvers return `leadId`) and the new `assertRecordAccess({ matterId, leadId })` send lead rows to the lead wall. `optionalRecordAccessClause` replaces `optionalMatterAccessClause` on every model carrying both `matterId` and `leadId` (Note, Task, CalendarEvent, TimeEntry, Document, RecordsRequest, ActivityLog); it ANDs the two scopes, so a row carrying both ids needs both.
@@ -21,6 +22,7 @@
 - `Expense.leadId` (never written) was dropped; lead expenses would need `Expense.matterId` relaxed, a separate money change.
 
 **Trade-offs:**
+
 - (+) A sensitive intake can be walled in one click, and the wall survives conversion; nothing changes for firms that never use it
 - (+) Lead children are walled through the same helpers the matter wall already uses, enforced by the static guard tests (`page-guards.test.ts`, `matter-access-guards.test.ts` lead rule)
 - (-) The Communication tab matches threads by email/contact, not lead: a walled lead's emails follow the ordinary mailbox rules

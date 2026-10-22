@@ -33,9 +33,7 @@ describe("encryptTokenWrites", () => {
 
   it("encrypts the { set } update form", () => {
     const out = encryptTokenWrites({ accessToken: { set: "plain" } });
-    expect(isEncryptedToken((out.accessToken as { set: string }).set)).toBe(
-      true
-    );
+    expect(isEncryptedToken((out.accessToken as { set: string }).set)).toBe(true);
   });
 
   it("passes through null and absent fields", () => {
@@ -54,10 +52,7 @@ describe("encryptTokenWrites", () => {
   });
 
   it("handles createMany-style arrays", () => {
-    const out = encryptTokenWrites([
-      { accessToken: "a" },
-      { accessToken: "b" },
-    ]);
+    const out = encryptTokenWrites([{ accessToken: "a" }, { accessToken: "b" }]);
     expect(out.every((row) => isEncryptedToken(row.accessToken))).toBe(true);
   });
 });
@@ -66,10 +61,7 @@ describe("decryptTokenReads", () => {
   it("decrypts rows and arrays of rows", () => {
     const row = { accessToken: encryptToken("a"), refreshToken: null };
     expect(decryptTokenReads(row).accessToken).toBe("a");
-    expect(decryptTokenReads([row, row]).map((r) => r.accessToken)).toEqual([
-      "a",
-      "a",
-    ]);
+    expect(decryptTokenReads([row, row]).map((r) => r.accessToken)).toEqual(["a", "a"]);
   });
 
   it("passes through batch payloads and nulls", () => {

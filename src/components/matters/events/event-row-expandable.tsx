@@ -32,10 +32,7 @@ import { EventNotesSection } from "@/components/calendar/event-notes-section";
 import { EventTimeEntriesSection } from "@/components/calendar/event-time-entries-section";
 import type { MatterEventRow } from "@/lib/queries/matter-detail";
 import { Badge } from "@/components/ui/badge";
-import {
-  EVENT_TYPE_LABEL,
-  type CalendarEventType,
-} from "@/lib/constants/calendar-event-type";
+import { EVENT_TYPE_LABEL, type CalendarEventType } from "@/lib/constants/calendar-event-type";
 
 /** Plain-text preview of the first (pinned-first, most-recent) note
  *  shown under the event title when the row is collapsed. Note content
@@ -44,10 +41,7 @@ import {
  *  LAST so "&amp;lt;" stays the literal text "&lt;" instead of being
  *  double-decoded. The result is rendered as React text (escaped), so
  *  decoding is XSS-safe. Exported for tests. */
-export function notePreview(note: {
-  content: string;
-  authorInitials: string;
-}): string {
+export function notePreview(note: { content: string; authorInitials: string }): string {
   const text = note.content
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
@@ -80,8 +74,7 @@ export function EventRowExpandable({
   // "Busy" shell rows (viewer can't see this event's details) carry
   // no notes/time and expose no expand or modal affordance.
   const canSeeDetails = event.viewerCanSeeDetails;
-  const hasAttachments =
-    event.notes.length > 0 || event.timeEntries.length > 0;
+  const hasAttachments = event.notes.length > 0 || event.timeEntries.length > 0;
   // Auto-expand when there's already something attached so the user
   // sees the thread + time logs on first load.
   const [expanded, setExpanded] = useState(canSeeDetails && hasAttachments);
@@ -101,12 +94,7 @@ export function EventRowExpandable({
 
   return (
     <li className="flex flex-col">
-      <div
-        className={cn(
-          "flex items-stretch gap-0",
-          expanded && "bg-paper-2/30"
-        )}
-      >
+      <div className={cn("flex items-stretch gap-0", expanded && "bg-paper-2/30")}>
         {/* Row body — expands attachments inline. This is the
             primary interaction; the modal is now opt-in via the
             right-side "open full view" button. */}
@@ -123,18 +111,12 @@ export function EventRowExpandable({
               style={{ background: event.color }}
             />
             <div className="flex flex-col leading-tight w-28 shrink-0">
-              <span className="text-xs font-medium text-ink">
-                {dateLabel}
-              </span>
-              <span className="text-2xs font-mono text-ink-4">
-                {timeLabel}
-              </span>
+              <span className="text-xs font-medium text-ink">{dateLabel}</span>
+              <span className="text-2xs font-mono text-ink-4">{timeLabel}</span>
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                <div className="text-xs font-medium text-ink truncate">
-                  {event.title}
-                </div>
+                <div className="text-xs font-medium text-ink truncate">{event.title}</div>
                 {notesCount > 0 && (
                   <Badge
                     className="gap-0.5"
@@ -156,9 +138,7 @@ export function EventRowExpandable({
                 )}
               </div>
               {event.location && (
-                <div className="text-2xs text-ink-3 truncate">
-                  {event.location}
-                </div>
+                <div className="text-2xs text-ink-3 truncate">{event.location}</div>
               )}
               {notesCount > 0 && !expanded && (
                 <div className="text-2xs text-ink-3 truncate mt-0.5 italic">
@@ -171,8 +151,7 @@ export function EventRowExpandable({
             </Badge>
             {event.attendeeCount > 0 && (
               <span className="text-2xs font-mono text-ink-4 shrink-0">
-                {event.attendeeCount}{" "}
-                {event.attendeeCount === 1 ? "attendee" : "attendees"}
+                {event.attendeeCount} {event.attendeeCount === 1 ? "attendee" : "attendees"}
               </span>
             )}
             {canSeeDetails && (
@@ -181,7 +160,7 @@ export function EventRowExpandable({
                 className={cn(
                   "text-ink-3 shrink-0 transition-transform",
                   expanded && "rotate-180",
-                  hasAttachments && !expanded && "text-brand-700"
+                  hasAttachments && !expanded && "text-brand-700",
                 )}
               />
             )}
@@ -195,7 +174,7 @@ export function EventRowExpandable({
             eventId={event.id}
             className={cn(
               "flex items-center px-3 border-l border-line shrink-0 transition-colors",
-              "text-ink-3 hover:bg-paper-2 hover:text-brand-700"
+              "text-ink-3 hover:bg-paper-2 hover:text-brand-700",
             )}
           >
             <span
@@ -210,10 +189,7 @@ export function EventRowExpandable({
       </div>
 
       {canSeeDetails && expanded && (
-        <EventAttachmentsProvider
-          {...viewer}
-          defaultTimeEntryDate={eventTimeEntryDate(event, tz)}
-        >
+        <EventAttachmentsProvider {...viewer} defaultTimeEntryDate={eventTimeEntryDate(event, tz)}>
           <div className="px-5 py-3 border-t border-line bg-paper-2/30 flex flex-col gap-4">
             <EventNotesSection
               eventId={event.id}

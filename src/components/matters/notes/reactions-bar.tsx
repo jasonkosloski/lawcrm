@@ -13,16 +13,9 @@
 import { useState, useTransition } from "react";
 import { SmilePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toggleNoteReaction } from "@/app/actions/notes";
-import {
-  REACTION_EMOJIS,
-  type ReactionEmoji,
-} from "@/lib/note-constants";
+import { REACTION_EMOJIS, type ReactionEmoji } from "@/lib/note-constants";
 import type { NoteReactionSummary } from "@/lib/queries/matter-detail";
 import { notifyError } from "@/lib/feedback";
 
@@ -76,7 +69,7 @@ export function ReactionsBar({
             r.userReacted
               ? "bg-brand-soft border-brand-200 text-brand-700"
               : "bg-white border-line text-ink-3 hover:border-brand-300 hover:text-brand-700",
-            pending && "opacity-60 cursor-wait"
+            pending && "opacity-60 cursor-wait",
           )}
           title={r.userReacted ? "Remove your reaction" : "Add your reaction"}
         >
@@ -117,7 +110,7 @@ function AddReactionButton({
           compact
             ? "inline-flex items-center gap-1 text-2xs text-ink-4 hover:text-brand-700 transition-colors"
             : "inline-flex items-center justify-center w-6 h-6 rounded-full border border-dashed border-line text-ink-4 hover:border-brand-300 hover:text-brand-700 transition-colors",
-          pending && "opacity-60 cursor-wait"
+          pending && "opacity-60 cursor-wait",
         )}
         aria-label="Add a reaction"
         title="Add a reaction"

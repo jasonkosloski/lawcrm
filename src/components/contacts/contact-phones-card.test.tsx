@@ -66,9 +66,7 @@ describe("ContactPhonesCard manager", () => {
     await user.clear(first);
     await user.type(first, "999");
     await user.click(screen.getByRole("button", { name: /cancel/i }));
-    await waitFor(() =>
-      expect(screen.queryByLabelText("Phone number")).toBeNull()
-    );
+    await waitFor(() => expect(screen.queryByLabelText("Phone number")).toBeNull());
 
     await user.click(screen.getByRole("button", { name: /manage/i }));
     const again = await screen.findAllByLabelText("Phone number");
@@ -77,14 +75,7 @@ describe("ContactPhonesCard manager", () => {
 
   test("a contact with only the legacy Contact.phone is seeded from it", async () => {
     const user = setupUser();
-    render(
-      <ContactPhonesCard
-        contactId="c1"
-        phones={[]}
-        legacyPhone="(303) 555-0182"
-        canEdit
-      />
-    );
+    render(<ContactPhonesCard contactId="c1" phones={[]} legacyPhone="(303) 555-0182" canEdit />);
     await user.click(screen.getByRole("button", { name: /manage/i }));
     const numbers = await screen.findAllByLabelText("Phone number");
     expect((numbers[0] as HTMLInputElement).value).toBe("(303) 555-0182");
@@ -97,13 +88,8 @@ describe("ContactPhonesCard row identity", () => {
     render(<ContactPhonesCard contactId="c1" phones={phones} canEdit />);
     await user.click(screen.getByRole("button", { name: /manage/i }));
 
-    const [rowA, rowB] = (await screen.findAllByLabelText(
-      "Phone number"
-    )) as HTMLInputElement[];
-    expect([rowA.value, rowB.value]).toEqual([
-      "(303) 555-0101",
-      "(303) 555-0102",
-    ]);
+    const [rowA, rowB] = (await screen.findAllByLabelText("Phone number")) as HTMLInputElement[];
+    expect([rowA.value, rowB.value]).toEqual(["(303) 555-0101", "(303) 555-0102"]);
 
     // Move the first row down. With index keys the two inputs would
     // just swap values in place (and keyboard focus would stay on the
@@ -114,10 +100,7 @@ describe("ContactPhonesCard row identity", () => {
     const after = screen.getAllByLabelText("Phone number") as HTMLInputElement[];
     expect(after[0]).toBe(rowB);
     expect(after[1]).toBe(rowA);
-    expect(after.map((n) => n.value)).toEqual([
-      "(303) 555-0102",
-      "(303) 555-0101",
-    ]);
+    expect(after.map((n) => n.value)).toEqual(["(303) 555-0102", "(303) 555-0101"]);
 
     // Remove the (now first) row: the survivor is the same element.
     await user.click(screen.getAllByRole("button", { name: "Remove phone" })[0]);

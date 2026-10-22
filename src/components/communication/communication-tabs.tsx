@@ -91,19 +91,14 @@ function Tab({
       aria-current={active ? "page" : undefined}
       className={cn(
         "inline-flex items-center gap-1.5 h-9 -mb-px border-b-2 text-sm transition-colors",
-        active
-          ? "text-ink border-ink font-medium"
-          : "text-ink-3 border-transparent hover:text-ink"
+        active ? "text-ink border-ink font-medium" : "text-ink-3 border-transparent hover:text-ink",
       )}
     >
       {icon}
       <span>{label}</span>
       {unread > 0 && (
         <span
-          className={cn(
-            "text-2xs font-mono px-1.5 rounded-full",
-            "bg-brand-50 text-brand-700"
-          )}
+          className={cn("text-2xs font-mono px-1.5 rounded-full", "bg-brand-50 text-brand-700")}
         >
           {unread}
         </span>

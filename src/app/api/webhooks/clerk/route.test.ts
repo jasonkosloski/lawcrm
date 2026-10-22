@@ -17,7 +17,7 @@ vi.mock("@/lib/prisma", () => ({
     user: {
       findFirst: vi.fn(
         async ({ where }: { where: { clerkUserId: string } }) =>
-          users.find((u) => u.clerkUserId === where.clerkUserId) ?? null
+          users.find((u) => u.clerkUserId === where.clerkUserId) ?? null,
       ),
       update: vi.fn(),
       updateMany: vi.fn(),
@@ -25,9 +25,7 @@ vi.mock("@/lib/prisma", () => ({
     activityLog: {
       findFirst: vi.fn(
         async ({ where }: { where: { title: string; detail: string } }) =>
-          rows.find(
-            (r) => r.title === where.title && r.detail === where.detail
-          ) ?? null
+          rows.find((r) => r.title === where.title && r.detail === where.detail) ?? null,
       ),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         rows.push(data);
@@ -64,10 +62,7 @@ describe("POST /api/webhooks/clerk", () => {
     mockedVerify.mockRejectedValue(new Error("bad sig"));
     expect((await POST(req())).status).toBe(401);
     expect(rows).toHaveLength(0);
-    expect(warn).toHaveBeenCalledWith(
-      "[clerk-webhook] verification failed:",
-      "bad sig"
-    );
+    expect(warn).toHaveBeenCalledWith("[clerk-webhook] verification failed:", "bad sig");
     warn.mockRestore();
   });
 

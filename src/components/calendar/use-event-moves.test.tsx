@@ -79,10 +79,9 @@ describe("useEventMoves", () => {
   test("a move shows optimistically and survives until the server catches up", async () => {
     moveCalendarEvent.mockResolvedValue({ ok: true });
     const items = [event()];
-    const { result, rerender } = renderHook(
-      ({ items }) => useEventMoves(items),
-      { initialProps: { items } }
-    );
+    const { result, rerender } = renderHook(({ items }) => useEventMoves(items), {
+      initialProps: { items },
+    });
 
     act(() => result.current.moveEvent("evt-1", move(10)));
     await flush();
@@ -130,17 +129,13 @@ describe("useEventMoves", () => {
 
     expect(unstable_rethrow).toHaveBeenCalledWith(boom);
     expect(startOf(result.current.renderItems)).toBe(SERVER_START.toISOString());
-    expect(errorToast).toHaveBeenCalledWith(
-      "Couldn't move event. Please try again."
-    );
+    expect(errorToast).toHaveBeenCalledWith("Couldn't move event. Please try again.");
   });
 
   test("a failed EARLIER move does not remove a newer pending move", async () => {
     let failFirst!: (v: { ok: boolean; error?: string }) => void;
     moveCalendarEvent
-      .mockImplementationOnce(
-        () => new Promise((resolve) => (failFirst = resolve))
-      )
+      .mockImplementationOnce(() => new Promise((resolve) => (failFirst = resolve)))
       .mockImplementationOnce(() => new Promise(() => {})); // never settles
     const items = [event()];
     const { result } = renderHook(() => useEventMoves(items));
@@ -159,26 +154,20 @@ describe("useEventMoves", () => {
 
   test("a move the viewer can't edit never reaches the server", async () => {
     const items = [event()];
-    const { result } = renderHook(() =>
-      useEventMoves(items, (id) => id !== "evt-1")
-    );
+    const { result } = renderHook(() => useEventMoves(items, (id) => id !== "evt-1"));
 
     act(() => result.current.moveEvent("evt-1", move(10)));
     await flush();
 
     expect(moveCalendarEvent).not.toHaveBeenCalled();
     expect(startOf(result.current.renderItems)).toBe(SERVER_START.toISOString());
-    expect(errorToast).toHaveBeenCalledWith(
-      "You don't have permission to move this event."
-    );
+    expect(errorToast).toHaveBeenCalledWith("You don't have permission to move this event.");
   });
 
   test("an editable event is allowed through when canMove says yes", async () => {
     moveCalendarEvent.mockResolvedValue({ ok: true });
     const items = [event()];
-    const { result } = renderHook(() =>
-      useEventMoves(items, (id) => id === "evt-1")
-    );
+    const { result } = renderHook(() => useEventMoves(items, (id) => id === "evt-1"));
 
     act(() => result.current.moveEvent("evt-1", move(10)));
     await flush();

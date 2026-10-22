@@ -20,7 +20,7 @@ const CHUNK = 500;
 
 export async function backfillClientPartyRows(
   db: Pick<Tx, "matter" | "matterContact">,
-  opts: { dryRun?: boolean } = {}
+  opts: { dryRun?: boolean } = {},
 ): Promise<{ missing: number; created: number }> {
   const withClient = await db.matter.findMany({
     where: { clientId: { not: null } },
@@ -32,9 +32,7 @@ export async function backfillClientPartyRows(
   });
   // Prisma can't compare two columns in a where, so the "no matching
   // (matter, clientId, client) row" test is done here.
-  const missing = withClient.filter(
-    (m) => !m.contacts.some((c) => c.contactId === m.clientId)
-  );
+  const missing = withClient.filter((m) => !m.contacts.some((c) => c.contactId === m.clientId));
   if (opts.dryRun) return { missing: missing.length, created: 0 };
 
   let created = 0;

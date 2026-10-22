@@ -107,15 +107,24 @@ async function filedCopy(invoiceId: string, name: string, key: string) {
   store.set(key, Buffer.from(await doc.save()));
   return prisma.document.create({
     data: {
-      matterId, invoiceId, name, fileUrl: key, fileSize: store.get(key)!.length,
-      contentType: "application/pdf", source: "invoice",
+      matterId,
+      invoiceId,
+      name,
+      fileUrl: key,
+      fileSize: store.get(key)!.length,
+      contentType: "application/pdf",
+      source: "invoice",
     },
   });
 }
 
 const form = (o: Record<string, string> = {}) => {
   const f = new FormData();
-  for (const [k, v] of Object.entries({ notifyClient: "true", recipient: "client@example.com", ...o })) {
+  for (const [k, v] of Object.entries({
+    notifyClient: "true",
+    recipient: "client@example.com",
+    ...o,
+  })) {
     f.set(k, v);
   }
   return f;
@@ -146,7 +155,10 @@ describe("voidInvoice (sent)", () => {
     const res = await run(id);
     expect(res).toEqual({ status: "ok" });
     expect(await statusOf(id)).toBe("void");
-    for (const [doc, old] of [[a, "old-a"], [b, "old-b"]] as const) {
+    for (const [doc, old] of [
+      [a, "old-a"],
+      [b, "old-b"],
+    ] as const) {
       const row = await prisma.document.findUniqueOrThrow({ where: { id: doc.id } });
       expect(row.name).toBe(doc.name);
       expect(row.fileUrl).not.toBe(old);
@@ -159,7 +171,9 @@ describe("voidInvoice (sent)", () => {
     expect(msg.subject).toBe(`Invoice ${N} from Kosloski Law has been voided`);
     expect(msg.fromName).toBe("Kosloski Law");
     expect(msg.replyTo).toBe("atty@firm.com");
-    expect(msg.idempotencyKey).toMatch(new RegExp(`^invoice-void-${id}-client@example\\.com-\\d+$`));
+    expect(msg.idempotencyKey).toMatch(
+      new RegExp(`^invoice-void-${id}-client@example\\.com-\\d+$`),
+    );
     expect(msg.attachments![0].filename).toBe(`Invoice ${N} (VOID).pdf`);
     expect(await extractText(msg.attachments![0].content)).toContain("VOID");
     const t = await titles();
@@ -175,7 +189,9 @@ describe("voidInvoice (sent)", () => {
     expect(res).toEqual({ status: "ok" });
     const docs = await prisma.document.findMany({ where: { invoiceId: id } });
     expect(docs).toHaveLength(1);
-    expect(docs[0].name).toMatch(new RegExp(`^Invoice ${N} \\(void \\d{4}-\\d{2}-\\d{2}\\)\\.pdf$`));
+    expect(docs[0].name).toMatch(
+      new RegExp(`^Invoice ${N} \\(void \\d{4}-\\d{2}-\\d{2}\\)\\.pdf$`),
+    );
     const text = await extractText(store.get(docs[0].fileUrl!)!);
     expect(text).toContain("VOID");
     expect(text).toContain("Test work");
@@ -194,7 +210,9 @@ describe("voidInvoice (sent)", () => {
   });
 
   test("without billing.send_invoice: stamped, no email", async () => {
-    vi.mocked(currentUserHasPermission).mockImplementation(async (k: string) => k !== "billing.send_invoice");
+    vi.mocked(currentUserHasPermission).mockImplementation(
+      async (k: string) => k !== "billing.send_invoice",
+    );
     const id = await makeInvoice();
     await filedCopy(id, `Invoice ${N} (sent 2026-10-02).pdf`, "old-a");
     expect(await run(id)).toEqual({ status: "ok" });
@@ -225,7 +243,9 @@ describe("voidInvoice (sent)", () => {
     const res = await run(id);
     expect(res.status).toBe("ok");
     expect(res.warning).toBe("Invoice voided. Some filed copies couldn't be stamped VOID.");
-    expect((await prisma.document.findUniqueOrThrow({ where: { id: a.id } })).fileUrl).toBe("old-a");
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: a.id } })).fileUrl).toBe(
+      "old-a",
+    );
     expect(cap.sent).toHaveLength(1);
     expect(await statusOf(id)).toBe("void");
   });
@@ -237,7 +257,9 @@ describe("voidInvoice (sent)", () => {
     failStoreFor = "(sent";
     await run(id);
     const logs = await prisma.activityLog.findMany({ where: { matterId } });
-    const failed = logs.find((l) => l.title === `1 filed PDF(s) of invoice ${N} couldn't be stamped VOID`);
+    const failed = logs.find(
+      (l) => l.title === `1 filed PDF(s) of invoice ${N} couldn't be stamped VOID`,
+    );
     expect(failed?.detail).toBe(`Invoice ${N} (sent 2026-10-02).pdf`);
     const ok = logs.find((l) => l.title === `Stamped 1 filed PDF(s) of invoice ${N} VOID`);
     expect(ok?.detail).toBe(`Invoice ${N} (resent 2026-10-03).pdf`);
@@ -273,7 +295,8 @@ describe("voidInvoice (sent)", () => {
     const res = await run(id);
     expect(res).toEqual({
       status: "error",
-      error: "Can't void an invoice with payments recorded. Payments can't be reversed in the app yet — ask an admin to correct it.",
+      error:
+        "Can't void an invoice with payments recorded. Payments can't be reversed in the app yet — ask an admin to correct it.",
     });
     expect(spy).not.toHaveBeenCalled();
     expect(await statusOf(id)).toBe("sent");
@@ -286,7 +309,7 @@ describe("voidInvoice (sent)", () => {
     const res = await run(id);
     expect(res.status).toBe("ok");
     expect(res.warning).toBe(
-      "Invoice voided. The firm profile couldn't be loaded, so the client wasn't emailed."
+      "Invoice voided. The firm profile couldn't be loaded, so the client wasn't emailed.",
     );
     expect(await statusOf(id)).toBe("void");
     expect(cap.sent).toHaveLength(0);
@@ -315,9 +338,7 @@ describe("voidInvoice (sent)", () => {
     const id = await makeInvoice();
     const res = await run(id);
     expect(res.status).toBe("ok");
-    expect(res.warning).toBe(
-      "Invoice voided. No PDF was available, so the client wasn't emailed."
-    );
+    expect(res.warning).toBe("Invoice voided. No PDF was available, so the client wasn't emailed.");
     expect(await statusOf(id)).toBe("void");
     expect(cap.sent).toHaveLength(0);
   });
@@ -326,11 +347,14 @@ describe("voidInvoice (sent)", () => {
     const id = await makeInvoice();
     await filedCopy(id, `Invoice ${N} (sent 2026-10-02).pdf`, "old-a");
     await run(id);
-    const keyAfterFirst = (await prisma.document.findFirstOrThrow({ where: { invoiceId: id } })).fileUrl;
+    const keyAfterFirst = (await prisma.document.findFirstOrThrow({ where: { invoiceId: id } }))
+      .fileUrl;
     const second = await run(id);
     expect(second.status).toBe("error");
     expect(cap.sent).toHaveLength(1);
-    expect((await prisma.document.findFirstOrThrow({ where: { invoiceId: id } })).fileUrl).toBe(keyAfterFirst);
+    expect((await prisma.document.findFirstOrThrow({ where: { invoiceId: id } })).fileUrl).toBe(
+      keyAfterFirst,
+    );
   });
 
   test("a payment landing mid-way: error, nothing stamped, filed or emailed", async () => {

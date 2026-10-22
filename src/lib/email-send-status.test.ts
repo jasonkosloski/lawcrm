@@ -1,8 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  isSendableStatus,
-  SENDABLE_EMAIL_STATUSES,
-} from "./email-send-status";
+import { isSendableStatus, SENDABLE_EMAIL_STATUSES } from "./email-send-status";
 
 describe("isSendableStatus", () => {
   test.each([

@@ -19,7 +19,7 @@ export type NotificationEmailSettings = {
 };
 
 export async function getNotificationEmailSettings(
-  userId: string
+  userId: string,
 ): Promise<NotificationEmailSettings> {
   const [prefs, mutes] = await Promise.all([
     prisma.notificationPreference.findMany({
@@ -34,15 +34,12 @@ export async function getNotificationEmailSettings(
   ]);
   const stored = new Map(prefs.map((p) => [p.category, p.emailMode]));
   const modes = Object.fromEntries(
-    NOTIFICATION_CATEGORIES.map((c) => [c.key, effectiveMode(c.key, stored.get(c.key))])
+    NOTIFICATION_CATEGORIES.map((c) => [c.key, effectiveMode(c.key, stored.get(c.key))]),
   ) as Record<NotificationCategory, EmailMode>;
   return { modes, mutedMatters: mutes.map((m) => m.matter) };
 }
 
-export async function isMatterEmailMuted(
-  userId: string,
-  matterId: string
-): Promise<boolean> {
+export async function isMatterEmailMuted(userId: string, matterId: string): Promise<boolean> {
   const hit = await prisma.notificationMatterMute.findUnique({
     where: { userId_matterId: { userId, matterId } },
     select: { userId: true },

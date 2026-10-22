@@ -94,9 +94,7 @@ describe("listContacts search", () => {
     expect((await listContacts({ search: "whitfield" })).map((c) => c.name)).toEqual([
       "Dana Whitfield",
     ]);
-    expect((await listContacts({ search: "acme" })).map((c) => c.name)).toEqual([
-      "Dana Whitfield",
-    ]);
+    expect((await listContacts({ search: "acme" })).map((c) => c.name)).toEqual(["Dana Whitfield"]);
     expect((await listContacts({ search: "dana.w@example" })).map((c) => c.name)).toEqual([
       "Dana Whitfield",
     ]);
@@ -239,9 +237,7 @@ describe("getContactById", () => {
 
     const c = await getContactById(contactId);
     expect(c?.isActive).toBe(false);
-    expect(c?.asClientMatters).toMatchObject([
-      { name: "Closed Matter", isArchived: true },
-    ]);
+    expect(c?.asClientMatters).toMatchObject([{ name: "Closed Matter", isArchived: true }]);
   });
 
   test("returns null for an unknown id", async () => {
@@ -259,20 +255,13 @@ describe("listContactPickerOptions", () => {
     await seedMatterContact({ matterId: m, contactId: mid, category: "lay_witness" });
 
     const rows = await listContactPickerOptions({ priorityMatterId: m });
-    expect(rows.map((r) => r.name)).toEqual([
-      "Mid Witness",
-      "Zed Client",
-      "Aaron Other",
-    ]);
+    expect(rows.map((r) => r.name)).toEqual(["Mid Witness", "Zed Client", "Aaron Other"]);
   });
 
   test("without a priority matter: plain A-Z", async () => {
     await seedContact({ name: "Beta" });
     await seedContact({ name: "Alpha" });
-    expect((await listContactPickerOptions()).map((r) => r.name)).toEqual([
-      "Alpha",
-      "Beta",
-    ]);
+    expect((await listContactPickerOptions()).map((r) => r.name)).toEqual(["Alpha", "Beta"]);
   });
 
   test("the matter's client is present even past the alphabetical cap", async () => {
@@ -330,9 +319,7 @@ describe("searchMergeCandidates", () => {
         email: "js@firm.com",
       },
     ]);
-    expect(
-      (await searchMergeCandidates({ query: "JS@FIRM", excludeId: "x" })).length
-    ).toBe(1);
+    expect((await searchMergeCandidates({ query: "JS@FIRM", excludeId: "x" })).length).toBe(1);
   });
 
   test("excludes the contact itself, inactive and merged-away records; empty query = none", async () => {
@@ -357,8 +344,8 @@ describe("searchMergeCandidates", () => {
         type: "other",
       })),
     });
-    expect(
-      (await searchMergeCandidates({ query: "smith", excludeId: "x" })).length
-    ).toBe(MERGE_SEARCH_LIMIT);
+    expect((await searchMergeCandidates({ query: "smith", excludeId: "x" })).length).toBe(
+      MERGE_SEARCH_LIMIT,
+    );
   });
 });

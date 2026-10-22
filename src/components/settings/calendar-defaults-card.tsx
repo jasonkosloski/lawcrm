@@ -36,23 +36,17 @@ export function FirmCalendarDefaultsCard({
   };
   canEdit: boolean;
 }) {
-  const [state, formAction, pending] = useActionState(
-    updateFirmCalendarDefaults,
-    initial
-  );
+  const [state, formAction, pending] = useActionState(updateFirmCalendarDefaults, initial);
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-semibold">
-          Calendar defaults
-        </CardTitle>
+        <CardTitle className="text-sm font-semibold">Calendar defaults</CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-4">
         <p className="text-xs text-ink-3 mb-3 leading-relaxed">
-          Firm-wide defaults for who lands on a calendar event
-          automatically. Each matter can override these on its
-          own edit page.
+          Firm-wide defaults for who lands on a calendar event automatically. Each matter can
+          override these on its own edit page.
         </p>
         <form action={formAction} className="flex flex-col gap-2">
           <FirmToggle
@@ -71,20 +65,11 @@ export function FirmCalendarDefaultsCard({
           />
           {canEdit && (
             <div className="flex items-center justify-between pt-2 mt-1 border-t border-line">
-              {state.status === "ok" && (
-                <span className="text-2xs text-ok">Saved.</span>
-              )}
+              {state.status === "ok" && <span className="text-2xs text-ok">Saved.</span>}
               {state.status === "error" && (
-                <span className="text-2xs text-warn">
-                  {state.error ?? "Couldn't save."}
-                </span>
+                <span className="text-2xs text-warn">{state.error ?? "Couldn't save."}</span>
               )}
-              <Button
-                type="submit"
-                size="sm"
-                disabled={pending}
-                className="ml-auto"
-              >
+              <Button type="submit" size="sm" disabled={pending} className="ml-auto">
                 {pending ? "Saving…" : "Save defaults"}
               </Button>
             </div>
@@ -112,7 +97,7 @@ function FirmToggle({
     <label
       className={cn(
         "flex items-start gap-2 text-xs select-none rounded-md p-2 -mx-2",
-        !disabled && "hover:bg-paper-2"
+        !disabled && "hover:bg-paper-2",
       )}
     >
       <input
@@ -158,16 +143,13 @@ export function MatterCalendarDefaultsCard({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-semibold">
-          Calendar defaults
-        </CardTitle>
+        <CardTitle className="text-sm font-semibold">Calendar defaults</CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-4">
         <p className="text-xs text-ink-3 mb-3 leading-relaxed">
-          Per-matter override of the firm-wide auto-attendee
-          rules. &ldquo;Inherit&rdquo; falls back to the firm
-          setting; the other two pin this matter regardless of
-          what the firm changes later.
+          Per-matter override of the firm-wide auto-attendee rules. &ldquo;Inherit&rdquo; falls back
+          to the firm setting; the other two pin this matter regardless of what the firm changes
+          later.
         </p>
         <form action={formAction} className="flex flex-col gap-3">
           <MatterTriToggle
@@ -188,20 +170,11 @@ export function MatterCalendarDefaultsCard({
           />
           {canEdit && (
             <div className="flex items-center justify-between pt-2 border-t border-line">
-              {state.status === "ok" && (
-                <span className="text-2xs text-ok">Saved.</span>
-              )}
+              {state.status === "ok" && <span className="text-2xs text-ok">Saved.</span>}
               {state.status === "error" && (
-                <span className="text-2xs text-warn">
-                  {state.error ?? "Couldn't save."}
-                </span>
+                <span className="text-2xs text-warn">{state.error ?? "Couldn't save."}</span>
               )}
-              <Button
-                type="submit"
-                size="sm"
-                disabled={pending}
-                className="ml-auto"
-              >
+              <Button type="submit" size="sm" disabled={pending} className="ml-auto">
                 {pending ? "Saving…" : "Save defaults"}
               </Button>
             </div>
@@ -228,8 +201,7 @@ function MatterTriToggle({
   hint: string;
 }) {
   // null → "inherit"; true → "true"; false → "false"
-  const defaultValue =
-    current === null ? "inherit" : current ? "true" : "false";
+  const defaultValue = current === null ? "inherit" : current ? "true" : "false";
 
   return (
     <fieldset disabled={disabled} className="flex flex-col gap-1">

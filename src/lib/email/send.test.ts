@@ -27,9 +27,7 @@ describe("sendEmail", () => {
   it("resend driver POSTs to https://api.resend.com/emails with bearer key and EMAIL_FROM", async () => {
     vi.stubEnv("RESEND_API_KEY", "k");
     vi.stubEnv("EMAIL_FROM", "Firm <noreply@firm.test>");
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, json: async () => ({ id: "x" }) });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: "x" }) });
     vi.stubGlobal("fetch", fetchMock);
     const res = await sendEmail(msg);
     expect(res).toMatchObject({ ok: true });

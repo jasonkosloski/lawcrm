@@ -42,7 +42,7 @@ describe("getMatterSettlement — one row per matter", () => {
   test("the database refuses a second settlement for the same matter (ADR-036)", async () => {
     await prisma.settlement.create({ data: { matterId, grossAmount: 1000 } });
     await expect(
-      prisma.settlement.create({ data: { matterId, grossAmount: 2000 } })
+      prisma.settlement.create({ data: { matterId, grossAmount: 2000 } }),
     ).rejects.toMatchObject({ code: "P2002" });
     const result = await getMatterSettlement(matterId);
     expect(result?.grossAmount).toBe(1000);
@@ -60,14 +60,13 @@ describe("getMatterSettlement — waterfall", () => {
       firmFeePercent?: string | null;
       firmFee?: string;
       advancedCosts?: string;
-    } = {}
+    } = {},
   ) =>
     prisma.settlement.create({
       data: {
         matterId,
         grossAmount: data.grossAmount ?? "100000",
-        firmFeePercent:
-          data.firmFeePercent === undefined ? "33.33" : data.firmFeePercent,
+        firmFeePercent: data.firmFeePercent === undefined ? "33.33" : data.firmFeePercent,
         firmFee: data.firmFee ?? "0",
         advancedCosts: data.advancedCosts ?? "0",
       },
@@ -106,9 +105,7 @@ describe("getMatterSettlement — waterfall", () => {
       ],
     });
     const dto = await getMatterSettlement(matterId);
-    expect(dto!.liens.map((l) => l.effectiveAmount).sort()).toEqual([
-      1000, 2500,
-    ]);
+    expect(dto!.liens.map((l) => l.effectiveAmount).sort()).toEqual([1000, 2500]);
     expect(dto!.lienTotal).toBe(3500);
     // 100000 - 33330 - 1200 - 3500
     expect(dto!.clientNet).toBe(61970);

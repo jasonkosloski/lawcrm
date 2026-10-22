@@ -13,12 +13,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { leadAccessWhere } from "@/lib/lead-access";
 import { LEAD_CLOSED_STAGES } from "@/lib/constants/lead-stage";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
-import {
-  dateKeyInTz,
-  daysBetweenKeys,
-  instantInTz,
-  todayKey,
-} from "@/lib/format-date";
+import { dateKeyInTz, daysBetweenKeys, instantInTz, todayKey } from "@/lib/format-date";
 
 // Stage value set + labels moved to their canonical client-safe home
 // in `src/lib/constants/lead-stage.ts` (this server-only file can't
@@ -67,10 +62,7 @@ export type LeadListRow = {
 /** Whole calendar days (in `tz`) from the day the lead was created to
  *  today. Never negative. */
 export function leadAgeDays(createdAt: Date, tz: string, now: Date): number {
-  return Math.max(
-    0,
-    daysBetweenKeys(dateKeyInTz(createdAt, tz), todayKey(tz, now))
-  );
+  return Math.max(0, daysBetweenKeys(dateKeyInTz(createdAt, tz), todayKey(tz, now)));
 }
 
 /** `Lead.statuteWindow` is a one-time snapshot ("days remaining" when
@@ -82,7 +74,7 @@ export function statuteDaysRemaining(
   statuteWindow: number | null,
   createdAt: Date,
   tz: string,
-  now: Date
+  now: Date,
 ): number | null {
   if (statuteWindow === null) return null;
   return statuteWindow - leadAgeDays(createdAt, tz, now);
@@ -110,7 +102,7 @@ export type LeadList = {
 export async function listLeads(
   now: Date = new Date(),
   /** 1-based `?page=` of the closed history; clamped into range. */
-  closedPage = 1
+  closedPage = 1,
 ): Promise<LeadList> {
   const include = {
     // Joined Contact wins for display fields when present — keeps
@@ -148,7 +140,7 @@ export async function listLeads(
           // `id` tiebreak keeps the order stable across pages.
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           include,
-        })
+        }),
     ),
   ]);
   const activeTruncated = active.length > ACTIVE_LEADS_SAFETY_CAP;
@@ -168,12 +160,7 @@ export async function listLeads(
     liabilityAssessment: l.liabilityAssessment,
     damagesAssessment: l.damagesAssessment,
     statuteWindow: l.statuteWindow,
-    statuteDaysRemaining: statuteDaysRemaining(
-      l.statuteWindow,
-      l.createdAt,
-      tz,
-      now
-    ),
+    statuteDaysRemaining: statuteDaysRemaining(l.statuteWindow, l.createdAt, tz, now),
     conflictCheck: l.conflictCheck,
     restricted: l.restricted,
     ageDays: leadAgeDays(l.createdAt, tz, now),
@@ -190,7 +177,7 @@ export async function listLeads(
  * sink below every scored lead. Then scored leads, highest first.
  */
 export function sortIntakeQueue<T extends { isActive: boolean; score: number | null }>(
-  leads: readonly T[]
+  leads: readonly T[],
 ): T[] {
   return [...leads].sort((a, b) => {
     if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
@@ -281,12 +268,7 @@ export const getLeadById = cache(async (id: string) => {
     ...lead,
     convertedMatter,
     /** Live days of statute left (see `statuteDaysRemaining`). */
-    statuteDaysRemaining: statuteDaysRemaining(
-      lead.statuteWindow,
-      lead.createdAt,
-      tz,
-      new Date()
-    ),
+    statuteDaysRemaining: statuteDaysRemaining(lead.statuteWindow, lead.createdAt, tz, new Date()),
     displayName: lead.contact?.name ?? lead.name,
     displayEmail: lead.contact?.email ?? lead.email,
     displayPhone: lead.contact?.phone ?? lead.phone,
@@ -304,23 +286,22 @@ export async function getLeadSummary(now: Date = new Date()) {
   // Same visibility as the queue it heads (ADR-049).
   const access = await leadAccessWhere(await getCurrentUserId());
 
-  const [activeCount, newTodayCount, conflictCount, convertedCount] =
-    await Promise.all([
-      prisma.lead.count({ where: { ...access, stage: openStage } }),
-      prisma.lead.count({
-        where: { ...access, createdAt: { gte: startOfToday } },
-      }),
-      // Open leads only: a flagged lead that was later converted or
-      // declined must not inflate the "N conflict" header forever.
-      prisma.lead.count({
-        where: {
-          ...access,
-          stage: openStage,
-          conflictCheck: { in: ["warn", "conflict"] },
-        },
-      }),
-      prisma.lead.count({ where: { ...access, stage: "converted" } }),
-    ]);
+  const [activeCount, newTodayCount, conflictCount, convertedCount] = await Promise.all([
+    prisma.lead.count({ where: { ...access, stage: openStage } }),
+    prisma.lead.count({
+      where: { ...access, createdAt: { gte: startOfToday } },
+    }),
+    // Open leads only: a flagged lead that was later converted or
+    // declined must not inflate the "N conflict" header forever.
+    prisma.lead.count({
+      where: {
+        ...access,
+        stage: openStage,
+        conflictCheck: { in: ["warn", "conflict"] },
+      },
+    }),
+    prisma.lead.count({ where: { ...access, stage: "converted" } }),
+  ]);
 
   return { activeCount, newTodayCount, conflictCount, convertedCount };
 }

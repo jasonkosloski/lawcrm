@@ -30,10 +30,7 @@ vi.mock("@/app/actions/matters", () => ({
 import { setMatterSolSatisfied } from "@/app/actions/matters";
 import { notifyError } from "@/lib/feedback";
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
-import {
-  StatuteOfLimitationsCard,
-  formatCalendarDate,
-} from "./statute-of-limitations-card";
+import { StatuteOfLimitationsCard, formatCalendarDate } from "./statute-of-limitations-card";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -57,48 +54,29 @@ describe("formatCalendarDate — UTC day grid", () => {
   test("renders the stored calendar day, not the local-shifted one", () => {
     // In America/Denver this instant is Jul 9, 6pm — the old
     // formatter showed "Jul 9, 2026".
-    expect(formatCalendarDate(new Date("2026-07-10T00:00:00Z"))).toBe(
-      "Fri, Jul 10, 2026"
-    );
+    expect(formatCalendarDate(new Date("2026-07-10T00:00:00Z"))).toBe("Fri, Jul 10, 2026");
     // Also across a DST boundary (MST, UTC-7).
-    expect(formatCalendarDate(new Date("2026-03-14T00:00:00Z"))).toBe(
-      "Sat, Mar 14, 2026"
-    );
+    expect(formatCalendarDate(new Date("2026-03-14T00:00:00Z"))).toBe("Sat, Mar 14, 2026");
   });
 });
 
 describe("StatuteOfLimitationsCard — rendered countdown", () => {
   test("shows the UTC deadline date and correct days remaining", () => {
     vi.setSystemTime(new Date("2026-07-06T02:00:00Z")); // Jul 5, 8pm MDT
-    render(
-      <StatuteOfLimitationsCard
-        {...baseProps}
-        date={new Date("2026-07-10T00:00:00Z")}
-      />
-    );
+    render(<StatuteOfLimitationsCard {...baseProps} date={new Date("2026-07-10T00:00:00Z")} />);
     expect(screen.getByText("5 days remaining")).toBeInTheDocument();
     expect(screen.getByText("Fri, Jul 10, 2026")).toBeInTheDocument();
   });
 
   test("shows 'Due today' through the whole local deadline day", () => {
     vi.setSystemTime(new Date("2026-07-11T03:00:00Z")); // Jul 10, 9pm MDT
-    render(
-      <StatuteOfLimitationsCard
-        {...baseProps}
-        date={new Date("2026-07-10T00:00:00Z")}
-      />
-    );
+    render(<StatuteOfLimitationsCard {...baseProps} date={new Date("2026-07-10T00:00:00Z")} />);
     expect(screen.getByText("Due today")).toBeInTheDocument();
   });
 
   test("shows overdue count once the local day has passed", () => {
     vi.setSystemTime(new Date("2026-07-06T18:00:00Z")); // Jul 6 local
-    render(
-      <StatuteOfLimitationsCard
-        {...baseProps}
-        date={new Date("2026-07-01T00:00:00Z")}
-      />
-    );
+    render(<StatuteOfLimitationsCard {...baseProps} date={new Date("2026-07-01T00:00:00Z")} />);
     expect(screen.getByText("5 days overdue")).toBeInTheDocument();
   });
 
@@ -109,7 +87,7 @@ describe("StatuteOfLimitationsCard — rendered countdown", () => {
         {...baseProps}
         date={new Date("2026-09-01T00:00:00Z")}
         incidentDate={new Date("2026-07-01T00:00:00Z")}
-      />
+      />,
     );
     expect(screen.getByText("Wed, Jul 1, 2026")).toBeInTheDocument();
   });
@@ -125,7 +103,7 @@ describe("StatuteOfLimitationsCard — profile zone, not runtime zone (F319/F685
     render(
       <UserTimeZoneProvider timeZone="Pacific/Auckland">
         <StatuteOfLimitationsCard {...baseProps} date={date} />
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
     expect(screen.getByText("4 days remaining")).toBeInTheDocument();
   });
@@ -136,14 +114,14 @@ describe("StatuteOfLimitationsCard — profile zone, not runtime zone (F319/F685
     const { unmount } = render(
       <UserTimeZoneProvider timeZone="America/Denver">
         <StatuteOfLimitationsCard {...baseProps} date={date} />
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
     expect(screen.getByText("Due today")).toBeInTheDocument();
     unmount();
     render(
       <UserTimeZoneProvider timeZone="UTC">
         <StatuteOfLimitationsCard {...baseProps} date={date} />
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
     expect(screen.getByText("1 day overdue")).toBeInTheDocument();
   });
@@ -159,34 +137,22 @@ describe("StatuteOfLimitationsCard — profile zone, not runtime zone (F319/F685
           // Jul 5 8pm Denver / Jul 6 2pm Auckland
           satisfiedAt={new Date("2026-07-06T02:00:00Z")}
         />
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
-    expect(
-      screen.getByText("Marked satisfied Mon, Jul 6, 2026")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Marked satisfied Mon, Jul 6, 2026")).toBeInTheDocument();
   });
 });
 
 describe("StatuteOfLimitationsCard — singular day labels (F787)", () => {
   test("1 day remaining", () => {
     vi.setSystemTime(new Date("2026-07-09T18:00:00Z")); // Jul 9 local
-    render(
-      <StatuteOfLimitationsCard
-        {...baseProps}
-        date={new Date("2026-07-10T00:00:00Z")}
-      />
-    );
+    render(<StatuteOfLimitationsCard {...baseProps} date={new Date("2026-07-10T00:00:00Z")} />);
     expect(screen.getByText("1 day remaining")).toBeInTheDocument();
   });
 
   test("1 day overdue", () => {
     vi.setSystemTime(new Date("2026-07-11T18:00:00Z")); // Jul 11 local
-    render(
-      <StatuteOfLimitationsCard
-        {...baseProps}
-        date={new Date("2026-07-10T00:00:00Z")}
-      />
-    );
+    render(<StatuteOfLimitationsCard {...baseProps} date={new Date("2026-07-10T00:00:00Z")} />);
     expect(screen.getByText("1 day overdue")).toBeInTheDocument();
   });
 });
@@ -200,7 +166,7 @@ describe("StatuteOfLimitationsCard — provenance line (F013)", () => {
         date={new Date("2026-07-01T00:00:00Z")}
         incidentDate={new Date("2024-07-01T00:00:00Z")}
         statutePeriod={{ amount: 730, unit: "DAYS" }}
-      />
+      />,
     );
     expect(screen.getByText(/from incident/i)).toBeInTheDocument();
     expect(screen.queryByText(/manual date/i)).toBeNull();
@@ -214,7 +180,7 @@ describe("StatuteOfLimitationsCard — provenance line (F013)", () => {
         date={new Date("2027-01-15T00:00:00Z")}
         incidentDate={new Date("2024-07-01T00:00:00Z")}
         statutePeriod={{ amount: 730, unit: "DAYS" }}
-      />
+      />,
     );
     expect(screen.getByText(/manual date/i)).toBeInTheDocument();
     expect(screen.queryByText(/^from incident/i)).toBeNull();
@@ -226,28 +192,17 @@ describe("StatuteOfLimitationsCard — matters.edit gating", () => {
 
   test("editors get the Mark satisfied toggle", () => {
     render(<StatuteOfLimitationsCard {...baseProps} date={date} />);
-    expect(
-      screen.getByRole("button", { name: /mark satisfied/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /mark satisfied/i })).toBeInTheDocument();
   });
 
   test("non-editors get no toggle while unsatisfied", () => {
-    render(
-      <StatuteOfLimitationsCard {...baseProps} date={date} canEdit={false} />
-    );
+    render(<StatuteOfLimitationsCard {...baseProps} date={date} canEdit={false} />);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByText(/mark satisfied/i)).not.toBeInTheDocument();
   });
 
   test("non-editors still see the satisfied status, without a toggle", () => {
-    render(
-      <StatuteOfLimitationsCard
-        {...baseProps}
-        date={date}
-        satisfied
-        canEdit={false}
-      />
-    );
+    render(<StatuteOfLimitationsCard {...baseProps} date={date} satisfied canEdit={false} />);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.getByText("Satisfied")).toBeInTheDocument();
   });
@@ -265,9 +220,7 @@ describe("StatuteOfLimitationsCard — satisfied toggle (F785)", () => {
     vi.mocked(setMatterSolSatisfied).mockResolvedValue({ ok: true });
     render(<StatuteOfLimitationsCard {...baseProps} date={date} />);
     fireEvent.click(screen.getByRole("button", { name: /mark satisfied/i }));
-    await waitFor(() =>
-      expect(setMatterSolSatisfied).toHaveBeenCalledWith("m1", true)
-    );
+    await waitFor(() => expect(setMatterSolSatisfied).toHaveBeenCalledWith("m1", true));
   });
 
   test("a refused toggle toasts the error and the card goes back to unsatisfied", async () => {
@@ -278,14 +231,10 @@ describe("StatuteOfLimitationsCard — satisfied toggle (F785)", () => {
     render(<StatuteOfLimitationsCard {...baseProps} date={date} />);
     fireEvent.click(screen.getByRole("button", { name: /mark satisfied/i }));
     await waitFor(() =>
-      expect(notifyError).toHaveBeenCalledWith(
-        "You don't have permission to edit matters."
-      )
+      expect(notifyError).toHaveBeenCalledWith("You don't have permission to edit matters."),
     );
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: /mark satisfied/i })
-      ).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: /mark satisfied/i })).toBeInTheDocument(),
     );
   });
 });

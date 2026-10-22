@@ -11,11 +11,7 @@ import { CSP_HEADER, nonceFromCsp } from "@/lib/csp";
  * required for the CSP nonce, which is read from the same request
  * header Next stamps its own scripts from (set in src/proxy.ts).
  */
-export async function StaffClerkProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export async function StaffClerkProvider({ children }: { children: React.ReactNode }) {
   const nonce = nonceFromCsp((await headers()).get(CSP_HEADER));
   return (
     <ClerkProvider dynamic nonce={nonce} signInUrl="/login">

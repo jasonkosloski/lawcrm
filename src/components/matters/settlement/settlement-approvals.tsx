@@ -19,12 +19,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import {
-  Check,
-  CheckCircle2,
-  Circle,
-  X,
-} from "lucide-react";
+import { Check, CheckCircle2, Circle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 // approvedAt is a real timestamp (an instant): shown in the user's
 // PROFILE zone via useUserTimeZone() so the server render and the
@@ -59,16 +54,11 @@ export function SettlementApprovals({
   const tz = useUserTimeZone();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [notesByApproval, setNotesByApproval] = useState<
-    Record<string, string>
-  >({});
+  const [notesByApproval, setNotesByApproval] = useState<Record<string, string>>({});
 
   if (approvals.length === 0) return null;
 
-  const handle = (
-    approvalId: string,
-    status: "approved" | "rejected" | "pending"
-  ) => {
+  const handle = (approvalId: string, status: "approved" | "rejected" | "pending") => {
     setError(null);
     const note = notesByApproval[approvalId];
     startTransition(async () => {
@@ -91,9 +81,7 @@ export function SettlementApprovals({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between">
-        <div className="text-2xs font-medium text-ink-3">
-          Approval chain
-        </div>
+        <div className="text-2xs font-medium text-ink-3">Approval chain</div>
         <div className="text-2xs text-ink-4 font-mono">
           {approvedCount}/{approvals.length} approved
           {rejectedCount > 0 && ` · ${rejectedCount} rejected`}
@@ -106,42 +94,25 @@ export function SettlementApprovals({
         {approvals.map((a) => {
           const isApproved = a.status === "approved";
           const isRejected = a.status === "rejected";
-          const Icon = isApproved
-            ? CheckCircle2
-            : isRejected
-              ? X
-              : Circle;
-          const iconClass = isApproved
-            ? "text-ok"
-            : isRejected
-              ? "text-warn"
-              : "text-ink-4";
+          const Icon = isApproved ? CheckCircle2 : isRejected ? X : Circle;
+          const iconClass = isApproved ? "text-ok" : isRejected ? "text-warn" : "text-ink-4";
           return (
             <li key={a.id} className="flex flex-col gap-2 px-3 py-2.5">
               <div className="flex items-start gap-3">
                 <Icon size={14} className={cn("shrink-0 mt-0.5", iconClass)} />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs text-ink leading-snug">
-                    <span className="font-mono text-ink-4 mr-1.5">
-                      {a.step}.
-                    </span>
+                    <span className="font-mono text-ink-4 mr-1.5">{a.step}.</span>
                     {a.label}
                   </div>
                   {isApproved && a.approverName && (
                     <div className="text-2xs text-ink-4 mt-0.5">
                       Approved by {a.approverName}
-                      {a.approvedAt &&
-                        ` · ${formatDate(a.approvedAt, "datetime_medium", tz)}`}
+                      {a.approvedAt && ` · ${formatDate(a.approvedAt, "datetime_medium", tz)}`}
                     </div>
                   )}
-                  {isRejected && (
-                    <div className="text-2xs text-warn mt-0.5">Rejected</div>
-                  )}
-                  {a.notes && (
-                    <div className="text-2xs text-ink-3 mt-0.5 italic">
-                      {a.notes}
-                    </div>
-                  )}
+                  {isRejected && <div className="text-2xs text-warn mt-0.5">Rejected</div>}
+                  {a.notes && <div className="text-2xs text-ink-3 mt-0.5 italic">{a.notes}</div>}
                 </div>
               </div>
 

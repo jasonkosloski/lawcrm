@@ -10,7 +10,7 @@ import { filterAccessibleMatterIds } from "@/lib/matter-access";
  */
 export async function actorSeesAllPortalMatters(
   userId: string,
-  identityId: string
+  identityId: string,
 ): Promise<boolean> {
   const rows = await prisma.portalMatterAccess.findMany({
     where: { identityId, revokedAt: null },

@@ -6,15 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import { TIME_ENTRY_WIP_STATUSES } from "@/lib/constants/time-entry-status";
-import {
-  EVENT_REF_SELECT,
-  scrubEventRef,
-} from "./shared";
-import {
-  EntitySource,
-  AttachedNotePreview,
-  resolveEntitySource,
-} from "./tasks";
+import { EVENT_REF_SELECT, scrubEventRef } from "./shared";
+import { EntitySource, AttachedNotePreview, resolveEntitySource } from "./tasks";
 
 // ── Time entries ─────────────────────────────────────────────────────────
 
@@ -64,7 +57,7 @@ const MATTER_TIME_ENTRIES_LIMIT = 200;
 
 export async function getMatterTimeEntries(
   matterId: string,
-  options: { limit?: number } = {}
+  options: { limit?: number } = {},
 ): Promise<TimeEntryRow[]> {
   const viewerId = await getCurrentUserId();
   const rows = await prisma.timeEntry.findMany({
@@ -159,9 +152,7 @@ export async function getMatterTimeEntries(
   }));
 }
 
-export async function getMatterTimeSummary(
-  matterId: string
-): Promise<MatterTimeSummary> {
+export async function getMatterTimeSummary(matterId: string): Promise<MatterTimeSummary> {
   // Aggregate in the database instead of fetching rows: the summary
   // must cover EVERY entry the matter ever had (unlike the capped
   // list above), so its cost can't be allowed to grow with row

@@ -22,10 +22,30 @@ describe("checkPortalUpload", () => {
   test("the allowlist is exactly the approved set", () => {
     expect([...PORTAL_UPLOAD_EXTENSIONS].sort()).toEqual(
       [
-        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "jpg", "jpeg",
-        "png", "heic", "heif", "webp", "gif", "tif", "tiff", "mp3", "m4a",
-        "wav", "mp4", "mov", "txt", "rtf",
-      ].sort()
+        "pdf",
+        "doc",
+        "docx",
+        "xls",
+        "xlsx",
+        "ppt",
+        "pptx",
+        "jpg",
+        "jpeg",
+        "png",
+        "heic",
+        "heif",
+        "webp",
+        "gif",
+        "tif",
+        "tiff",
+        "mp3",
+        "m4a",
+        "wav",
+        "mp4",
+        "mov",
+        "txt",
+        "rtf",
+      ].sort(),
     );
   });
 

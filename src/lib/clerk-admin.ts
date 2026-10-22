@@ -72,9 +72,7 @@ export async function inviteStaff(email: string): Promise<ClerkResult> {
  * fuzzy filter, so results are re-checked for an exact, case-insensitive
  * email match before anything is revoked.
  */
-export async function revokeStaffInvitation(
-  email: string
-): Promise<ClerkResult> {
+export async function revokeStaffInvitation(email: string): Promise<ClerkResult> {
   try {
     const client = await clerkClient();
     const wanted = email.trim().toLowerCase();
@@ -94,9 +92,7 @@ export async function revokeStaffInvitation(
   }
 }
 
-export async function revokeAllStaffSessions(
-  clerkUserId: string
-): Promise<ClerkResult> {
+export async function revokeAllStaffSessions(clerkUserId: string): Promise<ClerkResult> {
   try {
     const client = await clerkClient();
     for (const id of await activeSessionIds(clerkUserId)) {
@@ -130,10 +126,8 @@ export async function unbanStaff(clerkUserId: string): Promise<ClerkResult> {
 }
 
 export async function listActiveStaffSessions(
-  clerkUserId: string
-): Promise<
-  { ok: true; sessions: StaffSessionInfo[] } | { ok: false; error: string }
-> {
+  clerkUserId: string,
+): Promise<{ ok: true; sessions: StaffSessionInfo[] } | { ok: false; error: string }> {
   try {
     const client = await clerkClient();
     const sessions: StaffSessionInfo[] = [];
@@ -149,8 +143,7 @@ export async function listActiveStaffSessions(
         const browser = a?.browserName
           ? [a.browserName, a.browserVersion].filter(Boolean).join(" ")
           : null;
-        const location =
-          [a?.city, a?.country].filter(Boolean).join(", ") || null;
+        const location = [a?.city, a?.country].filter(Boolean).join(", ") || null;
         sessions.push({
           id: s.id,
           lastActiveAt: new Date(s.lastActiveAt),
@@ -170,7 +163,7 @@ export async function listActiveStaffSessions(
 
 export async function revokeStaffSession(
   clerkUserId: string,
-  sessionId: string
+  sessionId: string,
 ): Promise<ClerkResult> {
   try {
     const client = await clerkClient();
@@ -191,7 +184,7 @@ export async function revokeStaffSession(
  * accept backend-created users with no verification or password.
  */
 export async function ensureDevClerkUser(
-  email: string
+  email: string,
 ): Promise<{ ok: true; clerkUserId: string } | { ok: false; error: string }> {
   try {
     const client = await clerkClient();
@@ -212,7 +205,7 @@ export async function ensureDevClerkUser(
 
 /** DEV ONLY: a 60-second one-time sign-in ticket for a Clerk user. */
 export async function createDevSignInToken(
-  clerkUserId: string
+  clerkUserId: string,
 ): Promise<{ ok: true; token: string } | { ok: false; error: string }> {
   try {
     const client = await clerkClient();

@@ -16,13 +16,7 @@
 import type { NotificationType } from "@/lib/notifications";
 
 export type NotificationCategory =
-  | "deadlines"
-  | "tasks"
-  | "settlement"
-  | "billing"
-  | "matter_team"
-  | "portal"
-  | "other";
+  "deadlines" | "tasks" | "settlement" | "billing" | "matter_team" | "portal" | "other";
 
 export type EmailMode = "off" | "instant" | "digest";
 
@@ -92,35 +86,30 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategoryMeta[] = [
   },
 ];
 
-export const CATEGORY_BY_TYPE: Record<NotificationType, NotificationCategory> =
-  {
-    deadline_approaching: "deadlines",
-    deadline_overdue: "deadlines",
-    task_assigned: "tasks",
-    task_due_soon: "tasks",
-    settlement_step_approved: "settlement",
-    settlement_step_rejected: "settlement",
-    invoice_payment_recorded: "billing",
-    matter_assigned: "matter_team",
-    portal_upload: "portal",
-    portal_message: "portal",
-    note_mentioned: "other",
-    transcript_ready: "other",
-    transcript_failed: "other",
-    generic: "other",
-  };
+export const CATEGORY_BY_TYPE: Record<NotificationType, NotificationCategory> = {
+  deadline_approaching: "deadlines",
+  deadline_overdue: "deadlines",
+  task_assigned: "tasks",
+  task_due_soon: "tasks",
+  settlement_step_approved: "settlement",
+  settlement_step_rejected: "settlement",
+  invoice_payment_recorded: "billing",
+  matter_assigned: "matter_team",
+  portal_upload: "portal",
+  portal_message: "portal",
+  note_mentioned: "other",
+  transcript_ready: "other",
+  transcript_failed: "other",
+  generic: "other",
+};
 
 const META_BY_KEY = new Map(NOTIFICATION_CATEGORIES.map((c) => [c.key, c]));
 
-export function categoryMeta(
-  category: NotificationCategory
-): NotificationCategoryMeta {
+export function categoryMeta(category: NotificationCategory): NotificationCategoryMeta {
   return META_BY_KEY.get(category)!;
 }
 
-export function isNotificationCategory(
-  value: string
-): value is NotificationCategory {
+export function isNotificationCategory(value: string): value is NotificationCategory {
   return META_BY_KEY.has(value as NotificationCategory);
 }
 
@@ -131,19 +120,14 @@ export function categoryOf(type: string): NotificationCategory {
     : "other";
 }
 
-export function isAllowedMode(
-  category: NotificationCategory,
-  mode: string
-): mode is EmailMode {
+export function isAllowedMode(category: NotificationCategory, mode: string): mode is EmailMode {
   return categoryMeta(category).modes.includes(mode as EmailMode);
 }
 
 /** The mode in force: the stored one when allowed, else "instant". */
 export function effectiveMode(
   category: NotificationCategory,
-  stored: string | undefined
+  stored: string | undefined,
 ): EmailMode {
-  return stored !== undefined && isAllowedMode(category, stored)
-    ? stored
-    : "instant";
+  return stored !== undefined && isAllowedMode(category, stored) ? stored : "instant";
 }

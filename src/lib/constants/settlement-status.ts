@@ -7,12 +7,7 @@
  * anonymous z.enum arrays; they now validate against these.
  */
 
-export const SETTLEMENT_STATUSES = [
-  "pending",
-  "approved",
-  "disbursed",
-  "closed",
-] as const;
+export const SETTLEMENT_STATUSES = ["pending", "approved", "disbursed", "closed"] as const;
 
 export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
 
@@ -33,10 +28,7 @@ export const SETTLEMENT_LIEN_STATUSES = [
 
 export type SettlementLienStatus = (typeof SETTLEMENT_LIEN_STATUSES)[number];
 
-export const SETTLEMENT_LIEN_STATUS_LABEL: Record<
-  SettlementLienStatus,
-  string
-> = {
+export const SETTLEMENT_LIEN_STATUS_LABEL: Record<SettlementLienStatus, string> = {
   pending: "Pending",
   negotiating: "Negotiating",
   signed: "Signed",
@@ -44,11 +36,6 @@ export const SETTLEMENT_LIEN_STATUS_LABEL: Record<
   paid: "Paid",
 };
 
-export const SETTLEMENT_APPROVAL_STATUSES = [
-  "pending",
-  "approved",
-  "rejected",
-] as const;
+export const SETTLEMENT_APPROVAL_STATUSES = ["pending", "approved", "rejected"] as const;
 
-export type SettlementApprovalStatus =
-  (typeof SETTLEMENT_APPROVAL_STATUSES)[number];
+export type SettlementApprovalStatus = (typeof SETTLEMENT_APPROVAL_STATUSES)[number];

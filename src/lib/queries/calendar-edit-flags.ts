@@ -14,10 +14,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
-import {
-  canEditEvent,
-  viewerMayTouchLoadedEvent,
-} from "@/lib/calendar-visibility";
+import { canEditEvent, viewerMayTouchLoadedEvent } from "@/lib/calendar-visibility";
 import { filterAccessibleMatterIds } from "@/lib/matter-access";
 
 /**
@@ -25,9 +22,7 @@ import { filterAccessibleMatterIds } from "@/lib/matter-access";
  * resize and see edit controls for). Ids that don't exist are simply
  * absent from the result.
  */
-export async function getEditableEventIds(
-  eventIds: readonly string[]
-): Promise<Set<string>> {
+export async function getEditableEventIds(eventIds: readonly string[]): Promise<Set<string>> {
   if (eventIds.length === 0) return new Set();
   const [viewerId, hasEventsEdit, hasEventsEditNonMatter] = await Promise.all([
     getCurrentUserId(),
@@ -44,7 +39,7 @@ export async function getEditableEventIds(
   });
   const accessible = await filterAccessibleMatterIds(
     viewerId,
-    rows.flatMap((r) => (r.matterId ? [r.matterId] : []))
+    rows.flatMap((r) => (r.matterId ? [r.matterId] : [])),
   );
   const editable = new Set<string>();
   for (const row of rows) {
@@ -52,7 +47,7 @@ export async function getEditableEventIds(
       viewerMayTouchLoadedEvent(
         viewerId,
         row,
-        row.matterId ? accessible.has(row.matterId) : true
+        row.matterId ? accessible.has(row.matterId) : true,
       ) &&
       canEditEvent({
         viewerId,

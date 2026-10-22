@@ -33,16 +33,13 @@ const initial: TestState = { status: "idle" };
 
 // Payload doubles as the scripted outcome so each test drives the
 // action without shared mutable mocks.
-const action = async (
-  _prev: TestState,
-  payload: TestState
-): Promise<TestState> => ({ ...payload });
+const action = async (_prev: TestState, payload: TestState): Promise<TestState> => ({ ...payload });
 
 const setup = (open = true) =>
   renderHook(
     ({ open }: { open: boolean }) =>
       useDialogActionState<TestState, TestState>(action, initial, open),
-    { initialProps: { open } }
+    { initialProps: { open } },
   );
 
 let errorSpy: ReturnType<typeof vi.spyOn>;
@@ -150,7 +147,7 @@ describe("useDialogActionState", () => {
         settle = resolve;
       });
     const { result } = renderHook(() =>
-      useDialogActionState<TestState, TestState>(slow, initial, true)
+      useDialogActionState<TestState, TestState>(slow, initial, true),
     );
     expect(result.current[2]).toBe(false);
 

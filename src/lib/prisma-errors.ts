@@ -9,11 +9,7 @@
  */
 
 function hasPrismaCode(err: unknown, code: string): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    (err as { code?: unknown }).code === code
-  );
+  return typeof err === "object" && err !== null && (err as { code?: unknown }).code === code;
 }
 
 /** P2002: unique constraint violation. */

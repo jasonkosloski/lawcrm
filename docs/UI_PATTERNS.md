@@ -25,14 +25,14 @@ Inter for all UI; Fraunces for page titles (`TopBar` h1), the brand mark and ema
 `font-mono` renders **Inter with tabular figures** (use it, or `tabular-nums`, for times,
 money and counts); `font-code` (JetBrains Mono) is for code only.
 
-| Token | Size | Use |
-|---|---|---|
-| `text-3xs` | 11px | The floor. Dense chips only |
-| `text-2xs` | 11.5px | Meta: timestamps, counts, secondary lines, table headers, section labels |
-| `text-xs` | 12.5px | Body: table cells, row titles, form text |
-| `text-sm` | 13.5px | Nav, lead rows, card body where there's room |
-| `text-[15px] font-semibold` | 15px | Card titles (`CardTitle`) |
-| Fraunces `text-xl` | 20px | Page title |
+| Token                       | Size   | Use                                                                      |
+| --------------------------- | ------ | ------------------------------------------------------------------------ |
+| `text-3xs`                  | 11px   | The floor. Dense chips only                                              |
+| `text-2xs`                  | 11.5px | Meta: timestamps, counts, secondary lines, table headers, section labels |
+| `text-xs`                   | 12.5px | Body: table cells, row titles, form text                                 |
+| `text-sm`                   | 13.5px | Nav, lead rows, card body where there's room                             |
+| `text-[15px] font-semibold` | 15px   | Card titles (`CardTitle`)                                                |
+| Fraunces `text-xl`          | 20px   | Page title                                                               |
 
 - **Nothing under 11px**: no `text-[9px]`/`[10px]`.
 - **No uppercase or letter-spaced labels.** Section labels, field labels and table headers
@@ -46,6 +46,7 @@ money and counts); `font-code` (JetBrains Mono) is for code only.
 ## Component Patterns
 
 ### Headline figures (`StatStrip`)
+
 ```
 src/components/shared/stat-strip.tsx — one bordered card split by hairlines.
 - Label 11.5px ink-3 above a 24px value; optional 11.5px ink-4 detail line.
@@ -55,6 +56,7 @@ src/components/shared/stat-strip.tsx — one bordered card split by hairlines.
 ```
 
 ### Due dates (`DueLabel`)
+
 ```
 src/components/shared/due-label.tsx — "Oct 25 · 5d", "Today", "Tomorrow", "Oct 18 · 2d late".
 - Overdue: danger. Due within 2 days: warn. Otherwise grey.
@@ -63,6 +65,7 @@ src/components/shared/due-label.tsx — "Oct 25 · 5d", "Today", "Tomorrow", "Oc
 ```
 
 ### Status chip
+
 ```
 <Badge variant="ok|warn|danger|neutral"> (brand is the default) from
 src/components/ui/badge.tsx; don't hand-roll rounded-full spans.
@@ -76,6 +79,7 @@ One status mark per row.
 ```
 
 ### Empty State
+
 ```
 Shared component: src/components/shared/empty-state.tsx
 - Icon (lucide, 18px, text-ink-4, aria-hidden) above a text-sm
@@ -90,6 +94,7 @@ Shared component: src/components/shared/empty-state.tsx
 ```
 
 ### Navigation and selection
+
 ```
 Sidebar item: 30px tall, 13.5px, 16px outline icon (ink-4; ink when active).
   Active: bg-sidebar-accent (neutral pill), ink label, font-medium. Hover: bg-paper-2.
@@ -100,6 +105,7 @@ Segmented control: bg-paper-2 track, white active option with shadow-sm.
 ```
 
 ### Card
+
 ```
 Card: rounded-lg, 1px line border, no shadow. CardTitle 15px semibold ink, with an optional
 12px grey count and a right-aligned action.
@@ -107,6 +113,7 @@ Clickable card: `card-hover` (the edge darkens; no lift, no blue glow).
 ```
 
 ### Table
+
 ```
 - Header: 11.5px ink-4 sentence case, medium; no fill band.
 - Rows: h-10, 12.5px, border line-2 between rows, hover bg-paper/70. No zebra.
@@ -115,6 +122,7 @@ Clickable card: `card-hover` (the edge darkens; no lift, no blue glow).
 ```
 
 ### Button hierarchy
+
 ```
 Primary (default): brand-700 fill, white text, hover brand-900. One per screen.
 Outline: white, border-input, ink-2 text; on hover the border and text turn brand
@@ -133,6 +141,7 @@ Raw <button> is for rows, chips, tabs, inline text links and icon toggles.
 ```
 
 ### Dropdowns (`NativeSelect`)
+
 ```
 src/components/ui/native-select.tsx — never a raw <select> (ESLint enforces).
 - Native on purpose: posts with the form, OS picker on phones,
@@ -144,6 +153,7 @@ src/components/ui/native-select.tsx — never a raw <select> (ESLint enforces).
 ```
 
 ### Form fields (`ui/field`)
+
 ```
 src/components/ui/field.tsx — never a per-file inputCls / labelCls / Field copy.
 - inputClass(hasError, size): the compact control look. Sizes: xs h-7 (dense
@@ -159,6 +169,7 @@ src/components/ui/field.tsx — never a per-file inputCls / labelCls / Field cop
 ```
 
 ### Action feedback (toasts and confirmations)
+
 ```
 src/lib/feedback.ts — never window.alert/confirm/prompt (ESLint no-alert).
 - notifyError(msg): a mutation failed; show the server's message or what to try next.
@@ -179,7 +190,9 @@ src/lib/feedback.ts — never window.alert/confirm/prompt (ESLint no-alert).
 ## Layout Patterns
 
 ### Dashboard cards
+
 Every dashboard card renders on the shared frame in `src/components/dashboard/dashboard-card.tsx`:
+
 - `DashboardCard`: title (CardTitle style, not Fraunces; count in grey tabular figures), optional "View all" link (only when a destination page exists), body.
 - `DashboardRow`: one list row inside a card (`border-line-2` rules, `hover:bg-paper`).
 - `LatePill`: the overdue pill (`danger-soft`/`danger`, no border). Due dates in rows use `DueLabel`.
@@ -187,6 +200,7 @@ Every dashboard card renders on the shared frame in `src/components/dashboard/da
 Cards size by container query (`@container` on the card, `@sm:`/`@2xl:` variants inside), not viewport breakpoints, because the same card renders in the full-width band and in 4-, 6- or 8-column slots. Exception: `KpisCard` renders a `StatStrip` (see Headline figures), not a `DashboardCard`.
 
 ### Split Pane (Intake, Email)
+
 ```
 Left rail: fixed width (200–360px), scrollable list
 Right: flex-1, detail view
@@ -194,6 +208,7 @@ Divider: 1px border or visual gap
 ```
 
 ### Three-Pane (Email)
+
 ```
 Mailboxes: 200px, #fbfafa bg
 Thread list: 360px, white bg
@@ -202,6 +217,7 @@ Details drawer: 280px, toggled
 ```
 
 ### Matter Detail Tabs
+
 ```
 Horizontal tab row under topbar
 Active: text-brand-900, border-bottom brand-500
@@ -220,6 +236,7 @@ Composers, the notes list, the documents browser and the Records tab take a `sco
 A detail view that needs deep-linking and back/forward gets its own nested route rather than a modal: `/matters/[id]/records/[requestId]` and `/intake/[id]/records/[requestId]` (the layout keeps the tabs; Records stays highlighted); rows link with a plain `Link`. The route pages own auth (`requireUser`, the matter wall, `records.view`); the shared server component `src/components/records-requests/request-detail-page.tsx` loads the scoped record (a foreign or missing id 404s) and renders the client `request-detail.tsx`. Layout: header, then two columns on lg+ (main / side), stacked below. Data the viewer may not see (fees) is not sent to the client at all. Delete navigates back to the list.
 
 ### In-Tab Channel Toggle (Communication tabs)
+
 ```
 Segmented control, same visual idiom as the matters Table/Kanban toggle
 Active: bg-brand-soft text-brand-700 · Inactive: text-ink-3
@@ -286,6 +303,7 @@ Opens from anywhere; also triggered by the sidebar and topbar ⌘K buttons.
 **Architecture:** `CommandPaletteProvider` (client, mounted in `AppShell`) owns open state and the global shortcut; `useCommandPalette()` (`open`, `openPalette`, `closePalette`, `togglePalette`) lets any client component trigger it. Data is fetched per open via the `getPaletteData` server action (`src/lib/queries/command-palette.ts`); cmdk filters in memory.
 
 **Sections (order matters — shown top-down):**
+
 1. Contextual (e.g. Pin/Unpin this matter, only when on a matter page)
 2. Recent (from localStorage, when no query)
 3. Pinned matters (when no query)
@@ -293,6 +311,7 @@ Opens from anywhere; also triggered by the sidebar and topbar ⌘K buttons.
 5. Matters / People / Leads (filtered to matches)
 
 **Adding a new searchable entity:**
+
 1. Add to the `PaletteItem` union in `src/lib/queries/command-palette.ts`
 2. Include it in the `getPaletteData` fetch
 3. Add a `CommandGroup` for it in the palette component
@@ -392,22 +411,27 @@ The portal (`src/app/(portal)/portal/`) is for clients, not staff: often stresse
 ## Interaction Patterns
 
 ### Transitions
+
 - Motion is feedback only: hover/press 0.12s, page enter `fadeIn 0.22s`.
 - `prefers-reduced-motion` is honoured globally (globals.css); loops use `motion-safe:`.
 
 ### Focus
+
 - All focus-visible: `outline: 2px solid brand-500, offset 2px` (global base style;
   components with their own ring keep it).
 
 ### Scrollbars
+
 - Thin custom scrollbar: 8px width, warm grey thumb, transparent track
 - Apply `.scrollbar-thin` class to scrollable containers
 
 ### Floating layers
+
 - Only things that float get a shadow: menus, popovers, dialogs, the Create dock and the
   timer. The idle timer is a 36px icon button so it covers as little as possible.
 
 ### Long lists: paginate, never truncate
+
 - A list that can outgrow one screen never cuts rows silently. Default: offset paging by `?page=N` (the URL is the source of truth, ADR-007). Helpers in `src/lib/pagination.ts`: `parsePageParam` for the param, `paginate(page, size, count, fetch)` for a Prisma read (count and fetch share ONE `where`, so matter-access clauses filter the total too), `paginateArray` when rows must be sorted in JS first (matters list). Junk or out-of-range pages clamp, never 404.
 - Order by a unique tiebreak (`[{ lastMessageAt: "desc" }, { id: "desc" }]`) so rows don't repeat or vanish across pages.
 - Render `<Pager>` (`src/components/shared/pager.tsx`) with the list's base href; build it with `hrefFromSearchParams(path, sp)` on a server page so the filters survive. Row links that open a reader keep `?page=` (`withPageParam`), and `useUrlParams` drops `page` on every filter/sort write so a new filter starts on page 1.
@@ -415,6 +439,7 @@ The portal (`src/app/(portal)/portal/`) is for clients, not staff: often stresse
 - Examples: `listThreads` + `/communication`, `listMatters` + `/matters`, `listLeads` (closed history) + `/intake`, `getNotificationsFeed` + `/notifications`.
 
 ### Per-browser UI preferences (localStorage)
+
 - For small conveniences only (a collapsed rail, a remembered toggle), never data.
 - Read with `useSyncExternalStore(subscribe, readFromStorage, () => default)`: the server snapshot is the default, so there's no hydration mismatch and no setState-in-effect. Write with a helper that saves and dispatches a custom window event the subscriber listens to (plus `storage` for other tabs).
 - Wrap every storage read/write in try/catch: private mode or blocked site data must fall back to the default.
@@ -425,17 +450,19 @@ The portal (`src/app/(portal)/portal/`) is for clients, not staff: often stresse
 ## Color Coding
 
 ### Practice areas and matters
+
 Area and matter colours are data, not design tokens: `PracticeArea.color` and
 `Matter.color` (validated hex, see `src/lib/queries/sidebar.ts`). The old
 `--color-area-*` tokens and `.text-display` class no longer exist.
 
 ### Semantic
-| Meaning | Color | Var |
-|---|---|---|
-| Positive / filed / paid | `#23744d` | `--color-ok` (+ `ok-soft`) |
-| Warning / due soon / unfiled | `#9a4a26` | `--color-warn` (+ `warn-soft`) |
-| Danger / overdue / failed | `#b02a2a` | `--color-danger` (+ `danger-soft`) |
-| Highlight / amber | `#fff1bd` | `--color-highlight` |
+
+| Meaning                      | Color     | Var                                |
+| ---------------------------- | --------- | ---------------------------------- |
+| Positive / filed / paid      | `#23744d` | `--color-ok` (+ `ok-soft`)         |
+| Warning / due soon / unfiled | `#9a4a26` | `--color-warn` (+ `warn-soft`)     |
+| Danger / overdue / failed    | `#b02a2a` | `--color-danger` (+ `danger-soft`) |
+| Highlight / amber            | `#fff1bd` | `--color-highlight`                |
 
 ---
 
@@ -488,6 +515,7 @@ per open, seeding its working copies without a reset effect (see
 ### Reset or reseed without `set-state-in-effect`
 
 The lint config forbids effect-driven resets. Alternatives in use:
+
 - close/reset on success inside a wrapped action, after the awaited server call;
 - reseed in the open handler, or via a keyed per-open form body;
 - "stored previous prop" (compare to the last prop during render and adjust
@@ -502,11 +530,11 @@ The lint config forbids effect-driven resets. Alternatives in use:
 Client components render on the UTC host first and hydrate in the browser, so
 never use browser-local `Date` getters or zone-less `formatDate`. Use:
 
-| Value | Examples | Helper |
-|---|---|---|
+| Value                      | Examples                                                                             | Helper                                                                                                                                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Date-only (a calendar day) | `TimeEntry.date`, deadline/task due dates, SOL, all-day events, `Firm.establishedAt` | Send/receive as `dateOnlyKey` strings; display with `formatDateOnly`; never convert to a `Date` in the browser. Parse server-side with `parseDateOnly` (UTC midnight). "Today" is `todayKey(useUserTimeZone())`. |
-| Instant | `createdAt`, email dates, event start/end | `useUserTimeZone()` + `formatDate(value, format, tz)` |
-| `datetime-local` input | event, call log, composer times | Seed with `toWallClockInput(date, tz)`, read on the server with `parseWallClock(value, tz)` (profile zone) |
+| Instant                    | `createdAt`, email dates, event start/end                                            | `useUserTimeZone()` + `formatDate(value, format, tz)`                                                                                                                                                            |
+| `datetime-local` input     | event, call log, composer times                                                      | Seed with `toWallClockInput(date, tz)`, read on the server with `parseWallClock(value, tz)` (profile zone)                                                                                                       |
 
 All in `src/lib/format-date.ts`; the zone comes from the profile
 (`getCurrentUserTimeZone()` on the server, `useUserTimeZone()` in

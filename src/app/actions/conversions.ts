@@ -48,7 +48,7 @@ const noteToTaskSchema = z.object({
 export async function convertNoteToTask(
   noteId: string,
   _prev: InboxActionFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<InboxActionFormState> {
   await requirePermission("tasks.create");
   await assertChildMatterAccess("note", noteId);
@@ -69,9 +69,7 @@ export async function convertNoteToTask(
     };
   }
 
-  const dueDate = parsed.data.dueDate
-    ? parseDateOnly(parsed.data.dueDate)
-    : null;
+  const dueDate = parsed.data.dueDate ? parseDateOnly(parsed.data.dueDate) : null;
   if (parsed.data.dueDate && !dueDate) {
     return { status: "error", errors: { dueDate: ["Invalid due date"] } };
   }
@@ -120,7 +118,7 @@ const taskToDeadlineSchema = z.object({
 export async function convertTaskToDeadline(
   taskId: string,
   _prev: InboxActionFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<InboxActionFormState> {
   await requirePermission("deadlines.create");
   await assertChildMatterAccess("task", taskId);

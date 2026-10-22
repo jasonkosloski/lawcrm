@@ -46,7 +46,7 @@ const updateSchema = z.object({
 });
 
 function parseUpdate(
-  input: unknown
+  input: unknown,
 ): { ok: true; stageLabel: string; body: string } | { ok: false; error: string } {
   const parsed = updateSchema.safeParse(input);
   if (!parsed.success) {
@@ -57,7 +57,7 @@ function parseUpdate(
 
 export async function postStatusUpdate(
   matterId: string,
-  input: { stageLabel: string; body: string; emailClient: boolean }
+  input: { stageLabel: string; body: string; emailClient: boolean },
 ): Promise<Result> {
   const gate = await requirePermissionResult("portal.add_updates");
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -135,7 +135,7 @@ async function loadUpdate(id: string) {
 /** Edits never re-send the email. */
 export async function editStatusUpdate(
   id: string,
-  input: { stageLabel: string; body: string }
+  input: { stageLabel: string; body: string },
 ): Promise<Result> {
   const gate = await requirePermissionResult("portal.edit_updates");
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -235,7 +235,7 @@ async function requireVisibleEvent(eventId: string) {
 
 export async function shareEventWithClient(
   eventId: string,
-  input: { clientTitle: string; clientNote?: string }
+  input: { clientTitle: string; clientNote?: string },
 ): Promise<Result> {
   const g = await gateEvent("portal.share_events", eventId);
   if (!g.ok) return g;
@@ -275,7 +275,7 @@ export async function shareEventWithClient(
 
 export async function updateEventShare(
   eventId: string,
-  input: { clientTitle: string; clientNote?: string }
+  input: { clientTitle: string; clientNote?: string },
 ): Promise<Result> {
   const g = await gateEvent("portal.share_events", eventId);
   if (!g.ok) return g;

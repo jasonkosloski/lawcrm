@@ -5,12 +5,7 @@
  */
 
 import type { ReactNode } from "react";
-import {
-  formatDate,
-  formatDateOnly,
-  parseDateOnly,
-  parseWallClock,
-} from "@/lib/format-date";
+import { formatDate, formatDateOnly, parseDateOnly, parseWallClock } from "@/lib/format-date";
 import { dateOnly, toScheduleInput } from "@/lib/event-schedule";
 import type { EditableAttendee } from "./attendee-picker";
 import type { CalendarEventDetail } from "@/lib/queries/calendar";
@@ -45,10 +40,7 @@ export type EventEditState = {
   visibility: string;
 };
 
-export const buildInitialState = (
-  event: CalendarEventDetail,
-  tz: string
-): EventEditState => ({
+export const buildInitialState = (event: CalendarEventDetail, tz: string): EventEditState => ({
   title: event.title,
   type: event.type,
   isAllDay: event.isAllDay,
@@ -74,13 +66,7 @@ export const buildInitialState = (
 
 // ── Layout helpers ──────────────────────────────────────────────────────
 
-export function Row({
-  icon,
-  children,
-}: {
-  icon: ReactNode;
-  children: ReactNode;
-}) {
+export function Row({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <div className="flex items-start gap-3">
       <span className="text-ink-3 pt-0.5 shrink-0">{icon}</span>
@@ -96,7 +82,7 @@ export function Row({
 export function describeSchedule(
   c: EventEditState,
   event: CalendarEventDetail,
-  tz: string
+  tz: string,
 ): { dateLabel: string; startsAndEnds: string } {
   if (c.isAllDay) {
     const start = parseDateOnly(dateOnly(c.startTime));
@@ -105,9 +91,7 @@ export function describeSchedule(
     return {
       dateLabel: formatDateOnly(start, "full_long"),
       startsAndEnds:
-        multiDay && end
-          ? `All day · through ${formatDateOnly(end, "medium")}`
-          : "All day",
+        multiDay && end ? `All day · through ${formatDateOnly(end, "medium")}` : "All day",
     };
   }
   const start = parseWallClock(c.startTime, tz) ?? event.startTime;

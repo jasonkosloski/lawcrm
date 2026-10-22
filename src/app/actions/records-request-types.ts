@@ -82,10 +82,9 @@ type TypeData = {
 
 async function validate(
   fd: FormData,
-  selfId: string | null
+  selfId: string | null,
 ): Promise<
-  | { ok: true; data: TypeData; name: string }
-  | { ok: false; state: RecordsRequestFormState }
+  { ok: true; data: TypeData; name: string } | { ok: false; state: RecordsRequestFormState }
 > {
   const values = rawValues(fd);
   const parsed = schema.safeParse(values);
@@ -128,7 +127,7 @@ async function validate(
 
 export async function createRecordsRequestType(
   _prev: RecordsRequestFormState,
-  fd: FormData
+  fd: FormData,
 ): Promise<RecordsRequestFormState> {
   const userId = await requirePermission(KEY);
   const res = await validate(fd, null);
@@ -154,7 +153,7 @@ export async function createRecordsRequestType(
 export async function updateRecordsRequestType(
   id: string,
   _prev: RecordsRequestFormState,
-  fd: FormData
+  fd: FormData,
 ): Promise<RecordsRequestFormState> {
   const userId = await requirePermission(KEY);
   const existing = await prisma.recordsRequestType.findUnique({
@@ -180,7 +179,7 @@ export async function updateRecordsRequestType(
 
 export async function setRecordsRequestTypeActive(
   id: string,
-  active: boolean
+  active: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission(KEY);
   const row = await prisma.recordsRequestType.findUnique({
@@ -219,7 +218,7 @@ export async function setRecordsRequestTypeActive(
 
 export async function moveRecordsRequestType(
   id: string,
-  direction: "up" | "down"
+  direction: "up" | "down",
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission(KEY);
   const row = await prisma.recordsRequestType.findUnique({
@@ -243,8 +242,8 @@ export async function moveRecordsRequestType(
   [next[idx], next[target]] = [next[target], next[idx]];
   await prisma.$transaction(
     next.map((tid, i) =>
-      prisma.recordsRequestType.update({ where: { id: tid }, data: { sortOrder: i } })
-    )
+      prisma.recordsRequestType.update({ where: { id: tid }, data: { sortOrder: i } }),
+    ),
   );
   await logActivity({
     matterId: null,

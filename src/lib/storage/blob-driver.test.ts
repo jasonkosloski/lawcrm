@@ -28,15 +28,7 @@ vi.mock("@vercel/blob", async (importOriginal) => {
   };
 });
 
-import {
-  BlobNotFoundError,
-  del,
-  get,
-  head,
-  issueSignedToken,
-  presignUrl,
-  put,
-} from "@vercel/blob";
+import { BlobNotFoundError, del, get, head, issueSignedToken, presignUrl, put } from "@vercel/blob";
 import {
   BLOB_CACHE_MAX_AGE_SECONDS,
   SIGNED_MEDIA_URL_TTL_MS,
@@ -123,16 +115,12 @@ describe("deleteFileBlob", () => {
 
   test("already-gone blob is a no-op (best-effort contract)", async () => {
     mockedDel.mockRejectedValue(new BlobNotFoundError());
-    await expect(
-      deleteFileBlob(`${STORE}/k__gone.pdf`)
-    ).resolves.toBeUndefined();
+    await expect(deleteFileBlob(`${STORE}/k__gone.pdf`)).resolves.toBeUndefined();
   });
 
   test("other SDK errors still propagate", async () => {
     mockedDel.mockRejectedValue(new Error("store suspended"));
-    await expect(deleteFileBlob(`${STORE}/k__x.pdf`)).rejects.toThrow(
-      "store suspended"
-    );
+    await expect(deleteFileBlob(`${STORE}/k__x.pdf`)).rejects.toThrow("store suspended");
   });
 });
 
@@ -155,9 +143,7 @@ describe("statFileBlob", () => {
 
   test("other SDK errors still propagate", async () => {
     mockedHead.mockRejectedValue(new Error("rate limited"));
-    await expect(statFileBlob(`${STORE}/k__a.mp4`)).rejects.toThrow(
-      "rate limited"
-    );
+    await expect(statFileBlob(`${STORE}/k__a.mp4`)).rejects.toThrow("rate limited");
   });
 });
 
@@ -168,7 +154,7 @@ describe("blobPathname", () => {
 
   test("decodes #, ? and % escapes", () => {
     expect(blobPathname(`${STORE}/k__Exhibit%20%233%3F%2050%25.pdf`)).toBe(
-      "k__Exhibit #3? 50%.pdf"
+      "k__Exhibit #3? 50%.pdf",
     );
   });
 
@@ -233,9 +219,7 @@ describe("signedBlobUrl", () => {
       return { presignedUrl: u.toString() };
     });
     const key = "k__Exhibit #3? 50%.pdf";
-    const url = new URL(
-      await signedBlobUrl(`${STORE}/${encodeURIComponent(key)}`)
-    );
+    const url = new URL(await signedBlobUrl(`${STORE}/${encodeURIComponent(key)}`));
     expect(decodeURIComponent(url.pathname.slice(1))).toBe(key);
     expect(url.hash).toBe("");
     expect(url.searchParams.get("vercel-blob-signature")).toBe("s");

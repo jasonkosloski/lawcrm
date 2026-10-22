@@ -51,22 +51,13 @@ import { isStoredFileReferenced } from "@/lib/stored-file-refs";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
-import {
-  assertScopeWritable,
-  revalidateDocumentScope,
-} from "@/lib/scope-access";
+import { assertScopeWritable, revalidateDocumentScope } from "@/lib/scope-access";
 import { extractIfEmail } from "@/lib/email-attachment-extract";
-import {
-  DOCUMENT_CATEGORIES,
-  type DocumentCategory,
-} from "@/lib/document-form";
+import { DOCUMENT_CATEGORIES, type DocumentCategory } from "@/lib/document-form";
 import { isValidStorageKey } from "@/lib/storage/storage-key";
 import { resolveLeadUploadTarget } from "@/lib/lead-documents";
 import { resolveRecordsUpload } from "@/lib/records-requests/folder";
-import {
-  isRecordsDocRole,
-  type RecordsDocRole,
-} from "@/lib/records-requests/roles";
+import { isRecordsDocRole, type RecordsDocRole } from "@/lib/records-requests/roles";
 import { BLOB_CACHE_MAX_AGE_SECONDS } from "@/lib/storage/blob-driver";
 import {
   DRAFT_FILE_COUNT_ERROR,
@@ -166,182 +157,172 @@ type TokenPayload = {
   userId: string;
 };
 
-export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"] =
-  async (pathname, clientPayload) => {
-    const session = await getSession();
-    if (!session?.user?.id) {
-      throw new UploadTokenError(401, "Unauthorized");
-    }
-    const allowed = await currentUserHasPermission("documents.upload");
-    if (!allowed) {
-      throw new UploadTokenError(
-        403,
-        "You don't have permission to upload documents.",
+export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"] = async (
+  pathname,
+  clientPayload,
+) => {
+  const session = await getSession();
+  if (!session?.user?.id) {
+    throw new UploadTokenError(401, "Unauthorized");
+  }
+  const allowed = await currentUserHasPermission("documents.upload");
+  if (!allowed) {
+    throw new UploadTokenError(403, "You don't have permission to upload documents.");
+  }
+
+  // The client proposes its own pathname (it generates the key
+  // before asking us) — accept only our `{rand16}__{name}` shape.
+  // Anything else could nest "folders" or collide on purpose;
+  // `allowOverwrite: false` below is the backstop either way.
+  if (!isValidStorageKey(pathname)) {
+    throw new UploadTokenError(400, "Invalid upload pathname.");
+  }
+
+  let payload: z.infer<typeof clientPayloadSchema>;
+  try {
+    payload = clientPayloadSchema.parse(JSON.parse(clientPayload ?? ""));
+  } catch (err) {
+    // The draft-target refinements carry user-facing copy.
+    if (err instanceof z.ZodError) {
+      const draftIssue = err.issues.find(
+        (i) =>
+          i.message === UPLOAD_DRAFT_EXCLUSIVE_ERROR || i.message === UPLOAD_DRAFT_NO_FOLDER_ERROR,
       );
+      if (draftIssue) throw new UploadTokenError(400, draftIssue.message);
     }
+    throw new UploadTokenError(400, "Invalid upload payload.");
+  }
 
-    // The client proposes its own pathname (it generates the key
-    // before asking us) — accept only our `{rand16}__{name}` shape.
-    // Anything else could nest "folders" or collide on purpose;
-    // `allowOverwrite: false` below is the backstop either way.
-    if (!isValidStorageKey(pathname)) {
-      throw new UploadTokenError(400, "Invalid upload pathname.");
+  if (payload.draftId) {
+    // Hidden == missing, before any token is issued.
+    if (!(await canAccessDraft(session.user.id, payload.draftId))) {
+      throw new UploadTokenError(404, "Draft not found.");
     }
-
-    let payload: z.infer<typeof clientPayloadSchema>;
-    try {
-      payload = clientPayloadSchema.parse(JSON.parse(clientPayload ?? ""));
-    } catch (err) {
-      // The draft-target refinements carry user-facing copy.
-      if (err instanceof z.ZodError) {
-        const draftIssue = err.issues.find(
-          (i) =>
-            i.message === UPLOAD_DRAFT_EXCLUSIVE_ERROR ||
-            i.message === UPLOAD_DRAFT_NO_FOLDER_ERROR
-        );
-        if (draftIssue) throw new UploadTokenError(400, draftIssue.message);
-      }
-      throw new UploadTokenError(400, "Invalid upload payload.");
+    const existing = await prisma.matterDraftFile.count({
+      where: { draftId: payload.draftId },
+    });
+    if (existing >= DRAFT_MAX_FILES) {
+      throw new UploadTokenError(400, DRAFT_FILE_COUNT_ERROR);
     }
-
-    if (payload.draftId) {
-      // Hidden == missing, before any token is issued.
-      if (!(await canAccessDraft(session.user.id, payload.draftId))) {
-        throw new UploadTokenError(404, "Draft not found.");
-      }
-      const existing = await prisma.matterDraftFile.count({
-        where: { draftId: payload.draftId },
-      });
-      if (existing >= DRAFT_MAX_FILES) {
-        throw new UploadTokenError(400, DRAFT_FILE_COUNT_ERROR);
-      }
-      const contentType = contentTypeForFilename(pathname);
-      const draftPayload: TokenPayload = {
-        draftId: payload.draftId,
-        folderId: null,
-        name: payload.name,
-        category: payload.category ?? "discovery",
-        contentType,
-        userId: session.user.id,
-      };
-      return {
-        allowedContentTypes: [contentType],
-        maximumSizeInBytes: DRAFT_MAX_FILE_BYTES,
-        validUntil: Date.now() + TOKEN_TTL_MS,
-        addRandomSuffix: false,
-        allowOverwrite: false,
-        cacheControlMaxAge: BLOB_CACHE_MAX_AGE_SECONDS,
-        tokenPayload: JSON.stringify(draftPayload),
-      };
-    }
-
-    if (
-      payload.recordsRole != null &&
-      payload.recordsRole !== "" &&
-      !isRecordsDocRole(payload.recordsRole)
-    ) {
-      throw new UploadTokenError(400, "Invalid records document kind.");
-    }
-    const recordsRole: RecordsDocRole = isRecordsDocRole(payload.recordsRole)
-      ? payload.recordsRole
-      : "received_records";
-
-    // Same target validation as the streaming route's resolveTarget.
-    let scope: RecordScope;
-    if (payload.matterId) {
-      // TODO (multi-tenant): scope by firmId once Matter carries one.
-      const matter = await prisma.matter.findUnique({
-        where: { id: payload.matterId },
-        select: { id: true },
-      });
-      // Matter wall: hidden == missing, before any token is issued.
-      if (
-        !matter ||
-        !(await canAccessMatter(session.user.id, payload.matterId))
-      ) {
-        throw new UploadTokenError(404, "Matter not found.");
-      }
-      scope = { kind: "matter", matterId: payload.matterId };
-    } else if (payload.leadId) {
-      const lead = await prisma.lead.findUnique({
-        where: { id: payload.leadId },
-        select: { id: true },
-      });
-      // Lead wall (ADR-049): hidden == missing, before any token.
-      if (
-        !lead ||
-        !(await canAccessLead(session.user.id, payload.leadId))
-      ) {
-        throw new UploadTokenError(404, "Lead not found.");
-      }
-      scope = { kind: "lead", leadId: lead.id };
-      const readOnly = await assertScopeWritable(scope);
-      if (readOnly) throw new UploadTokenError(409, readOnly);
-    } else {
-      throw new UploadTokenError(400, UPLOAD_SCOPE_REQUIRED_ERROR);
-    }
-
-    const folderId = payload.folderId ?? null;
-    if (folderId) {
-      // Scoped find — a folderId from a *different* matter or lead
-      // must not let files leak into that tree.
-      const folder = await prisma.documentFolder.findFirst({
-        where: { id: folderId, ...scopeWhere(scope) },
-        select: { id: true },
-      });
-      if (!folder) {
-        throw new UploadTokenError(400, UPLOAD_FOLDER_SCOPE_ERROR);
-      }
-    }
-
-    const recordsRequestId = payload.recordsRequestId ?? null;
-    if (recordsRequestId) {
-      if (!(await currentUserHasPermission("records.edit"))) {
-        throw new UploadTokenError(
-          403,
-          "You don't have permission to link documents to records requests.",
-        );
-      }
-      const request = await prisma.recordsRequest.findFirst({
-        where: { id: recordsRequestId, ...scopeWhere(scope) },
-        select: { id: true },
-      });
-      if (!request) {
-        throw new UploadTokenError(400, UPLOAD_RECORDS_REQUEST_SCOPE_ERROR);
-      }
-    }
-
-    // Server-derived MIME from the key's extension — the same rule
-    // (and the same function) as the streaming route. The token pins
-    // the upload to exactly this type + this size cap; a client
-    // declaring anything else is rejected by Vercel Blob itself.
     const contentType = contentTypeForFilename(pathname);
-    const maximumSizeInBytes = isMediaType(contentType)
-      ? MAX_MEDIA_UPLOAD_BYTES
-      : MAX_STANDARD_UPLOAD_BYTES;
-
-    const tokenPayload: TokenPayload = {
-      ...scopeWhere(scope),
-      folderId,
-      ...(recordsRequestId ? { recordsRequestId, recordsRole } : {}),
+    const draftPayload: TokenPayload = {
+      draftId: payload.draftId,
+      folderId: null,
       name: payload.name,
       category: payload.category ?? "discovery",
       contentType,
       userId: session.user.id,
     };
-
     return {
       allowedContentTypes: [contentType],
-      maximumSizeInBytes,
-      validUntil:
-        Date.now() +
-        (isMediaType(contentType) ? MEDIA_TOKEN_TTL_MS : TOKEN_TTL_MS),
+      maximumSizeInBytes: DRAFT_MAX_FILE_BYTES,
+      validUntil: Date.now() + TOKEN_TTL_MS,
       addRandomSuffix: false,
       allowOverwrite: false,
       cacheControlMaxAge: BLOB_CACHE_MAX_AGE_SECONDS,
-      tokenPayload: JSON.stringify(tokenPayload),
+      tokenPayload: JSON.stringify(draftPayload),
     };
+  }
+
+  if (
+    payload.recordsRole != null &&
+    payload.recordsRole !== "" &&
+    !isRecordsDocRole(payload.recordsRole)
+  ) {
+    throw new UploadTokenError(400, "Invalid records document kind.");
+  }
+  const recordsRole: RecordsDocRole = isRecordsDocRole(payload.recordsRole)
+    ? payload.recordsRole
+    : "received_records";
+
+  // Same target validation as the streaming route's resolveTarget.
+  let scope: RecordScope;
+  if (payload.matterId) {
+    // TODO (multi-tenant): scope by firmId once Matter carries one.
+    const matter = await prisma.matter.findUnique({
+      where: { id: payload.matterId },
+      select: { id: true },
+    });
+    // Matter wall: hidden == missing, before any token is issued.
+    if (!matter || !(await canAccessMatter(session.user.id, payload.matterId))) {
+      throw new UploadTokenError(404, "Matter not found.");
+    }
+    scope = { kind: "matter", matterId: payload.matterId };
+  } else if (payload.leadId) {
+    const lead = await prisma.lead.findUnique({
+      where: { id: payload.leadId },
+      select: { id: true },
+    });
+    // Lead wall (ADR-049): hidden == missing, before any token.
+    if (!lead || !(await canAccessLead(session.user.id, payload.leadId))) {
+      throw new UploadTokenError(404, "Lead not found.");
+    }
+    scope = { kind: "lead", leadId: lead.id };
+    const readOnly = await assertScopeWritable(scope);
+    if (readOnly) throw new UploadTokenError(409, readOnly);
+  } else {
+    throw new UploadTokenError(400, UPLOAD_SCOPE_REQUIRED_ERROR);
+  }
+
+  const folderId = payload.folderId ?? null;
+  if (folderId) {
+    // Scoped find — a folderId from a *different* matter or lead
+    // must not let files leak into that tree.
+    const folder = await prisma.documentFolder.findFirst({
+      where: { id: folderId, ...scopeWhere(scope) },
+      select: { id: true },
+    });
+    if (!folder) {
+      throw new UploadTokenError(400, UPLOAD_FOLDER_SCOPE_ERROR);
+    }
+  }
+
+  const recordsRequestId = payload.recordsRequestId ?? null;
+  if (recordsRequestId) {
+    if (!(await currentUserHasPermission("records.edit"))) {
+      throw new UploadTokenError(
+        403,
+        "You don't have permission to link documents to records requests.",
+      );
+    }
+    const request = await prisma.recordsRequest.findFirst({
+      where: { id: recordsRequestId, ...scopeWhere(scope) },
+      select: { id: true },
+    });
+    if (!request) {
+      throw new UploadTokenError(400, UPLOAD_RECORDS_REQUEST_SCOPE_ERROR);
+    }
+  }
+
+  // Server-derived MIME from the key's extension — the same rule
+  // (and the same function) as the streaming route. The token pins
+  // the upload to exactly this type + this size cap; a client
+  // declaring anything else is rejected by Vercel Blob itself.
+  const contentType = contentTypeForFilename(pathname);
+  const maximumSizeInBytes = isMediaType(contentType)
+    ? MAX_MEDIA_UPLOAD_BYTES
+    : MAX_STANDARD_UPLOAD_BYTES;
+
+  const tokenPayload: TokenPayload = {
+    ...scopeWhere(scope),
+    folderId,
+    ...(recordsRequestId ? { recordsRequestId, recordsRole } : {}),
+    name: payload.name,
+    category: payload.category ?? "discovery",
+    contentType,
+    userId: session.user.id,
   };
+
+  return {
+    allowedContentTypes: [contentType],
+    maximumSizeInBytes,
+    validUntil: Date.now() + (isMediaType(contentType) ? MEDIA_TOKEN_TTL_MS : TOKEN_TTL_MS),
+    addRandomSuffix: false,
+    allowOverwrite: false,
+    cacheControlMaxAge: BLOB_CACHE_MAX_AGE_SECONDS,
+    tokenPayload: JSON.stringify(tokenPayload),
+  };
+};
 
 /** Completion for a matter-draft target: idempotent, and the blob is
  *  removed (nothing written) when the draft vanished, is full, or the
@@ -349,7 +330,7 @@ export const onBeforeGenerateToken: HandleUploadOptions["onBeforeGenerateToken"]
 async function completeDraftUpload(
   blobUrl: string,
   t: TokenPayload,
-  draftId: string
+  draftId: string,
 ): Promise<void> {
   const removeBlob = async (why: string) => {
     try {
@@ -433,9 +414,10 @@ async function completeDraftUpload(
  * Transient errors (DB down, head() failing) still throw so Vercel
  * retries them.
  */
-export const onUploadCompleted: NonNullable<
-  HandleUploadOptions["onUploadCompleted"]
-> = async ({ blob, tokenPayload }) => {
+export const onUploadCompleted: NonNullable<HandleUploadOptions["onUploadCompleted"]> = async ({
+  blob,
+  tokenPayload,
+}) => {
   if (!tokenPayload) {
     throw new Error("Missing token payload on completed upload.");
   }
@@ -502,7 +484,7 @@ export const onUploadCompleted: NonNullable<
   const resolveTag = async (
     tx: Parameters<typeof resolveRecordsUpload>[0],
     target: RecordScope,
-    targetFolderId: string | null
+    targetFolderId: string | null,
   ): Promise<RecordsTag> => {
     if (!t.recordsRequestId) return null;
     const tag = await resolveRecordsUpload(
@@ -510,17 +492,13 @@ export const onUploadCompleted: NonNullable<
       t.recordsRequestId,
       target,
       targetFolderId,
-      t.recordsRole ?? "received_records"
+      t.recordsRole ?? "received_records",
     );
     recordsTagDropped = !tag;
     return tag;
   };
 
-  const dataFor = (
-    target: RecordScope,
-    targetFolderId: string | null,
-    tag: RecordsTag = null
-  ) => ({
+  const dataFor = (target: RecordScope, targetFolderId: string | null, tag: RecordsTag = null) => ({
     ...scopeWhere(target),
     folderId: tag ? tag.folderId : targetFolderId,
     ...(tag
@@ -602,13 +580,7 @@ export const onUploadCompleted: NonNullable<
       | { kind: "forbidden"; matterId: string };
     const fileOnLead = (folder: string | null): Promise<Filed> =>
       prisma.$transaction(async (tx) => {
-        const target = await resolveLeadUploadTarget(
-          tx,
-          leadId,
-          t.userId,
-          folder,
-          canAccessMatter
-        );
+        const target = await resolveLeadUploadTarget(tx, leadId, t.userId, folder, canAccessMatter);
         if (target.kind !== "filed") return target;
         const tag = await resolveTag(tx, target.scope, target.folderId);
         const doc = await tx.document.create({
@@ -635,7 +607,7 @@ export const onUploadCompleted: NonNullable<
       // the file there would leak it past the matter wall. Fail
       // closed (and succeed the callback — a retry can't change it).
       await removeOrphan(
-        `lead converted during upload to matter ${filed.matterId} the uploader cannot access`
+        `lead converted during upload to matter ${filed.matterId} the uploader cannot access`,
       );
       return;
     }

@@ -150,10 +150,7 @@ describe("listMessengerItemsForMatter", () => {
     });
 
     const items = await listMessengerItemsForMatter(matterId);
-    expect(items.map((i) => i.body)).toEqual([
-      "explicitly filed",
-      "inherited via thread default",
-    ]);
+    expect(items.map((i) => i.body)).toEqual(["explicitly filed", "inherited via thread default"]);
     // Contact resolution comes from the thread.
     expect(items[1].contactName).toBe("Maria Alvarez");
     expect(items[0].contactName).toBeNull();
@@ -377,9 +374,7 @@ describe("listMessengerThreads filters + mailbox counts", () => {
     await seedItem({ threadId: bare, occurredAt: "2026-06-10T10:00" });
     const emptyThread = await seedThread({ phone: "+13035550012" });
 
-    const ids = (await listMessengerThreads({ filter: "unfiled" })).rows.map(
-      (r) => r.id
-    );
+    const ids = (await listMessengerThreads({ filter: "unfiled" })).rows.map((r) => r.id);
     expect(ids.sort()).toEqual([bare, emptyThread].sort());
   });
 });
@@ -423,11 +418,8 @@ describe("lead Communication tab thread lookup", () => {
     });
     expect(rows.map((r) => r.id).sort()).toEqual([onFile.id, typed.id].sort());
     // Nothing to match on -> nothing.
-    expect(
-      await listMessengerThreadsForLead({ contactId: null, phones: ["junk"] })
-    ).toEqual([]);
+    expect(await listMessengerThreadsForLead({ contactId: null, phones: ["junk"] })).toEqual([]);
   });
-
 });
 
 describe("getMessengerThread", () => {
@@ -456,12 +448,7 @@ describe("getMessengerThread", () => {
         ...base,
         providerEventId: "manual-abc",
         occurredAt: new Date("2026-06-10T10:00:00Z"),
-        mediaUrls: [
-          { url: "https://x/y.png", contentType: "image/png" },
-          7,
-          null,
-          { nope: 1 },
-        ],
+        mediaUrls: [{ url: "https://x/y.png", contentType: "image/png" }, 7, null, { nope: 1 }],
       },
     });
     await prisma.messengerItem.create({

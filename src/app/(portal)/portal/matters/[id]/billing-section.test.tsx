@@ -28,8 +28,20 @@ describe("BillingSection", () => {
         trust={null}
         invoices={[
           inv(),
-          inv({ id: "i2", invoiceNumber: "INV-1002", status: "sent", paidAmount: 0, balance: 1500 }),
-          inv({ id: "i3", invoiceNumber: "INV-1003", status: "paid", paidAmount: 1500, balance: 0 }),
+          inv({
+            id: "i2",
+            invoiceNumber: "INV-1002",
+            status: "sent",
+            paidAmount: 0,
+            balance: 1500,
+          }),
+          inv({
+            id: "i3",
+            invoiceNumber: "INV-1003",
+            status: "paid",
+            paidAmount: 1500,
+            balance: 0,
+          }),
           inv({ id: "i4", invoiceNumber: "INV-1004", status: "sent", overdue: true }),
         ]}
       />,
@@ -62,8 +74,22 @@ describe("BillingSection", () => {
         trust={{
           balance: 750,
           entries: [
-            { id: "t2", date: new Date("2026-02-10T00:00:00Z"), type: "disbursement", amount: -250, runningBalance: 750, description: "Filing fee" },
-            { id: "t1", date: new Date("2026-02-01T00:00:00Z"), type: "deposit", amount: 1000, runningBalance: 1000, description: "Retainer" },
+            {
+              id: "t2",
+              date: new Date("2026-02-10T00:00:00Z"),
+              type: "disbursement",
+              amount: -250,
+              runningBalance: 750,
+              description: "Filing fee",
+            },
+            {
+              id: "t1",
+              date: new Date("2026-02-01T00:00:00Z"),
+              type: "deposit",
+              amount: 1000,
+              runningBalance: 1000,
+              description: "Retainer",
+            },
           ],
         }}
       />,

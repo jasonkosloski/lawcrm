@@ -21,8 +21,7 @@ import { FollowUpButton, type FollowUpAction } from "./follow-up-button";
 // elements are genuinely interactive, so disable it.
 const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
 
-const okAction = (): FollowUpAction =>
-  vi.fn(async () => ({ ok: true as const }));
+const okAction = (): FollowUpAction => vi.fn(async () => ({ ok: true as const }));
 
 /** yyyy-mm-dd for a local date, matching the component's input format. */
 function iso(d: Date): string {
@@ -46,9 +45,7 @@ describe("FollowUpButton — date input re-syncs with followUpAt on open", () =>
   test("reopening after the prop changes shows the new date, not the mount-time one", async () => {
     const user = setupUser();
     const action = okAction();
-    const { rerender } = render(
-      <FollowUpButton threadId="t1" followUpAt={null} action={action} />
-    );
+    const { rerender } = render(<FollowUpButton threadId="t1" followUpAt={null} action={action} />);
 
     // Open once with no follow-up — input starts empty.
     let input = await openPopover(user);
@@ -58,9 +55,7 @@ describe("FollowUpButton — date input re-syncs with followUpAt on open", () =>
     // Server revalidation lands a new follow-up date.
     const nextWeek = new Date();
     nextWeek.setDate(nextWeek.getDate() + 7);
-    rerender(
-      <FollowUpButton threadId="t1" followUpAt={nextWeek} action={action} />
-    );
+    rerender(<FollowUpButton threadId="t1" followUpAt={nextWeek} action={action} />);
 
     // Reopen: the input must show the fresh date, not the stale "".
     input = await openPopover(user);
@@ -77,9 +72,7 @@ describe("FollowUpButton — date input re-syncs with followUpAt on open", () =>
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    await waitFor(() =>
-      expect(action).toHaveBeenCalledWith("t1", iso(tomorrow))
-    );
+    await waitFor(() => expect(action).toHaveBeenCalledWith("t1", iso(tomorrow)));
   });
 
   test("after Clear revalidates to null, reopening shows an empty input", async () => {
@@ -88,7 +81,7 @@ describe("FollowUpButton — date input re-syncs with followUpAt on open", () =>
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 3);
     const { rerender } = render(
-      <FollowUpButton threadId="t1" followUpAt={dueDate} action={action} />
+      <FollowUpButton threadId="t1" followUpAt={dueDate} action={action} />,
     );
 
     // Sanity: the input opens pre-filled with the current follow-up.
@@ -100,9 +93,7 @@ describe("FollowUpButton — date input re-syncs with followUpAt on open", () =>
 
     // Server revalidation clears the prop; reopening must not
     // resurrect the old date in the input.
-    rerender(
-      <FollowUpButton threadId="t1" followUpAt={null} action={action} />
-    );
+    rerender(<FollowUpButton threadId="t1" followUpAt={null} action={action} />);
     const reopened = await openPopover(user);
     expect(reopened.value).toBe("");
   });

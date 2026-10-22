@@ -15,26 +15,11 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import {
-  Archive,
-  ArchiveRestore,
-  ArrowDown,
-  ArrowUp,
-  Check,
-  Plus,
-} from "lucide-react";
+import { Archive, ArchiveRestore, ArrowDown, ArrowUp, Check, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { notifyError } from "@/lib/feedback";
-import {
-  createStage,
-  moveStage,
-  setStageActive,
-  updateStage,
-} from "@/app/actions/practice-areas";
-import {
-  stageInitialState,
-  type StageFormState,
-} from "@/lib/practice-area-constants";
+import { createStage, moveStage, setStageActive, updateStage } from "@/app/actions/practice-areas";
+import { stageInitialState, type StageFormState } from "@/lib/practice-area-constants";
 import { inputClass } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 
@@ -87,9 +72,7 @@ export function StageManager({
 
       {archived.length > 0 && (
         <div className="pt-3 border-t border-line flex flex-col">
-          <div className="text-2xs font-medium text-ink-3 mb-1">
-            Archived ({archived.length})
-          </div>
+          <div className="text-2xs font-medium text-ink-3 mb-1">Archived ({archived.length})</div>
           {archived.map((s) => (
             <StageRow key={s.id} stage={s} canMoveUp={false} canMoveDown={false} />
           ))}
@@ -109,10 +92,10 @@ function StageRow({
   canMoveDown: boolean;
 }) {
   const boundUpdate = updateStage.bind(null, stage.id);
-  const [state, formAction, isPending] = useActionState<
-    StageFormState,
-    FormData
-  >(boundUpdate, stageInitialState);
+  const [state, formAction, isPending] = useActionState<StageFormState, FormData>(
+    boundUpdate,
+    stageInitialState,
+  );
 
   const [, startTransition] = useTransition();
 
@@ -125,7 +108,7 @@ function StageRow({
   const toggleActive = () => {
     if (stage.isActive && stage.matterCount > 0) {
       notifyError(
-        `Cannot archive — ${stage.matterCount} active matter${stage.matterCount === 1 ? "" : "s"} still sit in "${stage.name}". Move them to a different stage first.`
+        `Cannot archive — ${stage.matterCount} active matter${stage.matterCount === 1 ? "" : "s"} still sit in "${stage.name}". Move them to a different stage first.`,
       );
       return;
     }
@@ -155,7 +138,7 @@ function StageRow({
       onSubmit={onSubmit}
       className={cn(
         "grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-2 px-2 py-1.5 border-b border-line last:border-b-0",
-        !stage.isActive && "opacity-70"
+        !stage.isActive && "opacity-70",
       )}
     >
       {/* Reorder */}
@@ -192,7 +175,10 @@ function StageRow({
           required
           aria-label={`Stage name (${stage.name})`}
           disabled={!stage.isActive}
-          className={cn(inputClass(!!errs.name, "xs"), "w-full disabled:bg-paper-2 disabled:cursor-not-allowed")}
+          className={cn(
+            inputClass(!!errs.name, "xs"),
+            "w-full disabled:bg-paper-2 disabled:cursor-not-allowed",
+          )}
         />
         {errs.name && errs.name.length > 0 && (
           <div className="text-2xs text-warn">{errs.name[0]}</div>
@@ -228,22 +214,15 @@ function StageRow({
               state.status === "ok"
                 ? "text-ok"
                 : "text-ink-3 hover:text-brand-700 hover:bg-brand-soft",
-              "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              "transition-colors disabled:opacity-60 disabled:cursor-not-allowed",
             )}
             title={state.status === "ok" ? "Saved" : "Save changes"}
           >
             <Check size={13} />
           </button>
         )}
-        <IconButton
-          onClick={toggleActive}
-          label={stage.isActive ? "Archive" : "Restore"}
-        >
-          {stage.isActive ? (
-            <Archive size={12} />
-          ) : (
-            <ArchiveRestore size={12} />
-          )}
+        <IconButton onClick={toggleActive} label={stage.isActive ? "Archive" : "Restore"}>
+          {stage.isActive ? <Archive size={12} /> : <ArchiveRestore size={12} />}
         </IconButton>
       </div>
     </form>
@@ -252,10 +231,10 @@ function StageRow({
 
 function AddStageForm({ practiceAreaId }: { practiceAreaId: string }) {
   const boundCreate = createStage.bind(null, practiceAreaId);
-  const [state, formAction, isPending] = useActionState<
-    StageFormState,
-    FormData
-  >(boundCreate, stageInitialState);
+  const [state, formAction, isPending] = useActionState<StageFormState, FormData>(
+    boundCreate,
+    stageInitialState,
+  );
 
   const errs = state.errors ?? {};
   const [, startTransition] = useTransition();
@@ -316,12 +295,7 @@ function AddStageForm({ practiceAreaId }: { practiceAreaId: string }) {
         terminal
       </label>
 
-      <Button
-        size="xs"
-        type="submit"
-        disabled={isPending}
-        className="hover:bg-brand-600"
-      >
+      <Button size="xs" type="submit" disabled={isPending} className="hover:bg-brand-600">
         <Plus size={12} />
         {isPending ? "Adding…" : "Add stage"}
       </Button>
@@ -353,7 +327,7 @@ function IconButton({
       className={cn(
         "inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-3",
         "hover:text-brand-700 hover:bg-brand-soft transition-colors",
-        "disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+        "disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent",
       )}
     >
       {children}

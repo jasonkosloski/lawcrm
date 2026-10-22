@@ -66,8 +66,7 @@ export function InvoicePreview({
   // false in printMode so each row renders the static <tr>.
   const editingEnabled = editable && !printMode;
   const canEditLineItem = (lineItemUserId: string): boolean =>
-    editingEnabled &&
-    (canEditAnyTimeEntry || lineItemUserId === currentUserId);
+    editingEnabled && (canEditAnyTimeEntry || lineItemUserId === currentUserId);
   const statusClass = INVOICE_STATUS_CLASS[invoice.status] ?? INVOICE_STATUS_CLASS.draft;
   const isInternal = invoice.kind === "internal_record";
   // A voided invoice owes nothing: the stored balance is just
@@ -91,11 +90,7 @@ export function InvoicePreview({
           paginates across pages). The parent <aside> in panel
           mode already provides the rounded border + bg for the
           pane chrome, so we don't double up here. */}
-      <div
-        className={
-          printMode ? "bg-white" : "flex-1 overflow-y-auto bg-white"
-        }
-      >
+      <div className={printMode ? "bg-white" : "flex-1 overflow-y-auto bg-white"}>
         <div className={isVoid ? "relative" : undefined}>
           {/* Matches the VOID stamp on filed PDFs (void-stamp.ts), so
               the print view of a voided invoice can't pass as a bill. */}
@@ -134,19 +129,14 @@ export function InvoicePreview({
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <div className="text-2xs font-medium text-ink-3">
-                  {headerLabel}
-                </div>
+                <div className="text-2xs font-medium text-ink-3">{headerLabel}</div>
                 <div className="text-lg font-display font-medium text-ink mt-0.5">
                   {invoice.invoiceNumber}
                 </div>
                 <span
                   className={`inline-block mt-1.5 text-2xs font-medium px-2 py-0.5 rounded-full border ${statusClass}`}
                 >
-                  {invoiceStatusLabel(
-                    invoice.status,
-                    invoice.kind as InvoiceKind
-                  )}
+                  {invoiceStatusLabel(invoice.status, invoice.kind as InvoiceKind)}
                 </span>
               </div>
             </div>
@@ -157,32 +147,20 @@ export function InvoicePreview({
             <div>
               {isInternal ? (
                 <>
-                  <div className="text-2xs font-medium text-ink-3 mb-1">
-                    For matter file
-                  </div>
-                  <div className="text-sm font-medium text-ink">
-                    Internal record — not billed
-                  </div>
+                  <div className="text-2xs font-medium text-ink-3 mb-1">For matter file</div>
+                  <div className="text-sm font-medium text-ink">Internal record — not billed</div>
                   <div className="text-2xs text-ink-4 mt-1 leading-relaxed max-w-xs">
-                    Closes WIP without invoicing. Excluded from
-                    Outstanding AR; the matter&apos;s Trust ledger is
-                    unaffected.
+                    Closes WIP without invoicing. Excluded from Outstanding AR; the matter&apos;s
+                    Trust ledger is unaffected.
                   </div>
                   <div className="text-2xs text-ink-4 mt-2">
-                    <span className="font-medium">
-                      Re:
-                    </span>{" "}
-                    {invoice.matterName}
+                    <span className="font-medium">Re:</span> {invoice.matterName}
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="text-2xs font-medium text-ink-3 mb-1">
-                    Bill to
-                  </div>
-                  <div className="text-sm font-medium text-ink">
-                    {invoice.clientName ?? "—"}
-                  </div>
+                  <div className="text-2xs font-medium text-ink-3 mb-1">Bill to</div>
+                  <div className="text-sm font-medium text-ink">{invoice.clientName ?? "—"}</div>
                   {invoice.clientEmail && (
                     <div className="text-2xs text-ink-3 font-mono mt-0.5">
                       {invoice.clientEmail}
@@ -190,9 +168,7 @@ export function InvoicePreview({
                   )}
                   {invoice.clientAddress && (
                     <div className="text-2xs text-ink-4 mt-1 leading-relaxed">
-                      {invoice.clientAddress.line1 && (
-                        <div>{invoice.clientAddress.line1}</div>
-                      )}
+                      {invoice.clientAddress.line1 && <div>{invoice.clientAddress.line1}</div>}
                       {(invoice.clientAddress.city ||
                         invoice.clientAddress.state ||
                         invoice.clientAddress.zip) && (
@@ -209,10 +185,7 @@ export function InvoicePreview({
                     </div>
                   )}
                   <div className="text-2xs text-ink-4 mt-2">
-                    <span className="font-medium">
-                      Re:
-                    </span>{" "}
-                    {invoice.matterName}
+                    <span className="font-medium">Re:</span> {invoice.matterName}
                   </div>
                 </>
               )}
@@ -232,9 +205,7 @@ export function InvoicePreview({
                 )}
               </dd>
               <dt className="text-ink-4">Total</dt>
-              <dd className="text-ink font-mono font-medium">
-                {formatMoney(invoice.totalAmount)}
-              </dd>
+              <dd className="text-ink font-mono font-medium">{formatMoney(invoice.totalAmount)}</dd>
               {invoice.paidAmount > 0 && (
                 <>
                   <dt className="text-ink-4">Paid</dt>
@@ -252,9 +223,7 @@ export function InvoicePreview({
 
           {/* Line items */}
           <div className="px-6 py-4 border-b border-line">
-            <div className="text-2xs font-medium text-ink-3 mb-2">
-              Services
-            </div>
+            <div className="text-2xs font-medium text-ink-3 mb-2">Services</div>
             {invoice.lineItems.length === 0 ? (
               <div className="text-xs text-ink-4 italic py-4">
                 No line items linked to this invoice.
@@ -265,21 +234,11 @@ export function InvoicePreview({
               <table className="w-full text-2xs">
                 <thead>
                   <tr className="text-ink-4 border-b border-line">
-                    <th className="text-left font-medium pb-1.5">
-                      Date
-                    </th>
-                    <th className="text-left font-medium pb-1.5">
-                      Description
-                    </th>
-                    <th className="text-right font-medium pb-1.5">
-                      Hrs
-                    </th>
-                    <th className="text-right font-medium pb-1.5">
-                      Rate
-                    </th>
-                    <th className="text-right font-medium pb-1.5">
-                      Amount
-                    </th>
+                    <th className="text-left font-medium pb-1.5">Date</th>
+                    <th className="text-left font-medium pb-1.5">Description</th>
+                    <th className="text-right font-medium pb-1.5">Hrs</th>
+                    <th className="text-right font-medium pb-1.5">Rate</th>
+                    <th className="text-right font-medium pb-1.5">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -299,20 +258,13 @@ export function InvoicePreview({
                         userJobTitle={li.userJobTitle}
                       />
                     ) : (
-                      <tr
-                        key={li.id}
-                        className="border-b border-line/60 last:border-b-0 align-top"
-                      >
+                      <tr key={li.id} className="border-b border-line/60 last:border-b-0 align-top">
                         <td className="py-2 font-mono text-ink-3 whitespace-nowrap pr-3">
                           {formatDateOnly(li.date, "short")}
                         </td>
                         <td className="py-2 pr-3">
                           <div className="text-ink">{li.activity}</div>
-                          {li.narrative && (
-                            <div className="text-ink-4 mt-0.5">
-                              {li.narrative}
-                            </div>
-                          )}
+                          {li.narrative && <div className="text-ink-4 mt-0.5">{li.narrative}</div>}
                           {/* Timekeeper attribution. "Jason Kosloski
                               — Managing Partner" reads more like a
                               real bill than a bare "JK" initials
@@ -321,9 +273,7 @@ export function InvoicePreview({
                               fallback is needed. */}
                           <div className="text-ink-4 mt-0.5">
                             {li.userName}
-                            <span className="text-ink-4">
-                              {" "}— {li.userJobTitle}
-                            </span>
+                            <span className="text-ink-4"> — {li.userJobTitle}</span>
                           </div>
                         </td>
                         <td className="py-2 text-right font-mono text-ink-3 whitespace-nowrap">
@@ -336,7 +286,7 @@ export function InvoicePreview({
                           {li.amount !== null ? formatMoney(li.amount) : "—"}
                         </td>
                       </tr>
-                    )
+                    ),
                   )}
                 </tbody>
               </table>
@@ -348,44 +298,27 @@ export function InvoicePreview({
               the eye groups them as parallel sections. */}
           {invoice.expenseLineItems.length > 0 && (
             <div className="px-6 py-4 border-b border-line">
-              <div className="text-2xs font-medium text-ink-3 mb-2">
-                Expenses
-              </div>
+              <div className="text-2xs font-medium text-ink-3 mb-2">Expenses</div>
               <table className="w-full text-2xs">
                 <thead>
                   <tr className="text-ink-4 border-b border-line">
-                    <th className="text-left font-medium pb-1.5">
-                      Date
-                    </th>
-                    <th className="text-left font-medium pb-1.5">
-                      Description
-                    </th>
-                    <th className="text-left font-medium pb-1.5">
-                      Category
-                    </th>
-                    <th className="text-right font-medium pb-1.5">
-                      Amount
-                    </th>
+                    <th className="text-left font-medium pb-1.5">Date</th>
+                    <th className="text-left font-medium pb-1.5">Description</th>
+                    <th className="text-left font-medium pb-1.5">Category</th>
+                    <th className="text-right font-medium pb-1.5">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {invoice.expenseLineItems.map((ex) => (
-                    <tr
-                      key={ex.id}
-                      className="border-b border-line/60 last:border-b-0 align-top"
-                    >
+                    <tr key={ex.id} className="border-b border-line/60 last:border-b-0 align-top">
                       <td className="py-2 font-mono text-ink-3 whitespace-nowrap pr-3">
                         {formatDateOnly(ex.date, "short")}
                       </td>
                       <td className="py-2 pr-3">
                         <div className="text-ink">{ex.description}</div>
-                        {ex.notes && (
-                          <div className="text-ink-4 mt-0.5">{ex.notes}</div>
-                        )}
+                        {ex.notes && <div className="text-ink-4 mt-0.5">{ex.notes}</div>}
                         {ex.utbmsCode && (
-                          <div className="text-ink-4 font-mono mt-0.5">
-                            {ex.utbmsCode}
-                          </div>
+                          <div className="text-ink-4 font-mono mt-0.5">{ex.utbmsCode}</div>
                         )}
                       </td>
                       <td className="py-2 text-ink-3 capitalize whitespace-nowrap pr-3">
@@ -405,20 +338,14 @@ export function InvoicePreview({
           <div className="px-6 py-4 border-b border-line">
             <dl className="ml-auto w-64 text-xs grid grid-cols-[1fr_auto] gap-y-1">
               <dt className="text-ink-3">Subtotal</dt>
-              <dd className="text-ink font-mono">
-                {formatMoney(invoice.subtotal)}
-              </dd>
+              <dd className="text-ink font-mono">{formatMoney(invoice.subtotal)}</dd>
               {invoice.taxAmount > 0 && (
                 <>
                   <dt className="text-ink-3">Tax</dt>
-                  <dd className="text-ink font-mono">
-                    {formatMoney(invoice.taxAmount)}
-                  </dd>
+                  <dd className="text-ink font-mono">{formatMoney(invoice.taxAmount)}</dd>
                 </>
               )}
-              <dt className="text-ink font-medium pt-1 border-t border-line mt-1">
-                Total due
-              </dt>
+              <dt className="text-ink font-medium pt-1 border-t border-line mt-1">Total due</dt>
               <dd className="text-ink font-mono font-semibold pt-1 border-t border-line mt-1">
                 {isVoid ? "Void — nothing due" : formatMoney(invoice.balance)}
               </dd>
@@ -440,44 +367,26 @@ export function InvoicePreview({
               <table className="w-full text-2xs">
                 <thead>
                   <tr className="text-ink-4 border-b border-line">
-                    <th className="text-left font-medium pb-1.5">
-                      Date
-                    </th>
-                    <th className="text-left font-medium pb-1.5">
-                      Source
-                    </th>
-                    <th className="text-left font-medium pb-1.5">
-                      Reference
-                    </th>
-                    <th className="text-right font-medium pb-1.5">
-                      Amount
-                    </th>
+                    <th className="text-left font-medium pb-1.5">Date</th>
+                    <th className="text-left font-medium pb-1.5">Source</th>
+                    <th className="text-left font-medium pb-1.5">Reference</th>
+                    <th className="text-right font-medium pb-1.5">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {invoice.payments.map((p) => (
-                    <tr
-                      key={p.id}
-                      className="border-b border-line/60 last:border-b-0 align-top"
-                    >
+                    <tr key={p.id} className="border-b border-line/60 last:border-b-0 align-top">
                       <td className="py-2 font-mono text-ink-3 whitespace-nowrap pr-3">
                         {formatDateOnly(p.date, "short")}
                       </td>
                       <td className="py-2 pr-3">
                         <div className="text-ink">
-                          {INVOICE_PAYMENT_SOURCE_LABEL[
-                            p.source as InvoicePaymentSource
-                          ] ?? p.source}
+                          {INVOICE_PAYMENT_SOURCE_LABEL[p.source as InvoicePaymentSource] ??
+                            p.source}
                         </div>
-                        {p.description && (
-                          <div className="text-ink-4 mt-0.5">
-                            {p.description}
-                          </div>
-                        )}
+                        {p.description && <div className="text-ink-4 mt-0.5">{p.description}</div>}
                       </td>
-                      <td className="py-2 pr-3 font-mono text-ink-3">
-                        {p.reference ?? "—"}
-                      </td>
+                      <td className="py-2 pr-3 font-mono text-ink-3">{p.reference ?? "—"}</td>
                       <td className="py-2 text-right font-mono text-ink whitespace-nowrap pl-3">
                         {formatMoney(p.amount)}
                       </td>
@@ -492,12 +401,9 @@ export function InvoicePreview({
                 <div className="text-2xs text-ink-4 mt-2 italic">
                   An additional{" "}
                   <span className="font-mono">
-                    {formatMoney(
-                      invoice.paidAmount - invoice.paymentsRecordedTotal
-                    )}
+                    {formatMoney(invoice.paidAmount - invoice.paymentsRecordedTotal)}
                   </span>{" "}
-                  was applied via Mark paid without a recorded
-                  transaction.
+                  was applied via Mark paid without a recorded transaction.
                 </div>
               )}
             </div>
@@ -517,7 +423,6 @@ export function InvoicePreview({
           )}
         </div>
       </div>
-
     </div>
   );
 }

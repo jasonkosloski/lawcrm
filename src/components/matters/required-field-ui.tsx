@@ -7,23 +7,16 @@
  */
 
 import type { ReactNode } from "react";
-import {
-  REQUIRED_FIELD_INPUT_NAME,
-  type RequiredMatterField,
-} from "@/lib/matter-required-fields";
+import { REQUIRED_FIELD_INPUT_NAME, type RequiredMatterField } from "@/lib/matter-required-fields";
 
 export function useRequiredHints(
   areaName: string | undefined,
-  requiredKeys: readonly RequiredMatterField[]
+  requiredKeys: readonly RequiredMatterField[],
 ) {
   const isRequired = (k: RequiredMatterField) => requiredKeys.includes(k);
   const requiredHint = areaName ? `Required for ${areaName}` : "";
   const reqHint = (k: RequiredMatterField, extra?: string) =>
-    isRequired(k)
-      ? extra
-        ? `${requiredHint}. ${extra}`
-        : requiredHint
-      : extra;
+    isRequired(k) ? (extra ? `${requiredHint}. ${extra}` : requiredHint) : extra;
   return { isRequired, requiredHint, reqHint };
 }
 
@@ -48,9 +41,7 @@ export function VenueField({
       {children}
       {!error && (
         <div className="text-2xs text-ink-4">
-          {required
-            ? requiredHint
-            : "The court or jurisdiction the case is in."}
+          {required ? requiredHint : "The court or jurisdiction the case is in."}
         </div>
       )}
     </div>
@@ -58,10 +49,7 @@ export function VenueField({
 }
 
 /** The visible, focusable control for a required field (null if none). */
-function focusTarget(
-  form: HTMLFormElement,
-  key: RequiredMatterField
-): HTMLElement | null {
+function focusTarget(form: HTMLFormElement, key: RequiredMatterField): HTMLElement | null {
   if (key === "venue") {
     return form.querySelector<HTMLElement>('[aria-label="Venue"]');
   }
@@ -76,15 +64,12 @@ function focusTarget(
 }
 
 /** Focus (and scroll to) the missing field that is earliest in the page. */
-export function focusFirstInvalid(
-  form: HTMLFormElement,
-  keys: readonly RequiredMatterField[]
-) {
+export function focusFirstInvalid(form: HTMLFormElement, keys: readonly RequiredMatterField[]) {
   const targets = keys
     .map((k) => focusTarget(form, k))
     .filter((el): el is HTMLElement => el !== null);
   targets.sort((a, b) =>
-    a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
+    a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
   );
   const first = targets[0];
   if (!first) return;

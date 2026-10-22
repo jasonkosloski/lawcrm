@@ -4,6 +4,7 @@ Time tracking (week view, day reconciliation, timer widget, UTBMS-coded entries)
 Related: [ADR-013](../decisions/013-timer-sessions-are-pre-entries-ungated-to.md), [ADR-024](../decisions/024-invoice-line-items-are-draft-only-money.md), [ADR-030](../decisions/030-settlement-status-follows-the-approval-chain-amounts.md), [ADR-036](../decisions/036-money-is-decimal-14-2-one-settlement.md), [ADR-038](../decisions/038-billing-view-gates-the-billing-read-surface.md), [ADR-021](../decisions/021-matter-tabs-honour-calendar-visibility-and-money.md), [PERMISSIONS.md](../PERMISSIONS.md)
 
 ## Open work
+
 - [ ] **Payment reversal** (P2) — `InvoicePayment` rows are append-only: no action edits, deletes or reverses one, and void is refused while any payment exists. A payment recorded against the wrong invoice (or a trust payment that already drew down `trustBalance`) can only be fixed in the database today. Needs a decision before building:
   - **Shape:** a reversing entry (negative `InvoicePayment` with `reversesId`, keeps the audit trail; matches how trust is a ledger) vs. a soft-delete flag. Leaning reversing entry: money history stays append-only.
   - **Effects to unwind under the invoice + matter locks:** `paidAmount` and status (paid → partial/sent), and for trust-sourced payments a compensating trust deposit restoring `trustBalance`.
@@ -14,13 +15,16 @@ Related: [ADR-013](../decisions/013-timer-sessions-are-pre-entries-ungated-to.md
 - [ ] **Palette "Start timer" row** — now safe to add since `startTimer` returns `already_running` instead of replacing.
 
 ## Shipped
+
 ### Time
+
 - [x] **Time tracking — week view** (2026-07-07) — `/time` (sidebar "Time"), URL-driven, timezone-correct (user-tz date keys). One row per day, horizontal hour bars segmented per matter in matter color (billable solid, non-billable dimmed), day + week totals, matter legend. Current-user only.
 - [x] **Time entry modal** (2026-07-07) — All composers (Time-tab TimeComposer, log-time-on-entity, edit, stop-timer) share `DurationFields` (decimal hours OR start–end computed client-side into `hours`) and `UtbmsCodeSelect` (A100 activity + L100 litigation task catalogs in `src/lib/time-entry-constants.ts`, server-validated wherever written). Narrative + billable/no-charge/privileged toggles. The edit dialog does not offer the Billed status. Create/edit/status/delete are activity-logged (edits log date/billable/no-charge changes). Time tab rows show the UTBMS chip (label on hover) and a "Timer" provenance marker; header shows "latest N of M" when capped at 200.
 - [x] **Timer widget** (2026-07-07) — Floating bottom-right pill in AppShell. Idle = "Timer" start; running = client-side ticking from `TimerSession.startedAt` (no polling), matter name, mid-run matter/activity re-point panel, two-step discard, Stop → prefilled StopTimerDialog (elapsed rounded UP to the quarter hour `TIME_ENTRY_INCREMENT_HOURS`, min one increment; matter REQUIRED; `source: "timer"`). `src/app/actions/timer.ts`: start/update/discard need no permission (a timer is a pre-entry, ADR-013); `stopTimer` gates on `time_entries.create`. `startTimer` returns `code: "already_running"` unless `replace: true`.
 - [x] **Time reconciliation** (2026-07-07) — `/time?view=day`: Logged lane (manual), Captured lane (source != manual; via-Email/Timer/Calendar chips), live Timer lane (read-only, today only; widget owns interaction), and a day-total bar vs `Firm.dailyHoursGoal` (`getFirmGoals()`, editable on /settings/firm). Read-only v1; entries link to the matter Time tab.
 
 ### Billing
+
 - [x] **Matter Billing tab (v1)** — Gated by `billing.view` for the whole tab, the print route and Overview trust/WIP facts (ADR-038). Three-card KPI strip (WIP, Trust, Outstanding AR) + invoices table + WIP entries + trust ledger + matter-level Received-payments ledger. WIP includes billable expenses.
   - **Generate invoice from WIP** — auto YYYY-NNN numbering, 30-day terms. **Bundle as internal record** for contingency/pro-bono closes (`kind="internal_record"`, born paid, excluded from AR).
   - **State machine** — draft → approved → sent → partial → paid; void only with no payments; drafts deletable. Invoice `notes` is client-facing (printed on invoice + PDF) and labelled so.
@@ -32,14 +36,17 @@ Related: [ADR-013](../decisions/013-timer-sessions-are-pre-entries-ungated-to.md
 - [x] **Matter expenses (v1)** — First-class `Expense` model; composer + table on the Time & Expenses tab, with an Edit dialog on the row menu. Permissions `matters.expense.{view,create,edit,delete}`; edit/delete refused once billed. `generateInvoiceFromWip` and `bundleAsInternalRecord` sweep both time and billable expenses. Receipt picker searches the matter's documents as you type (`searchReceiptDocuments`, newest 50 matches, no preloaded list) and links via `Expense.receiptDocumentId`; cross-matter isolation enforced server-side.
 
 ## Notes
+
 - Money columns are `DECIMAL(14,2)` (ADR-036, Quality sweep Batch 4, migration `20261017120000_quality_sweep`; run steps in `docs/DEPLOY_BACKFILLS.md`). Billing read surface gated by `billing.view` (ADR-038). The rest of Batch 4 (SOL periods, indexes, `Firm.matterVisibility`, private events) is documented under matters / calendar.
 
 ## Invoice email delivery
+
 - **Email send, "Send updated invoice" after a payment, and "Re-send email…"** email the invoice PDF via Resend. From is the firm name on `EMAIL_FROM`'s address; Reply-To is the sender. The body carries a client-portal deep link when the portal is live for the matter. **Mail** still only records intent.
 - The PDF is rendered server-side with `@react-pdf/renderer` (layout mirrors `/print/invoices/[id]`) and filed into a protected "Invoices" system folder (`systemKind` `invoices`) on the matter.
 - **Failure handling:** an email failure after a committed send or payment returns ok plus a warning toast; the send or payment is never rolled back. A re-send that does not go out returns an error.
 
 ## Void stamp and client notice
+
 - Voiding a **sent** client invoice opens a dialog: "Email the client a voided copy" (default on) and a recipient field, both shown only with `billing.send_invoice`. Approved-but-unsent invoices and internal records keep the plain confirm, with no stamp or email.
 - After the void commits, every PDF of the invoice filed in the matter's Invoices folder (linked by `Document.invoiceId`) has its bytes replaced in place with a VOID-stamped copy (pdf-lib overlay: red diagonal VOID plus "Voided <date>"); the old file is deleted unless another document shares it.
 - If nothing was filed, a stamped copy is rendered before the void and filed as "Invoice <n> (void YYYY-MM-DD).pdf". The client is emailed the stamped PDF.

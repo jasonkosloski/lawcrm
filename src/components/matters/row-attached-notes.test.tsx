@@ -8,11 +8,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -37,7 +33,7 @@ async function renderExpanded(timeZone: string) {
   render(
     <UserTimeZoneProvider timeZone={timeZone}>
       <RowAttachedNotes notes={[note]} matterId="m1" />
-    </UserTimeZoneProvider>
+    </UserTimeZoneProvider>,
   );
   await user.click(screen.getByRole("button", { name: /1 note/i }));
 }

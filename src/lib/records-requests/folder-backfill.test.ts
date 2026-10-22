@@ -21,15 +21,12 @@ import {
 } from "@/test/integration-helpers";
 
 const sql = readFileSync(
-  path.join(
-    process.cwd(),
-    "prisma/migrations/20261018200000_generated_folders/migration.sql"
-  ),
-  "utf8"
+  path.join(process.cwd(), "prisma/migrations/20261018200000_generated_folders/migration.sql"),
+  "utf8",
 );
 const body = sql.slice(
   sql.indexOf("-- BACKFILL BEGIN") + "-- BACKFILL BEGIN".length,
-  sql.indexOf("-- BACKFILL END")
+  sql.indexOf("-- BACKFILL END"),
 );
 const statements = body
   .split(";\n")
@@ -51,9 +48,7 @@ beforeEach(async () => {
   const { firmId } = await seedFirm();
   const { userId } = await seedUser({ firmId, name: "Atty" });
   const { areaId, stageId } = await seedPracticeArea();
-  matterId = (
-    await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId })
-  ).matterId;
+  matterId = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId })).matterId;
 });
 
 async function kinds() {
@@ -89,11 +84,20 @@ describe("generated folders backfill", () => {
     const r2 = await mk("Other", new Date("2030-01-01"));
 
     const inv = (await seedDocumentFolder({ matterId, name: "Investigation" })).folderId;
-    const root = (await seedDocumentFolder({ matterId, name: "Records Requests", parentId: inv })).folderId;
-    const req = (await seedDocumentFolder({ matterId, name: "Memorial Hospital — CORA", parentId: root })).folderId;
-    const reqDocs = (await seedDocumentFolder({ matterId, name: "Request documents", parentId: req })).folderId;
-    const respDocs = (await seedDocumentFolder({ matterId, name: "Responsive documents", parentId: req })).folderId;
-    const untagged = (await seedDocumentFolder({ matterId, name: "Empty Co — CORA", parentId: root })).folderId;
+    const root = (await seedDocumentFolder({ matterId, name: "Records Requests", parentId: inv }))
+      .folderId;
+    const req = (
+      await seedDocumentFolder({ matterId, name: "Memorial Hospital — CORA", parentId: root })
+    ).folderId;
+    const reqDocs = (
+      await seedDocumentFolder({ matterId, name: "Request documents", parentId: req })
+    ).folderId;
+    const respDocs = (
+      await seedDocumentFolder({ matterId, name: "Responsive documents", parentId: req })
+    ).folderId;
+    const untagged = (
+      await seedDocumentFolder({ matterId, name: "Empty Co — CORA", parentId: root })
+    ).folderId;
     const strayRoot = (await seedDocumentFolder({ matterId, name: "Records Requests" })).folderId;
 
     // One doc for r1 directly in the request folder... plus a tie-break
@@ -114,9 +118,18 @@ describe("generated folders backfill", () => {
     const first = await kinds();
     expect(first.get(inv)).toMatchObject({ systemKind: null, recordsRequestId: null });
     expect(first.get(root)).toMatchObject({ systemKind: "records_root", recordsRequestId: null });
-    expect(first.get(req)).toMatchObject({ systemKind: "records_request", recordsRequestId: r1.id });
-    expect(first.get(reqDocs)).toMatchObject({ systemKind: "records_request_docs", recordsRequestId: r1.id });
-    expect(first.get(respDocs)).toMatchObject({ systemKind: "records_responsive_docs", recordsRequestId: r1.id });
+    expect(first.get(req)).toMatchObject({
+      systemKind: "records_request",
+      recordsRequestId: r1.id,
+    });
+    expect(first.get(reqDocs)).toMatchObject({
+      systemKind: "records_request_docs",
+      recordsRequestId: r1.id,
+    });
+    expect(first.get(respDocs)).toMatchObject({
+      systemKind: "records_responsive_docs",
+      recordsRequestId: r1.id,
+    });
     expect(first.get(untagged)).toMatchObject({ systemKind: null, recordsRequestId: null });
     expect(first.get(strayRoot)).toMatchObject({ systemKind: null, recordsRequestId: null });
 
@@ -142,9 +155,11 @@ describe("generated folders backfill", () => {
       const late = await mk("Late", new Date("2030-01-01"));
       const early = await mk("Early", new Date("2020-01-01"));
       const inv = (await seedDocumentFolder({ matterId, name: "Investigation" })).folderId;
-      const root = (await seedDocumentFolder({ matterId, name: "Records Requests", parentId: inv })).folderId;
+      const root = (await seedDocumentFolder({ matterId, name: "Records Requests", parentId: inv }))
+        .folderId;
       const req = (await seedDocumentFolder({ matterId, name: "Shared", parentId: root })).folderId;
-      const sub = (await seedDocumentFolder({ matterId, name: "Request documents", parentId: req })).folderId;
+      const sub = (await seedDocumentFolder({ matterId, name: "Request documents", parentId: req }))
+        .folderId;
       for (const [folderId, rid] of [
         [req, late.id],
         [sub, early.id],
@@ -162,7 +177,10 @@ describe("generated folders backfill", () => {
       const { early, req, sub } = await seedTie();
       await runBackfill();
       const k = await kinds();
-      expect(k.get(req)).toMatchObject({ systemKind: "records_request", recordsRequestId: early.id });
+      expect(k.get(req)).toMatchObject({
+        systemKind: "records_request",
+        recordsRequestId: early.id,
+      });
       expect(k.get(sub)).toMatchObject({ recordsRequestId: early.id });
     });
 
@@ -170,7 +188,10 @@ describe("generated folders backfill", () => {
       const { early, req, sub, root } = await seedTie();
       await prisma.$transaction((tx) => linkRecordsFoldersUnder(tx, { matterId }, root));
       const k = await kinds();
-      expect(k.get(req)).toMatchObject({ systemKind: "records_request", recordsRequestId: early.id });
+      expect(k.get(req)).toMatchObject({
+        systemKind: "records_request",
+        recordsRequestId: early.id,
+      });
       expect(k.get(sub)).toMatchObject({ recordsRequestId: early.id });
     });
   });

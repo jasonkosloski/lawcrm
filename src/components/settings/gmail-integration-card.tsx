@@ -34,12 +34,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, History, Mail, Plus } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -53,20 +48,15 @@ const GENERIC_ERROR = "Something went wrong connecting Gmail. Try again.";
 /** Callback machine codes → human copy. Unknown codes get the
  *  generic line — never render a raw code to the user. */
 const ERROR_COPY: Record<string, string> = {
-  denied:
-    "Google connection was cancelled — no account was linked. Try again when you're ready.",
+  denied: "Google connection was cancelled — no account was linked. Try again when you're ready.",
   state:
     "The connection attempt could not be verified (it may have expired or been opened in a different browser). Start again from this page.",
-  exchange:
-    "Google didn't complete the authorization. Try connecting again.",
-  userinfo:
-    "Connected to Google, but the mailbox address couldn't be read. Try connecting again.",
+  exchange: "Google didn't complete the authorization. Try connecting again.",
+  userinfo: "Connected to Google, but the mailbox address couldn't be read. Try connecting again.",
   scope:
     "Gmail permissions were not granted, so nothing was connected. Try again and leave every Gmail permission ticked on Google's screen.",
-  save:
-    "Connected to Google, but saving the account failed. Try connecting again in a moment.",
-  not_configured:
-    "The Google integration isn't configured on this deployment yet.",
+  save: "Connected to Google, but saving the account failed. Try connecting again in a moment.",
+  not_configured: "The Google integration isn't configured on this deployment yet.",
 };
 
 export interface GmailAccountView {
@@ -118,8 +108,7 @@ export function GmailIntegrationCard({
   // Once the user acts on an account (disconnect / backfill) the callback
   // banner is stale: router.refresh() preserves this client state, so clear
   // it explicitly or "Gmail connected" would sit over a Disconnected chip.
-  const clearBanner = () =>
-    setBanner({ justConnected: false, errorCode: null });
+  const clearBanner = () => setBanner({ justConnected: false, errorCode: null });
   useEffect(() => {
     if (justConnected || errorCode) {
       router.replace(INTEGRATIONS_URL, { scroll: false });
@@ -134,9 +123,8 @@ export function GmailIntegrationCard({
           Gmail
         </CardTitle>
         <p className="text-xs text-ink-3">
-          Sync and send email from your own Google mailbox — calendar sync
-          rides the same connection. Filed threads stay on their matters
-          even if you disconnect.
+          Sync and send email from your own Google mailbox — calendar sync rides the same
+          connection. Filed threads stay on their matters even if you disconnect.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -159,8 +147,8 @@ export function GmailIntegrationCard({
           <div className="rounded-md border border-border bg-paper-2 px-3 py-2.5 text-xs text-ink-3">
             <p className="font-medium text-ink-2">Not set up yet</p>
             <p className="mt-1">
-              Gmail isn&apos;t connected for this firm yet. An administrator
-              needs to set it up before you can connect your mailbox.
+              Gmail isn&apos;t connected for this firm yet. An administrator needs to set it up
+              before you can connect your mailbox.
             </p>
           </div>
         ) : (
@@ -168,11 +156,7 @@ export function GmailIntegrationCard({
             {hasAccounts && (
               <ul className="divide-y divide-border rounded-md border border-border">
                 {accounts.map((account) => (
-                  <GmailAccountRow
-                    key={account.id}
-                    account={account}
-                    onAction={clearBanner}
-                  />
+                  <GmailAccountRow key={account.id} account={account} onAction={clearBanner} />
                 ))}
               </ul>
             )}
@@ -193,7 +177,11 @@ export function GmailIntegrationCard({
 
 const STATUS_CHIP: Record<
   string,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline"; className?: string }
+  {
+    label: string;
+    variant: "default" | "secondary" | "destructive" | "outline";
+    className?: string;
+  }
 > = {
   connected: {
     label: "Connected",
@@ -236,7 +224,7 @@ function GmailAccountRow({
             ? `Imported ${res.threadsSynced} older ${
                 res.threadsSynced === 1 ? "thread" : "threads"
               }.`
-            : "No older emails found."
+            : "No older emails found.",
         );
       } else {
         setBackfillFailed(true);
@@ -272,39 +260,25 @@ function GmailAccountRow({
   return (
     <li className="px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="text-xs font-medium text-ink">
-          {account.emailAddress}
-        </span>
+        <span className="text-xs font-medium text-ink">{account.emailAddress}</span>
         <Badge variant={chip.variant} className={cn(chip.className)}>
           {chip.label}
         </Badge>
         <span className="text-2xs text-ink-4">
-          {account.lastSyncLabel
-            ? `Last sync ${account.lastSyncLabel}`
-            : "Never synced"}
+          {account.lastSyncLabel ? `Last sync ${account.lastSyncLabel}` : "Never synced"}
           {" · "}
-          {account.threadCount}{" "}
-          {account.threadCount === 1 ? "thread" : "threads"}
+          {account.threadCount} {account.threadCount === 1 ? "thread" : "threads"}
         </span>
 
         <span className="ml-auto flex items-center gap-1.5">
           {isDisconnected ? (
-            <Button
-              variant="outline"
-              size="sm"
-              render={<a href={CONNECT_URL} />}
-            >
+            <Button variant="outline" size="sm" render={<a href={CONNECT_URL} />}>
               Reconnect
             </Button>
           ) : confirming ? (
             <>
               <span className="text-2xs text-ink-3">Disconnect mailbox?</span>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={pending}
-                onClick={disconnect}
-              >
+              <Button variant="destructive" size="sm" disabled={pending} onClick={disconnect}>
                 {pending ? "Disconnecting…" : "Confirm"}
               </Button>
               <Button
@@ -340,10 +314,7 @@ function GmailAccountRow({
           {account.calendarSyncEnabled ? (
             <span className="text-2xs text-ink-3">Calendar sync on</span>
           ) : (
-            <a
-              href={CONNECT_URL}
-              className="text-2xs text-brand-600 hover:underline"
-            >
+            <a href={CONNECT_URL} className="text-2xs text-brand-600 hover:underline">
               Reconnect to enable calendar sync
             </a>
           )}
@@ -354,9 +325,7 @@ function GmailAccountRow({
           anchor on and the mailbox is still connected. */}
       {!isDisconnected && account.oldestThreadLabel && (
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-2xs text-ink-4">
-            Oldest thread {account.oldestThreadLabel}
-          </span>
+          <span className="text-2xs text-ink-4">Oldest thread {account.oldestThreadLabel}</span>
           <Button
             variant="ghost"
             size="sm"
@@ -368,24 +337,15 @@ function GmailAccountRow({
             {backfillPending ? "Loading older…" : "Load older emails"}
           </Button>
           {backfillNote && !backfillPending && (
-            <span
-              className={cn(
-                "text-2xs",
-                backfillFailed ? "text-danger" : "text-ink-3"
-              )}
-            >
+            <span className={cn("text-2xs", backfillFailed ? "text-danger" : "text-ink-3")}>
               {backfillNote}
             </span>
           )}
         </div>
       )}
 
-      {account.syncError && (
-        <p className="mt-1.5 text-2xs text-danger">{account.syncError}</p>
-      )}
-      {actionError && (
-        <p className="mt-1.5 text-2xs text-danger">{actionError}</p>
-      )}
+      {account.syncError && <p className="mt-1.5 text-2xs text-danger">{account.syncError}</p>}
+      {actionError && <p className="mt-1.5 text-2xs text-danger">{actionError}</p>}
     </li>
   );
 }

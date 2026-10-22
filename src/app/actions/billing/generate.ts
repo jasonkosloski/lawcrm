@@ -46,7 +46,7 @@ const generateSchema = z.object({
 export async function generateInvoiceFromWip(
   matterId: string,
   _prev: BillingFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<BillingFormState> {
   await requirePermission("billing.generate_invoice");
   await assertMatterAccess(matterId);
@@ -113,23 +113,21 @@ export async function generateInvoiceFromWip(
 
       if (entries.length === 0 && expenseRows.length === 0) {
         throw new UserFacingError(
-          "Nothing unbilled to invoice — log billable time or expenses first."
+          "Nothing unbilled to invoice — log billable time or expenses first.",
         );
       }
 
       const subtotal = roundMoney(
         sumLineAmounts(entries.map((e) => e.amount)).add(
-          sumLineAmounts(expenseRows.map((e) => e.amount))
-        )
+          sumLineAmounts(expenseRows.map((e) => e.amount)),
+        ),
       );
       // No tax for v1 — firm settings will introduce a per-state
       // rate later. Total = subtotal.
       const total = subtotal;
 
       const issueDate = new Date();
-      const dueDate = new Date(
-        issueDate.getTime() + parsed.data.dueDays * 24 * 60 * 60 * 1000
-      );
+      const dueDate = new Date(issueDate.getTime() + parsed.data.dueDays * 24 * 60 * 60 * 1000);
 
       // Number generation + create. On a concurrent-generate
       // collision the unique index rejects this INSERT — which
@@ -199,11 +197,7 @@ export async function generateInvoiceFromWip(
   } catch (err) {
     return {
       status: "error",
-      error: toUserMessage(
-        err,
-        "Couldn't generate invoice.",
-        "billing.generateInvoiceFromWip"
-      ),
+      error: toUserMessage(err, "Couldn't generate invoice.", "billing.generateInvoiceFromWip"),
     };
   }
 }
@@ -227,17 +221,13 @@ const internalRecordSchema = z.object({
    *  Free-text so the firm can land on its own conventions
    *  (settled, abandoned, pro-bono complete, fee already collected
    *  via settlement, etc.). */
-  notes: z
-    .string()
-    .trim()
-    .min(1, "Reason is required so the record explains itself")
-    .max(2000),
+  notes: z.string().trim().min(1, "Reason is required so the record explains itself").max(2000),
 });
 
 export async function bundleAsInternalRecord(
   matterId: string,
   _prev: BillingFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<BillingFormState> {
   // Same key as generateInvoiceFromWip — bundling is the same
   // "sweep WIP into a document" capability, just born-locked.
@@ -301,8 +291,8 @@ export async function bundleAsInternalRecord(
 
       const subtotal = roundMoney(
         sumLineAmounts(entries.map((e) => e.amount)).add(
-          sumLineAmounts(expenseRows.map((e) => e.amount))
-        )
+          sumLineAmounts(expenseRows.map((e) => e.amount)),
+        ),
       );
       const total = subtotal;
 
@@ -381,7 +371,7 @@ export async function bundleAsInternalRecord(
       error: toUserMessage(
         err,
         "Couldn't bundle internal record.",
-        "billing.bundleAsInternalRecord"
+        "billing.bundleAsInternalRecord",
       ),
     };
   }

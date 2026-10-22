@@ -33,7 +33,7 @@ export function hmacSecret(s: string): string {
   if (!warnedNoKey) {
     warnedNoKey = true;
     console.error(
-      "[portal] AUTH_SECRET is not set; link-request hashes fall back to unkeyed SHA-256"
+      "[portal] AUTH_SECRET is not set; link-request hashes fall back to unkeyed SHA-256",
     );
   }
   return hashSecret(s);

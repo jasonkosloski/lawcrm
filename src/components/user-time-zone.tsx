@@ -25,11 +25,7 @@ export function UserTimeZoneProvider({
   timeZone: string;
   children: React.ReactNode;
 }) {
-  return (
-    <UserTimeZoneContext.Provider value={timeZone}>
-      {children}
-    </UserTimeZoneContext.Provider>
-  );
+  return <UserTimeZoneContext.Provider value={timeZone}>{children}</UserTimeZoneContext.Provider>;
 }
 
 /**
@@ -37,8 +33,5 @@ export function UserTimeZoneProvider({
  * public pages) it falls back to the runtime's zone.
  */
 export function useUserTimeZone(): string {
-  return (
-    useContext(UserTimeZoneContext) ??
-    Intl.DateTimeFormat().resolvedOptions().timeZone
-  );
+  return useContext(UserTimeZoneContext) ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 }

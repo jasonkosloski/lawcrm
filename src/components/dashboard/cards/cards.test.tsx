@@ -12,11 +12,7 @@ import { ActivityCard } from "./activity";
 import { DeadlinesCard } from "./deadlines";
 import { PulseCard } from "./pulse";
 import { RecordsCard } from "./records";
-import type {
-  DashboardKpis,
-  MyTaskItem,
-  MyTasksGrouped,
-} from "@/lib/queries/dashboard";
+import type { DashboardKpis, MyTaskItem, MyTasksGrouped } from "@/lib/queries/dashboard";
 
 const kpis: DashboardKpis = {
   openMatters: 12,
@@ -59,12 +55,10 @@ describe("KpisCard", () => {
   test("renders stats with v2 copy and links", () => {
     render(<KpisCard kpis={kpis} />);
     expect(screen.getByText("Goal 8.0")).toBeTruthy();
-    expect(
-      screen.getByText("Hours today").closest("a")?.getAttribute("href"),
-    ).toBe("/time");
-    expect(
-      screen.getByText("Unread email").closest("a")?.getAttribute("href"),
-    ).toBe("/communication?filter=unread");
+    expect(screen.getByText("Hours today").closest("a")?.getAttribute("href")).toBe("/time");
+    expect(screen.getByText("Unread email").closest("a")?.getAttribute("href")).toBe(
+      "/communication?filter=unread",
+    );
   });
 
   test("trust tile absent when trustBalance is null", () => {
@@ -78,29 +72,27 @@ describe("KpisCard", () => {
 describe("view-all links", () => {
   test("agenda", () => {
     render(<AgendaCard items={[]} />);
-    expect(
-      screen.getByRole("link", { name: /view all/i }).getAttribute("href"),
-    ).toBe("/calendar?view=day");
+    expect(screen.getByRole("link", { name: /view all/i }).getAttribute("href")).toBe(
+      "/calendar?view=day",
+    );
   });
   test("deadlines", () => {
     render(<DeadlinesCard data={{ items: [], overdueHidden: 0 }} />);
-    expect(
-      screen.getByRole("link", { name: /view all/i }).getAttribute("href"),
-    ).toBe("/calendar?show=deadlines");
+    expect(screen.getByRole("link", { name: /view all/i }).getAttribute("href")).toBe(
+      "/calendar?show=deadlines",
+    );
   });
   test("follow-ups", () => {
     render(<FollowUpsCard items={[]} />);
-    expect(
-      screen.getByRole("link", { name: /view all/i }).getAttribute("href"),
-    ).toBe("/communication");
+    expect(screen.getByRole("link", { name: /view all/i }).getAttribute("href")).toBe(
+      "/communication",
+    );
   });
   test("activity only with canViewActivityLog", () => {
-    const { rerender } = render(
-      <ActivityCard items={[]} canViewActivityLog />,
+    const { rerender } = render(<ActivityCard items={[]} canViewActivityLog />);
+    expect(screen.getByRole("link", { name: /view all/i }).getAttribute("href")).toBe(
+      "/settings/activity",
     );
-    expect(
-      screen.getByRole("link", { name: /view all/i }).getAttribute("href"),
-    ).toBe("/settings/activity");
     rerender(<ActivityCard items={[]} canViewActivityLog={false} />);
     expect(noViewAll()).toBeNull();
   });

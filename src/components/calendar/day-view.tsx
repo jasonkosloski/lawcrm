@@ -32,11 +32,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { formatHourLabel, HOUR_HEIGHT_PX, HOURS } from "@/lib/calendar-utils";
 import { dateKeyInTz, dateOnlyKey } from "@/lib/format-date";
-import type {
-  CalendarItem,
-  CalendarEventRow,
-  CalendarDeadlineRow,
-} from "@/lib/queries/calendar";
+import type { CalendarItem, CalendarEventRow, CalendarDeadlineRow } from "@/lib/queries/calendar";
 import { deadlineRank, itemIsOnDay } from "./bucket-items";
 import { WeekAllDayCell, WeekTimeColumn } from "./week-day-column";
 import { useEventMoves } from "./use-event-moves";
@@ -54,7 +50,7 @@ import { useEventMoves } from "./use-event-moves";
 export function bucketDayItems(
   items: CalendarItem[],
   dayKey: string,
-  tz: string
+  tz: string,
 ): {
   allDayEvents: CalendarEventRow[];
   timedEvents: CalendarEventRow[];
@@ -110,7 +106,7 @@ export function DayView({
   const editable = editableEventIds ? new Set(editableEventIds) : null;
   const { renderItems, moveEvent } = useEventMoves(
     items,
-    editable ? (id) => editable.has(id) : undefined
+    editable ? (id) => editable.has(id) : undefined,
   );
 
   const canDragEvent = editable ? (id: string) => editable.has(id) : undefined;
@@ -120,11 +116,7 @@ export function DayView({
   // Day key from the noon-UTC Date's UTC components.
   const dayKey = dateOnlyKey(day);
 
-  const { allDayEvents, timedEvents, deadlines } = bucketDayItems(
-    renderItems,
-    dayKey,
-    userTz
-  );
+  const { allDayEvents, timedEvents, deadlines } = bucketDayItems(renderItems, dayKey, userTz);
 
   // Deadlines-only: the hour grid + all-day strip would be empty
   // (events were filtered upstream), so render just the "due"
@@ -142,9 +134,7 @@ export function DayView({
           </div>
           <div className="flex flex-col gap-1 p-1.5 min-w-0">
             {deadlines.length === 0 ? (
-              <p className="text-xs text-ink-4 italic px-1 py-2">
-                No deadlines on this day.
-              </p>
+              <p className="text-xs text-ink-4 italic px-1 py-2">No deadlines on this day.</p>
             ) : (
               deadlines.map((d) => <DayDeadlineRow key={d.id} deadline={d} />)
             )}
@@ -244,7 +234,7 @@ function DayDeadlineRow({ deadline }: { deadline: CalendarDeadlineRow }) {
       href={`/matters/${deadline.matterId}/deadlines`}
       className={cn(
         "text-2xs font-medium px-2 py-1 rounded border flex items-center gap-1.5 overflow-hidden hover:shadow-sm transition-shadow",
-        cls
+        cls,
       )}
       title={`${deadline.title} — ${deadline.matterName}`}
     >
@@ -256,9 +246,7 @@ function DayDeadlineRow({ deadline }: { deadline: CalendarDeadlineRow }) {
       />
       <span className="truncate">{deadline.title}</span>
       {deadline.deadlineKind === "critical" && (
-        <span className="shrink-0 text-3xs font-mono opacity-80">
-          critical
-        </span>
+        <span className="shrink-0 text-3xs font-mono opacity-80">critical</span>
       )}
       <span className="ml-auto shrink-0 max-w-[45%] truncate font-mono text-3xs opacity-80">
         {deadline.matterName}

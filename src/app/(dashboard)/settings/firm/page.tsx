@@ -13,11 +13,7 @@ import { FirmCalendarDefaultsCard } from "@/components/settings/calendar-default
 import { PortalEnabledCard } from "@/components/settings/portal-enabled-card";
 import { MatterVisibilityCard } from "@/components/settings/matter-visibility-card";
 import { OriginatingDocCard } from "@/components/settings/originating-doc-card";
-import {
-  getCurrentFirm,
-  getFirmGoals,
-  isCurrentUserAdmin,
-} from "@/lib/firm";
+import { getCurrentFirm, getFirmGoals, isCurrentUserAdmin } from "@/lib/firm";
 import { listThinTeams } from "@/lib/queries/thin-teams";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
@@ -62,8 +58,8 @@ export default async function FirmSettingsPage() {
         <div className="mb-4">
           <h1 className="text-base font-semibold text-ink">Firm info</h1>
           <p className="text-xs text-ink-3 mt-1">
-            Identity, contact, and address for {firm.shortName ?? firm.name}.
-            Surfaces on letterhead, invoices, and matter documents.
+            Identity, contact, and address for {firm.shortName ?? firm.name}. Surfaces on
+            letterhead, invoices, and matter documents.
           </p>
         </div>
         {canEdit ? (
@@ -73,10 +69,7 @@ export default async function FirmSettingsPage() {
         )}
 
         <div className="mt-6">
-          <FirmCalendarDefaultsCard
-            current={calendarDefaults}
-            canEdit={canEdit}
-          />
+          <FirmCalendarDefaultsCard current={calendarDefaults} canEdit={canEdit} />
         </div>
 
         {canEdit && (

@@ -71,18 +71,11 @@ export function NotePanelBody({
   const attachmentErrors = state.attachmentErrors ?? {};
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="flex-1 flex flex-col min-h-0 overflow-hidden"
-    >
+    <form onSubmit={onSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <input type="hidden" name="content" value={html} />
       <input type="hidden" name="type" value={type} />
       {canPin && pin && <input type="hidden" name="isPinned" value="on" />}
-      <input
-        type="hidden"
-        name="attachments"
-        value={JSON.stringify(captures)}
-      />
+      <input type="hidden" name="attachments" value={JSON.stringify(captures)} />
 
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
         <NoteEditor
@@ -110,9 +103,7 @@ export function NotePanelBody({
                 aria-pressed={type === t}
                 className={cn(
                   "text-2xs font-medium px-2 py-0.5 rounded transition-colors",
-                  type === t
-                    ? "bg-paper-2 text-ink"
-                    : "text-ink-3 hover:text-brand-700"
+                  type === t ? "bg-paper-2 text-ink" : "text-ink-3 hover:text-brand-700",
                 )}
               >
                 {NOTE_TYPE_LABEL[t]}
@@ -129,13 +120,10 @@ export function NotePanelBody({
                 "inline-flex items-center gap-1 h-6 px-2 rounded-md text-2xs font-medium border transition-colors",
                 pin
                   ? "bg-brand-soft text-brand-700 border-brand-200"
-                  : "bg-white text-ink-3 border-line hover:text-brand-700 hover:border-brand-300"
+                  : "bg-white text-ink-3 border-line hover:text-brand-700 hover:border-brand-300",
               )}
             >
-              <Pin
-                size={11}
-                className={pin ? "fill-brand-500 text-brand-500" : ""}
-              />
+              <Pin size={11} className={pin ? "fill-brand-500 text-brand-500" : ""} />
               Pin
             </button>
           )}
@@ -168,19 +156,10 @@ export function NotePanelBody({
       </div>
 
       <footer className="flex items-center justify-end gap-2 px-4 py-3 border-t border-line shrink-0 bg-paper-2/30">
-        <Button
-          variant="outline"
-          size="xs"
-          type="button"
-          onClick={() => close(panelId)}
-        >
+        <Button variant="outline" size="xs" type="button" onClick={() => close(panelId)}>
           Cancel
         </Button>
-        <Button
-          size="xs"
-          type="submit"
-          disabled={isPending || html.trim().length === 0}
-        >
+        <Button size="xs" type="submit" disabled={isPending || html.trim().length === 0}>
           {isPending
             ? "Saving…"
             : captures.length > 0

@@ -10,7 +10,13 @@ vi.mock("@/app/actions/leads", () => ({ createLead: vi.fn() }));
 import { NewIntakeForm } from "./new-intake-form";
 
 const contacts = [
-  { id: "c1", name: "Dana Reyes", email: "dana@example.com", phone: "303-555-0142", type: "client" },
+  {
+    id: "c1",
+    name: "Dana Reyes",
+    email: "dana@example.com",
+    phone: "303-555-0142",
+    type: "client",
+  },
   { id: "c2", name: "Pat Moore", email: "pat@example.com", phone: null, type: "witness" },
 ];
 
@@ -24,7 +30,9 @@ describe("NewIntakeForm", () => {
     await user.type(screen.getByPlaceholderText(/start typing/i), "dan");
     await user.click(screen.getByRole("button", { name: /Dana Reyes/ }));
     expect(hiddenContactId()).toBe("c1");
-    expect(screen.getByText(/Existing contact · dana@example.com · 303-555-0142/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Existing contact · dana@example.com · 303-555-0142/),
+    ).toBeInTheDocument();
     // Email/phone inputs give way to the linked record.
     expect(screen.queryByLabelText(/^email$/i)).not.toBeInTheDocument();
 

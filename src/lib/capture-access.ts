@@ -13,10 +13,7 @@
  * out for tests.
  */
 
-import {
-  CAPTURE_CREATE_PERMISSION,
-  NOTE_PIN_PERMISSION,
-} from "@/lib/capture-permissions";
+import { CAPTURE_CREATE_PERMISSION, NOTE_PIN_PERMISSION } from "@/lib/capture-permissions";
 import { getCurrentUserPermissions } from "@/lib/permission-check";
 import type { CaptureKind } from "@/lib/note-constants";
 
@@ -30,11 +27,11 @@ export type CaptureAccess = {
 /** Pure: resolve access from a viewer's grants. Admins hold everything. */
 export function resolveCaptureAccess(
   isAdmin: boolean,
-  granted: ReadonlySet<string>
+  granted: ReadonlySet<string>,
 ): CaptureAccess {
   const has = (key: string) => isAdmin || granted.has(key);
-  const kinds = (Object.keys(CAPTURE_CREATE_PERMISSION) as CaptureKind[]).filter(
-    (kind) => has(CAPTURE_CREATE_PERMISSION[kind])
+  const kinds = (Object.keys(CAPTURE_CREATE_PERMISSION) as CaptureKind[]).filter((kind) =>
+    has(CAPTURE_CREATE_PERMISSION[kind]),
   );
   return { kinds, canPin: has(NOTE_PIN_PERMISSION) };
 }

@@ -25,12 +25,10 @@ describe("EmptyState", () => {
         description="Deadlines and task assignments land here."
       >
         <button type="button">Create one</button>
-      </EmptyState>
+      </EmptyState>,
     );
     expect(screen.getByText("No notifications yet")).toBeTruthy();
-    expect(
-      screen.getByText("Deadlines and task assignments land here.")
-    ).toBeTruthy();
+    expect(screen.getByText("Deadlines and task assignments land here.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Create one" })).toBeTruthy();
   });
 
@@ -41,9 +39,7 @@ describe("EmptyState", () => {
   });
 
   test("framed adds the dashed-card treatment, default doesn't", () => {
-    const { container: framed } = render(
-      <EmptyState title="Empty" framed />
-    );
+    const { container: framed } = render(<EmptyState title="Empty" framed />);
     expect(framed.firstElementChild?.className).toContain("border-dashed");
 
     const { container: plain } = render(<EmptyState title="Empty" />);

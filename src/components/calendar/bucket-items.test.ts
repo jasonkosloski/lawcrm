@@ -10,10 +10,7 @@
  */
 
 import { describe, expect, test } from "vitest";
-import type {
-  CalendarDeadlineRow,
-  CalendarEventRow,
-} from "@/lib/queries/calendar";
+import type { CalendarDeadlineRow, CalendarEventRow } from "@/lib/queries/calendar";
 import { parseDateOnly } from "@/lib/format-date";
 import {
   bucketItemsByDay,
@@ -153,18 +150,14 @@ describe("itemIsOnDay / bucketItemsByDay", () => {
     const due = deadline("2026-07-07");
     const byDay = bucketItemsByDay([trial, timed, due], TZ);
     expect(byDay.get("2026-07-06")?.map((i) => i.id)).toEqual(["trial"]);
-    expect(byDay.get("2026-07-07")?.map((i) => i.id)).toEqual([
-      "trial",
-      "timed",
-      due.id,
-    ]);
+    expect(byDay.get("2026-07-07")?.map((i) => i.id)).toEqual(["trial", "timed", due.id]);
   });
 });
 
 describe("helpers", () => {
   test("deadlineRank puts critical first", () => {
     expect(deadlineRank({ deadlineKind: "critical" })).toBeLessThan(
-      deadlineRank({ deadlineKind: "manual" })
+      deadlineRank({ deadlineKind: "manual" }),
     );
   });
 

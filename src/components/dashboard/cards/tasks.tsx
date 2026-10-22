@@ -30,20 +30,11 @@ function TaskGroup({
   tasks: MyTaskItem[];
 }) {
   if (tasks.length === 0) return null;
-  const labelClass =
-    tone === "warn"
-      ? "text-danger"
-      : tone === "brand"
-        ? "text-ink"
-        : "text-ink-3";
+  const labelClass = tone === "warn" ? "text-danger" : tone === "brand" ? "text-ink" : "text-ink-3";
   return (
     <div>
       <div className="mb-1 flex items-center gap-2">
-        <span
-          className={`text-xs font-semibold ${labelClass}`}
-        >
-          {label}
-        </span>
+        <span className={`text-xs font-semibold ${labelClass}`}>{label}</span>
         <span className="text-2xs text-ink-4 tabular-nums">{tasks.length}</span>
       </div>
       <div className="flex flex-col">
@@ -85,9 +76,7 @@ export function TasksCard({ tasks }: { tasks: MyTasksGrouped }) {
         <TaskGroup label="Later" tone="muted" tasks={tasks.later} />
         <TaskGroup label="No due date" tone="muted" tasks={tasks.noDueDate} />
         {tasks.hidden > 0 && (
-          <div className="text-2xs text-ink-4">
-            +{tasks.hidden} more not shown
-          </div>
+          <div className="text-2xs text-ink-4">+{tasks.hidden} more not shown</div>
         )}
       </div>
     </DashboardCard>

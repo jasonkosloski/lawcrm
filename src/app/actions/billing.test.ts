@@ -204,11 +204,7 @@ describe("generateInvoiceFromWip — bundling", () => {
     });
     await seedTimeEntry({ matterId, userId, amount: 100 }); // billable
 
-    const result = await generateInvoiceFromWip(
-      matterId,
-      billingInitialState,
-      new FormData()
-    );
+    const result = await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
     expect(result.status).toBe("ok");
 
     const inv = await prisma.invoice.findFirst({
@@ -225,11 +221,7 @@ describe("generateInvoiceFromWip — bundling", () => {
   });
 
   test("refuses when nothing billable is on the matter", async () => {
-    const result = await generateInvoiceFromWip(
-      matterId,
-      billingInitialState,
-      new FormData()
-    );
+    const result = await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
     expect(result.status).toBe("error");
     expect(result.error).toMatch(/Nothing unbilled/i);
 
@@ -263,11 +255,7 @@ describe("updateInvoiceLineItem — happy path", () => {
       rate: 250,
       amount: 500,
     });
-    await generateInvoiceFromWip(
-      matterId,
-      billingInitialState,
-      new FormData()
-    );
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
     const inv = await prisma.invoice.findFirstOrThrow({ where: { matterId } });
     expect(inv.subtotal.toNumber()).toBe(500);
 
@@ -280,7 +268,7 @@ describe("updateInvoiceLineItem — happy path", () => {
         narrative: "More detail",
         hours: "3",
         rate: "300",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
 
@@ -319,11 +307,7 @@ describe("updateInvoiceLineItem — happy path", () => {
       amount: 200,
     });
     await seedExpense({ matterId, amount: 50 });
-    await generateInvoiceFromWip(
-      matterId,
-      billingInitialState,
-      new FormData()
-    );
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
     const inv = await prisma.invoice.findFirstOrThrow({ where: { matterId } });
     // 100 + 200 + 50 = 350
     expect(inv.subtotal.toNumber()).toBe(350);
@@ -332,7 +316,7 @@ describe("updateInvoiceLineItem — happy path", () => {
     await updateInvoiceLineItem(
       t1,
       lineItemEditInitialState,
-      buildLineItemForm({ hours: "4", rate: "100" })
+      buildLineItemForm({ hours: "4", rate: "100" }),
     );
 
     const after = await prisma.invoice.findUnique({ where: { id: inv.id } });
@@ -349,16 +333,12 @@ describe("updateInvoiceLineItem — happy path", () => {
       rate: 250,
       amount: 500,
     });
-    await generateInvoiceFromWip(
-      matterId,
-      billingInitialState,
-      new FormData()
-    );
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
 
     const res = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm({ hours: "2", rate: "" })
+      buildLineItemForm({ hours: "2", rate: "" }),
     );
     expect(res.status).toBe("ok");
 
@@ -375,7 +355,7 @@ describe("updateInvoiceLineItem — guards", () => {
     const res = await updateInvoiceLineItem(
       "no-such-id",
       lineItemEditInitialState,
-      buildLineItemForm()
+      buildLineItemForm(),
     );
     expect(res.status).toBe("error");
     expect(res.error).toMatch(/not found/i);
@@ -387,7 +367,7 @@ describe("updateInvoiceLineItem — guards", () => {
     const res = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm()
+      buildLineItemForm(),
     );
     expect(res.status).toBe("error");
     expect(res.error).toMatch(/isn't on an invoice/i);
@@ -401,11 +381,7 @@ describe("updateInvoiceLineItem — guards", () => {
         userId,
         amount: 500,
       });
-      await generateInvoiceFromWip(
-        matterId,
-        billingInitialState,
-        new FormData()
-      );
+      await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
       const inv = await prisma.invoice.findFirstOrThrow({ where: { matterId } });
       await prisma.invoice.update({
         where: { id: inv.id },
@@ -415,11 +391,11 @@ describe("updateInvoiceLineItem — guards", () => {
       const res = await updateInvoiceLineItem(
         timeEntryId,
         lineItemEditInitialState,
-        buildLineItemForm()
+        buildLineItemForm(),
       );
       expect(res.status).toBe("error");
       expect(res.error).toMatch(new RegExp(status, "i"));
-    }
+    },
   );
 
   test("allows edits on a draft invoice but refuses once it is approved", async () => {
@@ -428,18 +404,14 @@ describe("updateInvoiceLineItem — guards", () => {
       userId,
       amount: 500,
     });
-    await generateInvoiceFromWip(
-      matterId,
-      billingInitialState,
-      new FormData()
-    );
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
     const inv = await prisma.invoice.findFirstOrThrow({ where: { matterId } });
     expect(inv.status).toBe("draft");
 
     const draftRes = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm()
+      buildLineItemForm(),
     );
     expect(draftRes.status).toBe("ok");
 
@@ -453,7 +425,7 @@ describe("updateInvoiceLineItem — guards", () => {
     const approvedRes = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm({ activity: "Approved-state edit", hours: "9" })
+      buildLineItemForm({ activity: "Approved-state edit", hours: "9" }),
     );
     expect(approvedRes.status).toBe("error");
     expect(approvedRes.error).toMatch(/approved/i);
@@ -469,16 +441,12 @@ describe("updateInvoiceLineItem — guards", () => {
       userId,
       amount: 500,
     });
-    await generateInvoiceFromWip(
-      matterId,
-      billingInitialState,
-      new FormData()
-    );
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
 
     const empty = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm({ activity: "   " })
+      buildLineItemForm({ activity: "   " }),
     );
     expect(empty.status).toBe("error");
     expect(empty.errors?.activity?.length).toBeGreaterThan(0);
@@ -486,7 +454,7 @@ describe("updateInvoiceLineItem — guards", () => {
     const zero = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm({ hours: "0" })
+      buildLineItemForm({ hours: "0" }),
     );
     expect(zero.status).toBe("error");
     expect(zero.errors?.hours?.length).toBeGreaterThan(0);
@@ -494,7 +462,7 @@ describe("updateInvoiceLineItem — guards", () => {
     const huge = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm({ hours: "30" })
+      buildLineItemForm({ hours: "30" }),
     );
     expect(huge.status).toBe("error");
   });
@@ -510,19 +478,9 @@ describe("updateInvoiceLineItem — RBAC", () => {
       userId, // author = current actor
       amount: 500,
     });
-    await generateInvoiceFromWip(
-      matterId,
-      billingInitialState,
-      new FormData()
-    );
-    await updateInvoiceLineItem(
-      timeEntryId,
-      lineItemEditInitialState,
-      buildLineItemForm()
-    );
-    expect(mockedRequirePermission).not.toHaveBeenCalledWith(
-      "time_entries.edit_any"
-    );
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+    await updateInvoiceLineItem(timeEntryId, lineItemEditInitialState, buildLineItemForm());
+    expect(mockedRequirePermission).not.toHaveBeenCalledWith("time_entries.edit_any");
   });
 
   test("non-author requires time_entries.edit_any", async () => {
@@ -536,31 +494,17 @@ describe("updateInvoiceLineItem — RBAC", () => {
         date: new Date(),
         hours: 1,
         activity: "Logged by other",
-        rate: new (await import("@/generated/prisma/client")).Prisma.Decimal(
-          250
-        ),
-        amount: new (await import("@/generated/prisma/client")).Prisma.Decimal(
-          250
-        ),
+        rate: new (await import("@/generated/prisma/client")).Prisma.Decimal(250),
+        amount: new (await import("@/generated/prisma/client")).Prisma.Decimal(250),
         billable: true,
         status: "billable",
       },
       select: { id: true },
     });
-    await generateInvoiceFromWip(
-      matterId,
-      billingInitialState,
-      new FormData()
-    );
+    await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
 
-    await updateInvoiceLineItem(
-      entry.id,
-      lineItemEditInitialState,
-      buildLineItemForm()
-    );
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "time_entries.edit_any"
-    );
+    await updateInvoiceLineItem(entry.id, lineItemEditInitialState, buildLineItemForm());
+    expect(mockedRequirePermission).toHaveBeenCalledWith("time_entries.edit_any");
   });
 });
 
@@ -620,7 +564,7 @@ describe("updateInvoiceLineItem — rate validation", () => {
     const res = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm({ rate: "-250" })
+      buildLineItemForm({ rate: "-250" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.rate?.length).toBeGreaterThan(0);
@@ -642,7 +586,7 @@ describe("updateInvoiceLineItem — rate validation", () => {
     const res = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm({ rate: "0" })
+      buildLineItemForm({ rate: "0" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.rate?.length).toBeGreaterThan(0);
@@ -687,7 +631,7 @@ describe("setInvoiceStatus — client paid/partial funnel", () => {
       const after = await prisma.invoice.findUnique({ where: { id: inv.id } });
       expect(after!.status).toBe("sent");
       expect(after!.paidAmount.toNumber()).toBe(0);
-    }
+    },
   );
 
   test("internal-record draft → paid ('Mark recorded') still sets paidAmount", async () => {
@@ -731,7 +675,7 @@ describe("sendInvoice — trustAmount validation", () => {
     const res = await sendInvoice(
       "irrelevant",
       billingInitialState,
-      buildSendForm({ applyTrust: "true", trustAmount: "abc" })
+      buildSendForm({ applyTrust: "true", trustAmount: "abc" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.trustAmount?.length).toBeGreaterThan(0);
@@ -741,7 +685,7 @@ describe("sendInvoice — trustAmount validation", () => {
     const res = await sendInvoice(
       "irrelevant",
       billingInitialState,
-      buildSendForm({ applyTrust: "true", trustAmount: "5.999" })
+      buildSendForm({ applyTrust: "true", trustAmount: "5.999" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.trustAmount?.length).toBeGreaterThan(0);
@@ -753,7 +697,7 @@ describe("sendInvoice — trustAmount validation", () => {
     const res = await sendInvoice(
       "no-such-invoice",
       billingInitialState,
-      buildSendForm({ applyTrust: "true", trustAmount: "$1,234.56" })
+      buildSendForm({ applyTrust: "true", trustAmount: "$1,234.56" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.trustAmount).toBeUndefined();
@@ -850,9 +794,9 @@ describe("billing concurrency", () => {
     expect(r1.status).toBe("ok");
     expect(r2.status).toBe("ok");
 
-    const numbers = (
-      await prisma.invoice.findMany({ select: { invoiceNumber: true } })
-    ).map((i) => i.invoiceNumber);
+    const numbers = (await prisma.invoice.findMany({ select: { invoiceNumber: true } })).map(
+      (i) => i.invoiceNumber,
+    );
     expect(numbers).toHaveLength(2);
     expect(new Set(numbers).size).toBe(2);
   });
@@ -870,16 +814,12 @@ describe("billing RBAC gates", () => {
 
   test("generateInvoiceFromWip gates on billing.generate_invoice", async () => {
     await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "billing.generate_invoice"
-    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith("billing.generate_invoice");
   });
 
   test("bundleAsInternalRecord gates on billing.generate_invoice", async () => {
     await bundleAsInternalRecord(matterId, billingInitialState, new FormData());
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "billing.generate_invoice"
-    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith("billing.generate_invoice");
   });
 
   test.each([
@@ -900,7 +840,7 @@ describe("billing RBAC gates", () => {
       expect(res.ok).toBe(false);
       expect(res.error).toMatch(/unknown/i);
       expect(mockedRequirePermission).not.toHaveBeenCalled();
-    }
+    },
   );
 
   test("setInvoiceStatus refuses an unknown status without gating", async () => {
@@ -917,42 +857,30 @@ describe("billing RBAC gates", () => {
 
   test("approveInvoice gates on billing.approve_invoice", async () => {
     await approveInvoice("no-such-invoice");
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "billing.approve_invoice"
-    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith("billing.approve_invoice");
   });
 
   test("addTrustTransaction gates on trust.record_transaction", async () => {
     await addTrustTransaction(matterId, billingInitialState, new FormData());
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "trust.record_transaction"
-    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith("trust.record_transaction");
   });
 
   test("recordInvoicePayment gates on billing.record_payment", async () => {
-    await recordInvoicePayment(
-      "no-such-invoice",
-      billingInitialState,
-      new FormData()
-    );
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "billing.record_payment"
-    );
+    await recordInvoicePayment("no-such-invoice", billingInitialState, new FormData());
+    expect(mockedRequirePermission).toHaveBeenCalledWith("billing.record_payment");
   });
 
   test("sendInvoice gates on billing.send_invoice (no trust leg)", async () => {
     await sendInvoice("no-such-invoice", billingInitialState, buildSendForm());
     expect(mockedRequirePermission).toHaveBeenCalledWith("billing.send_invoice");
-    expect(mockedRequirePermission).not.toHaveBeenCalledWith(
-      "billing.apply_trust"
-    );
+    expect(mockedRequirePermission).not.toHaveBeenCalledWith("billing.apply_trust");
   });
 
   test("sendInvoice stacks billing.apply_trust when applyTrust is set", async () => {
     await sendInvoice(
       "no-such-invoice",
       billingInitialState,
-      buildSendForm({ applyTrust: "true", trustAmount: "10" })
+      buildSendForm({ applyTrust: "true", trustAmount: "10" }),
     );
     expect(mockedRequirePermission).toHaveBeenCalledWith("billing.send_invoice");
     expect(mockedRequirePermission).toHaveBeenCalledWith("billing.apply_trust");
@@ -968,14 +896,8 @@ describe("updateInvoiceLineItem — billing gate + audit trail", () => {
     mockedRequirePermission.mockClear();
     const { timeEntryId } = await seedTimeEntry({ matterId, userId, amount: 500 });
     await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
-    await updateInvoiceLineItem(
-      timeEntryId,
-      lineItemEditInitialState,
-      buildLineItemForm()
-    );
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "billing.generate_invoice"
-    );
+    await updateInvoiceLineItem(timeEntryId, lineItemEditInitialState, buildLineItemForm());
+    expect(mockedRequirePermission).toHaveBeenCalledWith("billing.generate_invoice");
   });
 
   test("a denied billing gate stops the edit before anything is written", async () => {
@@ -996,8 +918,8 @@ describe("updateInvoiceLineItem — billing gate + audit trail", () => {
         updateInvoiceLineItem(
           timeEntryId,
           lineItemEditInitialState,
-          buildLineItemForm({ hours: "10", rate: "999" })
-        )
+          buildLineItemForm({ hours: "10", rate: "999" }),
+        ),
       ).rejects.toThrow("NEXT_REDIRECT");
     } finally {
       mockedRequirePermission.mockReset();
@@ -1022,7 +944,7 @@ describe("updateInvoiceLineItem — billing gate + audit trail", () => {
     await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm({ hours: "3", rate: "300" })
+      buildLineItemForm({ hours: "3", rate: "300" }),
     );
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { matterId, title: { contains: "line item edited" } },
@@ -1056,7 +978,7 @@ describe("updateInvoiceLineItem — billing gate + audit trail", () => {
       const res = await updateInvoiceLineItem(
         timeEntryId,
         lineItemEditInitialState,
-        buildLineItemForm({ hours: "9", rate: "1000" })
+        buildLineItemForm({ hours: "9", rate: "1000" }),
       );
       expect(res.status).toBe("error");
       expect(res.error).toMatch(/approved/i);
@@ -1077,7 +999,7 @@ describe("money rounding — line items + payments", () => {
     const res = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm({ hours: "0.25", rate: "187.50" })
+      buildLineItemForm({ hours: "0.25", rate: "187.50" }),
     );
     expect(res.status).toBe("ok");
     const te = await prisma.timeEntry.findUniqueOrThrow({ where: { id: timeEntryId } });
@@ -1087,11 +1009,7 @@ describe("money rounding — line items + payments", () => {
     expect(inv.totalAmount.toString()).toBe("46.88");
 
     await prisma.invoice.update({ where: { id: inv.id }, data: { status: "sent" } });
-    const pay = await recordInvoicePayment(
-      inv.id,
-      billingInitialState,
-      buildPaymentForm("46.88")
-    );
+    const pay = await recordInvoicePayment(inv.id, billingInitialState, buildPaymentForm("46.88"));
     expect(pay.status).toBe("ok");
     const paid = await prisma.invoice.findUniqueOrThrow({ where: { id: inv.id } });
     expect(paid.status).toBe("paid");
@@ -1112,11 +1030,7 @@ describe("money rounding — line items + payments", () => {
       },
       select: { id: true },
     });
-    const pay = await recordInvoicePayment(
-      inv.id,
-      billingInitialState,
-      buildPaymentForm("46.88")
-    );
+    const pay = await recordInvoicePayment(inv.id, billingInitialState, buildPaymentForm("46.88"));
     expect(pay.status).toBe("ok");
     const after = await prisma.invoice.findUniqueOrThrow({ where: { id: inv.id } });
     expect(after.status).toBe("paid");
@@ -1134,7 +1048,7 @@ describe("money rounding — line items + payments", () => {
     const res = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm({ hours: "0.123", rate: "275" })
+      buildLineItemForm({ hours: "0.123", rate: "275" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.hours?.[0]).toMatch(/2 decimal/i);
@@ -1154,7 +1068,7 @@ describe("money rounding — line items + payments", () => {
     const res = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      buildLineItemForm({ hours: "0.3333", rate: "100", narrative: "typo fix" })
+      buildLineItemForm({ hours: "0.3333", rate: "100", narrative: "typo fix" }),
     );
     expect(res.status).toBe("ok");
     const te = await prisma.timeEntry.findUniqueOrThrow({ where: { id: timeEntryId } });
@@ -1222,14 +1136,10 @@ describe("recordInvoicePayment — trust source gate", () => {
     });
     try {
       await expect(
-        recordInvoicePayment(invId, billingInitialState, sourceForm("trust"))
+        recordInvoicePayment(invId, billingInitialState, sourceForm("trust")),
       ).rejects.toThrow("NEXT_REDIRECT");
       // Non-trust payments still work for the same user.
-      const ok = await recordInvoicePayment(
-        invId,
-        billingInitialState,
-        sourceForm("check")
-      );
+      const ok = await recordInvoicePayment(invId, billingInitialState, sourceForm("check"));
       expect(ok.status).toBe("ok");
     } finally {
       mockedRequirePermission.mockReset();
@@ -1299,7 +1209,7 @@ describe("generate / bundle — double-billing races", () => {
     // the updateMany would silently re-point it at the new invoice.
     const realTransaction = prisma.$transaction.bind(prisma);
     const txSpy = vi.spyOn(prisma, "$transaction").mockImplementationOnce(((
-      cb: (tx: unknown) => Promise<unknown>
+      cb: (tx: unknown) => Promise<unknown>,
     ) =>
       realTransaction((tx) =>
         cb(
@@ -1321,16 +1231,12 @@ describe("generate / bundle — double-billing races", () => {
                 },
               });
             },
-          })
-        )
+          }),
+        ),
       )) as never);
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      const res = await generateInvoiceFromWip(
-        matterId,
-        billingInitialState,
-        new FormData()
-      );
+      const res = await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
       expect(res.status).toBe("error");
       expect(res.error).toMatch(/changed while the invoice was being created/i);
     } finally {
@@ -1461,21 +1367,14 @@ describe("billing actions — generic client errors", () => {
     await seedTimeEntry({ matterId, userId, amount: 100 });
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const leaky = new Error(
-      "Invalid `prisma.invoice.create()` invocation in /var/task/.next/server/chunks/x.js:12"
+      "Invalid `prisma.invoice.create()` invocation in /var/task/.next/server/chunks/x.js:12",
     );
     const txSpy = vi.spyOn(prisma, "$transaction").mockRejectedValueOnce(leaky);
     try {
-      const res = await generateInvoiceFromWip(
-        matterId,
-        billingInitialState,
-        new FormData()
-      );
+      const res = await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
       expect(res.status).toBe("error");
       expect(res.error).toBe("Couldn't generate invoice.");
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "[billing.generateInvoiceFromWip]",
-        leaky
-      );
+      expect(consoleSpy).toHaveBeenCalledWith("[billing.generateInvoiceFromWip]", leaky);
     } finally {
       txSpy.mockRestore();
       consoleSpy.mockRestore();
@@ -1483,11 +1382,7 @@ describe("billing actions — generic client errors", () => {
   });
 
   test("intentional refusals still reach the user verbatim", async () => {
-    const res = await generateInvoiceFromWip(
-      matterId,
-      billingInitialState,
-      new FormData()
-    );
+    const res = await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
     expect(res.error).toMatch(/Nothing unbilled/i);
   });
 });

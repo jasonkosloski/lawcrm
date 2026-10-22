@@ -45,8 +45,6 @@ describe("/dev/sign-in-as page", () => {
     vi.stubEnv("DEV_SIGN_IN", "1");
     vi.stubEnv("DATABASE_URL", "postgresql://u:p@localhost:5433/db");
     await DevSignInAsPage();
-    expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { isActive: true } })
-    );
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { isActive: true } }));
   });
 });

@@ -33,10 +33,7 @@ import {
   getThreadById,
   listThreadsForLead,
 } from "@/lib/queries/communication";
-import {
-  listMessengerThreadsForLead,
-  type MessengerThreadRow,
-} from "@/lib/queries/messenger";
+import { listMessengerThreadsForLead, type MessengerThreadRow } from "@/lib/queries/messenger";
 // Thread timestamps are real instants — render them on the viewer's
 // calendar via the centralized formatter + user TZ (ADR-012).
 import { formatDate } from "@/lib/format-date";
@@ -61,8 +58,7 @@ export default async function LeadCommunicationPage({
   await assertLeadAccess(id);
   const sp = await searchParams;
   const rawThread = firstParam(sp.thread);
-  const requestedThreadId =
-    typeof rawThread === "string" ? rawThread : null;
+  const requestedThreadId = typeof rawThread === "string" ? rawThread : null;
 
   const lead = await getLeadById(id);
   if (!lead) notFound();
@@ -71,28 +67,27 @@ export default async function LeadCommunicationPage({
 
   // Filed email + SMS + the (eager) requested thread in one wave; the
   // thread is discarded below if it isn't filed to this lead.
-  const [emailThreads, requestedThread, messengerThreads, callContacts, tz] =
-    await Promise.all([
-      listThreadsForLead(id, parsePageParam(sp.page)),
-      requestedThreadId ? getThreadById(requestedThreadId) : null,
-      phone
-        ? listMessengerThreadsForLead({
-            contactId: lead.contact?.id,
-            phones: [
-              phone,
-              lead.contact?.phone,
-              ...(lead.contact?.phones.map((p) => p.number) ?? []),
-            ],
-          })
-        : Promise.resolve([]),
-      // Contact typeahead options for the log-call composer — only
-      // when the gate passes AND the lead has a joined contact to
-      // pre-select (leads always do post-migration, but stay safe).
-      currentUserHasPermission("communication.log_call").then((can) =>
-        can && lead.contact ? listContactPickerOptions() : null
-      ),
-      getCurrentUserTimeZone(),
-    ]);
+  const [emailThreads, requestedThread, messengerThreads, callContacts, tz] = await Promise.all([
+    listThreadsForLead(id, parsePageParam(sp.page)),
+    requestedThreadId ? getThreadById(requestedThreadId) : null,
+    phone
+      ? listMessengerThreadsForLead({
+          contactId: lead.contact?.id,
+          phones: [
+            phone,
+            lead.contact?.phone,
+            ...(lead.contact?.phones.map((p) => p.number) ?? []),
+          ],
+        })
+      : Promise.resolve([]),
+    // Contact typeahead options for the log-call composer — only
+    // when the gate passes AND the lead has a joined contact to
+    // pre-select (leads always do post-migration, but stay safe).
+    currentUserHasPermission("communication.log_call").then((can) =>
+      can && lead.contact ? listContactPickerOptions() : null,
+    ),
+    getCurrentUserTimeZone(),
+  ]);
 
   // "Log call" prefilled with the lead's contact. No matter picker
   // options: a lead has no matter until conversion, so lead calls
@@ -151,13 +146,7 @@ export default async function LeadCommunicationPage({
         />
       </div>
 
-      {phone && (
-        <SmsSection
-          phone={phone}
-          threads={messengerThreads}
-          tz={tz}
-        />
-      )}
+      {phone && <SmsSection phone={phone} threads={messengerThreads} tz={tz} />}
     </div>
   );
 }
@@ -179,8 +168,7 @@ function SmsSection({
   return (
     <div className="flex flex-col gap-2 shrink-0">
       <div className="text-2xs font-mono text-ink-4">
-        SMS / calls with this contact ·{" "}
-        <span className="text-ink-3">{formatPhone(phone)}</span>
+        SMS / calls with this contact · <span className="text-ink-3">{formatPhone(phone)}</span>
       </div>
       <Card className="p-0 overflow-hidden">
         {threads.length === 0 ? (

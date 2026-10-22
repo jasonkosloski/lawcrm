@@ -75,20 +75,13 @@ import type { TranscriptView } from "@/lib/queries/transcript";
 import type { RailMoment } from "@/components/evidence/moments-rail";
 import { DocxViewer } from "@/components/documents-viewer/docx-viewer";
 import { DocxPreviewRenderer } from "@/components/documents-viewer/docx-preview-renderer";
-import {
-  CsvTablePreview,
-  TextPreview,
-} from "@/components/documents-viewer/text-preview";
+import { CsvTablePreview, TextPreview } from "@/components/documents-viewer/text-preview";
 
-import {
-  documentCategoryLabel,
-  documentStatusMeta,
-  formatFileSize,
-} from "@/lib/document-display";
+import { documentCategoryLabel, documentStatusMeta, formatFileSize } from "@/lib/document-display";
 import { scopeBasePath, type RecordScope } from "@/lib/record-scope";
 import { Badge } from "@/components/ui/badge";
 
-const firstParam =(v: string | string[] | undefined): string | undefined =>
+const firstParam = (v: string | string[] | undefined): string | undefined =>
   Array.isArray(v) ? v[0] : v;
 
 export async function DocumentViewerBody({
@@ -119,7 +112,7 @@ export async function DocumentViewerBody({
     attachmentDocIds: Object.fromEntries(
       (doc.attachmentDocs ?? [])
         .filter((a) => a.attachmentIndex !== null)
-        .map((a) => [a.attachmentIndex as number, a.id])
+        .map((a) => [a.attachmentIndex as number, a.id]),
     ),
     // Older uploads: offer to extract now.
     canExtract: doc.attachmentDocs === null && canUpload,
@@ -130,9 +123,7 @@ export async function DocumentViewerBody({
   const rawT = firstParam(sp.t);
   const parsedT = typeof rawT === "string" ? Number(rawT) : NaN;
   const tSeconds =
-    Number.isFinite(parsedT) && parsedT >= 0 && parsedT <= MAX_MEDIA_SECONDS
-      ? parsedT
-      : null;
+    Number.isFinite(parsedT) && parsedT >= 0 && parsedT <= MAX_MEDIA_SECONDS ? parsedT : null;
   // ?flag=ID — anchor deep link for every kind, resolved below once
   // the flag list is loaded.
   const flagParam = firstParam(sp.flag) ?? null;
@@ -146,9 +137,7 @@ export async function DocumentViewerBody({
 
   // Evidence-review data — every renderer flags now, so fetch
   // whenever there's an actual file to review.
-  const renderer = doc.fileUrl
-    ? resolveDocumentRenderer(doc.contentType, doc.name)
-    : null;
+  const renderer = doc.fileUrl ? resolveDocumentRenderer(doc.contentType, doc.name) : null;
   let review: ReviewData | null = null;
   if (renderer) {
     const isMedia = renderer === "video" || renderer === "audio";
@@ -163,16 +152,16 @@ export async function DocumentViewerBody({
       canDeleteTranscript,
       canEditTranscript,
     ] = await Promise.all([
-        getDocumentFlaggedMoments(doc.id),
-        getCurrentUserId(),
-        currentUserHasPermission("evidence.flag.create"),
-        currentUserHasPermission("evidence.flag.edit_any"),
-        currentUserHasPermission("evidence.flag.delete_any"),
-        isMedia ? getDocumentTranscript(doc.id) : Promise.resolve(null),
-        isMedia ? currentUserHasPermission("documents.transcribe") : Promise.resolve(false),
-        isMedia ? currentUserHasPermission("documents.transcript.delete") : Promise.resolve(false),
-        isMedia ? currentUserHasPermission("documents.transcript.edit") : Promise.resolve(false),
-      ]);
+      getDocumentFlaggedMoments(doc.id),
+      getCurrentUserId(),
+      currentUserHasPermission("evidence.flag.create"),
+      currentUserHasPermission("evidence.flag.edit_any"),
+      currentUserHasPermission("evidence.flag.delete_any"),
+      isMedia ? getDocumentTranscript(doc.id) : Promise.resolve(null),
+      isMedia ? currentUserHasPermission("documents.transcribe") : Promise.resolve(false),
+      isMedia ? currentUserHasPermission("documents.transcript.delete") : Promise.resolve(false),
+      isMedia ? currentUserHasPermission("documents.transcript.edit") : Promise.resolve(false),
+    ]);
     // Resolve ?flag= against the rail list (server-side) — its
     // anchor becomes the adapter's initial navigation. A stale id
     // (deleted flag, wrong document) simply resolves to nothing.
@@ -244,9 +233,7 @@ export async function DocumentViewerBody({
           >
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
             Documents
-            {doc.folderName && (
-              <span className="text-ink-4">/ {doc.folderName}</span>
-            )}
+            {doc.folderName && <span className="text-ink-4">/ {doc.folderName}</span>}
           </Link>
         </div>
 
@@ -254,12 +241,8 @@ export async function DocumentViewerBody({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h1 className="min-w-0 truncate text-sm font-semibold text-ink">
-                {doc.name}
-              </h1>
-              <Badge variant="neutral">
-                {documentCategoryLabel(doc.category)}
-              </Badge>
+              <h1 className="min-w-0 truncate text-sm font-semibold text-ink">{doc.name}</h1>
+              <Badge variant="neutral">{documentCategoryLabel(doc.category)}</Badge>
               <span
                 className={`inline-block rounded-full px-2 py-0.5 text-2xs font-medium ${status.className}`}
               >
@@ -303,11 +286,7 @@ export async function DocumentViewerBody({
               icon={<ChevronRight className="h-4 w-4" aria-hidden />}
             />
             {canEdit && (
-              <EditDocumentButton
-                documentId={doc.id}
-                name={doc.name}
-                category={doc.category}
-              />
+              <EditDocumentButton documentId={doc.id} name={doc.name} category={doc.category} />
             )}
             {doc.fileUrl && (
               <a
@@ -408,7 +387,7 @@ async function renderBody(
   downloadHref: string,
   review: ReviewData,
   tz: string,
-  emailExtras: EmailExtras
+  emailExtras: EmailExtras,
 ): Promise<React.ReactNode> {
   const failureCard = (reason: string) => (
     <DocumentReview {...shared}>
@@ -487,16 +466,8 @@ async function renderBody(
       // awaitContentReady defers the ?flag= relocation until the
       // client render (or fallback swap) settles.
       return (
-        <TextReview
-          initialQuote={review.initialQuote}
-          awaitContentReady
-          {...shared}
-        >
-          <DocxPreviewRenderer
-            src={downloadHref}
-            name={doc.name}
-            fallback={fallback}
-          />
+        <TextReview initialQuote={review.initialQuote} awaitContentReady {...shared}>
+          <DocxPreviewRenderer src={downloadHref} name={doc.name} fallback={fallback} />
         </TextReview>
       );
     }
@@ -516,11 +487,7 @@ async function renderBody(
         );
       }
       let preview: React.ReactNode = (
-        <TextPreview
-          text={result.text}
-          truncated={result.truncated}
-          downloadHref={downloadHref}
-        />
+        <TextPreview text={result.text} truncated={result.truncated} downloadHref={downloadHref} />
       );
       if (renderer === "csv") {
         // Table only when the CSV parses cleanly; a truncated read
@@ -528,11 +495,7 @@ async function renderBody(
         const rows = parseCsvPreview(result.text);
         if (rows) {
           preview = (
-            <CsvTablePreview
-              rows={rows}
-              truncated={result.truncated}
-              downloadHref={downloadHref}
-            />
+            <CsvTablePreview rows={rows} truncated={result.truncated} downloadHref={downloadHref} />
           );
         }
       }
@@ -564,7 +527,10 @@ async function renderBody(
             attachmentDocIds={emailExtras.attachmentDocIds}
             headerAction={
               emailExtras.canExtract && result.email.attachments.length > 0 ? (
-                <ExtractAttachmentsButton documentId={doc.id} count={result.email.attachments.length} />
+                <ExtractAttachmentsButton
+                  documentId={doc.id}
+                  count={result.email.attachments.length}
+                />
               ) : undefined
             }
           />

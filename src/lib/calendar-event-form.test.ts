@@ -9,27 +9,21 @@ describe("normalizeVideoUrl", () => {
 
   test("http(s) links pass through unchanged", () => {
     expect(normalizeVideoUrl("https://zoom.us/j/123?pwd=abc")).toBe(
-      "https://zoom.us/j/123?pwd=abc"
+      "https://zoom.us/j/123?pwd=abc",
     );
-    expect(normalizeVideoUrl("http://meet.example.com/room")).toBe(
-      "http://meet.example.com/room"
-    );
-    expect(normalizeVideoUrl("  https://zoom.us/j/1  ")).toBe(
-      "https://zoom.us/j/1"
-    );
+    expect(normalizeVideoUrl("http://meet.example.com/room")).toBe("http://meet.example.com/room");
+    expect(normalizeVideoUrl("  https://zoom.us/j/1  ")).toBe("https://zoom.us/j/1");
   });
 
   test("a bare host gets https:// prepended", () => {
     expect(normalizeVideoUrl("zoom.us/j/123")).toBe("https://zoom.us/j/123");
     expect(normalizeVideoUrl("meet.google.com/abc-defg-hij")).toBe(
-      "https://meet.google.com/abc-defg-hij"
+      "https://meet.google.com/abc-defg-hij",
     );
   });
 
   test("a host:port is a host, not a scheme", () => {
-    expect(normalizeVideoUrl("zoom.us:8443/j/1")).toBe(
-      "https://zoom.us:8443/j/1"
-    );
+    expect(normalizeVideoUrl("zoom.us:8443/j/1")).toBe("https://zoom.us:8443/j/1");
   });
 
   test.each([

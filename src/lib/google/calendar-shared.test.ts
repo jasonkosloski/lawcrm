@@ -14,21 +14,17 @@ describe("hasCalendarScope", () => {
   test("finds the scope in a space-separated grant list", () => {
     expect(
       hasCalendarScope(
-        `openid email https://www.googleapis.com/auth/gmail.modify ${CALENDAR_EVENTS_SCOPE}`
-      )
+        `openid email https://www.googleapis.com/auth/gmail.modify ${CALENDAR_EVENTS_SCOPE}`,
+      ),
     ).toBe(true);
   });
   test("false for null, empty, and gmail-only grants", () => {
     expect(hasCalendarScope(null)).toBe(false);
     expect(hasCalendarScope("")).toBe(false);
-    expect(
-      hasCalendarScope("openid https://www.googleapis.com/auth/gmail.modify")
-    ).toBe(false);
+    expect(hasCalendarScope("openid https://www.googleapis.com/auth/gmail.modify")).toBe(false);
   });
   test("no prefix-matching — the broader calendar scope is a different string", () => {
-    expect(
-      hasCalendarScope("https://www.googleapis.com/auth/calendar")
-    ).toBe(false);
+    expect(hasCalendarScope("https://www.googleapis.com/auth/calendar")).toBe(false);
   });
 });
 
@@ -54,7 +50,9 @@ describe("eventToGoogleResource", () => {
 
   test("visibility: private pushes as Google private, everything else as default", () => {
     expect(eventToGoogleResource({ ...base, visibility: "private" }).visibility).toBe("private");
-    expect(eventToGoogleResource({ ...base, visibility: "show_details" }).visibility).toBe("default");
+    expect(eventToGoogleResource({ ...base, visibility: "show_details" }).visibility).toBe(
+      "default",
+    );
     expect(eventToGoogleResource(base).visibility).toBe("default");
   });
 
@@ -142,9 +140,7 @@ describe("eventToGoogleResource", () => {
     const echoed = googleEventToCrmFields({
       ...eventToGoogleResource(crm),
     })!;
-    expect(stripZoomLine(echoed.description, crm.zoomUrl)).toBe(
-      "Bring exhibits"
-    );
+    expect(stripZoomLine(echoed.description, crm.zoomUrl)).toBe("Bring exhibits");
     // Zoom-only description round-trips to null.
     const zoomOnly = googleEventToCrmFields({
       ...eventToGoogleResource({ ...crm, description: null }),
@@ -221,14 +217,14 @@ describe("googleEventToCrmFields", () => {
         summary: "x",
         start: { date: "2026-02-31" },
         end: { date: "2026-03-01" },
-      })
+      }),
     ).toBeNull();
     expect(
       googleEventToCrmFields({
         summary: "x",
         start: { date: "garbage" },
         end: { date: "2026-03-01" },
-      })
+      }),
     ).toBeNull();
   });
 
@@ -246,7 +242,7 @@ describe("googleEventToCrmFields", () => {
       googleEventToCrmFields({
         start: { dateTime: "2026-08-10T15:00:00Z" },
         end: { dateTime: "2026-08-10T16:00:00Z" },
-      })!.title
+      })!.title,
     ).toBe("(no title)");
     expect(googleEventToCrmFields({ summary: "x" })).toBeNull();
     expect(
@@ -254,7 +250,7 @@ describe("googleEventToCrmFields", () => {
         summary: "x",
         start: { dateTime: "not a date" },
         end: { dateTime: "2026-08-10T16:00:00Z" },
-      })
+      }),
     ).toBeNull();
   });
 });
@@ -278,14 +274,10 @@ describe("googleEventIdFor", () => {
 describe("stripZoomLine", () => {
   const url = "https://zoom.us/j/9";
   test("strips every stacked trailing copy and leaves other text alone", () => {
-    expect(stripZoomLine(`Notes\n\nZoom: ${url}\n\nZoom: ${url}`, url)).toBe(
-      "Notes"
-    );
+    expect(stripZoomLine(`Notes\n\nZoom: ${url}\n\nZoom: ${url}`, url)).toBe("Notes");
     expect(stripZoomLine("Notes", url)).toBe("Notes");
     expect(stripZoomLine(`Zoom: ${url}`, url)).toBeNull();
-    expect(stripZoomLine(`Notes\n\nZoom: ${url}`, null)).toBe(
-      `Notes\n\nZoom: ${url}`
-    );
+    expect(stripZoomLine(`Notes\n\nZoom: ${url}`, null)).toBe(`Notes\n\nZoom: ${url}`);
     expect(stripZoomLine(null, url)).toBeNull();
   });
 });
@@ -310,7 +302,7 @@ describe("lawcrmIdOf", () => {
     expect(
       lawcrmIdOf({
         extendedProperties: { private: { [LAWCRM_MARKER_KEY]: "evt9" } },
-      })
+      }),
     ).toBe("evt9");
     expect(lawcrmIdOf({})).toBeNull();
     expect(lawcrmIdOf({ extendedProperties: { private: {} } })).toBeNull();

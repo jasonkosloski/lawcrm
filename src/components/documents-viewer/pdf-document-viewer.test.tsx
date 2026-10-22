@@ -30,7 +30,7 @@ vi.mock("pdfjs-dist", () => ({
           setTimeout(() => {
             destroying = false;
             resolve();
-          }, 20)
+          }, 20),
         );
       },
     };

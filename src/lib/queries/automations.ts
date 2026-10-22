@@ -50,7 +50,9 @@ export type AutoApplyRow = {
   targetActive: boolean;
 };
 
-export async function listDeadlineRules(opts: { activeOnly?: boolean } = {}): Promise<DeadlineRuleRow[]> {
+export async function listDeadlineRules(
+  opts: { activeOnly?: boolean } = {},
+): Promise<DeadlineRuleRow[]> {
   const rules = await prisma.deadlineRule.findMany({
     where: opts.activeOnly ? { isActive: true } : undefined,
     orderBy: [{ isActive: "desc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
@@ -84,7 +86,13 @@ export async function listTaskLists(opts: { activeOnly?: boolean } = {}): Promis
     include: {
       items: {
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-        select: { title: true, description: true, priority: true, assignTo: true, dueOffsetDays: true },
+        select: {
+          title: true,
+          description: true,
+          priority: true,
+          assignTo: true,
+          dueOffsetDays: true,
+        },
       },
     },
   });

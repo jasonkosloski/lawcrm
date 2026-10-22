@@ -18,17 +18,9 @@ export const DEADLINE_STATUSES = ["open", "completed", "waived"] as const;
 export type DeadlineStatus = (typeof DEADLINE_STATUSES)[number];
 
 /// Every status value that can appear on a row, settable or derived.
-export const ALL_DEADLINE_STATUSES = [
-  "open",
-  "completed",
-  "overdue",
-  "waived",
-] as const;
+export const ALL_DEADLINE_STATUSES = ["open", "completed", "overdue", "waived"] as const;
 
-export const DEADLINE_STATUS_LABEL: Record<
-  (typeof ALL_DEADLINE_STATUSES)[number],
-  string
-> = {
+export const DEADLINE_STATUS_LABEL: Record<(typeof ALL_DEADLINE_STATUSES)[number], string> = {
   open: "Open",
   completed: "Completed",
   overdue: "Overdue",

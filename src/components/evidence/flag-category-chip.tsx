@@ -16,9 +16,7 @@ import {
 
 export function FlagCategoryChip({ category }: { category: string }) {
   const known = category in FLAG_CATEGORY_LABEL;
-  const label = known
-    ? FLAG_CATEGORY_LABEL[category as FlagCategory]
-    : category;
+  const label = known ? FLAG_CATEGORY_LABEL[category as FlagCategory] : category;
   const className = known
     ? flagCategoryChipClass(category as FlagCategory)
     : FLAG_TONE_CHIP_CLASS.neutral;

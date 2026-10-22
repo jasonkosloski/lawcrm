@@ -62,14 +62,14 @@
      caller moved up one step without an edit. Half-pixel steps keep
      desktop density close to v1 while staying legible.
        3xs 11 · 2xs 11.5 (meta) · xs 12.5 (body, cells) · sm 13.5 (nav, lead text) */
-  --text-3xs: 0.6875rem;              /* 11px */
-  --text-3xs--line-height: 0.875rem;  /* 14px */
-  --text-2xs: 0.71875rem;             /* 11.5px */
-  --text-2xs--line-height: 1rem;      /* 16px */
-  --text-xs: 0.78125rem;              /* 12.5px */
-  --text-xs--line-height: 1.0625rem;  /* 17px */
-  --text-sm: 0.84375rem;              /* 13.5px */
-  --text-sm--line-height: 1.1875rem;  /* 19px */
+  --text-3xs: 0.6875rem; /* 11px */
+  --text-3xs--line-height: 0.875rem; /* 14px */
+  --text-2xs: 0.71875rem; /* 11.5px */
+  --text-2xs--line-height: 1rem; /* 16px */
+  --text-xs: 0.78125rem; /* 12.5px */
+  --text-xs--line-height: 1.0625rem; /* 17px */
+  --text-sm: 0.84375rem; /* 13.5px */
+  --text-sm--line-height: 1.1875rem; /* 19px */
 
   /* Radius scale */
   --radius-sm: calc(var(--radius) * 0.6);
@@ -184,7 +184,10 @@
     font-variant-numeric: tabular-nums;
   }
 
-  code, kbd, samp, pre {
+  code,
+  kbd,
+  samp,
+  pre {
     font-family: var(--font-code);
   }
 
@@ -199,7 +202,9 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
+    *,
+    *::before,
+    *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
@@ -211,7 +216,12 @@
 /* ── Brand gradient hairline (top of main content area) ─────────────────────── */
 .brand-gradient-line {
   height: 3px;
-  background: linear-gradient(90deg, var(--color-brand-500), var(--color-brand-300) 40%, #e5e4de 80%);
+  background: linear-gradient(
+    90deg,
+    var(--color-brand-500),
+    var(--color-brand-300) 40%,
+    #e5e4de 80%
+  );
 }
 
 /* ── Email reader body typography ───────────────────────────────────────────── */
@@ -261,12 +271,20 @@
 /* ── KPI tiles (v1) ─────────────────────────────────────────────────────────
    Retired: KPIs are a divided StatStrip (components/shared/stat-strip.tsx).
    The classes stay as no-ops until the last caller is gone. */
-.kpi-accent { position: relative; }
+.kpi-accent {
+  position: relative;
+}
 
 /* ── Subtle page transition ─────────────────────────────────────────────────── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .animate-page-enter {
   animation: fadeIn 0.22s ease-out both;

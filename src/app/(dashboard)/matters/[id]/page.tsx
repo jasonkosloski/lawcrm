@@ -64,9 +64,7 @@ function dayDistanceLabel(days: number): string {
   return `${days}d`;
 }
 
-export default async function MatterOverviewPage({
-  params,
-}: PageProps<"/matters/[id]">) {
+export default async function MatterOverviewPage({ params }: PageProps<"/matters/[id]">) {
   const userId = await requireUser();
   const { id } = await params;
   await assertMatterAccess(id);
@@ -199,8 +197,7 @@ export default async function MatterOverviewPage({
   // Pin the primary client (Matter.clientId) to the top of the list.
   const clients = [...clientRows].sort(
     (a, b) =>
-      (b.contact.id === matter.clientId ? 1 : 0) -
-      (a.contact.id === matter.clientId ? 1 : 0)
+      (b.contact.id === matter.clientId ? 1 : 0) - (a.contact.id === matter.clientId ? 1 : 0),
   );
 
   const upcomingDeadlines = deadlines;
@@ -280,24 +277,14 @@ export default async function MatterOverviewPage({
                 <Fact label="Opposing firm" value={matter.opposingFirm} />
                 {canViewBilling && (
                   <>
-                    <Fact
-                      label="Trust balance"
-                      value={formatMoney(matter.trustBalance)}
-                      mono
-                    />
-                    <Fact
-                      label="WIP"
-                      value={formatMoney(timeSummary.unbilledAmount)}
-                      mono
-                    />
+                    <Fact label="Trust balance" value={formatMoney(matter.trustBalance)} mono />
+                    <Fact label="WIP" value={formatMoney(timeSummary.unbilledAmount)} mono />
                   </>
                 )}
                 {matter.description && (
                   <div className="col-span-2 pt-2 border-t border-line">
                     <dt className="text-ink-4 mb-1">Summary</dt>
-                    <dd className="text-ink leading-relaxed">
-                      {matter.description}
-                    </dd>
+                    <dd className="text-ink leading-relaxed">{matter.description}</dd>
                   </div>
                 )}
               </dl>
@@ -338,7 +325,11 @@ export default async function MatterOverviewPage({
                   ])}
                 />
               )}
-              <NotesTabBody notes={notes} scope={{ kind: "matter", matterId: matter.id }} access={noteAccess} />
+              <NotesTabBody
+                notes={notes}
+                scope={{ kind: "matter", matterId: matter.id }}
+                access={noteAccess}
+              />
             </CardContent>
           </Card>
 
@@ -346,9 +337,7 @@ export default async function MatterOverviewPage({
           <Card>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold">
-                  Open tasks
-                </CardTitle>
+                <CardTitle className="text-sm font-semibold">Open tasks</CardTitle>
                 <Link
                   href={`/matters/${matter.id}/tasks`}
                   className="text-2xs text-brand-700 hover:underline"
@@ -359,16 +348,11 @@ export default async function MatterOverviewPage({
             </CardHeader>
             <CardContent className="px-4 pb-4">
               {openTasks.length === 0 ? (
-                <div className="py-2 text-xs text-ink-4">
-                  No open tasks on this matter.
-                </div>
+                <div className="py-2 text-xs text-ink-4">No open tasks on this matter.</div>
               ) : (
                 <ul className="flex flex-col divide-y divide-line">
                   {openTasks.map((t) => (
-                    <li
-                      key={t.id}
-                      className="flex items-center gap-2 py-2 first:pt-0 last:pb-0"
-                    >
+                    <li key={t.id} className="flex items-center gap-2 py-2 first:pt-0 last:pb-0">
                       <span
                         className={
                           "w-3.5 h-3.5 rounded-full border shrink-0 " +
@@ -377,9 +361,7 @@ export default async function MatterOverviewPage({
                             : "border-line")
                         }
                       />
-                      <span className="flex-1 text-xs text-ink truncate">
-                        {t.title}
-                      </span>
+                      <span className="flex-1 text-xs text-ink truncate">{t.title}</span>
                       <span className="text-2xs font-mono text-ink-4 w-14 text-right shrink-0">
                         {t.daysUntilDue !== null && t.daysUntilDue <= 7
                           ? dayDistanceLabel(t.daysUntilDue)
@@ -436,73 +418,42 @@ export default async function MatterOverviewPage({
               ) : (
                 <ul className="flex flex-col gap-3">
                   {clients.map((row) => (
-                    <li
-                      key={row.id}
-                      className="flex flex-col gap-1 text-xs"
-                    >
+                    <li key={row.id} className="flex flex-col gap-1 text-xs">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-ink truncate">
-                          {row.contact.name}
-                        </span>
+                        <span className="font-medium text-ink truncate">{row.contact.name}</span>
                         {row.contact.id === matter.clientId && (
-                          <Badge
-                            title="Matter's primary client"
-                          >
-                            Primary
-                          </Badge>
+                          <Badge title="Matter's primary client">Primary</Badge>
                         )}
                       </div>
                       {row.contact.organization && (
-                        <div className="text-2xs text-ink-3">
-                          {row.contact.organization}
-                        </div>
+                        <div className="text-2xs text-ink-3">{row.contact.organization}</div>
                       )}
                       {row.contact.email && (
                         <div className="flex items-center gap-1.5 text-2xs">
                           <Mail size={11} className="text-ink-4 shrink-0" />
-                          <EmailLink
-                            email={row.contact.email}
-                            className="text-ink truncate"
-                          />
+                          <EmailLink email={row.contact.email} className="text-ink truncate" />
                         </div>
                       )}
                       {row.contact.phones.length > 0 ? (
                         <div className="flex flex-col gap-0.5">
                           {row.contact.phones.map((p) => (
-                            <div
-                              key={p.id}
-                              className="flex items-center gap-1.5 text-2xs"
-                            >
-                              <Phone
-                                size={11}
-                                className="text-ink-4 shrink-0"
-                              />
-                              {p.label && (
-                                <span className="text-ink-4">
-                                  {p.label}
-                                </span>
-                              )}
+                            <div key={p.id} className="flex items-center gap-1.5 text-2xs">
+                              <Phone size={11} className="text-ink-4 shrink-0" />
+                              {p.label && <span className="text-ink-4">{p.label}</span>}
                               <a
                                 href={`tel:${p.number.replace(/\D/g, "")}`}
                                 className="font-mono text-ink hover:text-brand-700 hover:underline"
                               >
                                 {formatPhone(p.number)}
                               </a>
-                              {p.isPrimary &&
-                                row.contact.phones.length > 1 && (
-                                  <span className="text-3xs text-brand-700">
-                                    primary
-                                  </span>
-                                )}
+                              {p.isPrimary && row.contact.phones.length > 1 && (
+                                <span className="text-3xs text-brand-700">primary</span>
+                              )}
                             </div>
                           ))}
                         </div>
                       ) : null}
-                      {row.notes && (
-                        <div className="text-2xs text-ink-3 italic">
-                          {row.notes}
-                        </div>
-                      )}
+                      {row.notes && <div className="text-2xs text-ink-3 italic">{row.notes}</div>}
                     </li>
                   ))}
                 </ul>
@@ -551,9 +502,7 @@ export default async function MatterOverviewPage({
           <Card>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold">
-                  Upcoming deadlines
-                </CardTitle>
+                <CardTitle className="text-sm font-semibold">Upcoming deadlines</CardTitle>
                 <Link
                   href={`/matters/${matter.id}/deadlines`}
                   className="text-2xs text-brand-700 hover:underline"
@@ -564,17 +513,13 @@ export default async function MatterOverviewPage({
             </CardHeader>
             <CardContent className="px-4 pb-4">
               {upcomingDeadlines.length === 0 ? (
-                <div className="py-2 text-xs text-ink-4">
-                  No open deadlines.
-                </div>
+                <div className="py-2 text-xs text-ink-4">No open deadlines.</div>
               ) : (
                 <ul className="flex flex-col gap-2.5">
                   {upcomingDeadlines.map((d) => (
                     <li key={d.id} className="flex items-start gap-2">
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs text-ink truncate">
-                          {d.title}
-                        </div>
+                        <div className="text-xs text-ink truncate">{d.title}</div>
                         {d.sourceRef && (
                           <div className="text-2xs font-mono text-ink-4 truncate">
                             {d.sourceRef}
@@ -607,9 +552,7 @@ export default async function MatterOverviewPage({
             </CardHeader>
             <CardContent className="px-4 pb-4">
               {matter.teamMembers.length === 0 ? (
-                <div className="text-xs text-ink-4 py-2">
-                  No team assigned yet.
-                </div>
+                <div className="text-xs text-ink-4 py-2">No team assigned yet.</div>
               ) : (
                 <ul className="flex flex-col gap-2.5">
                   {matter.teamMembers.map((t) => {
@@ -622,7 +565,7 @@ export default async function MatterOverviewPage({
                           // Former members stay visible (audit /
                           // historical attribution) but dim so the
                           // active roster reads as primary.
-                          isFormer && "opacity-60"
+                          isFormer && "opacity-60",
                         )}
                       >
                         <span
@@ -630,7 +573,7 @@ export default async function MatterOverviewPage({
                             "inline-flex items-center justify-center w-7 h-7 rounded-full text-2xs font-mono font-medium border shrink-0",
                             isFormer
                               ? "bg-paper-2 text-ink-4 border-line"
-                              : "bg-brand-50 text-brand-700 border-brand-100"
+                              : "bg-brand-50 text-brand-700 border-brand-100",
                           )}
                         >
                           {t.user.initials}
@@ -639,16 +582,14 @@ export default async function MatterOverviewPage({
                           <div
                             className={cn(
                               "text-xs font-medium truncate",
-                              isFormer ? "text-ink-3" : "text-ink"
+                              isFormer ? "text-ink-3" : "text-ink",
                             )}
                           >
                             {t.user.name}
                           </div>
                           <div className="text-2xs text-ink-4">
                             {ROLE_LABEL[t.role] ?? t.role}
-                            {isFormer && (
-                              <span className="italic"> (former)</span>
-                            )}
+                            {isFormer && <span className="italic"> (former)</span>}
                           </div>
                         </div>
                       </li>
@@ -676,9 +617,7 @@ function Fact({
   return (
     <div>
       <dt className="text-ink-4 mb-0.5">{label}</dt>
-      <dd className={mono ? "font-mono text-ink" : "text-ink"}>
-        {value || "—"}
-      </dd>
+      <dd className={mono ? "font-mono text-ink" : "text-ink"}>{value || "—"}</dd>
     </div>
   );
 }

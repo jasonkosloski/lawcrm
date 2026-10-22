@@ -56,9 +56,7 @@ describe("formatPhone", () => {
   test("digits with extension/other suffix are NOT normalized", () => {
     // Don't try to be clever about extensions — render raw so the
     // user sees what they entered.
-    expect(formatPhone("303-555-1212 ext. 42")).toBe(
-      "303-555-1212 ext. 42"
-    );
+    expect(formatPhone("303-555-1212 ext. 42")).toBe("303-555-1212 ext. 42");
   });
 
   test("a 7-digit number with an extension is not turned into a fake US number", () => {

@@ -16,8 +16,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
-  const mod =
-    await importOriginal<typeof import("@/lib/google/gmail-client")>();
+  const mod = await importOriginal<typeof import("@/lib/google/gmail-client")>();
   return { ...mod, gmailFetch: vi.fn() };
 });
 
@@ -60,7 +59,7 @@ beforeEach(async () => {
 async function seedAccount(
   ownerId: string,
   email: string,
-  opts?: { grantedScopes?: string }
+  opts?: { grantedScopes?: string },
 ): Promise<string> {
   const account = await prisma.emailAccount.create({
     data: {
@@ -89,9 +88,7 @@ describe("syncMyEmailAccounts", () => {
     expect(res.results[0]).toMatchObject({ accountId: mine, ok: true });
 
     // Only my account ever hit Google.
-    expect(
-      mockedFetch.mock.calls.every(([accountId]) => accountId === mine)
-    ).toBe(true);
+    expect(mockedFetch.mock.calls.every(([accountId]) => accountId === mine)).toBe(true);
     expect(mockedRevalidate).toHaveBeenCalledWith("/communication");
     expect(mockedRevalidate).toHaveBeenCalledWith("/settings/integrations");
 
@@ -129,7 +126,7 @@ describe("syncMyEmailAccounts", () => {
             ],
             nextSyncToken: "st-1",
           }),
-          { status: 200 }
+          { status: 200 },
         );
       }
       const body = path.includes("/labels")
@@ -148,9 +145,7 @@ describe("syncMyEmailAccounts", () => {
       ok: true,
       imported: 1,
     });
-    expect(
-      await prisma.calendarEvent.count({ where: { title: "Google-born" } })
-    ).toBe(1);
+    expect(await prisma.calendarEvent.count({ where: { title: "Google-born" } })).toBe(1);
     expect(mockedRevalidate).toHaveBeenCalledWith("/calendar");
   });
 
@@ -272,7 +267,7 @@ describe("backfillMyEmailAccount", () => {
     expect(
       await prisma.emailThread.count({
         where: { accountId, externalId: "t-older" },
-      })
+      }),
     ).toBe(1);
     expect(mockedRevalidate).toHaveBeenCalledWith("/communication");
     expect(mockedRevalidate).toHaveBeenCalledWith("/settings/integrations");

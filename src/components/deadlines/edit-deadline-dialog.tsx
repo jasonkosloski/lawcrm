@@ -47,10 +47,7 @@ import { formatDateOnly, parseDateOnly } from "@/lib/format-date";
 import { SOL_SOURCE_TYPE } from "@/lib/sol";
 import { updateDeadline } from "@/app/actions/deadlines";
 import { CascadeConfirm } from "@/components/automations/cascade-confirm";
-import {
-  updateDeadlineInitialState,
-  type UpdateDeadlineFormState,
-} from "@/lib/deadline-form";
+import { updateDeadlineInitialState, type UpdateDeadlineFormState } from "@/lib/deadline-form";
 
 export type EditableDeadline = {
   id: string;
@@ -84,10 +81,11 @@ export function EditDeadlineDialog({
   // Wrapped useActionState: masks state left over from a previous
   // open, so a failed attempt's field errors don't reappear when
   // the dialog is reopened. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    UpdateDeadlineFormState,
-    FormData
-  >(action, updateDeadlineInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<UpdateDeadlineFormState, FormData>(
+    action,
+    updateDeadlineInitialState,
+    open,
+  );
 
   // Close on success. Deps must be the state OBJECT, not
   // state.status: useActionState keeps its state across
@@ -189,9 +187,9 @@ function EditDeadlineForm({
         <div className="flex flex-col gap-2 rounded-md border border-line bg-paper-2 px-3 py-2 text-sm">
           <div className="font-medium text-ink">{deadline.title}</div>
           <div className="text-ink-3">
-            Due {formatDateOnly(parseDateOnly(dueDate), "medium")}. This
-            deadline is the matter&apos;s statute of limitations and is managed
-            on the matter edit page. Only its status can be changed here.
+            Due {formatDateOnly(parseDateOnly(dueDate), "medium")}. This deadline is the
+            matter&apos;s statute of limitations and is managed on the matter edit page. Only its
+            status can be changed here.
           </div>
           {errs.dueDate?.[0] && (
             <div role="alert" className="text-xs text-destructive">

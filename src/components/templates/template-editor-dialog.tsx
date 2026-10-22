@@ -35,11 +35,7 @@ import {
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  MERGE_FIELD_GROUPS,
-  SAMPLE_MERGE_CONTEXT,
-  mergeTemplate,
-} from "@/lib/template-merge";
+import { MERGE_FIELD_GROUPS, SAMPLE_MERGE_CONTEXT, mergeTemplate } from "@/lib/template-merge";
 import {
   MAX_TEMPLATE_DESCRIPTION,
   MAX_TEMPLATE_NAME,
@@ -51,10 +47,7 @@ import {
   type TemplateCategory,
   type TemplateFormState,
 } from "@/lib/template-constants";
-import {
-  createDocumentTemplate,
-  updateDocumentTemplate,
-} from "@/app/actions/document-templates";
+import { createDocumentTemplate, updateDocumentTemplate } from "@/app/actions/document-templates";
 import type { TemplateListItem } from "@/components/templates/template-library";
 import { inputClass, labelClass, textareaClass, FormErrorBanner } from "@/components/ui/field";
 
@@ -68,15 +61,14 @@ export function TemplateEditorDialog({
   onOpenChange: (open: boolean) => void;
   template: TemplateListItem | null;
 }) {
-  const action = template
-    ? updateDocumentTemplate.bind(null, template.id)
-    : createDocumentTemplate;
+  const action = template ? updateDocumentTemplate.bind(null, template.id) : createDocumentTemplate;
   // Wrapped useActionState: masks stale error/success across
   // close/reopen. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    TemplateFormState,
-    FormData
-  >(action, templateFormInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<TemplateFormState, FormData>(
+    action,
+    templateFormInitialState,
+    open,
+  );
 
   const [name, setName] = useState("");
   const [category, setCategory] = useState<string>("general");
@@ -131,21 +123,17 @@ export function TemplateEditorDialog({
   };
 
   // Sample preview is pure + client-side; only computed while shown.
-  const preview = previewing
-    ? mergeTemplate(body, SAMPLE_MERGE_CONTEXT)
-    : null;
+  const preview = previewing ? mergeTemplate(body, SAMPLE_MERGE_CONTEXT) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>
-            {template ? "Edit template" : "New template"}
-          </DialogTitle>
+          <DialogTitle>{template ? "Edit template" : "New template"}</DialogTitle>
           <DialogDescription>
             {"Use the field picker (or type {{field.key}}) to add merge "}
-            fields — they fill in from the matter, client, and firm when
-            someone generates a document.
+            fields — they fill in from the matter, client, and firm when someone generates a
+            document.
           </DialogDescription>
         </DialogHeader>
 
@@ -175,9 +163,7 @@ export function TemplateEditorDialog({
                 id="template-category"
                 name="category"
                 value={category}
-                onChange={(e) =>
-                  setCategory(e.target.value as TemplateCategory)
-                }
+                onChange={(e) => setCategory(e.target.value as TemplateCategory)}
                 className="w-full"
               >
                 {/* A row whose category isn't in the curated list
@@ -223,16 +209,10 @@ export function TemplateEditorDialog({
               <div className="flex items-center gap-1.5">
                 <InsertFieldMenu onInsert={insertField} />
                 <div className="inline-flex rounded-md border border-line overflow-hidden">
-                  <ModeButton
-                    active={!previewing}
-                    onClick={() => setPreviewing(false)}
-                  >
+                  <ModeButton active={!previewing} onClick={() => setPreviewing(false)}>
                     Write
                   </ModeButton>
-                  <ModeButton
-                    active={previewing}
-                    onClick={() => setPreviewing(true)}
-                  >
+                  <ModeButton active={previewing} onClick={() => setPreviewing(true)}>
                     Preview
                   </ModeButton>
                 </div>
@@ -260,7 +240,7 @@ export function TemplateEditorDialog({
               className={cn(
                 textareaClass(),
                 "py-2 font-mono leading-relaxed",
-                previewing && "hidden"
+                previewing && "hidden",
               )}
             />
 
@@ -280,9 +260,7 @@ export function TemplateEditorDialog({
                     Preview — sample data
                   </div>
                   <div className="text-xs text-ink whitespace-pre-wrap leading-relaxed">
-                    {preview.text || (
-                      <span className="text-ink-4">Nothing to preview yet.</span>
-                    )}
+                    {preview.text || <span className="text-ink-4">Nothing to preview yet.</span>}
                   </div>
                 </div>
               </div>
@@ -292,19 +270,11 @@ export function TemplateEditorDialog({
           {state.status === "error" && state.error && <FormErrorBanner message={state.error} />}
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending
-                ? "Saving…"
-                : template
-                  ? "Save changes"
-                  : "Create template"}
+              {isPending ? "Saving…" : template ? "Save changes" : "Create template"}
             </Button>
           </DialogFooter>
         </form>
@@ -329,9 +299,7 @@ function ModeButton({
       aria-pressed={active}
       className={cn(
         "px-2.5 h-7 text-2xs font-medium transition-colors",
-        active
-          ? "bg-paper-2 text-ink"
-          : "bg-white text-ink-3 hover:text-ink"
+        active ? "bg-paper-2 text-ink" : "bg-white text-ink-3 hover:text-ink",
       )}
     >
       {children}
@@ -340,21 +308,12 @@ function ModeButton({
 }
 
 /** Grouped field picker fed by the exported merge catalog. */
-function InsertFieldMenu({
-  onInsert,
-}: {
-  onInsert: (key: string) => void;
-}) {
+function InsertFieldMenu({ onInsert }: { onInsert: (key: string) => void }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button
-            variant="outline"
-            size="xs"
-            type="button"
-            className="text-2xs"
-          >
+          <Button variant="outline" size="xs" type="button" className="text-2xs">
             Insert field
             <ChevronDown size={11} />
           </Button>
@@ -370,15 +329,9 @@ function InsertFieldMenu({
               {group.group}
             </DropdownMenuLabel>
             {group.fields.map((f) => (
-              <DropdownMenuItem
-                key={f.key}
-                onClick={() => onInsert(f.key)}
-                title={f.description}
-              >
+              <DropdownMenuItem key={f.key} onClick={() => onInsert(f.key)} title={f.description}>
                 <span className="flex-1">{f.label}</span>
-                <span className="font-mono text-2xs text-ink-4">
-                  {f.key}
-                </span>
+                <span className="font-mono text-2xs text-ink-4">{f.key}</span>
               </DropdownMenuItem>
             ))}
           </DropdownMenuGroup>

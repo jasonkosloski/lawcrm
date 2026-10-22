@@ -21,16 +21,8 @@ vi.mock("@/lib/current-user", () => ({
 }));
 
 import { getCurrentUserId } from "@/lib/current-user";
-import {
-  getCurrentFirm,
-  isCurrentUserAdmin,
-  requireAdmin,
-} from "@/lib/firm";
-import {
-  resetDb,
-  seedFirm,
-  seedUser,
-} from "@/test/integration-helpers";
+import { getCurrentFirm, isCurrentUserAdmin, requireAdmin } from "@/lib/firm";
+import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
 

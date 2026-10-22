@@ -3,11 +3,7 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
-import {
-  dateOnly,
-  withDefaultEnd,
-  withDefaultStart,
-} from "@/lib/event-schedule";
+import { dateOnly, withDefaultEnd, withDefaultStart } from "@/lib/event-schedule";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -15,8 +11,7 @@ import { Button } from "@/components/ui/button";
 
 // ── Inline editors ─────────────────────────────────────────────────────
 
-const cellHover =
-  "rounded-sm px-1 -mx-1 hover:bg-paper-2 cursor-text transition-colors";
+const cellHover = "rounded-sm px-1 -mx-1 hover:bg-paper-2 cursor-text transition-colors";
 const inputBase =
   "rounded-sm px-1 -mx-1 border border-brand-300 bg-white text-ink outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-200";
 
@@ -186,10 +181,7 @@ export function InlineTextarea({
         aria-label={ariaLabel}
         onBlur={(e) => commit(e.currentTarget.value)}
         onKeyDown={(e) => {
-          if (
-            e.key === "Enter" &&
-            (e.metaKey || e.ctrlKey)
-          ) {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             commit(e.currentTarget.value);
           } else if (e.key === "Escape") {
@@ -200,10 +192,7 @@ export function InlineTextarea({
             setEditing(false);
           }
         }}
-        className={cn(
-          inputBase,
-          "w-full text-xs resize-y leading-relaxed"
-        )}
+        className={cn(inputBase, "w-full text-xs resize-y leading-relaxed")}
       />
     );
   }
@@ -232,10 +221,7 @@ export function InlineTextarea({
           setEditing(true);
         }
       }}
-      className={cn(
-        cellHover,
-        "text-xs text-ink leading-relaxed whitespace-pre-wrap"
-      )}
+      className={cn(cellHover, "text-xs text-ink leading-relaxed whitespace-pre-wrap")}
     >
       {value}
     </p>
@@ -358,11 +344,7 @@ export function InlineTimeEditor({
   isAllDay: boolean;
   startTime: string;
   endTime: string;
-  onCommit: (changes: {
-    isAllDay?: boolean;
-    startTime?: string;
-    endTime?: string;
-  }) => void;
+  onCommit: (changes: { isAllDay?: boolean; startTime?: string; endTime?: string }) => void;
   displayDate: string;
   displayRange: string;
 }) {
@@ -396,11 +378,7 @@ export function InlineTimeEditor({
   }
 
   const save = () => {
-    if (
-      draftIsAllDay === isAllDay &&
-      draftStart === startTime &&
-      draftEnd === endTime
-    ) {
+    if (draftIsAllDay === isAllDay && draftStart === startTime && draftEnd === endTime) {
       // Nothing changed: close without a pointless write.
       setEditing(false);
       return;
@@ -463,13 +441,9 @@ export function InlineTimeEditor({
           {draftIsAllDay ? "Start date" : "Starts"}
           <input
             type={draftIsAllDay ? "date" : "datetime-local"}
-            value={
-              draftIsAllDay ? dateOnly(draftStart) : draftStart
-            }
+            value={draftIsAllDay ? dateOnly(draftStart) : draftStart}
             onChange={(e) =>
-              setDraftStart(
-                draftIsAllDay ? `${e.target.value}T00:00` : e.target.value
-              )
+              setDraftStart(draftIsAllDay ? `${e.target.value}T00:00` : e.target.value)
             }
             className="h-8 px-2 rounded-md border border-line text-xs text-ink bg-white font-mono"
           />
@@ -480,9 +454,7 @@ export function InlineTimeEditor({
             type={draftIsAllDay ? "date" : "datetime-local"}
             value={draftIsAllDay ? dateOnly(draftEnd) : draftEnd}
             onChange={(e) =>
-              setDraftEnd(
-                draftIsAllDay ? `${e.target.value}T00:00` : e.target.value
-              )
+              setDraftEnd(draftIsAllDay ? `${e.target.value}T00:00` : e.target.value)
             }
             className="h-8 px-2 rounded-md border border-line text-xs text-ink bg-white font-mono"
           />
@@ -494,11 +466,7 @@ export function InlineTimeEditor({
           <Check size={11} />
           Save
         </Button>
-        <button
-          type="button"
-          onClick={cancel}
-          className="text-2xs text-ink-3 hover:text-ink"
-        >
+        <button type="button" onClick={cancel} className="text-2xs text-ink-3 hover:text-ink">
           Cancel
         </button>
       </div>

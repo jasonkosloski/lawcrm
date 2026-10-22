@@ -25,7 +25,11 @@ vi.mock("@/lib/feedback", () => ({
   notifyError: vi.fn(),
 }));
 
-import { requestTranscript, deleteTranscript, changeSpeakerForSelection } from "@/app/actions/transcripts";
+import {
+  requestTranscript,
+  deleteTranscript,
+  changeSpeakerForSelection,
+} from "@/app/actions/transcripts";
 import { confirmAction, notifyError } from "@/lib/feedback";
 import type { TranscriptView } from "@/lib/queries/transcript";
 import { TranscriptPane } from "./transcript-pane";
@@ -206,7 +210,9 @@ describe("TranscriptPane", () => {
   test("polls with router.refresh while processing, and stops once completed", () => {
     vi.useFakeTimers();
     try {
-      const { rerender, props } = pane({ transcript: { ...BASE, status: "processing", segments: [] } });
+      const { rerender, props } = pane({
+        transcript: { ...BASE, status: "processing", segments: [] },
+      });
       expect(screen.getByRole("status")).toBeTruthy();
       act(() => void vi.advanceTimersByTime(15_000));
       expect(refresh).toHaveBeenCalledTimes(1);
@@ -257,7 +263,9 @@ describe("fix round 1", () => {
     pane({ transcript: { ...BASE, status: "failed", error: "Audio unreadable" } });
     const banner = screen.getByText("Audio unreadable");
     const firstText = screen.getByText("[00:00:03]");
-    expect(banner.compareDocumentPosition(firstText) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      banner.compareDocumentPosition(firstText) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   test("Re-transcribe in the menu requests a transcript", async () => {
@@ -270,7 +278,10 @@ describe("fix round 1", () => {
   });
 
   test("Delete is reachable for a failed transcript with no segments", async () => {
-    pane({ transcript: { ...BASE, status: "failed", error: "boom", segments: [] }, canTranscribe: false });
+    pane({
+      transcript: { ...BASE, status: "failed", error: "boom", segments: [] },
+      canTranscribe: false,
+    });
     const user = userEvent.setup();
     await user.click(screen.getByLabelText("Transcript options"));
     expect(await screen.findByRole("menuitem", { name: "Delete transcript" })).toBeTruthy();
@@ -304,7 +315,12 @@ describe("fix round 1", () => {
     // 19.5 is within 5s of words in seg0 (ends 9) no; near seg1 start 20 and seg0? only seg1 nearest
     pane({ flags: [{ id: "p", timeSeconds: 19.9, endSeconds: null, category: "emphasis" }] });
     expect(document.querySelectorAll('[data-flag-marker="p"]')).toHaveLength(1);
-    expect(document.querySelector('[data-flag-marker="p"]')!.closest("[data-seg]")!.getAttribute("data-seg")).toBe("seg1");
+    expect(
+      document
+        .querySelector('[data-flag-marker="p"]')!
+        .closest("[data-seg]")!
+        .getAttribute("data-seg"),
+    ).toBe("seg1");
   });
 
   test("Flag selection shows in the pane only with canFlag and a handler", () => {

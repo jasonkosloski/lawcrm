@@ -25,10 +25,7 @@ vi.mock("@/lib/permission-check", () => ({
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
-import {
-  overrideLeadConflictCheck,
-  runLeadConflictCheck,
-} from "@/app/actions/conflict-check";
+import { overrideLeadConflictCheck, runLeadConflictCheck } from "@/app/actions/conflict-check";
 import {
   resetDb,
   seedContact,
@@ -71,9 +68,7 @@ const overrideForm = (notes: string) => {
 };
 
 /** An opposing party "Roe" on the active matter, plus a lead of that name. */
-async function seedConflictedLead(
-  opts: { conflictCheck?: string } = {}
-): Promise<string> {
+async function seedConflictedLead(opts: { conflictCheck?: string } = {}): Promise<string> {
   const roe = await seedContact({
     name: "John Roe",
     email: "roe@example.com",
@@ -125,7 +120,9 @@ describe("runLeadConflictCheck", () => {
 
   test("unknown lead → not found, nothing written", async () => {
     // Unknown == hidden: the lead wall answers with notFound() (ADR-049).
-    await expect(runLeadConflictCheck("nope")).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
+    await expect(runLeadConflictCheck("nope")).rejects.toThrow(
+      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/,
+    );
     expect(await prisma.activityLog.count()).toBe(0);
   });
 
@@ -220,15 +217,13 @@ describe("overrideLeadConflictCheck", () => {
 
     const res = await overrideLeadConflictCheck(
       leadId,
-      overrideForm("Informed-consent waiver signed 2026-10-01")
+      overrideForm("Informed-consent waiver signed 2026-10-01"),
     );
     expect(res).toEqual({ ok: true });
 
     const lead = await prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
     expect(lead.conflictCheck).toBe("override");
-    expect(lead.conflictResolutionNotes).toBe(
-      "Informed-consent waiver signed 2026-10-01"
-    );
+    expect(lead.conflictResolutionNotes).toBe("Informed-consent waiver signed 2026-10-01");
 
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { title: { contains: "overridden" } },
@@ -236,9 +231,7 @@ describe("overrideLeadConflictCheck", () => {
     expect(log.matterId).toBeNull();
     expect(log.userId).toBe(userId);
     expect(log.title).toContain("John Roe");
-    expect(log.detail).toBe(
-      `lead ${leadId}: Informed-consent waiver signed 2026-10-01`
-    );
+    expect(log.detail).toBe(`lead ${leadId}: Informed-consent waiver signed 2026-10-01`);
   });
 
   test("a warn lead can be overridden too", async () => {
@@ -259,34 +252,26 @@ describe("overrideLeadConflictCheck", () => {
     expect(await prisma.activityLog.count()).toBe(0);
   });
 
-  test.each(["clear", "pending", "override"])(
-    "a %s lead cannot be overridden",
-    async (status) => {
-      const leadId = await seedConflictedLead({ conflictCheck: status });
-      const res = await overrideLeadConflictCheck(
-        leadId,
-        overrideForm("A perfectly good reason")
-      );
-      expect(res.ok).toBe(false);
-      expect(res.error).toMatch(/flagged or conflicted/);
+  test.each(["clear", "pending", "override"])("a %s lead cannot be overridden", async (status) => {
+    const leadId = await seedConflictedLead({ conflictCheck: status });
+    const res = await overrideLeadConflictCheck(leadId, overrideForm("A perfectly good reason"));
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/flagged or conflicted/);
 
-      const lead = await prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
-      expect(lead.conflictCheck).toBe(status);
-      expect(lead.conflictResolutionNotes).toBeNull();
-    }
-  );
+    const lead = await prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
+    expect(lead.conflictCheck).toBe(status);
+    expect(lead.conflictResolutionNotes).toBeNull();
+  });
 
   test("unknown lead → not found", async () => {
     await expect(
-      overrideLeadConflictCheck("nope", overrideForm("A perfectly good reason"))
+      overrideLeadConflictCheck("nope", overrideForm("A perfectly good reason")),
     ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
   });
 
   test("is gated on intake.conflict_check.override", async () => {
     const leadId = await seedConflictedLead({ conflictCheck: "warn" });
     await overrideLeadConflictCheck(leadId, overrideForm("A perfectly good reason"));
-    expect(requirePermission).toHaveBeenCalledWith(
-      "intake.conflict_check.override"
-    );
+    expect(requirePermission).toHaveBeenCalledWith("intake.conflict_check.override");
   });
 });

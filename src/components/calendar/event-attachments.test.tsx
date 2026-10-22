@@ -11,14 +11,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  within,
-} from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { EventNote, EventTimeEntry } from "@/lib/queries/calendar";
 import { parseDateOnly } from "@/lib/format-date";
@@ -46,13 +39,9 @@ vi.mock("@/components/matters/notes/note-editor", () => ({
   ),
 }));
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-  }: {
-    href: string;
-    children: React.ReactNode;
-  }) => <a href={href}>{children}</a>,
+  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
 }));
 
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
@@ -107,39 +96,22 @@ describe("EventNotesSection", () => {
     // Tokyo. Neither matches the browser zone of both suite runs.
     const { unmount } = render(
       <UserTimeZoneProvider timeZone="America/Denver">
-        <EventNotesSection
-          eventId="e1"
-          matterId="m1"
-          matterName="Smith"
-          notes={[note()]}
-        />
-      </UserTimeZoneProvider>
+        <EventNotesSection eventId="e1" matterId="m1" matterName="Smith" notes={[note()]} />
+      </UserTimeZoneProvider>,
     );
     expect(screen.getByText("Jul 6, 9:30 PM")).toBeTruthy();
     unmount();
 
     render(
       <UserTimeZoneProvider timeZone="Asia/Tokyo">
-        <EventNotesSection
-          eventId="e1"
-          matterId="m1"
-          matterName="Smith"
-          notes={[note()]}
-        />
-      </UserTimeZoneProvider>
+        <EventNotesSection eventId="e1" matterId="m1" matterName="Smith" notes={[note()]} />
+      </UserTimeZoneProvider>,
     );
     expect(screen.getByText("Jul 7, 12:30 PM")).toBeTruthy();
   });
 
   test("without a provider every control shows (server stays the authority)", () => {
-    render(
-      <EventNotesSection
-        eventId="e1"
-        matterId="m1"
-        matterName="Smith"
-        notes={[note()]}
-      />
-    );
+    render(<EventNotesSection eventId="e1" matterId="m1" matterName="Smith" notes={[note()]} />);
     expect(screen.getByLabelText("Pin note")).toBeTruthy();
     expect(screen.getByLabelText("Delete note")).toBeTruthy();
   });
@@ -147,47 +119,36 @@ describe("EventNotesSection", () => {
   test("hides Pin without notes.pin", () => {
     render(
       <EventAttachmentsProvider viewerId="u_me" canPinNotes={false}>
-        <EventNotesSection
-          eventId="e1"
-          matterId="m1"
-          matterName="Smith"
-          notes={[note()]}
-        />
-      </EventAttachmentsProvider>
+        <EventNotesSection eventId="e1" matterId="m1" matterName="Smith" notes={[note()]} />
+      </EventAttachmentsProvider>,
     );
     expect(screen.queryByLabelText("Pin note")).toBeNull();
   });
 
   test("hides Delete on a colleague's note without notes.delete_any", () => {
     render(
-      <EventAttachmentsProvider
-        viewerId="u_me"
-        canDeleteAnyNote={false}
-      >
+      <EventAttachmentsProvider viewerId="u_me" canDeleteAnyNote={false}>
         <EventNotesSection
           eventId="e1"
           matterId="m1"
           matterName="Smith"
           notes={[note({ authorId: "u_other" })]}
         />
-      </EventAttachmentsProvider>
+      </EventAttachmentsProvider>,
     );
     expect(screen.queryByLabelText("Delete note")).toBeNull();
   });
 
   test("keeps Delete on the viewer's own note even without notes.delete_any", () => {
     render(
-      <EventAttachmentsProvider
-        viewerId="u_me"
-        canDeleteAnyNote={false}
-      >
+      <EventAttachmentsProvider viewerId="u_me" canDeleteAnyNote={false}>
         <EventNotesSection
           eventId="e1"
           matterId="m1"
           matterName="Smith"
           notes={[note({ authorId: "u_me" })]}
         />
-      </EventAttachmentsProvider>
+      </EventAttachmentsProvider>,
     );
     expect(screen.getByLabelText("Delete note")).toBeTruthy();
   });
@@ -201,7 +162,7 @@ describe("EventNotesSection", () => {
           matterName="Smith"
           notes={[note({ authorId: "u_other" })]}
         />
-      </EventAttachmentsProvider>
+      </EventAttachmentsProvider>,
     );
     expect(screen.getByLabelText("Delete note")).toBeTruthy();
   });
@@ -211,13 +172,7 @@ describe("EventTimeEntriesSection", () => {
   test("a date-only entry shows the day it was saved on, not the day before", () => {
     // Stored 2026-10-16T00:00Z. A browser-zone format in Denver says
     // Oct 15 (and the SSR text, rendered in UTC, said Oct 16).
-    render(
-      <EventTimeEntriesSection
-        eventId="e1"
-        matterId="m1"
-        entries={[entry()]}
-      />
-    );
+    render(<EventTimeEntriesSection eventId="e1" matterId="m1" entries={[entry()]} />);
     expect(screen.getByText("Oct 16")).toBeTruthy();
     expect(screen.queryByText("Oct 15")).toBeNull();
   });
@@ -231,7 +186,7 @@ describe("EventTimeEntriesSection", () => {
           entry({ id: "a", hours: 0.25 }),
           entry({ id: "b", hours: 0.75, billable: false }),
         ]}
-      />
+      />,
     );
     expect(screen.getByText("0.25h")).toBeTruthy();
     expect(screen.getByText("0.75h")).toBeTruthy();
@@ -241,10 +196,7 @@ describe("EventTimeEntriesSection", () => {
 
   test("hides Delete on a colleague's entry without time_entries.delete_any", () => {
     render(
-      <EventAttachmentsProvider
-        viewerId="u_me"
-        canDeleteAnyTimeEntry={false}
-      >
+      <EventAttachmentsProvider viewerId="u_me" canDeleteAnyTimeEntry={false}>
         <EventTimeEntriesSection
           eventId="e1"
           matterId="m1"
@@ -253,7 +205,7 @@ describe("EventTimeEntriesSection", () => {
             entry({ id: "mine", userId: "u_me", activity: "My work" }),
           ]}
         />
-      </EventAttachmentsProvider>
+      </EventAttachmentsProvider>,
     );
     // Only the viewer's own entry keeps a Delete button.
     expect(screen.getAllByLabelText("Delete time entry")).toHaveLength(1);
@@ -268,23 +220,15 @@ describe("EventNoteComposer", () => {
     await user.click(screen.getByText("Add a note about this event…"));
     await user.click(screen.getByRole("button", { name: "Strategy" }));
     await user.click(screen.getByRole("button", { name: /Pin/ }));
-    expect(
-      screen.getByRole("button", { name: /Pin/ }).getAttribute("aria-pressed")
-    ).toBe("true");
+    expect(screen.getByRole("button", { name: /Pin/ }).getAttribute("aria-pressed")).toBe("true");
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await user.click(screen.getByText("Add a note about this event…"));
 
     // Back to a plain, unpinned "Note".
-    expect(
-      screen.getByRole("button", { name: /Pin/ }).getAttribute("aria-pressed")
-    ).toBe("false");
-    expect(
-      screen.getByRole("button", { name: "Note" }).className
-    ).toContain("bg-white");
-    expect(
-      screen.getByRole("button", { name: "Strategy" }).className
-    ).not.toContain("bg-white");
+    expect(screen.getByRole("button", { name: /Pin/ }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "Note" }).className).toContain("bg-white");
+    expect(screen.getByRole("button", { name: "Strategy" }).className).not.toContain("bg-white");
   });
 
   test("a saved note collapses the composer and resets it", async () => {
@@ -304,22 +248,19 @@ describe("EventNoteComposer", () => {
 
     // Reopened: the previous draft's type is gone.
     await user.click(screen.getByText("Add a note about this event…"));
-    expect(
-      screen.getByRole("button", { name: "Note" }).className
-    ).toContain("bg-white");
+    expect(screen.getByRole("button", { name: "Note" }).className).toContain("bg-white");
   });
 });
 
 describe("EventTimeEntryComposer", () => {
-  const dateInput = () =>
-    screen.getByLabelText("Date") as HTMLInputElement;
+  const dateInput = () => screen.getByLabelText("Date") as HTMLInputElement;
 
   test("defaults to the event's date, not today", async () => {
     const user = userEvent.setup();
     render(
       <EventAttachmentsProvider defaultTimeEntryDate="2026-10-06">
         <EventTimeEntryComposer matterId="m1" eventId="e1" />
-      </EventAttachmentsProvider>
+      </EventAttachmentsProvider>,
     );
     await user.click(screen.getByText("Log time for this event…"));
     expect(dateInput().value).toBe("2026-10-06");
@@ -334,7 +275,7 @@ describe("EventTimeEntryComposer", () => {
     render(
       <UserTimeZoneProvider timeZone="America/Denver">
         <EventTimeEntryComposer matterId="m1" eventId="e1" />
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
     await user.click(screen.getByText("Log time for this event…"));
     expect(dateInput().value).toBe("2026-04-27");
@@ -345,7 +286,7 @@ describe("EventTimeEntryComposer", () => {
     render(
       <EventAttachmentsProvider defaultTimeEntryDate="2026-10-06">
         <EventTimeEntryComposer matterId="m1" eventId="e1" />
-      </EventAttachmentsProvider>
+      </EventAttachmentsProvider>,
     );
     await user.click(screen.getByText("Log time for this event…"));
     fireEvent.change(dateInput(), { target: { value: "2026-01-01" } });
@@ -359,22 +300,15 @@ describe("EventTimeEntryComposer", () => {
   test("a logged entry collapses the composer", async () => {
     createTimeEntry.mockResolvedValue({ status: "ok" });
     const user = userEvent.setup();
-    const { container } = render(
-      <EventTimeEntryComposer matterId="m1" eventId="e1" />
-    );
+    const { container } = render(<EventTimeEntryComposer matterId="m1" eventId="e1" />);
     await user.click(screen.getByText("Log time for this event…"));
     await user.type(screen.getByPlaceholderText("Hrs"), "1.5");
-    await user.type(
-      screen.getByPlaceholderText(/Activity/),
-      "Hearing attendance"
-    );
+    await user.type(screen.getByPlaceholderText(/Activity/), "Hearing attendance");
     await act(async () => {
       fireEvent.submit(container.querySelector("form")!);
     });
 
     expect(createTimeEntry).toHaveBeenCalledTimes(1);
-    expect(
-      await within(container).findByText("Log time for this event…")
-    ).toBeTruthy();
+    expect(await within(container).findByText("Log time for this event…")).toBeTruthy();
   });
 });

@@ -47,7 +47,10 @@ vi.mock("@/components/matters/documents/multi-file-upload", async () => {
 
 import { deleteDocument } from "@/app/actions/documents";
 import { moveDocuments } from "@/app/actions/document-folders";
-import { previewFolderMoveVisibility, setDocumentsClientShare } from "@/app/actions/portal-documents";
+import {
+  previewFolderMoveVisibility,
+  setDocumentsClientShare,
+} from "@/app/actions/portal-documents";
 import { notifyUndoable } from "@/lib/feedback";
 import type { DocTarget, FolderTarget, WorkspacePerms } from "@/lib/document-entry-actions";
 import { docKey, folderKey } from "@/lib/document-selection";
@@ -137,7 +140,7 @@ function renderWorkspace(rows: RowData[], perms: WorkspacePerms = ALL) {
       storageDriver="local"
       visibilityWarnings
       empty={<div>Empty</div>}
-    />
+    />,
   );
 }
 
@@ -162,7 +165,12 @@ describe("row menu", () => {
   });
 
   test("hidden without permissions", async () => {
-    renderWorkspace([docRow("d1", { canDelete: false })], { ...ALL, edit: false, share: false, organize: false });
+    renderWorkspace([docRow("d1", { canDelete: false })], {
+      ...ALL,
+      edit: false,
+      share: false,
+      organize: false,
+    });
     await userEvent.click(screen.getByRole("button", { name: "Document actions" }));
     expect(screen.queryByText("Edit details…")).toBeNull();
     expect(screen.queryByText("Delete")).toBeNull();
@@ -181,16 +189,23 @@ describe("row menu", () => {
     await userEvent.click(screen.getByRole("button", { name: "Document actions" }));
     await userEvent.click(screen.getByText("Move to…"));
     await userEvent.click(screen.getByRole("button", { name: /^A$/ }));
-    expect(await screen.findByText("3 files will become visible to the client.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("3 files will become visible to the client."),
+    ).toBeInTheDocument();
   });
 
   test("a mixed selection's move warns too, counting the folder's subtree", async () => {
-    vi.mocked(previewFolderMoveVisibility).mockResolvedValueOnce({ becomesVisible: 4, becomesHidden: 0 });
+    vi.mocked(previewFolderMoveVisibility).mockResolvedValueOnce({
+      becomesVisible: 4,
+      becomesHidden: 0,
+    });
     renderWorkspace([folderRow("f"), docRow("d1")]);
     await userEvent.click(screen.getByRole("checkbox", { name: "Select all" }));
     await userEvent.click(screen.getByRole("button", { name: /Move 2 items to/ }));
     await userEvent.click(screen.getByRole("button", { name: /^A$/ }));
-    expect(await screen.findByText("5 files will become visible to the client.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("5 files will become visible to the client."),
+    ).toBeInTheDocument();
     expect(previewFolderMoveVisibility).toHaveBeenCalledWith("f", "a");
   });
 

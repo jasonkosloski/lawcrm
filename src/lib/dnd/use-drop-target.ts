@@ -38,9 +38,7 @@ export type UseDropTargetResult = {
   };
 };
 
-export function useDropTarget<D>(
-  options: UseDropTargetOptions<D>
-): UseDropTargetResult {
+export function useDropTarget<D>(options: UseDropTargetOptions<D>): UseDropTargetResult {
   const { kind, onDrop, disabled = false } = options;
   // We use a counter (not a boolean) because dragenter/dragleave
   // fire for every nested child — naively flipping a boolean

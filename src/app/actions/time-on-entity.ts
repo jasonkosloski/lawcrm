@@ -28,7 +28,10 @@ import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
 /** Trim a string to N chars, appending "…" only when actually truncated. */
 function snippet(s: string | null | undefined, max: number): string {
   if (!s) return "";
-  const stripped = s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const stripped = s
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   return stripped.length <= max ? stripped : stripped.slice(0, max - 1) + "…";
 }
 
@@ -52,7 +55,7 @@ const timeSchema = z.object({
 export async function addTimeEntryToTask(
   taskId: string,
   _prev: NoteAttachmentFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<NoteAttachmentFormState> {
   await requirePermission("time_entries.create");
   await assertChildMatterAccess("task", taskId);
@@ -110,7 +113,7 @@ export async function addTimeEntryToTask(
 export async function addTimeEntryToDeadline(
   deadlineId: string,
   _prev: NoteAttachmentFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<NoteAttachmentFormState> {
   await requirePermission("time_entries.create");
   await assertChildMatterAccess("deadline", deadlineId);
@@ -155,7 +158,8 @@ export async function addTimeEntryToDeadline(
     userId,
     type: "time_entry",
     title: `Time logged on deadline · ${parsed.data.hours}h`,
-    detail: parsed.data.privileged === "on" ? undefined : `${deadline.title}: ${parsed.data.activity}`,
+    detail:
+      parsed.data.privileged === "on" ? undefined : `${deadline.title}: ${parsed.data.activity}`,
   });
   return { status: "ok" };
 }
@@ -165,7 +169,7 @@ export async function addTimeEntryToDeadline(
 export async function addTimeEntryToEmailMessage(
   emailMessageId: string,
   _prev: NoteAttachmentFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<NoteAttachmentFormState> {
   await requirePermission("time_entries.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -221,7 +225,10 @@ export async function addTimeEntryToEmailMessage(
     userId,
     type: "time_entry",
     title: `Time logged on email · ${parsed.data.hours}h`,
-    detail: parsed.data.privileged === "on" ? undefined : `${snippet(msg.thread.subject, 40)} (${msg.fromName}): ${parsed.data.activity}`,
+    detail:
+      parsed.data.privileged === "on"
+        ? undefined
+        : `${snippet(msg.thread.subject, 40)} (${msg.fromName}): ${parsed.data.activity}`,
   });
   return { status: "ok" };
 }
@@ -231,7 +238,7 @@ export async function addTimeEntryToEmailMessage(
 export async function addTimeEntryToMessengerItem(
   messengerItemId: string,
   _prev: NoteAttachmentFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<NoteAttachmentFormState> {
   await requirePermission("time_entries.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -273,8 +280,7 @@ export async function addTimeEntryToMessengerItem(
     };
   }
   const userId = await getCurrentUserId();
-  const who =
-    item.thread?.contact?.name ?? item.thread?.contactPhone ?? "Unknown";
+  const who = item.thread?.contact?.name ?? item.thread?.contactPhone ?? "Unknown";
   await prisma.timeEntry.create({
     data: {
       matterId,

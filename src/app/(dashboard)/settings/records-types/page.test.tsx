@@ -32,7 +32,11 @@ vi.mock("@/lib/prisma", () => ({
 }));
 vi.mock("@/components/records-requests/request-type-editor", () => ({
   RequestTypeEditor: ({ types }: { types: { name: string }[] }) => (
-    <ul>{types.map((t) => <li key={t.name}>{t.name}</li>)}</ul>
+    <ul>
+      {types.map((t) => (
+        <li key={t.name}>{t.name}</li>
+      ))}
+    </ul>
   ),
 }));
 

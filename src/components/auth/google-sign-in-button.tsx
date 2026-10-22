@@ -55,8 +55,8 @@ export function GoogleSignInButton({ next }: { next: string }) {
       </button>
       {failed && (
         <p role="alert" className="text-xs leading-relaxed text-warn">
-          Google sign-in didn&apos;t start. Try again, and if it keeps
-          failing, tell an administrator.
+          Google sign-in didn&apos;t start. Try again, and if it keeps failing, tell an
+          administrator.
         </p>
       )}
     </div>

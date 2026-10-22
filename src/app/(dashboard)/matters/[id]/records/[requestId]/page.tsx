@@ -19,11 +19,7 @@ export default async function MatterRecordsRequestPage({
   if (!(await currentUserHasPermission("records.view"))) notFound();
   return (
     <div className="p-5">
-      <RequestDetailPage
-        scope={{ kind: "matter", matterId: id }}
-        requestId={requestId}
-        writable
-      />
+      <RequestDetailPage scope={{ kind: "matter", matterId: id }} requestId={requestId} writable />
     </div>
   );
 }

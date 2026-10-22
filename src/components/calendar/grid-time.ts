@@ -43,9 +43,7 @@ export const clamp = (n: number, min: number, max: number): number =>
 export function minutesOnDay(d: Date, dayKey: DayKey, tz: string): number {
   const wall = toWallClockInput(d, tz); // YYYY-MM-DDTHH:mm
   const dayDelta = daysBetweenKeys(dayKey, wall.slice(0, 10));
-  return (
-    dayDelta * 1440 + Number(wall.slice(11, 13)) * 60 + Number(wall.slice(14, 16))
-  );
+  return dayDelta * 1440 + Number(wall.slice(11, 13)) * 60 + Number(wall.slice(14, 16));
 }
 
 /** "9:00am" in `tz`. */
@@ -72,20 +70,12 @@ export type ChipBox = {
  * inside its column instead of drawing over the all-day strip, past
  * the bottom, or 1,500px tall.
  */
-export function chipBox(
-  start: Date,
-  end: Date,
-  dayKey: DayKey,
-  tz: string
-): ChipBox {
+export function chipBox(start: Date, end: Date, dayKey: DayKey, tz: string): ChipBox {
   const s = minutesOnDay(start, dayKey, tz) - GRID_START_MIN;
   const e = minutesOnDay(end, dayKey, tz) - GRID_START_MIN;
   const topMin = clamp(s, 0, GRID_MINUTES);
   const bottomMin = clamp(e, 0, GRID_MINUTES);
-  const height = Math.max(
-    MIN_CHIP_PX,
-    ((bottomMin - topMin) / 60) * HOUR_HEIGHT_PX - 2
-  );
+  const height = Math.max(MIN_CHIP_PX, ((bottomMin - topMin) / 60) * HOUR_HEIGHT_PX - 2);
   const top = Math.min((topMin / 60) * HOUR_HEIGHT_PX, GRID_HEIGHT_PX - height);
   return { top, height, clippedTop: s < 0, clippedBottom: e > GRID_MINUTES };
 }
@@ -101,11 +91,7 @@ export function nowTopPx(now: Date, dayKey: DayKey, tz: string): number | null {
 
 /** The instant at `totalMinutes` past the grid's first hour on the
  *  `dayKey` calendar day in `tz`. */
-export function instantAtGridMinutes(
-  dayKey: DayKey,
-  totalMinutes: number,
-  tz: string
-): Date {
+export function instantAtGridMinutes(dayKey: DayKey, totalMinutes: number, tz: string): Date {
   const abs = GRID_START_MIN + totalMinutes;
   const hh = String(Math.floor(abs / 60)).padStart(2, "0");
   const mm = String(abs % 60).padStart(2, "0");
@@ -117,15 +103,13 @@ export function instantAtGridMinutes(
 /** Snapped minutes-from-grid-start for a cursor Y inside a column. */
 export function snapMinutes(
   cursorYInColumn: number,
-  data: Pick<CalendarEventDragData, "isAllDay" | "grabOffsetY">
+  data: Pick<CalendarEventDragData, "isAllDay" | "grabOffsetY">,
 ): number {
-  const chipTopY = data.isAllDay
-    ? cursorYInColumn
-    : cursorYInColumn - data.grabOffsetY;
+  const chipTopY = data.isAllDay ? cursorYInColumn : cursorYInColumn - data.grabOffsetY;
   return clamp(
     Math.round(((chipTopY / HOUR_HEIGHT_PX) * 60) / SNAP_MINUTES) * SNAP_MINUTES,
     0,
-    GRID_MINUTES - SNAP_MINUTES
+    GRID_MINUTES - SNAP_MINUTES,
   );
 }
 
@@ -141,7 +125,7 @@ export function computeTimedDrop(
   data: CalendarEventDragData,
   cursorYInColumn: number,
   dayKey: DayKey,
-  tz: string
+  tz: string,
 ): Schedule | null {
   const total = snapMinutes(cursorYInColumn, data);
   const start = instantAtGridMinutes(dayKey, total, tz);
@@ -149,10 +133,7 @@ export function computeTimedDrop(
   const originalEnd = new Date(data.endTimeIso);
   const durationMs = data.isAllDay
     ? 2 * 60 * 60 * 1000
-    : Math.max(
-        SNAP_MINUTES * 60_000,
-        originalEnd.getTime() - originalStart.getTime()
-      );
+    : Math.max(SNAP_MINUTES * 60_000, originalEnd.getTime() - originalStart.getTime());
   const end = new Date(start.getTime() + durationMs);
 
   if (!data.isAllDay) {
@@ -162,7 +143,7 @@ export function computeTimedDrop(
       clamp(
         Math.round(originalMin / SNAP_MINUTES) * SNAP_MINUTES,
         0,
-        GRID_MINUTES - SNAP_MINUTES
+        GRID_MINUTES - SNAP_MINUTES,
       ) === total;
     if (insideGrid && ownSlot) return null;
   }
@@ -172,11 +153,7 @@ export function computeTimedDrop(
 /** Lowest start a top-edge resize may reach: the grid's first hour on
  *  the event's day — unless the event already starts above the grid,
  *  in which case it may not be pulled any earlier than it is. */
-export function clampStartToGrid(
-  proposed: Date,
-  originalStart: Date,
-  tz: string
-): Date {
+export function clampStartToGrid(proposed: Date, originalStart: Date, tz: string): Date {
   const key = dateKeyInTz(originalStart, tz);
   const gridStart = instantAtGridMinutes(key, 0, tz);
   const min = originalStart.getTime() < gridStart.getTime() ? originalStart : gridStart;
@@ -185,11 +162,7 @@ export function clampStartToGrid(
 
 /** Highest end a bottom-edge resize may reach: the grid's last hour
  *  on the event's end day — unless it already ends below the grid. */
-export function clampEndToGrid(
-  proposed: Date,
-  originalEnd: Date,
-  tz: string
-): Date {
+export function clampEndToGrid(proposed: Date, originalEnd: Date, tz: string): Date {
   const key = dateKeyInTz(originalEnd, tz);
   const gridEnd = instantAtGridMinutes(key, GRID_MINUTES, tz);
   const max = originalEnd.getTime() > gridEnd.getTime() ? originalEnd : gridEnd;

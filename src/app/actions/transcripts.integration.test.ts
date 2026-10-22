@@ -86,7 +86,11 @@ describe("requestTranscript", () => {
   });
 
   test("PDF is refused", async () => {
-    const { documentId } = await seedDocument({ matterId, name: "x.pdf", contentType: "application/pdf" });
+    const { documentId } = await seedDocument({
+      matterId,
+      name: "x.pdf",
+      contentType: "application/pdf",
+    });
     await prisma.document.update({ where: { id: documentId }, data: { fileUrl: "blob/x.pdf" } });
     expect(await requestTranscript(documentId)).toEqual({
       ok: false,
@@ -153,7 +157,9 @@ describe("requestTranscript", () => {
 
   test("provider error text has links stripped before it is stored", async () => {
     vi.mocked(submitJob).mockRejectedValue(
-      new Error("AssemblyAI submit failed: cannot fetch https://x.blob.core/a.mp3?sig=abc123 today"),
+      new Error(
+        "AssemblyAI submit failed: cannot fetch https://x.blob.core/a.mp3?sig=abc123 today",
+      ),
     );
     await requestTranscript(docId);
     const t = await prisma.transcript.findUniqueOrThrow({ where: { documentId: docId } });
@@ -202,7 +208,14 @@ describe("requestTranscript", () => {
   test("a failed re-run keeps the previous completedAt", async () => {
     const done = new Date("2026-10-02T12:00:00Z");
     await prisma.transcript.create({
-      data: { documentId: docId, status: "completed", providerJobId: "old", requestedById: userId, durationSeconds: 90, completedAt: done },
+      data: {
+        documentId: docId,
+        status: "completed",
+        providerJobId: "old",
+        requestedById: userId,
+        durationSeconds: 90,
+        completedAt: done,
+      },
     });
     vi.mocked(submitJob).mockRejectedValue(new Error("down"));
     expect((await requestTranscript(docId)).ok).toBe(false);
@@ -260,7 +273,15 @@ describe("requestTranscript", () => {
       },
     });
     await prisma.transcriptSegment.create({
-      data: { transcriptId: src.id, index: 0, speaker: "A", startSeconds: 0, endSeconds: 2, text: "Hello.", words: [{ w: "Hello.", s: 0, e: 1 }] },
+      data: {
+        transcriptId: src.id,
+        index: 0,
+        speaker: "A",
+        startSeconds: 0,
+        endSeconds: 2,
+        text: "Hello.",
+        words: [{ w: "Hello.", s: 0, e: 1 }],
+      },
     });
     expect(await requestTranscript(docId)).toEqual({ ok: true, status: "completed" });
     expect(submitJob).not.toHaveBeenCalled();
@@ -279,14 +300,27 @@ describe("requestTranscript", () => {
   async function completedSibling() {
     const other = await audioDoc("blob/a.mp3", "copy.mp3");
     await prisma.transcript.create({
-      data: { documentId: other, status: "completed", providerJobId: "src", requestedById: userId, durationSeconds: 60, completedAt: new Date() },
+      data: {
+        documentId: other,
+        status: "completed",
+        providerJobId: "src",
+        requestedById: userId,
+        durationSeconds: 60,
+        completedAt: new Date(),
+      },
     });
   }
 
   test("re-running over an existing completed transcript re-runs, never copies a sibling", async () => {
     await completedSibling();
     await prisma.transcript.create({
-      data: { documentId: docId, status: "completed", providerJobId: "mine", requestedById: userId, completedAt: new Date() },
+      data: {
+        documentId: docId,
+        status: "completed",
+        providerJobId: "mine",
+        requestedById: userId,
+        completedAt: new Date(),
+      },
     });
     expect(await requestTranscript(docId)).toEqual({ ok: true, status: "processing" });
     expect(submitJob).toHaveBeenCalledTimes(1);
@@ -305,7 +339,14 @@ describe("requestTranscript", () => {
     process.env.TRANSCRIPTION_MONTHLY_HOURS = "1";
     const other = await audioDoc("blob/other.mp3", "o.mp3");
     await prisma.transcript.create({
-      data: { documentId: other, status: "completed", providerJobId: "u", requestedById: userId, durationSeconds: 3600, completedAt: new Date() },
+      data: {
+        documentId: other,
+        status: "completed",
+        providerJobId: "u",
+        requestedById: userId,
+        durationSeconds: 3600,
+        completedAt: new Date(),
+      },
     });
     expect(await requestTranscript(docId)).toEqual({
       ok: false,
@@ -336,7 +377,12 @@ describe("deleteTranscript", () => {
 
   test("completed row: no purge row", async () => {
     await prisma.transcript.create({
-      data: { documentId: docId, status: "completed", providerJobId: "done", requestedById: userId },
+      data: {
+        documentId: docId,
+        status: "completed",
+        providerJobId: "done",
+        requestedById: userId,
+      },
     });
     await deleteTranscript(docId);
     expect(await prisma.transcriptPurge.count()).toBe(0);

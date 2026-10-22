@@ -39,7 +39,7 @@ const noteSchema = z.object({
 export async function addNoteToTask(
   taskId: string,
   _prev: NoteAttachmentFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<NoteAttachmentFormState> {
   // Same key as the primary note composer (notes.ts createNote) — the
   // inline task composer is just another door into note authorship.
@@ -104,7 +104,7 @@ export async function addNoteToTask(
 export async function addNoteToDeadline(
   deadlineId: string,
   _prev: NoteAttachmentFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<NoteAttachmentFormState> {
   // Same key as the primary note composer (notes.ts createNote) — the
   // inline deadline composer is just another door into note authorship.

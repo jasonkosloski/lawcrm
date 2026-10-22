@@ -35,7 +35,7 @@ export function filesByFolder<F extends TreeFile>(files: F[]): Map<string, F[]> 
 
 /** An email's attachments, by email id, in attachment order. */
 export function attachmentsByEmail<F extends TreeFile & { attachmentIndex?: number | null }>(
-  files: F[]
+  files: F[],
 ): Map<string, F[]> {
   const out = new Map<string, F[]>();
   for (const f of files) {
@@ -44,7 +44,8 @@ export function attachmentsByEmail<F extends TreeFile & { attachmentIndex?: numb
     if (list) list.push(f);
     else out.set(f.parentDocumentId, [f]);
   }
-  for (const list of out.values()) list.sort((a, b) => (a.attachmentIndex ?? 0) - (b.attachmentIndex ?? 0));
+  for (const list of out.values())
+    list.sort((a, b) => (a.attachmentIndex ?? 0) - (b.attachmentIndex ?? 0));
   return out;
 }
 
@@ -66,8 +67,7 @@ export function ancestorChain(tree: FolderNode[], folderId: string | null): stri
 
 /** Case- and accent-insensitive "contains", ignoring surrounding space. */
 export function nameMatches(name: string, query: string): boolean {
-  const norm = (s: string) =>
-    s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+  const norm = (s: string) => s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
   const q = norm(query.trim());
   return q === "" || norm(name).includes(q);
 }
@@ -83,7 +83,7 @@ export function filterTree<F extends TreeFile>(
   byFolder: Map<string, F[]>,
   query: string,
   /** Email id → its attachments; an email shows when one matches. */
-  attachments: Map<string, F[]> = new Map()
+  attachments: Map<string, F[]> = new Map(),
 ): { files: Set<string>; folders: Set<string> } | null {
   if (query.trim() === "") return null;
   const files = new Set<string>();

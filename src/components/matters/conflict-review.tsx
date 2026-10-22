@@ -71,7 +71,7 @@ export function ConflictReview({
                 "inline-block shrink-0 text-2xs font-medium px-1.5 py-0.5 rounded-full border",
                 m.severity === "conflict"
                   ? "bg-warn-soft text-warn border-warn-border"
-                  : "bg-paper-2 text-ink-3 border-line"
+                  : "bg-paper-2 text-ink-3 border-line",
               )}
             >
               {m.severity === "conflict" ? "Conflict" : "Warn"}
@@ -83,16 +83,13 @@ export function ConflictReview({
 
       {blocked ? (
         <div className="text-2xs text-ink-2">
-          Someone with permission to override conflict checks has to make this
-          change, or change the names above.
+          Someone with permission to override conflict checks has to make this change, or change the
+          names above.
         </div>
       ) : isConflict ? (
         <div className="flex flex-col gap-1">
           <input type="hidden" name="conflictAck" value={conflict.fingerprint} />
-          <label
-            htmlFor="conflictOverrideReason"
-            className="text-xs font-medium text-ink-2"
-          >
+          <label htmlFor="conflictOverrideReason" className="text-xs font-medium text-ink-2">
             Override justification <span className="text-warn">*</span>
           </label>
           <textarea
@@ -107,9 +104,7 @@ export function ConflictReview({
           {reasonError?.length ? (
             <div className="text-2xs text-warn">{reasonError[0]}</div>
           ) : (
-            <div className="text-2xs text-ink-4">
-              Recorded on the matter&apos;s timeline.
-            </div>
+            <div className="text-2xs text-ink-4">Recorded on the matter&apos;s timeline.</div>
           )}
         </div>
       ) : (

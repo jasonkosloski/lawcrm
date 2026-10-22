@@ -31,11 +31,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import {
-  HOUR_HEIGHT_PX,
-  HOURS,
-  layoutOverlappingEvents,
-} from "@/lib/calendar-utils";
+import { HOUR_HEIGHT_PX, HOURS, layoutOverlappingEvents } from "@/lib/calendar-utils";
 import { dateOnlyKey } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import {
@@ -47,15 +43,8 @@ import {
   useDropTarget,
   type DragPayload,
 } from "@/lib/dnd";
-import {
-  allDayDropSchedule,
-  CALENDAR_EVENT_KIND,
-  type CalendarEventDragData,
-} from "./event-drag";
-import type {
-  CalendarEventRow,
-  CalendarDeadlineRow,
-} from "@/lib/queries/calendar";
+import { allDayDropSchedule, CALENDAR_EVENT_KIND, type CalendarEventDragData } from "./event-drag";
+import type { CalendarEventRow, CalendarDeadlineRow } from "@/lib/queries/calendar";
 import type { MoveEventFn } from "./week-view";
 import {
   chipBox,
@@ -124,7 +113,7 @@ export function WeekAllDayCell({
         // hour-grid column directly below it.
         "border-l border-line p-1 flex flex-col gap-0.5 min-w-0 overflow-hidden transition-colors",
         weekend && "bg-paper",
-        drop.isOver && "bg-brand-tint/40 ring-2 ring-brand-300 ring-inset"
+        drop.isOver && "bg-brand-tint/40 ring-2 ring-brand-300 ring-inset",
       )}
     >
       {events.map((e) => (
@@ -204,9 +193,7 @@ export function WeekTimeColumn({
       if (!data) return;
       const rect = e.currentTarget.getBoundingClientRect();
       const cursorYInColumn = e.clientY - rect.top;
-      setPreviewTopY(
-        (snapMinutes(cursorYInColumn, data) / 60) * HOUR_HEIGHT_PX
-      );
+      setPreviewTopY((snapMinutes(cursorYInColumn, data) / 60) * HOUR_HEIGHT_PX);
     },
     onDragLeave: (e: React.DragEvent) => {
       drop.handlers.onDragLeave(e);
@@ -219,9 +206,7 @@ export function WeekTimeColumn({
   };
 
   // Preview label + height derived from previewTopY.
-  const activeDrag = peekActiveDrag<CalendarEventDragData>(
-    CALENDAR_EVENT_KIND
-  );
+  const activeDrag = peekActiveDrag<CalendarEventDragData>(CALENDAR_EVENT_KIND);
   let previewLabel: string | null = null;
   let previewHeight = 0;
   if (previewTopY !== null && activeDrag) {
@@ -237,11 +222,7 @@ export function WeekTimeColumn({
     const originalEnd = new Date(activeDrag.endTimeIso);
     const durationHours = activeDrag.isAllDay
       ? 2
-      : Math.max(
-          0.25,
-          (originalEnd.getTime() - originalStart.getTime()) /
-            (60 * 60 * 1000)
-        );
+      : Math.max(0.25, (originalEnd.getTime() - originalStart.getTime()) / (60 * 60 * 1000));
     previewHeight = durationHours * HOUR_HEIGHT_PX;
   }
 
@@ -263,7 +244,7 @@ export function WeekTimeColumn({
         // child shouldn't break the column width silently.
         "border-l border-line relative min-w-0",
         weekend && "bg-paper",
-        drop.isOver && "bg-brand-tint/30"
+        drop.isOver && "bg-brand-tint/30",
       )}
     >
       {/* Hour rows for grid lines. Borders on the BOTTOM mean
@@ -272,11 +253,7 @@ export function WeekTimeColumn({
           at the top of each row, so a "7a" label aligns with
           the line below the 6am row. */}
       {HOURS.map((h) => (
-        <div
-          key={h}
-          className="border-b border-line"
-          style={{ height: HOUR_HEIGHT_PX }}
-        />
+        <div key={h} className="border-b border-line" style={{ height: HOUR_HEIGHT_PX }} />
       ))}
 
       {/* Timed events — Y position computed from start time alone
@@ -284,7 +261,7 @@ export function WeekTimeColumn({
           own row above this column). Overlapping events split the
           column horizontally via `layoutOverlappingEvents`. */}
       {layoutOverlappingEvents(
-        events.map((e) => ({ ...e, start: e.startTime, end: e.endTime }))
+        events.map((e) => ({ ...e, start: e.startTime, end: e.endTime })),
       ).map(({ event, lane, laneCount }) => (
         <DraggableEventBlock
           key={event.id}
@@ -300,10 +277,7 @@ export function WeekTimeColumn({
 
       {/* "Now" line */}
       {nowTop !== null && (
-        <div
-          className="absolute left-0 right-0 z-20 pointer-events-none"
-          style={{ top: nowTop }}
-        >
+        <div className="absolute left-0 right-0 z-20 pointer-events-none" style={{ top: nowTop }}>
           <div className="h-px bg-warn">
             <div
               className="w-2 h-2 rounded-full bg-warn -mt-[3px] -ml-[3px]"
@@ -340,13 +314,7 @@ export function WeekTimeColumn({
 
 // ── Chip components (shared) ────────────────────────────────────────────
 
-function DraggableAllDayChip({
-  event,
-  canEdit,
-}: {
-  event: CalendarEventRow;
-  canEdit: boolean;
-}) {
+function DraggableAllDayChip({ event, canEdit }: { event: CalendarEventRow; canEdit: boolean }) {
   const style: React.CSSProperties = {
     background: `color-mix(in oklch, ${event.color} 16%, white)`,
     borderColor: `color-mix(in oklch, ${event.color} 35%, white)`,
@@ -374,9 +342,7 @@ function DraggableAllDayChip({
     >
       <div className="font-medium truncate">All day: {event.title}</div>
       {event.matterName && (
-        <div className="font-mono text-ink-3 truncate leading-tight">
-          {event.matterName}
-        </div>
+        <div className="font-mono text-ink-3 truncate leading-tight">{event.matterName}</div>
       )}
     </DraggableEventWrapper>
   );
@@ -433,24 +399,19 @@ function DraggableEventBlock({
       const deltaY = e.clientY - resizing.startMouseY;
       // Pixel delta → minute delta, snapped to 15. Same snap
       // resolution as the move drag for consistency.
-      const deltaMinutes =
-        Math.round((deltaY / HOUR_HEIGHT_PX) * 60 / 15) * 15;
+      const deltaMinutes = Math.round(((deltaY / HOUR_HEIGHT_PX) * 60) / 15) * 15;
       const minDurationMs = 15 * 60_000;
 
       if (resizing.edge === "top") {
         // Move start; clamp so duration stays >= 15min and the
         // start doesn't slide above the grid's first hour.
-        const proposed = new Date(
-          resizing.originalStart.getTime() + deltaMinutes * 60_000
-        );
+        const proposed = new Date(resizing.originalStart.getTime() + deltaMinutes * 60_000);
         const max = new Date(resizing.originalEnd.getTime() - minDurationMs);
         const next = clampStartToGrid(proposed, resizing.originalStart, tz);
         const constrained = next.getTime() > max.getTime() ? max : next;
         setResizing({ ...resizing, previewStart: constrained });
       } else {
-        const proposed = new Date(
-          resizing.originalEnd.getTime() + deltaMinutes * 60_000
-        );
+        const proposed = new Date(resizing.originalEnd.getTime() + deltaMinutes * 60_000);
         const min = new Date(resizing.originalStart.getTime() + minDurationMs);
         const next = clampEndToGrid(proposed, resizing.originalEnd, tz);
         const constrained = next.getTime() < min.getTime() ? min : next;
@@ -460,10 +421,8 @@ function DraggableEventBlock({
     const onUp = () => {
       // Commit only if something changed. Same-time mouseup =
       // accidental click on the handle; no-op.
-      const startChanged =
-        resizing.previewStart.getTime() !== resizing.originalStart.getTime();
-      const endChanged =
-        resizing.previewEnd.getTime() !== resizing.originalEnd.getTime();
+      const startChanged = resizing.previewStart.getTime() !== resizing.originalStart.getTime();
+      const endChanged = resizing.previewEnd.getTime() !== resizing.originalEnd.getTime();
       if (startChanged || endChanged) {
         move(event.id, {
           isAllDay: false,
@@ -481,34 +440,28 @@ function DraggableEventBlock({
     };
   }, [resizing, event.id, move, tz]);
 
-  const startResize = (edge: "top" | "bottom") =>
-    (e: React.MouseEvent) => {
-      if (!editable) return;
-      // Stop the chip's HTML5 drag from kicking in — the
-      // wrapper is `draggable`, but mousedown on a handle should
-      // initiate resize, not move.
-      e.preventDefault();
-      e.stopPropagation();
-      setResizing({
-        edge,
-        startMouseY: e.clientY,
-        originalStart: event.startTime,
-        originalEnd: event.endTime,
-        previewStart: event.startTime,
-        previewEnd: event.endTime,
-      });
-    };
+  const startResize = (edge: "top" | "bottom") => (e: React.MouseEvent) => {
+    if (!editable) return;
+    // Stop the chip's HTML5 drag from kicking in — the
+    // wrapper is `draggable`, but mousedown on a handle should
+    // initiate resize, not move.
+    e.preventDefault();
+    e.stopPropagation();
+    setResizing({
+      edge,
+      startMouseY: e.clientY,
+      originalStart: event.startTime,
+      originalEnd: event.endTime,
+      previewStart: event.startTime,
+      previewEnd: event.endTime,
+    });
+  };
 
   // Display schedule = preview during resize, committed otherwise.
   const renderStart = resizing?.previewStart ?? event.startTime;
   const renderEnd = resizing?.previewEnd ?? event.endTime;
 
-  const { top, height, clippedTop, clippedBottom } = chipBox(
-    renderStart,
-    renderEnd,
-    dayKey,
-    tz
-  );
+  const { top, height, clippedTop, clippedBottom } = chipBox(renderStart, renderEnd, dayKey, tz);
   // Lane → horizontal position. We leave a hairline gap between
   // adjacent chips so the boundary reads cleanly. The first lane
   // starts at the column's left padding (4px); subsequent lanes
@@ -547,9 +500,8 @@ function DraggableEventBlock({
         "absolute px-1.5 py-1 rounded-sm overflow-hidden transition-shadow",
         // Drop the hover-shadow during a resize — the live
         // outline is feedback enough.
-        !resizing &&
-          "hover:shadow-[inset_3px_0_0_0,0_2px_6px_-2px_rgba(0,0,0,0.1)]",
-        resizing && "shadow-[0_4px_12px_-2px_rgba(0,0,0,0.15)]"
+        !resizing && "hover:shadow-[inset_3px_0_0_0,0_2px_6px_-2px_rgba(0,0,0,0.1)]",
+        resizing && "shadow-[0_4px_12px_-2px_rgba(0,0,0,0.15)]",
       )}
       // Stays above the column's drop-zone background so the
       // drag pickup stays reliable.
@@ -607,12 +559,11 @@ function DraggableEventBlock({
         <div
           className={cn(
             "absolute right-1 text-3xs font-mono text-brand-700 bg-white/90 px-1 rounded shadow-sm pointer-events-none",
-            resizing.edge === "top" ? "bottom-1" : "top-1"
+            resizing.edge === "top" ? "bottom-1" : "top-1",
           )}
           aria-live="polite"
         >
-          {formatTimeShort(renderStart, tz)} –{" "}
-          {formatTimeShort(renderEnd, tz)}
+          {formatTimeShort(renderStart, tz)} – {formatTimeShort(renderEnd, tz)}
         </div>
       )}
     </DraggableEventWrapper>
@@ -656,8 +607,7 @@ function ChipBody({
     key: "time",
     render: () => (
       <span className="text-3xs font-mono text-ink-3 truncate block">
-        {formatTimeShort(event.startTime, tz)} –{" "}
-        {formatTimeShort(event.endTime, tz)}
+        {formatTimeShort(event.startTime, tz)} – {formatTimeShort(event.endTime, tz)}
       </span>
     ),
   });
@@ -692,9 +642,7 @@ function ChipBody({
     lines.push({
       key: "matter",
       render: () => (
-        <span className="text-3xs font-mono text-ink-3 truncate block">
-          {event.matterName}
-        </span>
+        <span className="text-3xs font-mono text-ink-3 truncate block">{event.matterName}</span>
       ),
     });
   }
@@ -709,7 +657,7 @@ function ChipBody({
   const titleLines = renderHeight >= PADDING + TITLE_LINE * 2 ? 2 : 1;
   const availableSlots = Math.max(
     0,
-    Math.floor((renderHeight - TITLE_LINE * titleLines - PADDING) / LINE_HEIGHT)
+    Math.floor((renderHeight - TITLE_LINE * titleLines - PADDING) / LINE_HEIGHT),
   );
   const visibleLines = lines.slice(0, availableSlots);
 
@@ -718,7 +666,7 @@ function ChipBody({
       <div
         className={cn(
           "text-2xs font-medium text-ink leading-tight break-words",
-          titleLines === 2 ? "line-clamp-2" : "truncate"
+          titleLines === 2 ? "line-clamp-2" : "truncate",
         )}
       >
         {event.title}
@@ -756,7 +704,7 @@ function DraggableEventWrapper({
   readOnly: boolean;
   dragDisabled?: boolean;
   buildPayload: (
-    grabOffsetY: number
+    grabOffsetY: number,
   ) => DragPayload<typeof CALENDAR_EVENT_KIND, CalendarEventDragData>;
   title: string;
   style: React.CSSProperties;
@@ -801,10 +749,7 @@ function DraggableEventWrapper({
       role="button"
       tabIndex={0}
       title={title}
-      className={cn(
-        className,
-        !dragDisabled && "cursor-grab active:cursor-grabbing"
-      )}
+      className={cn(className, !dragDisabled && "cursor-grab active:cursor-grabbing")}
       style={{ ...style, ...extraStyle }}
       draggable={!dragDisabled}
       onDragStart={(e) => {
@@ -845,7 +790,7 @@ export function DeadlineChip({ deadline }: { deadline: CalendarDeadlineRow }) {
       href={`/matters/${deadline.matterId}/deadlines`}
       className={cn(
         "text-3xs font-medium px-1.5 py-0.5 rounded border truncate flex items-center gap-1",
-        cls
+        cls,
       )}
       title={`${deadline.title} — ${deadline.matterName}`}
     >

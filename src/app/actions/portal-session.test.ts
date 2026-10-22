@@ -22,12 +22,10 @@ let hostHeader = "portal.localhost:3000";
 let forwardedFor = "203.0.113.7, 10.0.0.1";
 vi.mock("next/headers", () => ({
   headers: async () => ({
-    get: (n: string) =>
-      n === "host" ? hostHeader : n === "x-forwarded-for" ? forwardedFor : null,
+    get: (n: string) => (n === "host" ? hostHeader : n === "x-forwarded-for" ? forwardedFor : null),
   }),
   cookies: async () => ({
-    get: (name: string) =>
-      jar.has(name) ? { name, value: jar.get(name)! } : undefined,
+    get: (name: string) => (jar.has(name) ? { name, value: jar.get(name)! } : undefined),
     set: (name: string, value: string, opts?: unknown) => {
       setCalls.push({ name, value, opts });
       if (value === "") jar.delete(name);
@@ -82,7 +80,12 @@ beforeEach(async () => {
   const { userId } = await seedUser({ firmId });
   const { areaId, stageId } = await seedPracticeArea();
   matterId = (
-    await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name: "Secret Matter Name" })
+    await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+      name: "Secret Matter Name",
+    })
   ).matterId;
   const { contactId } = await seedContact({ email: "jane@example.com" });
   identityId = (
@@ -116,7 +119,12 @@ describe("requestPortalLink", () => {
       where: { identityId },
       data: { revokedAt: new Date() },
     });
-    for (const e of ["nobody@example.com", "off@example.com", "none@example.com", "jane@example.com"]) {
+    for (const e of [
+      "nobody@example.com",
+      "off@example.com",
+      "none@example.com",
+      "jane@example.com",
+    ]) {
       expect(await requestPortalLink({ status: "idle" }, form(e))).toEqual(SENT);
     }
     await prisma.portalMatterAccess.updateMany({ data: { revokedAt: null } });
@@ -140,7 +148,7 @@ describe("requestPortalLink", () => {
     expect(rows[0].emailHash).toBe(hmacSecret("jane@example.com"));
     // Keyed: a plain SHA-256 of a guessed email does not match the stored row.
     expect(rows[0].emailHash).not.toBe(
-      createHash("sha256").update("jane@example.com").digest("hex")
+      createHash("sha256").update("jane@example.com").digest("hex"),
     );
   });
 
@@ -211,21 +219,29 @@ describe("verifyPortalLink", () => {
     const raw = await issueToken(identityId, "login");
     expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({ status: "ok" });
     jar.clear();
-    expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({ status: "invalid" });
+    expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({
+      status: "invalid",
+    });
     expect(jar.size).toBe(0);
     expect(await prisma.activityLog.count({ where: { title: "Portal link rejected" } })).toBe(1);
-    expect(await verifyPortalLink({ status: "idle" }, tokenForm("garbage"))).toEqual({ status: "invalid" });
+    expect(await verifyPortalLink({ status: "idle" }, tokenForm("garbage"))).toEqual({
+      status: "invalid",
+    });
     expect(await prisma.activityLog.count({ where: { title: "Portal link rejected" } })).toBe(1);
   });
 
   test("portal off or no live access after consume: invalid, no session", async () => {
     await prisma.firm.update({ where: { id: firmId }, data: { portalEnabled: false } });
     let raw = await issueToken(identityId, "login");
-    expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({ status: "invalid" });
+    expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({
+      status: "invalid",
+    });
     await prisma.firm.update({ where: { id: firmId }, data: { portalEnabled: true } });
     await prisma.portalMatterAccess.updateMany({ data: { revokedAt: new Date() } });
     raw = await issueToken(identityId, "login");
-    expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({ status: "invalid" });
+    expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({
+      status: "invalid",
+    });
     expect(await prisma.portalSession.count()).toBe(0);
     expect(jar.size).toBe(0);
   });
@@ -245,7 +261,9 @@ describe("verifyPortalLink", () => {
   test("off the portal host: invalid, no cookie, token not consumed", async () => {
     const raw = await issueToken(identityId, "login");
     hostHeader = "app.example.com";
-    expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({ status: "invalid" });
+    expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({
+      status: "invalid",
+    });
     expect(jar.size).toBe(0);
     hostHeader = "portal.localhost:3000";
     expect(await verifyPortalLink({ status: "idle" }, tokenForm(raw))).toEqual({ status: "ok" });
@@ -266,13 +284,15 @@ describe("devPortalSignIn", () => {
     expect(jar.get(PORTAL_COOKIE)).toBeTruthy();
     expect(await prisma.portalSession.count({ where: { identityId } })).toBe(1);
     expect(
-      await prisma.activityLog.count({ where: { title: "Signed in to portal (dev shortcut)" } })
+      await prisma.activityLog.count({ where: { title: "Signed in to portal (dev shortcut)" } }),
     ).toBe(1);
   });
 
   test("refused in production, even on portal.localhost", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    expect(await devPortalSignIn({ status: "idle" }, asForm(identityId))).toEqual({ status: "invalid" });
+    expect(await devPortalSignIn({ status: "idle" }, asForm(identityId))).toEqual({
+      status: "invalid",
+    });
     expect(await prisma.portalSession.count()).toBe(0);
     expect(jar.size).toBe(0);
   });
@@ -281,24 +301,37 @@ describe("devPortalSignIn", () => {
     vi.stubEnv("PORTAL_HOST", "portal.example.com");
     for (const h of ["portal.example.com", "app.example.com", "localhost:3000"]) {
       hostHeader = h;
-      expect(await devPortalSignIn({ status: "idle" }, asForm(identityId))).toEqual({ status: "invalid" });
+      expect(await devPortalSignIn({ status: "idle" }, asForm(identityId))).toEqual({
+        status: "invalid",
+      });
     }
     expect(await prisma.portalSession.count()).toBe(0);
   });
 
   test("refused when the portal is off, the identity is disabled, has no live access, or is unknown", async () => {
     await prisma.firm.update({ where: { id: firmId }, data: { portalEnabled: false } });
-    expect(await devPortalSignIn({ status: "idle" }, asForm(identityId))).toEqual({ status: "invalid" });
+    expect(await devPortalSignIn({ status: "idle" }, asForm(identityId))).toEqual({
+      status: "invalid",
+    });
     await prisma.firm.update({ where: { id: firmId }, data: { portalEnabled: true } });
 
-    await prisma.portalIdentity.update({ where: { id: identityId }, data: { disabledAt: new Date() } });
-    expect(await devPortalSignIn({ status: "idle" }, asForm(identityId))).toEqual({ status: "invalid" });
+    await prisma.portalIdentity.update({
+      where: { id: identityId },
+      data: { disabledAt: new Date() },
+    });
+    expect(await devPortalSignIn({ status: "idle" }, asForm(identityId))).toEqual({
+      status: "invalid",
+    });
     await prisma.portalIdentity.update({ where: { id: identityId }, data: { disabledAt: null } });
 
     await prisma.portalMatterAccess.updateMany({ data: { revokedAt: new Date() } });
-    expect(await devPortalSignIn({ status: "idle" }, asForm(identityId))).toEqual({ status: "invalid" });
+    expect(await devPortalSignIn({ status: "idle" }, asForm(identityId))).toEqual({
+      status: "invalid",
+    });
 
-    expect(await devPortalSignIn({ status: "idle" }, asForm("nope"))).toEqual({ status: "invalid" });
+    expect(await devPortalSignIn({ status: "idle" }, asForm("nope"))).toEqual({
+      status: "invalid",
+    });
     expect(await prisma.portalSession.count()).toBe(0);
     expect(jar.size).toBe(0);
   });

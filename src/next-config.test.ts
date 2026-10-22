@@ -26,10 +26,7 @@ function matching(all: Rule[], path: string): Rule[] {
   return all.filter((r) => pathToRegexp(r.source).test(path));
 }
 
-const FRAMED = [
-  "/api/documents/abc123/download",
-  "/api/email-attachments/xyz/download",
-];
+const FRAMED = ["/api/documents/abc123/download", "/api/email-attachments/xyz/download"];
 const NOT_FRAMED = [
   "/",
   "/matters/abc",
@@ -53,9 +50,7 @@ describe("next.config headers()", () => {
       const rule = hits[0];
       expect(header(rule, "X-Frame-Options"), path).toBe("DENY");
       expect(header(rule, "X-Content-Type-Options")).toBe("nosniff");
-      expect(header(rule, "Referrer-Policy")).toBe(
-        "strict-origin-when-cross-origin"
-      );
+      expect(header(rule, "Referrer-Policy")).toBe("strict-origin-when-cross-origin");
       const permissions = header(rule, "Permissions-Policy") ?? "";
       for (const feature of ["camera", "microphone", "geolocation"]) {
         expect(permissions).toContain(`${feature}=()`);
@@ -76,18 +71,14 @@ describe("next.config headers()", () => {
       expect(header(hits[0], "X-Frame-Options"), path).toBe("SAMEORIGIN");
       // everything else from the baseline still applies
       expect(header(hits[0], "X-Content-Type-Options")).toBe("nosniff");
-      expect(header(hits[0], "Referrer-Policy")).toBe(
-        "strict-origin-when-cross-origin"
-      );
+      expect(header(hits[0], "Referrer-Policy")).toBe("strict-origin-when-cross-origin");
     }
   });
 
   it("does not ship a CSP that could collide with the download routes' sandbox CSP", async () => {
     const all = await rules();
     for (const rule of all) {
-      expect(rule.headers.map((h) => h.key.toLowerCase())).not.toContain(
-        "content-security-policy"
-      );
+      expect(rule.headers.map((h) => h.key.toLowerCase())).not.toContain("content-security-policy");
     }
   });
 

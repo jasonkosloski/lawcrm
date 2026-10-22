@@ -17,14 +17,13 @@ const base: MatterNameInput = {
   timeZone: "America/Denver",
 };
 const aurora = { name: "Aurora", county: "Arapahoe", state: "CO" };
-const r = (tpl: string, o: Partial<MatterNameInput>) =>
-  renderMatterName(tpl, { ...base, ...o });
+const r = (tpl: string, o: Partial<MatterNameInput>) => renderMatterName(tpl, { ...base, ...o });
 
 describe("default template (old autoMatterName cases)", () => {
   test("full pattern", () => {
-    expect(
-      r(D, { clientName: "Maria Alvarez", caseNumber: "2026-CV-00481", venue: aurora })
-    ).toBe("Alvarez, Maria - 2026-CV-00481 - Aurora");
+    expect(r(D, { clientName: "Maria Alvarez", caseNumber: "2026-CV-00481", venue: aurora })).toBe(
+      "Alvarez, Maria - 2026-CV-00481 - Aurora",
+    );
   });
   test("partial fills", () => {
     expect(r(D, { clientName: "Maria Alvarez", venue: aurora })).toBe("Alvarez, Maria - Aurora");
@@ -33,10 +32,10 @@ describe("default template (old autoMatterName cases)", () => {
   });
   test("organizations are not inverted", () => {
     expect(r(D, { clientName: "Colorado Freedom Fund", caseNumber: "2026-CV-00481" })).toBe(
-      "Colorado Freedom Fund - 2026-CV-00481"
+      "Colorado Freedom Fund - 2026-CV-00481",
     );
     expect(r(D, { clientName: "Rocky Mountain Advocates", isOrganization: true })).toBe(
-      "Rocky Mountain Advocates"
+      "Rocky Mountain Advocates",
     );
   });
   test("suffix follows the first name", () => {
@@ -56,15 +55,15 @@ describe("custom templates", () => {
   });
   test("partial", () => {
     expect(r("State v. {client_last} - {case_number}", { clientName: "Maria Alvarez" })).toBe(
-      "State v. Alvarez"
+      "State v. Alvarez",
     );
   });
   test("venue tokens, and null venue drops them", () => {
     expect(r("{county} {state} {location}", { venue: aurora, clientName: "x" })).toBe(
-      "Arapahoe CO Aurora"
+      "Arapahoe CO Aurora",
     );
     expect(r("{client_full} - {county}/{state}/{location}", { clientName: "Maria Alvarez" })).toBe(
-      "Maria Alvarez"
+      "Maria Alvarez",
     );
   });
   test("year uses the firm zone", () => {

@@ -29,10 +29,7 @@ export function dueCountdownLabel(daysUntil: number): {
 }
 
 /** The rule behind a computed due date: "3 business days after sending". */
-export function responsePeriodLabel(
-  amount: number,
-  unit: RecordsResponseUnit
-): string {
+export function responsePeriodLabel(amount: number, unit: RecordsResponseUnit): string {
   const noun =
     unit === "BUSINESS_DAYS"
       ? amount === 1

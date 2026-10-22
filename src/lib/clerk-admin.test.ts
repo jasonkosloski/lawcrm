@@ -47,14 +47,14 @@ describe("banStaff", () => {
       .mockResolvedValueOnce({ data: first, totalCount: 101 })
       .mockResolvedValueOnce({ data: [sess("s100")], totalCount: 101 });
     client.sessions.revokeSession.mockImplementation(
-      async (id: string) => void order.push(`revoke:${id}`)
+      async (id: string) => void order.push(`revoke:${id}`),
     );
 
     expect(await banStaff("u1")).toEqual({ ok: true });
     expect(order[0]).toBe("ban");
     expect(client.sessions.revokeSession).toHaveBeenCalledTimes(101);
     expect(client.sessions.getSessionList).toHaveBeenLastCalledWith(
-      expect.objectContaining({ userId: "u1", status: "active", offset: 100 })
+      expect.objectContaining({ userId: "u1", status: "active", offset: 100 }),
     );
   });
 
@@ -167,12 +167,9 @@ describe("revokeStaffInvitation", () => {
     });
     expect(await revokeStaffInvitation("jo@firm.com")).toEqual({ ok: true });
     expect(client.invitations.getInvitationList).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "pending", query: "jo@firm.com" })
+      expect.objectContaining({ status: "pending", query: "jo@firm.com" }),
     );
-    expect(client.invitations.revokeInvitation.mock.calls).toEqual([
-      ["inv_1"],
-      ["inv_2"],
-    ]);
+    expect(client.invitations.revokeInvitation.mock.calls).toEqual([["inv_1"], ["inv_2"]]);
   });
 
   it("is ok when there is nothing pending", async () => {

@@ -49,10 +49,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
 import { dateOnlyKey } from "@/lib/format-date";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import {
   addMatterTeamMember,
   createMatter,
@@ -141,8 +138,8 @@ describe("createMatter transaction", () => {
           newClientEmail: "jane@example.com",
           newClientPhone: "303-555-0100",
           statuteOfLimitationsDate: "2027-06-01",
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow(/__REDIRECT__:\/matters\//);
 
     const matter = await prisma.matter.findFirst({
@@ -174,8 +171,8 @@ describe("createMatter transaction", () => {
           newClientName: "Jane Doe",
           newClientEmail: "jane@example.com",
           newClientPhone: "303-555-0100",
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow();
 
     // Atomicity: no orphaned Contact / ContactPhone left behind.
@@ -201,13 +198,13 @@ describe("createMatter — automatic defaults (ADR-019)", () => {
       ],
     });
 
-    await expect(
-      createMatter(createMatterInitialState, createForm())
-    ).rejects.toThrow(/__REDIRECT__:\/matters\//);
+    await expect(createMatter(createMatterInitialState, createForm())).rejects.toThrow(
+      /__REDIRECT__:\/matters\//,
+    );
 
     const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
     expect(
-      await prisma.deadline.count({ where: { matterId: matter.id, deadlineRuleId: rule.id } })
+      await prisma.deadline.count({ where: { matterId: matter.id, deadlineRuleId: rule.id } }),
     ).toBe(1);
     const setDate = await prisma.task.findFirstOrThrow({ where: { matterId: matter.id } });
     expect(setDate.title).toBe("Set date: CGIA notice");
@@ -229,10 +226,7 @@ describe("createMatter — billing type", () => {
   test("court_appointed writes hourly + court_voucher", async () => {
     await restrictArea(["court_appointed"], "court_appointed");
     await expect(
-      createMatter(
-        createMatterInitialState,
-        createForm({ billingType: "court_appointed" })
-      )
+      createMatter(createMatterInitialState, createForm({ billingType: "court_appointed" })),
     ).rejects.toThrow(/__REDIRECT__:\/matters\//);
     const m = await prisma.matter.findFirstOrThrow({
       select: { feeStructure: true, billingMode: true },
@@ -242,22 +236,17 @@ describe("createMatter — billing type", () => {
 
   test("a type the area does not allow is rejected and nothing is written", async () => {
     await restrictArea(["court_appointed"], "court_appointed");
-    const res = await createMatter(
-      createMatterInitialState,
-      createForm({ billingType: "hourly" })
-    );
+    const res = await createMatter(createMatterInitialState, createForm({ billingType: "hourly" }));
     expect(res.status).toBe("error");
-    expect(res.errors?.billingType).toEqual([
-      "Not offered for this practice area",
-    ]);
+    expect(res.errors?.billingType).toEqual(["Not offered for this practice area"]);
     expect(await prisma.matter.count()).toBe(0);
   });
 
   test("omitted billingType uses the area default", async () => {
     await restrictArea(["hourly", "flat"], "flat");
-    await expect(
-      createMatter(createMatterInitialState, createForm())
-    ).rejects.toThrow(/__REDIRECT__:\/matters\//);
+    await expect(createMatter(createMatterInitialState, createForm())).rejects.toThrow(
+      /__REDIRECT__:\/matters\//,
+    );
     const m = await prisma.matter.findFirstOrThrow({
       select: { feeStructure: true, billingMode: true },
     });
@@ -266,10 +255,7 @@ describe("createMatter — billing type", () => {
 
   test("pro_bono writes pro_bono + none", async () => {
     await expect(
-      createMatter(
-        createMatterInitialState,
-        createForm({ billingType: "pro_bono" })
-      )
+      createMatter(createMatterInitialState, createForm({ billingType: "pro_bono" })),
     ).rejects.toThrow(/__REDIRECT__:\/matters\//);
     const m = await prisma.matter.findFirstOrThrow({
       select: { feeStructure: true, billingMode: true },
@@ -317,9 +303,9 @@ describe("updateMatter SOL satisfied sync", () => {
     const matterId = await seedSatisfiedMatter();
 
     // Edit with no SOL/incident date while the area still tracks SOL.
-    await expect(
-      updateMatter(matterId, updateMatterInitialState, updateForm())
-    ).rejects.toThrow(/__REDIRECT__/);
+    await expect(updateMatter(matterId, updateMatterInitialState, updateForm())).rejects.toThrow(
+      /__REDIRECT__/,
+    );
 
     const matter = await prisma.matter.findUniqueOrThrow({
       where: { id: matterId },
@@ -334,22 +320,22 @@ describe("updateMatter SOL satisfied sync", () => {
     expect(
       await prisma.deadline.count({
         where: { matterId, sourceType: SOL_SOURCE_TYPE },
-      })
+      }),
     ).toBe(0);
   });
 
   test("re-adding a date after a clear starts back at open, not satisfied", async () => {
     const matterId = await seedSatisfiedMatter();
 
-    await expect(
-      updateMatter(matterId, updateMatterInitialState, updateForm())
-    ).rejects.toThrow(/__REDIRECT__/);
+    await expect(updateMatter(matterId, updateMatterInitialState, updateForm())).rejects.toThrow(
+      /__REDIRECT__/,
+    );
     await expect(
       updateMatter(
         matterId,
         updateMatterInitialState,
-        updateForm({ statuteOfLimitationsDate: "2028-01-15" })
-      )
+        updateForm({ statuteOfLimitationsDate: "2028-01-15" }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
 
     // Overview card and Deadlines tab agree: not satisfied, open.
@@ -373,8 +359,8 @@ describe("updateMatter SOL satisfied sync", () => {
       updateMatter(
         matterId,
         updateMatterInitialState,
-        updateForm({ statuteOfLimitationsDate: "2027-09-01" })
-      )
+        updateForm({ statuteOfLimitationsDate: "2027-09-01" }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
 
     const matter = await prisma.matter.findUniqueOrThrow({
@@ -401,10 +387,7 @@ describe("deactivated lead attorney", () => {
     const inactive = await seedUser({ firmId, isActive: false });
 
     await expect(
-      createMatter(
-        createMatterInitialState,
-        createForm({ leadUserId: inactive.userId })
-      )
+      createMatter(createMatterInitialState, createForm({ leadUserId: inactive.userId })),
     ).rejects.toThrow(/__REDIRECT__/);
 
     const lead = await prisma.matterTeamMember.findFirst({
@@ -427,7 +410,7 @@ describe("deactivated lead attorney", () => {
     const result = await updateMatter(
       matterId,
       updateMatterInitialState,
-      updateForm({ leadUserId: inactive.userId })
+      updateForm({ leadUserId: inactive.userId }),
     );
     expect(result.status).toBe("error");
     expect(result.errors?.leadUserId?.[0]).toMatch(/active user/i);
@@ -441,7 +424,7 @@ describe("deactivated lead attorney", () => {
     expect(
       await prisma.matterTeamMember.count({
         where: { matterId, userId: inactive.userId },
-      })
+      }),
     ).toBe(0);
   });
 
@@ -457,8 +440,8 @@ describe("deactivated lead attorney", () => {
       updateMatter(
         matterId,
         updateMatterInitialState,
-        updateForm({ leadUserId: departed.userId, court: "D. Colo." })
-      )
+        updateForm({ leadUserId: departed.userId, court: "D. Colo." }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
 
     const members = await prisma.matterTeamMember.findMany({
@@ -466,9 +449,9 @@ describe("deactivated lead attorney", () => {
       select: { userId: true, role: true },
     });
     expect(members).toEqual([{ userId: departed.userId, role: "lead" }]);
-    expect(
-      (await prisma.matter.findUniqueOrThrow({ where: { id: matterId } })).court
-    ).toBe("D. Colo.");
+    expect((await prisma.matter.findUniqueOrThrow({ where: { id: matterId } })).court).toBe(
+      "D. Colo.",
+    );
   });
 
   test("saving with an unchanged, since-deactivated client keeps the client (F082)", async () => {
@@ -486,17 +469,12 @@ describe("deactivated lead attorney", () => {
     });
 
     await expect(
-      updateMatter(
-        matterId,
-        updateMatterInitialState,
-        updateForm({ clientId: client.id })
-      )
+      updateMatter(matterId, updateMatterInitialState, updateForm({ clientId: client.id })),
     ).rejects.toThrow(/__REDIRECT__/);
 
-    expect(
-      (await prisma.matter.findUniqueOrThrow({ where: { id: matterId } }))
-        .clientId
-    ).toBe(client.id);
+    expect((await prisma.matter.findUniqueOrThrow({ where: { id: matterId } })).clientId).toBe(
+      client.id,
+    );
   });
 });
 
@@ -511,13 +489,13 @@ describe("updateMatter lead change authorization (F138/F300/F767)", () => {
       leadUserId: userId,
     });
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key) => key !== "matters.manage_team"
+      async (key) => key !== "matters.manage_team",
     );
 
     const result = await updateMatter(
       matterId,
       updateMatterInitialState,
-      updateForm({ leadUserId: other.userId })
+      updateForm({ leadUserId: other.userId }),
     );
     expect(result.status).toBe("error");
     expect(result.errors?.leadUserId?.[0]).toMatch(/manage the case team/i);
@@ -534,17 +512,17 @@ describe("updateMatter lead change authorization (F138/F300/F767)", () => {
       leadUserId: userId,
     });
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key) => key !== "matters.manage_team"
+      async (key) => key !== "matters.manage_team",
     );
 
-    await expect(
-      updateMatter(matterId, updateMatterInitialState, updateForm())
-    ).rejects.toThrow(/__REDIRECT__/);
+    await expect(updateMatter(matterId, updateMatterInitialState, updateForm())).rejects.toThrow(
+      /__REDIRECT__/,
+    );
     const noLeadField = updateForm({ court: "Omitted lead" });
     noLeadField.delete("leadUserId");
-    await expect(
-      updateMatter(matterId, updateMatterInitialState, noLeadField)
-    ).rejects.toThrow(/__REDIRECT__/);
+    await expect(updateMatter(matterId, updateMatterInitialState, noLeadField)).rejects.toThrow(
+      /__REDIRECT__/,
+    );
     const lead = await prisma.matterTeamMember.findFirst({
       where: { matterId, role: "lead", removedAt: null },
     });
@@ -560,11 +538,7 @@ describe("updateMatter lead change authorization (F138/F300/F767)", () => {
     });
 
     await expect(
-      updateMatter(
-        matterId,
-        updateMatterInitialState,
-        updateForm({ leadUserId: other.userId })
-      )
+      updateMatter(matterId, updateMatterInitialState, updateForm({ leadUserId: other.userId })),
     ).rejects.toThrow(/__REDIRECT__/);
 
     const members = await prisma.matterTeamMember.findMany({
@@ -651,9 +625,9 @@ describe("updateMatter SOL recompute", () => {
     };
   };
   const save = (matterId: string, over: Record<string, string>) =>
-    expect(
-      updateMatter(matterId, updateMatterInitialState, updateForm(over))
-    ).rejects.toThrow(/__REDIRECT__/);
+    expect(updateMatter(matterId, updateMatterInitialState, updateForm(over))).rejects.toThrow(
+      /__REDIRECT__/,
+    );
 
   test("an auto-derived SOL follows a corrected incident date even when the stored date is posted back", async () => {
     await setPeriod(730);
@@ -798,7 +772,7 @@ describe("updateMatter SOL recompute", () => {
       updateForm({
         incidentDate: "not-a-date",
         statuteOfLimitationsDate: "2026-02-31",
-      })
+      }),
     );
     expect(bad.status).toBe("error");
     expect(bad.errors?.incidentDate).toBeDefined();
@@ -806,7 +780,7 @@ describe("updateMatter SOL recompute", () => {
 
     const badCreate = await createMatter(
       createMatterInitialState,
-      createForm({ incidentDate: "garbage" })
+      createForm({ incidentDate: "garbage" }),
     );
     expect(badCreate.status).toBe("error");
     expect(badCreate.errors?.incidentDate).toBeDefined();
@@ -875,9 +849,9 @@ describe("updateMatter SOL recompute", () => {
 
 describe("matter audit trail", () => {
   test("createMatter writes a 'Matter created' row", async () => {
-    await expect(
-      createMatter(createMatterInitialState, createForm())
-    ).rejects.toThrow(/__REDIRECT__/);
+    await expect(createMatter(createMatterInitialState, createForm())).rejects.toThrow(
+      /__REDIRECT__/,
+    );
     const matter = await prisma.matter.findFirstOrThrow();
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { matterId: matter.id, title: "Matter created" },
@@ -908,8 +882,8 @@ describe("matter audit trail", () => {
           statuteOfLimitationsDate: "2027-01-01",
           court: "D. Colo.",
           stageId: stage2.id,
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
 
     const sol = await prisma.activityLog.findFirstOrThrow({
@@ -924,7 +898,7 @@ describe("matter audit trail", () => {
     expect(
       await prisma.activityLog.count({
         where: { matterId, title: "Stage moved: Intake → Discovery" },
-      })
+      }),
     ).toBe(1);
   });
 
@@ -935,11 +909,7 @@ describe("matter audit trail", () => {
       leadUserId: userId,
     });
     await expect(
-      updateMatter(
-        matterId,
-        updateMatterInitialState,
-        updateForm({ name: "Test Matter" })
-      )
+      updateMatter(matterId, updateMatterInitialState, updateForm({ name: "Test Matter" })),
     ).rejects.toThrow(/__REDIRECT__/);
     expect(await prisma.activityLog.count({ where: { matterId } })).toBe(0);
   });
@@ -983,26 +953,20 @@ describe("updateMatter when the area no longer tracks SOL", () => {
     });
 
     await expect(
-      updateMatter(
-        matterId,
-        updateMatterInitialState,
-        updateForm({ caseNumber: "24-CV-100" })
-      )
+      updateMatter(matterId, updateMatterInitialState, updateForm({ caseNumber: "24-CV-100" })),
     ).rejects.toThrow(/__REDIRECT__/);
 
     const m = await prisma.matter.findUniqueOrThrow({
       where: { id: matterId },
     });
     expect(m.caseNumber).toBe("24-CV-100");
-    expect(m.statuteOfLimitationsDate?.toISOString().slice(0, 10)).toBe(
-      "2027-01-10"
-    );
+    expect(m.statuteOfLimitationsDate?.toISOString().slice(0, 10)).toBe("2027-01-10");
     expect(m.incidentDate?.toISOString().slice(0, 10)).toBe("2025-01-10");
     expect(m.statuteOfLimitationsNotes).toBe("check tolling");
     expect(
       await prisma.deadline.count({
         where: { matterId, sourceType: SOL_SOURCE_TYPE },
-      })
+      }),
     ).toBe(1);
   });
 
@@ -1017,22 +981,20 @@ describe("updateMatter when the area no longer tracks SOL", () => {
       updateMatter(
         matterId,
         updateMatterInitialState,
-        updateForm({ practiceAreaId: other.areaId, stageId: other.stageId })
-      )
+        updateForm({ practiceAreaId: other.areaId, stageId: other.stageId }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
 
     const m = await prisma.matter.findUniqueOrThrow({
       where: { id: matterId },
     });
     expect(m.practiceAreaId).toBe(other.areaId);
-    expect(m.statuteOfLimitationsDate?.toISOString().slice(0, 10)).toBe(
-      "2027-01-10"
-    );
+    expect(m.statuteOfLimitationsDate?.toISOString().slice(0, 10)).toBe("2027-01-10");
     expect(m.statuteOfLimitationsNotes).toBe("check tolling");
     expect(
       await prisma.deadline.count({
         where: { matterId, sourceType: SOL_SOURCE_TYPE },
-      })
+      }),
     ).toBe(1);
   });
 });
@@ -1048,8 +1010,8 @@ describe("createMatter inline client", () => {
           clientId: NEW_CLIENT_SENTINEL,
           newClientName: "Jane Doe",
           newClientEmail: "jane@example.com",
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
     const contact = await prisma.contact.findFirstOrThrow({
       where: { name: "Jane Doe" },
@@ -1067,12 +1029,12 @@ describe("createMatter inline client", () => {
           clientId: NEW_CLIENT_SENTINEL,
           newClientName: "Jane Doe",
           newClientEmail: email,
-        })
+        }),
       );
       expect(state.errors?.newClientEmail?.[0]).toMatch(/doesn't look like an email/);
       expect(await prisma.contact.count({ where: { name: "Jane Doe" } })).toBe(0);
       expect(await prisma.matter.count({ where: { name: "Doe v. Acme" } })).toBe(0);
-    }
+    },
   );
 });
 
@@ -1091,7 +1053,7 @@ describe("createMatter — conflict gate", () => {
 
   test("a clear check creates silently (no conflict timeline row)", async () => {
     await expect(
-      createMatter(createMatterInitialState, createForm({ opposingParty: "Nobody Known" }))
+      createMatter(createMatterInitialState, createForm({ opposingParty: "Nobody Known" })),
     ).rejects.toThrow(/__REDIRECT__/);
     const rows = await prisma.activityLog.count({
       where: { title: { startsWith: "Created with conflict check" } },
@@ -1107,7 +1069,7 @@ describe("createMatter — conflict gate", () => {
         clientId: NEW_CLIENT_SENTINEL,
         newClientName: "Jane Doe",
         newClientEmail: "jane@example.com",
-      })
+      }),
     );
     expect(first.conflict?.severity).toBe("warn");
     expect(first.values?.newClientName).toBe("Jane Doe");
@@ -1121,8 +1083,8 @@ describe("createMatter — conflict gate", () => {
           newClientName: "Jane Doe",
           newClientEmail: "jane@example.com",
           conflictAck: first.conflict!.fingerprint,
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { title: "Created with conflict check: warn (reviewed)" },
@@ -1140,7 +1102,7 @@ describe("createMatter — conflict gate", () => {
         newClientName: "Jane Doe",
         newClientEmail: "jane@example.com",
         conflictAck: "earlier-fingerprint",
-      })
+      }),
     );
     expect(res.errors?.conflictAck?.[0]).toMatch(/changed/);
   });
@@ -1153,7 +1115,7 @@ describe("createMatter — conflict gate", () => {
       data: { mergedIntoId: survivor.contactId },
     });
     await expect(
-      createMatter(createMatterInitialState, createForm({ clientId: gone.contactId }))
+      createMatter(createMatterInitialState, createForm({ clientId: gone.contactId })),
     ).rejects.toThrow(/__REDIRECT__/);
     const m = await prisma.matter.findFirstOrThrow({ select: { clientId: true } });
     expect(m.clientId).toBe(survivor.contactId);
@@ -1168,7 +1130,7 @@ describe("createMatter — conflict gate", () => {
         newClientName: "Jane Doe",
         newClientEmail: "jane@example.com",
         conflictAck: "stale-fingerprint",
-      })
+      }),
     );
     expect(res.conflict?.severity).toBe("warn");
     expect(await created()).toBe(0);
@@ -1177,11 +1139,11 @@ describe("createMatter — conflict gate", () => {
   test("an adverse party who is a current client is a conflict; no override key → blocked", async () => {
     await seedClientOnMatter("Acme Holdings");
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key) => key !== "intake.conflict_check.override"
+      async (key) => key !== "intake.conflict_check.override",
     );
     const first = await createMatter(
       createMatterInitialState,
-      createForm({ opposingParty: "Acme Holdings" })
+      createForm({ opposingParty: "Acme Holdings" }),
     );
     expect(first.conflict).toMatchObject({ severity: "conflict", canOverride: false });
     expect(first.conflict!.matches[0].description).toMatch(/current client/);
@@ -1193,7 +1155,7 @@ describe("createMatter — conflict gate", () => {
         opposingParty: "Acme Holdings",
         conflictAck: first.conflict!.fingerprint,
         conflictOverrideReason: "Waiver signed by both clients",
-      })
+      }),
     );
     expect(again.conflict?.canOverride).toBe(false);
     expect(await created()).toBe(0);
@@ -1203,7 +1165,7 @@ describe("createMatter — conflict gate", () => {
     await seedClientOnMatter("Acme Holdings");
     const first = await createMatter(
       createMatterInitialState,
-      createForm({ opposingParty: "Acme Holdings" })
+      createForm({ opposingParty: "Acme Holdings" }),
     );
     expect(first.conflict).toMatchObject({ severity: "conflict", canOverride: true });
 
@@ -1213,7 +1175,7 @@ describe("createMatter — conflict gate", () => {
         opposingParty: "Acme Holdings",
         conflictAck: first.conflict!.fingerprint,
         conflictOverrideReason: "ok",
-      })
+      }),
     );
     expect(short.errors?.conflictOverrideReason?.[0]).toMatch(/5\+ characters/);
     expect(await created()).toBe(0);
@@ -1225,8 +1187,8 @@ describe("createMatter — conflict gate", () => {
           opposingParty: "Acme Holdings",
           conflictAck: first.conflict!.fingerprint,
           conflictOverrideReason: "Informed-consent waiver signed",
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
     const matter = await prisma.matter.findFirstOrThrow({
       where: { name: "Doe v. Acme" },
@@ -1242,7 +1204,7 @@ describe("createMatter — conflict gate", () => {
   test("an existing client picked on the form does not match itself", async () => {
     const c = await seedContact({ name: "Repeat Client", email: "r@example.com" });
     await expect(
-      createMatter(createMatterInitialState, createForm({ clientId: c.contactId }))
+      createMatter(createMatterInitialState, createForm({ clientId: c.contactId })),
     ).rejects.toThrow(/__REDIRECT__/);
   });
 });
@@ -1252,8 +1214,7 @@ describe("createMatter — conflict gate", () => {
 describe("updateMatter — conflict gate on a changed client or opposing party", () => {
   let matterId: string;
   beforeEach(async () => {
-    matterId = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId }))
-      .matterId;
+    matterId = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId })).matterId;
   });
   /** A client on ANOTHER active matter. */
   const seedOtherClient = async (name: string) => {
@@ -1270,7 +1231,7 @@ describe("updateMatter — conflict gate on a changed client or opposing party",
     const first = await updateMatter(
       matterId,
       updateMatterInitialState,
-      updateForm({ opposingParty: "Acme Holdings" })
+      updateForm({ opposingParty: "Acme Holdings" }),
     );
     expect(first.conflict?.severity).toBe("conflict");
     expect(await opposing()).toBeNull();
@@ -1283,8 +1244,8 @@ describe("updateMatter — conflict gate on a changed client or opposing party",
           opposingParty: "Acme Holdings",
           conflictAck: first.conflict!.fingerprint,
           conflictOverrideReason: "Waiver on file",
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
     expect(await opposing()).toBe("Acme Holdings");
     const log = await prisma.activityLog.findFirstOrThrow({
@@ -1304,8 +1265,8 @@ describe("updateMatter — conflict gate on a changed client or opposing party",
       updateMatter(
         matterId,
         updateMatterInitialState,
-        updateForm({ opposingParty: " acme holdings ", court: "D. Colo." })
-      )
+        updateForm({ opposingParty: " acme holdings ", court: "D. Colo." }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
   });
 
@@ -1316,8 +1277,8 @@ describe("updateMatter — conflict gate on a changed client or opposing party",
       updateMatter(
         matterId,
         updateMatterInitialState,
-        updateForm({ clientId: own.contactId, opposingParty: "Own Client" })
-      )
+        updateForm({ clientId: own.contactId, opposingParty: "Own Client" }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
   });
 
@@ -1330,7 +1291,7 @@ describe("updateMatter — conflict gate on a changed client or opposing party",
     const res = await updateMatter(
       matterId,
       updateMatterInitialState,
-      updateForm({ clientId: adverse.contactId })
+      updateForm({ clientId: adverse.contactId }),
     );
     expect(res.conflict?.severity).toBe("conflict");
     const m = await prisma.matter.findUniqueOrThrow({ where: { id: matterId } });
@@ -1362,31 +1323,31 @@ describe("createMatter — extra team members", () => {
             { userId: userId, role: "co_counsel" }, // the lead: dropped
             { userId: paraId, role: "investigator" }, // duplicate: dropped
           ]),
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
     expect(await teamOf()).toEqual(
       expect.arrayContaining([
         { userId, role: "lead" },
         { userId: paraId, role: "paralegal" },
-      ])
+      ]),
     );
     expect(await teamOf()).toHaveLength(2);
     expect(
-      await prisma.notification.count({ where: { userId: paraId, type: "matter_assigned" } })
+      await prisma.notification.count({ where: { userId: paraId, type: "matter_assigned" } }),
     ).toBe(1);
     expect(
-      await prisma.activityLog.count({ where: { title: "Pat Para added to team as Paralegal" } })
+      await prisma.activityLog.count({ where: { title: "Pat Para added to team as Paralegal" } }),
     ).toBe(1);
   });
 
   test("without matters.manage_team, extra seats are refused and nothing is written", async () => {
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key) => key !== "matters.manage_team"
+      async (key) => key !== "matters.manage_team",
     );
     const res = await createMatter(
       createMatterInitialState,
-      createForm({ extraTeam: JSON.stringify([{ userId: paraId, role: "paralegal" }]) })
+      createForm({ extraTeam: JSON.stringify([{ userId: paraId, role: "paralegal" }]) }),
     );
     expect(res.errors?.extraTeam?.[0]).toMatch(/permission/);
     expect(await prisma.matter.count()).toBe(0);
@@ -1396,13 +1357,13 @@ describe("createMatter — extra team members", () => {
     await prisma.user.update({ where: { id: paraId }, data: { isActive: false } });
     const inactive = await createMatter(
       createMatterInitialState,
-      createForm({ extraTeam: JSON.stringify([{ userId: paraId, role: "paralegal" }]) })
+      createForm({ extraTeam: JSON.stringify([{ userId: paraId, role: "paralegal" }]) }),
     );
     expect(inactive.errors?.extraTeam?.[0]).toMatch(/no longer active/);
 
     const asLead = await createMatter(
       createMatterInitialState,
-      createForm({ extraTeam: JSON.stringify([{ userId: paraId, role: "lead" }]) })
+      createForm({ extraTeam: JSON.stringify([{ userId: paraId, role: "lead" }]) }),
     );
     expect(asLead.errors?.extraTeam).toBeDefined();
     expect(await prisma.matter.count()).toBe(0);
@@ -1438,15 +1399,12 @@ describe("addMatterTeamMember / removeMatterTeamMember", () => {
   });
 
   test("re-adding the ACTIVE lead at another role is refused: the matter keeps its lead", async () => {
-    const res = await addMatterTeamMember(
-      matterId,
-      teamForm(userId, "paralegal")
-    );
+    const res = await addMatterTeamMember(matterId, teamForm(userId, "paralegal"));
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/lead attorney/i);
     expect(await activeLeads()).toEqual([{ userId }]);
     expect(
-      await prisma.activityLog.count({ where: { title: { contains: "added to team" } } })
+      await prisma.activityLog.count({ where: { title: { contains: "added to team" } } }),
     ).toBe(0);
   });
 
@@ -1544,9 +1502,7 @@ describe("addMatterTeamMember / removeMatterTeamMember", () => {
       where: { userId: other },
       select: { eventId: true },
     });
-    expect(left.map((a) => a.eventId).sort()).toEqual(
-      [past.id, theirs.id, elsewhere.id].sort()
-    );
+    expect(left.map((a) => a.eventId).sort()).toEqual([past.id, theirs.id, elsewhere.id].sort());
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { title: { contains: "removed from team" } },
     });
@@ -1579,8 +1535,7 @@ describe("addMatterTeamMember / removeMatterTeamMember", () => {
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/last team member/i);
     expect(
-      (await prisma.matterTeamMember.findUniqueOrThrow({ where: { id: row.id } }))
-        .removedAt
+      (await prisma.matterTeamMember.findUniqueOrThrow({ where: { id: row.id } })).removedAt,
     ).toBeNull();
 
     // Unrestricted: the same removal is allowed.
@@ -1658,9 +1613,7 @@ describe("updateMatterStage", () => {
       ok: true,
     });
     expect(await stageOf()).toBe(s1);
-    const titles = (
-      await prisma.activityLog.findMany({ where: { matterId } })
-    ).map((l) => l.title);
+    const titles = (await prisma.activityLog.findMany({ where: { matterId } })).map((l) => l.title);
     expect(titles).toContain("Reopened from Closed → Intake");
   });
 
@@ -1674,7 +1627,7 @@ describe("updateMatterStage", () => {
 
   test("unknown matter / inactive stage are refused; gated on matters.edit", async () => {
     await expect(updateMatterStage("nope", s2)).rejects.toThrow(
-      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/
+      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/,
     );
     await prisma.matterStage.update({ where: { id: s2 }, data: { isActive: false } });
     expect((await updateMatterStage(matterId, s2)).ok).toBe(false);
@@ -1711,7 +1664,11 @@ describe("updateMatter — incident date change needs confirmation for dependent
 
   test("first save writes nothing and returns the deadlines that would move", async () => {
     const { matterId, noticeId } = await seedIncidentMatter();
-    const res = await updateMatter(matterId, updateMatterInitialState, updateForm({ incidentDate: "2026-03-20" }));
+    const res = await updateMatter(
+      matterId,
+      updateMatterInitialState,
+      updateForm({ incidentDate: "2026-03-20" }),
+    );
     expect(res.status).toBe("confirm");
     expect(res.cascade?.map((c) => [c.title, c.fromKey, c.toKey, c.anchorText])).toEqual([
       ["CGIA notice", "2026-09-08", "2026-09-18", "Incident date"],
@@ -1726,16 +1683,24 @@ describe("updateMatter — incident date change needs confirmation for dependent
     const { matterId, noticeId } = await seedIncidentMatter();
     const fd = updateForm({ incidentDate: "2026-03-20", cascadeDecision: "apply" });
     fd.append("cascadeId", noticeId);
-    await expect(updateMatter(matterId, updateMatterInitialState, fd)).rejects.toThrow(/__REDIRECT__/);
+    await expect(updateMatter(matterId, updateMatterInitialState, fd)).rejects.toThrow(
+      /__REDIRECT__/,
+    );
     expect(await due(noticeId)).toBe("2026-09-18");
-    const log = await prisma.activityLog.findFirstOrThrow({ where: { matterId, title: "Deadline recalculated" } });
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId, title: "Deadline recalculated" },
+    });
     expect(log.detail).toMatch(/after the incident date changed/);
   });
 
   test("skip saves the matter and leaves the deadline", async () => {
     const { matterId, noticeId } = await seedIncidentMatter();
     await expect(
-      updateMatter(matterId, updateMatterInitialState, updateForm({ incidentDate: "2026-03-20", cascadeDecision: "skip" }))
+      updateMatter(
+        matterId,
+        updateMatterInitialState,
+        updateForm({ incidentDate: "2026-03-20", cascadeDecision: "skip" }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
     const m = await prisma.matter.findUniqueOrThrow({ where: { id: matterId } });
     expect(dateOnlyKey(m.incidentDate!)).toBe("2026-03-20");
@@ -1745,7 +1710,7 @@ describe("updateMatter — incident date change needs confirmation for dependent
   test("an unchanged incident date never asks", async () => {
     const { matterId } = await seedIncidentMatter();
     await expect(
-      updateMatter(matterId, updateMatterInitialState, updateForm({ incidentDate: "2026-03-10" }))
+      updateMatter(matterId, updateMatterInitialState, updateForm({ incidentDate: "2026-03-10" })),
     ).rejects.toThrow(/__REDIRECT__/);
   });
 });
@@ -1767,12 +1732,12 @@ describe("matter venue, dates and required fields", () => {
     try {
       return await updateMatter(id, updateMatterInitialState, updateForm(o));
     } catch (e) {
-      if (String(e).includes("__REDIRECT__")) return { status: "saved" as const, errors: undefined };
+      if (String(e).includes("__REDIRECT__"))
+        return { status: "saved" as const, errors: undefined };
       throw e;
     }
   };
-  const redirected = (p: Promise<unknown>) =>
-    expect(p).rejects.toThrow("__REDIRECT__");
+  const redirected = (p: Promise<unknown>) => expect(p).rejects.toThrow("__REDIRECT__");
 
   test("create: required fields all blank -> errors on each, no matter row", async () => {
     await requireOnArea(["caseNumber", "filedDate", "venue"]);
@@ -1809,16 +1774,10 @@ describe("matter venue, dates and required fields", () => {
   });
 
   test("create: unknown and archived venue are refused", async () => {
-    const unknown = await createMatter(
-      createMatterInitialState,
-      createForm({ venueId: "nope" }),
-    );
+    const unknown = await createMatter(createMatterInitialState, createForm({ venueId: "nope" }));
     expect(unknown.errors?.venueId).toEqual(["Choose a venue from the list."]);
     const old = await mkVenue("Old Court", false);
-    const archived = await createMatter(
-      createMatterInitialState,
-      createForm({ venueId: old.id }),
-    );
+    const archived = await createMatter(createMatterInitialState, createForm({ venueId: old.id }));
     expect(archived.errors?.venueId).toEqual(["That venue is archived."]);
     expect(await prisma.matter.count()).toBe(0);
   });
@@ -1935,7 +1894,11 @@ describe("matter venue, dates and required fields", () => {
       where: { id: matterId },
       data: { venueId: a.id, filedDate: new Date("2026-01-02T00:00:00Z") },
     });
-    const res = await upd(matterId, { venueId: d.id, filedDate: "2026-02-03", trialDate: "2027-05-06" });
+    const res = await upd(matterId, {
+      venueId: d.id,
+      filedDate: "2026-02-03",
+      trialDate: "2027-05-06",
+    });
     expect(res.status).not.toBe("error");
     const m = await prisma.matter.findUniqueOrThrow({ where: { id: matterId } });
     expect(m.venueId).toBe(d.id);
@@ -1966,15 +1929,12 @@ describe("createMatter: open from a draft + originating-document gate", () => {
             fileSize: 100 + i,
             uploadedBy: userId,
           },
-        })
+        }),
       );
     }
     return { draft, files };
   };
-  const draftForm = (
-    d: { id: string; updatedAt: Date },
-    extra: Record<string, string> = {}
-  ) =>
+  const draftForm = (d: { id: string; updatedAt: Date }, extra: Record<string, string> = {}) =>
     createForm({
       draftId: d.id,
       draftUpdatedAt: d.updatedAt.toISOString(),
@@ -1993,8 +1953,8 @@ describe("createMatter: open from a draft + originating-document gate", () => {
           originatingFileId: files[0].id,
           agreementStatus: "signed",
           agreementSignedDate: "2026-01-05",
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow(/__REDIRECT__/);
     const m = await prisma.matter.findFirstOrThrow();
     const folder = await prisma.documentFolder.findFirstOrThrow({
@@ -2039,7 +1999,7 @@ describe("createMatter: open from a draft + originating-document gate", () => {
       createForm({
         draftId: draft.id,
         draftUpdatedAt: new Date(draft.updatedAt.getTime() - 5000).toISOString(),
-      })
+      }),
     );
     expect(res.errors?.draftId).toEqual([
       "Someone else saved this draft. Reload to see their changes.",
@@ -2054,13 +2014,14 @@ describe("createMatter: open from a draft + originating-document gate", () => {
     // the action has read it by bumping updatedAt from a spy on the
     // first transaction.
     const real = prisma.$transaction.bind(prisma);
-    const spy = vi
-      .spyOn(prisma, "$transaction")
-      .mockImplementationOnce(((fn: unknown, opts: unknown) => {
-        return prisma.matterDraft
-          .update({ where: { id: draft.id }, data: { leadUserId: userId } })
-          .then(() => (real as (a: unknown, b: unknown) => unknown)(fn, opts));
-      }) as never);
+    const spy = vi.spyOn(prisma, "$transaction").mockImplementationOnce(((
+      fn: unknown,
+      opts: unknown,
+    ) => {
+      return prisma.matterDraft
+        .update({ where: { id: draft.id }, data: { leadUserId: userId } })
+        .then(() => (real as (a: unknown, b: unknown) => unknown)(fn, opts));
+    }) as never);
     const res = await run(draftForm(draft));
     spy.mockRestore();
     expect(res.errors?.draftId).toEqual([
@@ -2074,26 +2035,23 @@ describe("createMatter: open from a draft + originating-document gate", () => {
   // first transaction starts (the window the review found).
   const beforeTx = (fn: () => Promise<unknown>) => {
     const real = prisma.$transaction.bind(prisma);
-    return vi.spyOn(prisma, "$transaction").mockImplementationOnce(((
-      f: unknown,
-      o: unknown
-    ) =>
-      fn().then(() => (real as (a: unknown, b: unknown) => unknown)(f, o))) as never);
+    return vi
+      .spyOn(prisma, "$transaction")
+      .mockImplementationOnce(((f: unknown, o: unknown) =>
+        fn().then(() => (real as (a: unknown, b: unknown) => unknown)(f, o))) as never);
   };
   const CHANGED = "The draft's files changed. Review the draft and try again.";
 
   test("originating file removed between the gate and the claim: refused, draft intact", async () => {
     await requireOn();
     const { draft, files } = await seedDraft(2);
-    const spy = beforeTx(() =>
-      prisma.matterDraftFile.delete({ where: { id: files[0].id } })
-    );
+    const spy = beforeTx(() => prisma.matterDraftFile.delete({ where: { id: files[0].id } }));
     const res = await run(
       draftForm(draft, {
         originatingFileId: files[0].id,
         agreementStatus: "signed",
         agreementSignedDate: "2026-01-05",
-      })
+      }),
     );
     spy.mockRestore();
     expect(res.errors?.draftId).toEqual([CHANGED]);
@@ -2114,9 +2072,9 @@ describe("createMatter: open from a draft + originating-document gate", () => {
         },
       });
     });
-    await expect(
-      run(draftForm(draft, { originatingFileId: files[0].id }))
-    ).rejects.toThrow(/__REDIRECT__/);
+    await expect(run(draftForm(draft, { originatingFileId: files[0].id }))).rejects.toThrow(
+      /__REDIRECT__/,
+    );
     spy.mockRestore();
     const m = await prisma.matter.findFirstOrThrow();
     const docs = await prisma.document.findMany({ where: { matterId: m.id } });
@@ -2129,7 +2087,7 @@ describe("createMatter: open from a draft + originating-document gate", () => {
     let blocked: boolean | null = null;
     const spy = vi.spyOn(prisma, "$transaction").mockImplementationOnce(((
       f: (tx: unknown) => unknown,
-      o: unknown
+      o: unknown,
     ) =>
       (real as (a: unknown, b: unknown) => unknown)(async (tx: unknown) => {
         const out = await f(tx);
@@ -2165,9 +2123,7 @@ describe("createMatter: open from a draft + originating-document gate", () => {
 
     test("no draft: originating file error, no matter, no conflict", async () => {
       const res = await run(createForm(signed));
-      expect(res.errors?.originatingFileId).toEqual([
-        "Attach the signed Fee agreement.",
-      ]);
+      expect(res.errors?.originatingFileId).toEqual(["Attach the signed Fee agreement."]);
       expect(res.conflict).toBeUndefined();
       expect(await matterCount()).toBe(0);
     });
@@ -2187,22 +2143,18 @@ describe("createMatter: open from a draft + originating-document gate", () => {
           originatingFileId: files[0].id,
           agreementStatus: "sent",
           agreementSignedDate: "2026-01-05",
-        })
+        }),
       );
-      expect(res.errors?.agreementStatus).toEqual([
-        "Mark the Fee agreement as signed.",
-      ]);
+      expect(res.errors?.agreementStatus).toEqual(["Mark the Fee agreement as signed."]);
       expect(await matterCount()).toBe(0);
     });
 
     test("no date", async () => {
       const { draft, files } = await seedDraft(1);
       const res = await run(
-        draftForm(draft, { originatingFileId: files[0].id, agreementStatus: "signed" })
+        draftForm(draft, { originatingFileId: files[0].id, agreementStatus: "signed" }),
       );
-      expect(res.errors?.agreementSignedDate).toEqual([
-        "Enter the date it was signed.",
-      ]);
+      expect(res.errors?.agreementSignedDate).toEqual(["Enter the date it was signed."]);
       expect(await matterCount()).toBe(0);
     });
 
@@ -2213,20 +2165,16 @@ describe("createMatter: open from a draft + originating-document gate", () => {
           originatingFileId: files[0].id,
           agreementStatus: "signed",
           agreementSignedDate: "2999-01-01",
-        })
+        }),
       );
-      expect(res.errors?.agreementSignedDate).toEqual([
-        "The signed date can't be in the future.",
-      ]);
+      expect(res.errors?.agreementSignedDate).toEqual(["The signed date can't be in the future."]);
       expect(await matterCount()).toBe(0);
     });
 
     test("a file from another draft is refused", async () => {
       const { draft } = await seedDraft(1);
       const other = await seedDraft(1);
-      const res = await run(
-        draftForm(draft, { originatingFileId: other.files[0].id, ...signed })
-      );
+      const res = await run(draftForm(draft, { originatingFileId: other.files[0].id, ...signed }));
       expect(res.errors?.originatingFileId).toBeDefined();
       expect(await matterCount()).toBe(0);
     });
@@ -2237,9 +2185,7 @@ describe("createMatter: open from a draft + originating-document gate", () => {
         data: { originatingDocLabel: "Retainer" },
       });
       const res = await run(createForm(signed));
-      expect(res.errors?.originatingFileId).toEqual([
-        "Attach the signed Retainer.",
-      ]);
+      expect(res.errors?.originatingFileId).toEqual(["Attach the signed Retainer."]);
     });
 
     test("signed today late evening in the profile zone is accepted", async () => {
@@ -2255,8 +2201,8 @@ describe("createMatter: open from a draft + originating-document gate", () => {
               originatingFileId: files[0].id,
               agreementStatus: "signed",
               agreementSignedDate: "2026-10-20",
-            })
-          )
+            }),
+          ),
         ).rejects.toThrow(/__REDIRECT__/);
         expect(await matterCount()).toBe(1);
       } finally {
@@ -2281,9 +2227,9 @@ describe("createMatter: open from a draft + originating-document gate", () => {
 
 describe("updateMatter billing type lock", () => {
   const noBillingEdit = () =>
-    vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key) => key !== "matters.billing_type.edit"
-    );
+    vi
+      .mocked(currentUserHasPermission)
+      .mockImplementation(async (key) => key !== "matters.billing_type.edit");
   const seed = async (data: { feeStructure: string; billingMode: string }) => {
     const { matterId } = await seedMatter({
       practiceAreaId: areaId,
@@ -2361,13 +2307,11 @@ describe("updateMatter billing type lock", () => {
 
   test("permitted user can save other edits to a hybrid matter posting billingType=hybrid", async () => {
     const id = await seed({ feeStructure: "hybrid", billingMode: "client" });
-    await expect(
-      run(id, { billingType: "hybrid", caseNumber: "H-1" })
-    ).rejects.toThrow(/__REDIRECT__/);
+    await expect(run(id, { billingType: "hybrid", caseNumber: "H-1" })).rejects.toThrow(
+      /__REDIRECT__/,
+    );
     expect(await stored(id)).toEqual({ feeStructure: "hybrid", billingMode: "client" });
-    expect(
-      (await prisma.matter.findUniqueOrThrow({ where: { id } })).caseNumber
-    ).toBe("H-1");
+    expect((await prisma.matter.findUniqueOrThrow({ where: { id } })).caseNumber).toBe("H-1");
   });
 
   test("hybrid cannot be chosen as a change target", async () => {

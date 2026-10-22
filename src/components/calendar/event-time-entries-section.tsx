@@ -24,10 +24,7 @@ import { deleteTimeEntry } from "@/app/actions/time-entries";
 import { formatDateOnly } from "@/lib/format-date";
 import { formatHours } from "@/lib/time-entry-constants";
 import type { EventTimeEntry } from "@/lib/queries/calendar";
-import {
-  canDeleteRecord,
-  useEventAttachmentsViewer,
-} from "./event-attachments-context";
+import { canDeleteRecord, useEventAttachmentsViewer } from "./event-attachments-context";
 import { EventTimeEntryComposer } from "./event-time-entry-composer";
 import { TIME_ENTRY_STATUS_LABEL } from "@/lib/constants/time-entry-status";
 
@@ -57,8 +54,7 @@ export function EventTimeEntriesSection({
           {entries.length > 0 && (
             <div className="text-2xs font-mono text-ink-3">
               {formatHours(totalHours)}h total
-              {billableHours !== totalHours &&
-                ` · ${formatHours(billableHours)}h billable`}
+              {billableHours !== totalHours && ` · ${formatHours(billableHours)}h billable`}
             </div>
           )}
         </div>
@@ -85,8 +81,7 @@ export function EventTimeEntriesSection({
         <EventTimeEntryComposer matterId={matterId} eventId={eventId} />
       ) : (
         <p className="text-2xs text-ink-4">
-          Firm-wide events can&apos;t have time entries — link this event
-          to a matter first.
+          Firm-wide events can&apos;t have time entries — link this event to a matter first.
         </p>
       )}
     </div>
@@ -98,11 +93,7 @@ function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
   // Deleting a colleague's entry needs time_entries.delete_any; hide
   // the button rather than bounce the user to "/" on denial.
   const { viewerId, canDeleteAnyTimeEntry } = useEventAttachmentsViewer();
-  const canDelete = canDeleteRecord(
-    entry.userId,
-    viewerId,
-    canDeleteAnyTimeEntry
-  );
+  const canDelete = canDeleteRecord(entry.userId, viewerId, canDeleteAnyTimeEntry);
 
   const onDelete = async () => {
     if (
@@ -120,14 +111,13 @@ function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
     });
   };
 
-  const mutedForBilling =
-    entry.status === "billed" || entry.status === "written_off";
+  const mutedForBilling = entry.status === "billed" || entry.status === "written_off";
 
   return (
     <li
       className={cn(
         "rounded-md border border-line bg-paper-2/40 p-3 flex flex-col gap-1",
-        pending && "opacity-60"
+        pending && "opacity-60",
       )}
     >
       <div className="flex items-center gap-2">
@@ -138,9 +128,7 @@ function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
           {entry.userInitials}
         </span>
         <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-medium text-ink truncate">
-            {entry.activity}
-          </span>
+          <span className="text-xs font-medium text-ink truncate">{entry.activity}</span>
           {entry.privileged && (
             <span
               title="Privileged"
@@ -155,10 +143,7 @@ function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
           {formatDateOnly(entry.date, "short")}
         </span>
         <span
-          className={cn(
-            "font-mono text-xs shrink-0",
-            mutedForBilling ? "text-ink-4" : "text-ink"
-          )}
+          className={cn("font-mono text-xs shrink-0", mutedForBilling ? "text-ink-4" : "text-ink")}
         >
           {formatHours(entry.hours)}h
         </span>
@@ -168,14 +153,12 @@ function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
             onClick={onDelete}
             disabled={pending}
             title={
-              entry.status === "billed"
-                ? "Entry is billed — unbill before deleting"
-                : "Delete"
+              entry.status === "billed" ? "Entry is billed — unbill before deleting" : "Delete"
             }
             aria-label="Delete time entry"
             className={cn(
               "inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-3 hover:text-warn hover:bg-warn-soft transition-colors disabled:opacity-60",
-              entry.status === "billed" && "opacity-40"
+              entry.status === "billed" && "opacity-40",
             )}
           >
             <Trash2 size={11} />
@@ -184,13 +167,14 @@ function EventTimeEntryItem({ entry }: { entry: EventTimeEntry }) {
       </div>
 
       {entry.narrative && (
-        <div className="text-2xs text-ink-3 leading-relaxed pl-8">
-          {entry.narrative}
-        </div>
+        <div className="text-2xs text-ink-3 leading-relaxed pl-8">{entry.narrative}</div>
       )}
 
       <div className="flex items-center gap-2 pl-8 text-3xs text-ink-4 font-mono">
-        <span>{(TIME_ENTRY_STATUS_LABEL as Record<string, string>)[entry.status]?.toLowerCase() ?? entry.status}</span>
+        <span>
+          {(TIME_ENTRY_STATUS_LABEL as Record<string, string>)[entry.status]?.toLowerCase() ??
+            entry.status}
+        </span>
         {!entry.billable && <span>· non-billable</span>}
         {entry.noCharge && <span>· no charge</span>}
       </div>

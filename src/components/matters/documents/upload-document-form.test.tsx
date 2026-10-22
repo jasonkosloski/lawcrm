@@ -29,9 +29,7 @@ const fetchMock = vi.fn();
 
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
-  fetchMock.mockResolvedValue(
-    new Response(JSON.stringify({ documents: [] }), { status: 200 })
-  );
+  fetchMock.mockResolvedValue(new Response(JSON.stringify({ documents: [] }), { status: 200 }));
 });
 
 afterEach(() => {
@@ -44,7 +42,7 @@ async function fill(
   driver: "local" | "vercel-blob" | undefined,
   file: File,
   opts?: { name?: string; category?: string },
-  scope: RecordScope = { kind: "matter", matterId: "m1" }
+  scope: RecordScope = { kind: "matter", matterId: "m1" },
 ) {
   const user = userEvent.setup({ applyAccept: false });
   render(<UploadDocumentForm scope={scope} storageDriver={driver} />);
@@ -66,7 +64,7 @@ describe("local driver → streaming route", () => {
       "local",
       new File(["pdf"], "scan.pdf"),
       { name: "Intake form", category: "pleading" },
-      { kind: "lead", leadId: "l1" }
+      { kind: "lead", leadId: "l1" },
     );
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const fd = (fetchMock.mock.calls[0] as [string, RequestInit])[1].body as FormData;
@@ -95,16 +93,14 @@ describe("local driver → streaming route", () => {
 
     // Success refreshes the listing and collapses the composer.
     await waitFor(() => expect(refresh).toHaveBeenCalled());
-    expect(
-      await screen.findByRole("button", { name: /upload document/i })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /upload document/i })).toBeInTheDocument();
   });
 
   test("a server rejection is shown inline and the typed form is kept", async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ error: "Matter not found." }), {
         status: 404,
-      })
+      }),
     );
     await fill("local", new File(["pdf"], "scan.pdf"), { name: "Keep me" });
 
@@ -145,21 +141,15 @@ describe("vercel-blob driver → client-direct upload()", () => {
     mockedUpload.mockResolvedValue({ url: "https://s/x" } as never);
     await fill("vercel-blob", new File(["pdf"], "scan.pdf"));
     await waitFor(() => expect(mockedUpload).toHaveBeenCalled());
-    const payload = JSON.parse(
-      mockedUpload.mock.calls[0][2].clientPayload as string
-    );
+    const payload = JSON.parse(mockedUpload.mock.calls[0][2].clientPayload as string);
     expect(payload.name).toBe("scan.pdf");
     expect(payload.category).toBe("other");
   });
 
   test("a token-route rejection reads as friendly text", async () => {
-    mockedUpload.mockRejectedValue(
-      new Error("Vercel Blob: Failed to  retrieve the client token")
-    );
+    mockedUpload.mockRejectedValue(new Error("Vercel Blob: Failed to  retrieve the client token"));
     await fill("vercel-blob", new File(["pdf"], "scan.pdf"));
-    expect(
-      await screen.findByText(/upload was rejected.*lost permission/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/upload was rejected.*lost permission/i)).toBeInTheDocument();
   });
 });
 

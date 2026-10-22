@@ -32,7 +32,7 @@ const MAX_SUGGESTIONS = 6;
 export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] }) {
   const [state, formAction, isPending] = useActionState<NewIntakeFormState, FormData>(
     createLead,
-    newIntakeInitialState
+    newIntakeInitialState,
   );
   const v = state.values ?? {};
   const errs = state.errors ?? {};
@@ -40,7 +40,7 @@ export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] })
   const [name, setName] = useState(v.name ?? "");
   const [email, setEmail] = useState(v.email ?? "");
   const [linked, setLinked] = useState<IntakeContactOption | null>(
-    () => contacts.find((c) => c.id === v.contactId) ?? null
+    () => contacts.find((c) => c.id === v.contactId) ?? null,
   );
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -49,9 +49,7 @@ export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] })
     if (linked || q.length < 2) return [];
     return contacts
       .filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          (c.email?.toLowerCase().includes(q) ?? false)
+        (c) => c.name.toLowerCase().includes(q) || (c.email?.toLowerCase().includes(q) ?? false),
       )
       .slice(0, MAX_SUGGESTIONS);
   }, [name, contacts, linked]);
@@ -160,16 +158,27 @@ export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] })
                 />
               </Field>
               <Field label="Phone" error={errs.phone?.[0]}>
-                <input name="phone" type="tel" defaultValue={v.phone ?? ""} maxLength={40} placeholder="(555) 555-5555" className={inputClass(!!errs.phone, "md")} />
+                <input
+                  name="phone"
+                  type="tel"
+                  defaultValue={v.phone ?? ""}
+                  maxLength={40}
+                  placeholder="(555) 555-5555"
+                  className={inputClass(!!errs.phone, "md")}
+                />
               </Field>
             </div>
             {emailMatch && (
               <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-paper-2 border border-line text-2xs text-ink-3">
                 <Link2 size={12} className="shrink-0 mt-px" />
                 <span>
-                  That email belongs to <strong className="text-ink">{emailMatch.name}</strong>
-                  {" "}— this intake will be linked to that contact.{" "}
-                  <button type="button" onClick={() => link(emailMatch)} className="text-brand-700 hover:underline">
+                  That email belongs to <strong className="text-ink">{emailMatch.name}</strong> —
+                  this intake will be linked to that contact.{" "}
+                  <button
+                    type="button"
+                    onClick={() => link(emailMatch)}
+                    className="text-brand-700 hover:underline"
+                  >
                     Use their record
                   </button>
                 </span>
@@ -183,30 +192,64 @@ export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] })
       <Section title="Inquiry">
         <div className="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-3">
           <Field label="Source" error={errs.source?.[0]}>
-            <NativeSelect name="source" defaultValue={v.source ?? "phone"} className="w-full" aria-invalid={!!errs.source || undefined}>
+            <NativeSelect
+              name="source"
+              defaultValue={v.source ?? "phone"}
+              className="w-full"
+              aria-invalid={!!errs.source || undefined}
+            >
               <NativeSelectOption value="">Unknown</NativeSelectOption>
               {LEAD_SOURCES.map((s) => (
-                <NativeSelectOption key={s} value={s}>{LEAD_SOURCE_LABEL[s] ?? s}</NativeSelectOption>
+                <NativeSelectOption key={s} value={s}>
+                  {LEAD_SOURCE_LABEL[s] ?? s}
+                </NativeSelectOption>
               ))}
             </NativeSelect>
           </Field>
           <Field label="Source detail" error={errs.sourceDetail?.[0]}>
-            <input name="sourceDetail" defaultValue={v.sourceDetail ?? ""} maxLength={200} placeholder="e.g. referred by …" className={inputClass(!!errs.sourceDetail, "md")} />
+            <input
+              name="sourceDetail"
+              defaultValue={v.sourceDetail ?? ""}
+              maxLength={200}
+              placeholder="e.g. referred by …"
+              className={inputClass(!!errs.sourceDetail, "md")}
+            />
           </Field>
         </div>
         <Field label="What happened" error={errs.summary?.[0]}>
-          <textarea name="summary" defaultValue={v.summary ?? ""} rows={4} maxLength={4000} className={cn(inputClass(!!errs.summary, "md"), "h-auto py-2 leading-relaxed")} />
+          <textarea
+            name="summary"
+            defaultValue={v.summary ?? ""}
+            rows={4}
+            maxLength={4000}
+            className={cn(inputClass(!!errs.summary, "md"), "h-auto py-2 leading-relaxed")}
+          />
         </Field>
         <div className="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-3">
           <Field label="Date of incident" error={errs.dateOfIncident?.[0]}>
-            <input name="dateOfIncident" type="date" defaultValue={v.dateOfIncident ?? ""} className={inputClass(!!errs.dateOfIncident, "md")} />
+            <input
+              name="dateOfIncident"
+              type="date"
+              defaultValue={v.dateOfIncident ?? ""}
+              className={inputClass(!!errs.dateOfIncident, "md")}
+            />
           </Field>
           <Field label="Location" error={errs.location?.[0]}>
-            <input name="location" defaultValue={v.location ?? ""} maxLength={200} className={inputClass(!!errs.location, "md")} />
+            <input
+              name="location"
+              defaultValue={v.location ?? ""}
+              maxLength={200}
+              className={inputClass(!!errs.location, "md")}
+            />
           </Field>
         </div>
         <Field label="Injuries / harm" error={errs.injuries?.[0]}>
-          <input name="injuries" defaultValue={v.injuries ?? ""} maxLength={2000} className={inputClass(!!errs.injuries, "md")} />
+          <input
+            name="injuries"
+            defaultValue={v.injuries ?? ""}
+            maxLength={2000}
+            className={inputClass(!!errs.injuries, "md")}
+          />
         </Field>
         <label className="flex items-center gap-2 text-xs text-ink-2">
           <input type="checkbox" name="priorCounsel" defaultChecked={v.priorCounsel === "on"} />
@@ -221,13 +264,12 @@ export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] })
       )}
 
       <div className="flex items-center gap-3 pt-2 border-t border-line">
-        <Button
-          type="submit"
-          disabled={isPending}
-        >
+        <Button type="submit" disabled={isPending}>
           {isPending ? "Saving…" : "Save intake"}
         </Button>
-        <span className="text-2xs text-ink-4">A conflict check runs automatically when you save.</span>
+        <span className="text-2xs text-ink-4">
+          A conflict check runs automatically when you save.
+        </span>
       </div>
     </form>
   );
@@ -241,4 +283,3 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     </section>
   );
 }
-

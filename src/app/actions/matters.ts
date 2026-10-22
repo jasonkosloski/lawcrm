@@ -17,10 +17,7 @@ import { isLenientEmail } from "@/lib/email-shape";
 import { prisma, type Tx } from "@/lib/prisma";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { logActivity, logActivityTx } from "@/lib/activity-log";
 import { createNotification } from "@/lib/notifications";
 import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
@@ -47,10 +44,7 @@ import {
   type RecalcTrigger,
 } from "@/lib/automations/recalc";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
-import {
-  MATTER_TEAM_ROLES,
-  matterTeamRoleLabel,
-} from "@/lib/matter-team-constants";
+import { MATTER_TEAM_ROLES, matterTeamRoleLabel } from "@/lib/matter-team-constants";
 import {
   NEW_CLIENT_SENTINEL,
   type CreateMatterState,
@@ -80,19 +74,13 @@ import {
   type RequiredMatterField,
 } from "@/lib/matter-required-fields";
 
-const DRAFT_FILES_CHANGED_MESSAGE =
-  "The draft's files changed. Review the draft and try again.";
+const DRAFT_FILES_CHANGED_MESSAGE = "The draft's files changed. Review the draft and try again.";
 const DRAFT_USED_MESSAGE = "This draft was already used to open a matter.";
-const DRAFT_STALE_MESSAGE =
-  "Someone else saved this draft. Reload to see their changes.";
+const DRAFT_STALE_MESSAGE = "Someone else saved this draft. Reload to see their changes.";
 
 const createMatterSchema = z
   .object({
-    name: z
-      .string()
-      .trim()
-      .min(1, "Name is required")
-      .max(200, "Name is too long"),
+    name: z.string().trim().min(1, "Name is required").max(200, "Name is too long"),
     practiceAreaId: z.string().trim().min(1, "Practice area is required"),
     stageId: z.string().trim().min(1, "Stage is required"),
     /** Omitted => the practice area's default billing type. */
@@ -105,12 +93,7 @@ const createMatterSchema = z
     newClientName: z.string().trim().max(200).optional().or(z.literal("")),
     newClientEmail: z.string().trim().max(200).optional().or(z.literal("")),
     newClientPhone: z.string().trim().max(80).optional().or(z.literal("")),
-    newClientOrganization: z
-      .string()
-      .trim()
-      .max(200)
-      .optional()
-      .or(z.literal("")),
+    newClientOrganization: z.string().trim().max(200).optional().or(z.literal("")),
     opposingParty: z.string().trim().max(200).optional().or(z.literal("")),
     opposingFirm: z.string().trim().max(200).optional().or(z.literal("")),
     leadUserId: z.string().trim().min(1, "Lead attorney is required"),
@@ -121,22 +104,9 @@ const createMatterSchema = z
      *  incidentDate is filled in, the SOL date is auto-computed
      *  on submit; the explicit `statuteOfLimitationsDate` value
      *  (if any) wins so the lawyer can override. */
-    incidentDate: z
-      .string()
-      .trim()
-      .optional()
-      .or(z.literal("")),
-    statuteOfLimitationsDate: z
-      .string()
-      .trim()
-      .optional()
-      .or(z.literal("")),
-    statuteOfLimitationsNotes: z
-      .string()
-      .trim()
-      .max(4000)
-      .optional()
-      .or(z.literal("")),
+    incidentDate: z.string().trim().optional().or(z.literal("")),
+    statuteOfLimitationsDate: z.string().trim().optional().or(z.literal("")),
+    statuteOfLimitationsNotes: z.string().trim().max(4000).optional().or(z.literal("")),
     venueId: z.string().trim().optional().or(z.literal("")),
     filedDate: z.string().trim().optional().or(z.literal("")),
     trialDate: z.string().trim().optional().or(z.literal("")),
@@ -208,7 +178,7 @@ async function syncMatterSolDeadline(
     /** Owner for a newly created row when `ownerId` is undefined. */
     createOwnerId?: string | null;
     applyStatus?: boolean;
-  }
+  },
 ): Promise<void> {
   const existing = await tx.deadline.findFirst({
     where: { matterId: opts.matterId, sourceType: SOL_SOURCE_TYPE },
@@ -261,7 +231,7 @@ async function syncMatterSolDeadline(
 function parseSolDates(
   tracks: boolean,
   incidentRaw: string | undefined,
-  solRaw: string | undefined
+  solRaw: string | undefined,
 ):
   | { ok: true; incident: Date | null; sol: Date | null }
   | { ok: false; errors: Record<string, string[]> } {
@@ -289,9 +259,7 @@ const REQUIRED_ERROR_FIELD: Record<RequiredMatterField, string> = {
   description: "description",
 };
 
-function requiredFieldErrors(
-  keys: RequiredMatterField[]
-): Record<string, string[]> {
+function requiredFieldErrors(keys: RequiredMatterField[]): Record<string, string[]> {
   const errors: Record<string, string[]> = {};
   for (const k of keys) errors[REQUIRED_ERROR_FIELD[k]] = [requiredFieldError];
   return errors;
@@ -300,7 +268,7 @@ function requiredFieldErrors(
 /** Strictly parse the posted filed/trial dates (undefined = not posted). */
 function parseFiledTrial(
   filedRaw: string | undefined,
-  trialRaw: string | undefined
+  trialRaw: string | undefined,
 ):
   | { ok: true; filed: Date | null; trial: Date | null }
   | { ok: false; errors: Record<string, string[]> } {
@@ -317,7 +285,7 @@ function parseFiledTrial(
  *  keep its own current venue even after it was archived. */
 async function checkVenue(
   venueId: string,
-  currentVenueId: string | null
+  currentVenueId: string | null,
 ): Promise<{ ok: true; name: string } | { ok: false; error: string }> {
   const venue = await prisma.venue.findUnique({
     where: { id: venueId },
@@ -337,7 +305,7 @@ async function checkVenue(
  */
 async function resolveAreaAndStage(
   practiceAreaId: string,
-  stageId: string
+  stageId: string,
 ): Promise<
   | {
       ok: true;
@@ -386,8 +354,7 @@ async function resolveAreaAndStage(
   if (!resolvedStageId) {
     return { ok: false, error: "This practice area has no active stages" };
   }
-  const { allowedBillingTypes, defaultBillingType } =
-    normalizeAreaBillingTypes(area);
+  const { allowedBillingTypes, defaultBillingType } = normalizeAreaBillingTypes(area);
   return {
     ok: true,
     practiceAreaId: area.id,
@@ -407,7 +374,7 @@ const extraTeamSchema = z
     z.object({
       userId: z.string().trim().min(1),
       role: z.enum(MATTER_TEAM_ROLES).refine((r) => r !== "lead"),
-    })
+    }),
   )
   .max(20);
 
@@ -418,10 +385,9 @@ const extraTeamSchema = z
  *  `requirePermission` redirect so nothing typed is lost. */
 async function resolveExtraTeam(
   rawJson: string | undefined,
-  leadUserId: string
+  leadUserId: string,
 ): Promise<
-  | { ok: true; seats: Array<NewMatterTeamSeat & { name: string }> }
-  | { ok: false; error: string }
+  { ok: true; seats: Array<NewMatterTeamSeat & { name: string }> } | { ok: false; error: string }
 > {
   if (!rawJson) return { ok: true, seats: [] };
   let decoded: unknown;
@@ -453,7 +419,7 @@ async function resolveExtraTeam(
         where: { id: { in: seats.map((s) => s.userId) }, isActive: true },
         select: { id: true, name: true },
       })
-    ).map((u) => [u.id, u.name])
+    ).map((u) => [u.id, u.name]),
   );
   if (active.size !== seats.length) {
     return {
@@ -469,7 +435,7 @@ async function resolveExtraTeam(
 
 export async function createMatter(
   _prev: CreateMatterState,
-  formData: FormData
+  formData: FormData,
 ): Promise<CreateMatterState> {
   await requirePermission("matters.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -531,7 +497,7 @@ export async function createMatter(
         : null,
   };
   const createErrors = requiredFieldErrors(
-    missingRequired(resolved.requiredMatterFields, createValues)
+    missingRequired(resolved.requiredMatterFields, createValues),
   );
   const filedTrial = parseFiledTrial(data.filedDate, data.trialDate);
   if (!filedTrial.ok) Object.assign(createErrors, filedTrial.errors);
@@ -547,10 +513,7 @@ export async function createMatter(
   const filedDate = filedTrial.ok ? filedTrial.filed : null;
   const trialDate = filedTrial.ok ? filedTrial.trial : null;
 
-  const [currentUserId, tz] = await Promise.all([
-    getCurrentUserId(),
-    getCurrentUserTimeZone(),
-  ]);
+  const [currentUserId, tz] = await Promise.all([getCurrentUserId(), getCurrentUserTimeZone()]);
 
   // Originating-document gate. After the required/venue checks and
   // BEFORE the conflict gate: missing paperwork never asks for a
@@ -600,20 +563,19 @@ export async function createMatter(
       status: data.agreementStatus ?? "",
       signedDate: data.agreementSignedDate ?? "",
       hasOriginatingFile:
-        !!data.originatingFileId &&
-        draftFiles.some((f) => f.id === data.originatingFileId),
+        !!data.originatingFileId && draftFiles.some((f) => f.id === data.originatingFileId),
     },
     {
       required: gateFirm?.firm?.requireOriginatingDoc ?? false,
       label: agreementLabel,
       today: dateOnlyKey(await todayDateOnly()),
-    }
+    },
   );
   if (Object.keys(agreementErrors).length > 0) {
     return {
       status: "error",
       errors: Object.fromEntries(
-        Object.entries(agreementErrors).map(([k, v]) => [k, [v as string]])
+        Object.entries(agreementErrors).map(([k, v]) => [k, [v as string]]),
       ),
       values: raw,
     };
@@ -631,8 +593,7 @@ export async function createMatter(
 
   // Contact.firmId is stamped by the action layer on every new write
   // (schema comment); only an inline new client needs it here.
-  const firmId =
-    data.clientId === NEW_CLIENT_SENTINEL ? (await getCurrentFirm()).id : null;
+  const firmId = data.clientId === NEW_CLIENT_SENTINEL ? (await getCurrentFirm()).id : null;
 
   // Verify the selected lead is a real, active user; fall through to
   // the current user if the posted value is stale or the user has
@@ -649,7 +610,7 @@ export async function createMatter(
   const parsedDates = parseSolDates(
     resolved.hasStatuteOfLimitations,
     data.incidentDate,
-    data.statuteOfLimitationsDate
+    data.statuteOfLimitationsDate,
   );
   if (!parsedDates.ok) {
     return { status: "error", errors: parsedDates.errors, values: raw };
@@ -657,15 +618,10 @@ export async function createMatter(
   const incidentDate = parsedDates.incident;
   // Manual override wins; otherwise auto-compute from
   // incidentDate + the area's statute period.
-  const solDate =
-    resolved.hasStatuteOfLimitations
-      ? (parsedDates.sol ??
-        computeSolDate(incidentDate, resolved.statutePeriod))
-      : null;
-  const solNotes =
-    resolved.hasStatuteOfLimitations
-      ? data.statuteOfLimitationsNotes || null
-      : null;
+  const solDate = resolved.hasStatuteOfLimitations
+    ? (parsedDates.sol ?? computeSolDate(incidentDate, resolved.statutePeriod))
+    : null;
+  const solNotes = resolved.hasStatuteOfLimitations ? data.statuteOfLimitationsNotes || null : null;
 
   const team = await resolveExtraTeam(raw.extraTeam, leadUserId);
   if (!team.ok) {
@@ -866,8 +822,7 @@ export async function createMatter(
           orderBy: { createdAt: "asc" },
         });
         const origOk =
-          !data.originatingFileId ||
-          files.some((f) => f.id === data.originatingFileId);
+          !data.originatingFileId || files.some((f) => f.id === data.originatingFileId);
         const needsOrig =
           (gateFirm?.firm?.requireOriginatingDoc ?? false) &&
           !files.some((f) => f.id === data.originatingFileId);
@@ -989,7 +944,7 @@ export async function createMatter(
             }),
           ]
         : []),
-    ])
+    ]),
   );
 
   // Sidebar + matters list both read fresh data on next render.
@@ -1000,11 +955,7 @@ export async function createMatter(
 // ── Update ──────────────────────────────────────────────────────────────
 
 const updateMatterSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, "Name is required")
-    .max(200, "Name is too long"),
+  name: z.string().trim().min(1, "Name is required").max(200, "Name is too long"),
   practiceAreaId: z.string().trim().min(1, "Practice area is required"),
   stageId: z.string().trim().min(1, "Stage is required"),
   /** Locked after creation: omitted leaves the stored type alone; a
@@ -1021,22 +972,9 @@ const updateMatterSchema = z.object({
    *  needs that key. */
   leadUserId: z.string().trim().optional().or(z.literal("")),
   description: z.string().trim().max(4000).optional().or(z.literal("")),
-  incidentDate: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal("")),
-  statuteOfLimitationsDate: z
-    .string()
-    .trim()
-    .optional()
-    .or(z.literal("")),
-  statuteOfLimitationsNotes: z
-    .string()
-    .trim()
-    .max(4000)
-    .optional()
-    .or(z.literal("")),
+  incidentDate: z.string().trim().optional().or(z.literal("")),
+  statuteOfLimitationsDate: z.string().trim().optional().or(z.literal("")),
+  statuteOfLimitationsNotes: z.string().trim().max(4000).optional().or(z.literal("")),
   /** Venue + filed/trial dates. An omitted key (older client) leaves the
    *  stored value alone; a posted blank clears it (subject to the
    *  practice area's required-field rule). */
@@ -1055,7 +993,7 @@ const updateMatterSchema = z.object({
 export async function updateMatter(
   matterId: string,
   _prev: UpdateMatterState,
-  formData: FormData
+  formData: FormData,
 ): Promise<UpdateMatterState> {
   await requirePermission("matters.edit");
   await assertMatterAccess(matterId);
@@ -1127,9 +1065,7 @@ export async function updateMatter(
   // ordinary edits); a change needs its own key.
   const storedBillingType = billingTypeOf(stored);
   const requestedBillingType =
-    data.billingType && data.billingType !== storedBillingType
-      ? data.billingType
-      : null;
+    data.billingType && data.billingType !== storedBillingType ? data.billingType : null;
   // Legacy "hybrid" is only valid as the unchanged stored value (the
   // form posts it back for hybrid matters); it can't be a target.
   if (requestedBillingType === "hybrid") {
@@ -1140,10 +1076,7 @@ export async function updateMatter(
     };
   }
   const nextBillingType = requestedBillingType;
-  if (
-    nextBillingType &&
-    !(await currentUserHasPermission("matters.billing_type.edit"))
-  ) {
+  if (nextBillingType && !(await currentUserHasPermission("matters.billing_type.edit"))) {
     return {
       status: "error",
       errors: {
@@ -1166,9 +1099,7 @@ export async function updateMatter(
       return {
         status: "error",
         errors: {
-          leadUserId: [
-            "Changing the lead attorney requires permission to manage the case team.",
-          ],
+          leadUserId: ["Changing the lead attorney requires permission to manage the case team."],
         },
         values: raw,
       };
@@ -1231,7 +1162,7 @@ export async function updateMatter(
   const parsedDates = parseSolDates(
     resolved.hasStatuteOfLimitations,
     data.incidentDate,
-    data.statuteOfLimitationsDate
+    data.statuteOfLimitationsDate,
   );
   if (!parsedDates.ok) {
     return { status: "error", errors: parsedDates.errors, values: raw };
@@ -1244,11 +1175,10 @@ export async function updateMatter(
   const updateErrors: Record<string, string[]> = {};
   const filedTrial = parseFiledTrial(
     data.filedDate ?? (stored.filedDate ? dateOnlyKey(stored.filedDate) : ""),
-    data.trialDate ?? (stored.trialDate ? dateOnlyKey(stored.trialDate) : "")
+    data.trialDate ?? (stored.trialDate ? dateOnlyKey(stored.trialDate) : ""),
   );
   if (!filedTrial.ok) Object.assign(updateErrors, filedTrial.errors);
-  const nextVenueId =
-    data.venueId === undefined ? stored.venueId : data.venueId || null;
+  const nextVenueId = data.venueId === undefined ? stored.venueId : data.venueId || null;
   let nextVenueName: string | null = stored.venue?.name ?? null;
   if (nextVenueId && nextVenueId !== stored.venueId) {
     const v = await checkVenue(nextVenueId, stored.venueId);
@@ -1288,9 +1218,7 @@ export async function updateMatter(
   };
   Object.assign(
     updateErrors,
-    requiredFieldErrors(
-      clearedRequired(resolved.requiredMatterFields, beforeValues, afterValues)
-    )
+    requiredFieldErrors(clearedRequired(resolved.requiredMatterFields, beforeValues, afterValues)),
   );
   if (Object.keys(updateErrors).length > 0) {
     return { status: "error", errors: updateErrors, values: raw };
@@ -1304,9 +1232,7 @@ export async function updateMatter(
   const adverseNames = [
     [data.opposingParty, stored.opposingParty],
     [data.opposingFirm, stored.opposingFirm],
-  ].flatMap(([next, prev]) =>
-    next && normalize(next) !== normalize(prev) ? [next] : []
-  );
+  ].flatMap(([next, prev]) => (next && normalize(next) !== normalize(prev) ? [next] : []));
   let gate: ConflictGateOutcome = { ok: true, outcome: "clear" };
   if (changedClient || adverseNames.length > 0) {
     const ownClientIds = [
@@ -1347,13 +1273,11 @@ export async function updateMatter(
   // the form resubmits with cascadeDecision=apply (+ ticked cascadeIds)
   // or skip. A cleared incident date moves nothing (no date to count
   // from), so it needs no confirmation.
-  const { decision: cascadeDecision, selectedIds: cascadeIds } =
-    readCascadeDecision(formData);
+  const { decision: cascadeDecision, selectedIds: cascadeIds } = readCascadeDecision(formData);
   const incidentTrigger: RecalcTrigger | null =
     resolved.hasStatuteOfLimitations &&
     parsedDates.incident &&
-    (!stored.incidentDate ||
-      dateOnlyKey(stored.incidentDate) !== dateOnlyKey(parsedDates.incident))
+    (!stored.incidentDate || dateOnlyKey(stored.incidentDate) !== dateOnlyKey(parsedDates.incident))
       ? { kind: "incident", newIncidentKey: dateOnlyKey(parsedDates.incident) }
       : null;
   if (incidentTrigger && !cascadeDecision) {
@@ -1404,7 +1328,7 @@ export async function updateMatter(
         storedIncident: cur.incidentDate,
         storedPeriod: toSolPeriod(
           cur.practiceArea.statutePeriodAmount,
-          cur.practiceArea.statutePeriodUnit
+          cur.practiceArea.statutePeriodUnit,
         ),
         incident: parsedDates.incident,
         period: resolved.statutePeriod,
@@ -1414,12 +1338,8 @@ export async function updateMatter(
     // No SOL date (date cleared while the area tracks SOL) means
     // there's nothing left to satisfy — reset the flags so a re-added
     // date starts back at "open". Untracked areas leave them alone.
-    const isSatisfied = solDate
-      ? cur.statuteOfLimitationsSatisfied
-      : false;
-    const satisfiedAt = isSatisfied
-      ? cur.statuteOfLimitationsSatisfiedAt
-      : null;
+    const isSatisfied = solDate ? cur.statuteOfLimitationsSatisfied : false;
+    const satisfiedAt = isSatisfied ? cur.statuteOfLimitationsSatisfiedAt : null;
 
     await tx.matter.update({
       where: { id: matterId },
@@ -1520,8 +1440,7 @@ export async function updateMatter(
       });
       const ownerFollowsLead =
         leadChanged &&
-        (existingSol?.ownerId == null ||
-          existingSol.ownerId === currentLead?.userId);
+        (existingSol?.ownerId == null || existingSol.ownerId === currentLead?.userId);
       await syncMatterSolDeadline(tx, {
         matterId,
         trackSol: true,
@@ -1529,11 +1448,7 @@ export async function updateMatter(
         notes: solNotes,
         satisfied: isSatisfied,
         satisfiedAt,
-        ownerId: existingSol
-          ? ownerFollowsLead
-            ? leadUserId
-            : undefined
-          : leadUserId,
+        ownerId: existingSol ? (ownerFollowsLead ? leadUserId : undefined) : leadUserId,
       });
     }
 
@@ -1586,7 +1501,7 @@ export async function updateMatter(
   diff("court", stored.court, data.court || null);
   if (nextBillingType) {
     changed.push(
-      `billing type ${BILLING_TYPE_LABEL[storedBillingType]} → ${BILLING_TYPE_LABEL[nextBillingType]}`
+      `billing type ${BILLING_TYPE_LABEL[storedBillingType]} → ${BILLING_TYPE_LABEL[nextBillingType]}`,
     );
   }
   diff("opposing party", stored.opposingParty, data.opposingParty || null);
@@ -1596,37 +1511,26 @@ export async function updateMatter(
     changed.push(`Venue: ${stored.venue?.name ?? "none"} → ${nextVenueName ?? "none"}`);
   }
   if (dayOrNone(stored.filedDate) !== dayOrNone(nextFiled)) {
-    changed.push(
-      `Filed date: ${dayOrNone(stored.filedDate)} → ${dayOrNone(nextFiled)}`
-    );
+    changed.push(`Filed date: ${dayOrNone(stored.filedDate)} → ${dayOrNone(nextFiled)}`);
   }
   if (dayOrNone(stored.trialDate) !== dayOrNone(nextTrial)) {
-    changed.push(
-      `Trial date: ${dayOrNone(stored.trialDate)} → ${dayOrNone(nextTrial)}`
-    );
+    changed.push(`Trial date: ${dayOrNone(stored.trialDate)} → ${dayOrNone(nextTrial)}`);
   }
   if (stored.practiceAreaId !== resolved.practiceAreaId) {
-    changed.push(
-      `practice area ${stored.practiceArea.name} → ${resolved.areaName}`
-    );
+    changed.push(`practice area ${stored.practiceArea.name} → ${resolved.areaName}`);
   }
   if (stored.clientId !== clientId) {
-    changed.push(
-      `client ${stored.client?.name ?? "none"} → ${newClientName ?? "none"}`
-    );
+    changed.push(`client ${stored.client?.name ?? "none"} → ${newClientName ?? "none"}`);
   }
   if (
     resolved.hasStatuteOfLimitations &&
     dayOrNone(sol.before.incident) !== dayOrNone(sol.after.incident)
   ) {
     changed.push(
-      `incident date ${dayOrNone(sol.before.incident)} → ${dayOrNone(sol.after.incident)}`
+      `incident date ${dayOrNone(sol.before.incident)} → ${dayOrNone(sol.after.incident)}`,
     );
   }
-  if (
-    resolved.hasStatuteOfLimitations &&
-    (sol.before.notes ?? "") !== (sol.after.notes ?? "")
-  ) {
+  if (resolved.hasStatuteOfLimitations && (sol.before.notes ?? "") !== (sol.after.notes ?? "")) {
     changed.push("statute of limitations notes");
   }
   if (changed.length > 0) {
@@ -1708,7 +1612,7 @@ export async function updateMatter(
 export async function updateMatterStage(
   matterId: string,
   newStageId: string,
-  options: { force?: boolean } = {}
+  options: { force?: boolean } = {},
 ): Promise<{
   ok: boolean;
   error?: string;
@@ -1815,7 +1719,7 @@ export async function updateMatterStage(
  *  a linked document is filed + verified. */
 export async function setMatterSolSatisfied(
   matterId: string,
-  satisfied: boolean
+  satisfied: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("matters.edit");
   await assertMatterAccess(matterId);
@@ -1837,8 +1741,7 @@ export async function setMatterSolSatisfied(
   if (!matter.practiceArea.hasStatuteOfLimitations) {
     return {
       ok: false,
-      error:
-        "This matter's practice area doesn't track statute of limitations.",
+      error: "This matter's practice area doesn't track statute of limitations.",
     };
   }
 
@@ -1916,7 +1819,7 @@ export async function setMatterSolSatisfied(
  */
 export async function setMatterRestricted(
   matterId: string,
-  restricted: boolean
+  restricted: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   const actorId = await requirePermission("matters.restrict");
   await assertMatterAccess(matterId);
@@ -1947,9 +1850,7 @@ export async function setMatterRestricted(
       matterId,
       userId: actorId,
       type: "filing",
-      title: restricted
-        ? "Matter restricted to its case team"
-        : "Matter opened to the firm",
+      title: restricted ? "Matter restricted to its case team" : "Matter opened to the firm",
     });
   }
   revalidatePath(`/matters/${matterId}`, "layout");
@@ -1965,7 +1866,7 @@ const addTeamMemberSchema = z.object({
 
 export async function addMatterTeamMember(
   matterId: string,
-  formData: FormData
+  formData: FormData,
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("matters.manage_team");
   await assertMatterAccess(matterId);
@@ -2125,7 +2026,7 @@ export async function addMatterTeamMember(
 
 export async function removeMatterTeamMember(
   matterId: string,
-  membershipId: string
+  membershipId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("matters.manage_team");
   await assertMatterAccess(matterId);
@@ -2155,8 +2056,7 @@ export async function removeMatterTeamMember(
   if (member.role === "lead") {
     return {
       ok: false,
-      error:
-        "Can't remove the lead attorney without first promoting another team member to lead.",
+      error: "Can't remove the lead attorney without first promoting another team member to lead.",
     };
   }
 
@@ -2192,10 +2092,7 @@ export async function removeMatterTeamMember(
           matterId,
           startTime: { gt: new Date() },
           // SQL `<>` skips NULL creators (legacy rows), so spell it out.
-          OR: [
-            { createdById: null },
-            { createdById: { not: member.userId } },
-          ],
+          OR: [{ createdById: null }, { createdById: { not: member.userId } }],
         },
       },
     });
@@ -2216,9 +2113,7 @@ export async function removeMatterTeamMember(
     type: "filing",
     title: `${member.user.name} removed from team (${matterTeamRoleLabel(member.role)})`,
     detail:
-      detached > 0
-        ? `Removed from ${detached} upcoming event${detached === 1 ? "" : "s"}`
-        : null,
+      detached > 0 ? `Removed from ${detached} upcoming event${detached === 1 ? "" : "s"}` : null,
   });
 
   revalidatePath(`/matters/${matterId}`);

@@ -43,12 +43,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessMatter } from "@/lib/matter-access";
 import { canAccessLead } from "@/lib/lead-access";
 import { scopeOf } from "@/lib/record-scope";
-import {
-  isBlobKey,
-  openReadStream,
-  signedBlobUrl,
-  statFile,
-} from "@/lib/file-storage";
+import { isBlobKey, openReadStream, signedBlobUrl, statFile } from "@/lib/file-storage";
 import { isInlineSafeType } from "@/lib/inline-safe-types";
 import { resolveRangeHeader } from "./range";
 import { Readable } from "node:stream";
@@ -75,7 +70,7 @@ export const dynamic = "force-dynamic";
  *  documents follow the lead wall (restricted leads, ADR-049). */
 async function canReadDocument(
   userId: string,
-  doc: { matterId: string | null; leadId: string | null }
+  doc: { matterId: string | null; leadId: string | null },
 ): Promise<boolean> {
   let scope;
   try {
@@ -90,7 +85,7 @@ async function canReadDocument(
 
 export async function GET(
   req: NextRequest,
-  ctx: { params: Promise<{ id: string }> }
+  ctx: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const session = await getSession();
   if (!session?.user?.id) {
@@ -126,11 +121,7 @@ export async function GET(
   });
   // Matter wall: a document on a matter the user can't access is
   // indistinguishable from a missing one (404, never 403).
-  if (
-    !doc ||
-    !doc.fileUrl ||
-    !(await canReadDocument(session.user.id, doc))
-  ) {
+  if (!doc || !doc.fileUrl || !(await canReadDocument(session.user.id, doc))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
@@ -189,7 +180,7 @@ export async function GET(
           "Content-Range": `bytes */${fsStat.size}`,
           "Accept-Ranges": "bytes",
         },
-      }
+      },
     );
   }
   const partial = range.kind === "partial";
@@ -203,15 +194,13 @@ export async function GET(
   // both inclusive) — a seek never reads the skipped bytes.
   const nodeStream = openReadStream(
     doc.fileUrl,
-    partial ? { start: range.start, end: range.end } : undefined
+    partial ? { start: range.start, end: range.end } : undefined,
   ) as Readable;
   const webStream = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
 
   const headers: Record<string, string> = {
     "Content-Type": contentType,
-    "Content-Length": String(
-      partial ? range.end - range.start + 1 : fsStat.size
-    ),
+    "Content-Length": String(partial ? range.end - range.start + 1 : fsStat.size),
     // Advertise seekability — media elements probe this before
     // issuing Range requests.
     "Accept-Ranges": "bytes",
@@ -234,8 +223,7 @@ export async function GET(
     headers["Content-Security-Policy"] = "sandbox";
   }
   if (partial) {
-    headers["Content-Range"] =
-      `bytes ${range.start}-${range.end}/${fsStat.size}`;
+    headers["Content-Range"] = `bytes ${range.start}-${range.end}/${fsStat.size}`;
   }
 
   return new Response(webStream, { status: partial ? 206 : 200, headers });

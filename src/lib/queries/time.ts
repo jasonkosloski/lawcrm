@@ -154,9 +154,7 @@ export async function getMyWeekTime(dayKeys: string[]): Promise<MyWeekTime> {
       }))
       .sort((a, b) => b.hours - a.hours);
     const dayTotal = round2(segments.reduce((sum, s) => sum + s.hours, 0));
-    const dayBillable = round2(
-      segments.reduce((sum, s) => sum + s.billableHours, 0)
-    );
+    const dayBillable = round2(segments.reduce((sum, s) => sum + s.billableHours, 0));
     totalHours += dayTotal;
     billableHours += dayBillable;
     return { dayKey, totalHours: dayTotal, billableHours: dayBillable, segments };
@@ -239,8 +237,7 @@ export async function getMyDayTime(dayKey: string): Promise<MyDayTime> {
     id: e.id,
     matterId: e.matter?.id ?? null,
     leadId: e.lead?.id ?? null,
-    matterName:
-      e.matter?.name ?? (e.lead ? `Intake · ${e.lead.name}` : "Intake"),
+    matterName: e.matter?.name ?? (e.lead ? `Intake · ${e.lead.name}` : "Intake"),
     matterColor: e.matter?.color ?? INTAKE_COLOR,
     activity: e.activity,
     narrative: e.narrative,
@@ -257,9 +254,7 @@ export async function getMyDayTime(dayKey: string): Promise<MyDayTime> {
     logged: rows.filter((r) => r.source === "manual"),
     captured: rows.filter((r) => r.source !== "manual"),
     totalHours: round2(rows.reduce((sum, r) => sum + r.hours, 0)),
-    billableHours: round2(
-      rows.filter(isBillable).reduce((sum, r) => sum + r.hours, 0)
-    ),
+    billableHours: round2(rows.filter(isBillable).reduce((sum, r) => sum + r.hours, 0)),
   };
 }
 

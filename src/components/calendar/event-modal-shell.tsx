@@ -2,12 +2,7 @@
 
 "use client";
 
-import {
-  useEffect,
-  useRef,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
-} from "react";
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 // ── Dialog shell ────────────────────────────────────────────────────────
@@ -55,8 +50,7 @@ export function ModalShell({
     const handler = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
       const target = e.target instanceof Element ? e.target : null;
-      const onPage =
-        !target || target === document.body || target === document.documentElement;
+      const onPage = !target || target === document.body || target === document.documentElement;
       const inside = !!target && !!rootRef.current?.contains(target);
       // Focus is somewhere else on the page (e.g. a docked composer):
       // that surface owns this Escape.
@@ -77,9 +71,9 @@ export function ModalShell({
     if (e.key !== "Tab") return;
     const dialog = dialogRef.current;
     if (!dialog) return;
-    const items = Array.from(
-      dialog.querySelectorAll<HTMLElement>(FOCUSABLE)
-    ).filter((el) => !el.hasAttribute("disabled") && el.tabIndex >= 0);
+    const items = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+      (el) => !el.hasAttribute("disabled") && el.tabIndex >= 0,
+    );
     if (items.length === 0) {
       e.preventDefault();
       return;
@@ -114,7 +108,7 @@ export function ModalShell({
         onKeyDown={trapTab}
         className={cn(
           "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 rounded-xl shadow-2xl ring-1 ring-black/5 border border-line bg-white flex flex-col overflow-hidden outline-none animate-in zoom-in-95 fade-in duration-100",
-          widthClass
+          widthClass,
         )}
       >
         {children}

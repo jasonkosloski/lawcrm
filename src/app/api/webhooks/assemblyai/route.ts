@@ -24,8 +24,7 @@ function secretMatches(provided: string | null, expected: string): boolean {
 export async function POST(request: Request): Promise<Response> {
   let jobId: unknown;
   try {
-    jobId = ((await request.json()) as { transcript_id?: unknown })
-      ?.transcript_id;
+    jobId = ((await request.json()) as { transcript_id?: unknown })?.transcript_id;
   } catch {
     return Response.json({ ok: true });
   }
@@ -39,9 +38,7 @@ export async function POST(request: Request): Promise<Response> {
   // Already finished (secret cleared): nothing left to do.
   if (!t.webhookSecret) return Response.json({ ok: true });
 
-  if (
-    !secretMatches(request.headers.get(WEBHOOK_SECRET_HEADER), t.webhookSecret)
-  ) {
+  if (!secretMatches(request.headers.get(WEBHOOK_SECRET_HEADER), t.webhookSecret)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

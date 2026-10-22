@@ -68,9 +68,7 @@ export function RequestsSection({
               key={r.id}
               className="flex flex-col gap-1 rounded-xl bg-white p-5 shadow-xs ring-1 ring-line"
             >
-              <span className="font-display text-base font-medium text-ink">
-                {r.title}
-              </span>
+              <span className="font-display text-base font-medium text-ink">{r.title}</span>
               <span className="inline-flex items-center gap-1.5 text-sm text-ink-3">
                 <CheckCircle2 className="size-4 text-ok" aria-hidden="true" />
                 Received, the firm is reviewing
@@ -103,9 +101,7 @@ function RequestHeader({ r }: { r: PortalRequest }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-display text-base font-medium text-ink">
-          {r.title}
-        </span>
+        <span className="font-display text-base font-medium text-ink">{r.title}</span>
         {r.overdue ? (
           <span className="rounded-full border border-warn-border bg-warn-soft px-2.5 py-0.5 text-xs font-medium text-warn">
             Overdue
@@ -114,9 +110,7 @@ function RequestHeader({ r }: { r: PortalRequest }) {
       </div>
       {due ? <span className="text-sm text-ink-3">{due}</span> : null}
       {r.instructions ? (
-        <p className="text-sm whitespace-pre-line text-ink-2">
-          {r.instructions}
-        </p>
+        <p className="text-sm whitespace-pre-line text-ink-2">{r.instructions}</p>
       ) : null}
     </div>
   );

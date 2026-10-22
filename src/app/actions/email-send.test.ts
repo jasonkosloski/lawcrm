@@ -62,23 +62,18 @@ vi.mock("@/lib/file-storage", async (importOriginal) => {
   return { ...actual, statFile: vi.fn() };
 });
 vi.mock("@/lib/email-attachments", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/lib/email-attachments")>();
+  const actual = await importOriginal<typeof import("@/lib/email-attachments")>();
   return { ...actual, readStoredBytes: vi.fn() };
 });
 
 // Keep the real error classes (instanceof in the action must match);
 // stub only the network call.
 vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/lib/google/gmail-client")>();
+  const actual = await importOriginal<typeof import("@/lib/google/gmail-client")>();
   return { ...actual, gmailFetch: vi.fn() };
 });
 
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { getCurrentUserId } from "@/lib/current-user";
 import { canAccessMatter } from "@/lib/matter-access";
 import { gmailFetch } from "@/lib/google/gmail-client";
@@ -233,9 +228,7 @@ describe("sendEmail — gate + ownership", () => {
     const { accountId } = await seedEmailAccount({ userId });
     mockedGmailFetch.mockResolvedValue(gmailOk());
     await sendEmail(accountId, BASE_SEND);
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "communication.send_email"
-    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith("communication.send_email");
   });
 
   test("another user's accountId does not resolve — no network call", async () => {
@@ -292,7 +285,7 @@ describe("sendEmail — record filing", () => {
       sendEmail(accountId, {
         ...BASE_SEND,
         scope: { kind: "lead", leadId: "does-not-exist" },
-      })
+      }),
     ).rejects.toThrow("NEXT_NOT_FOUND");
 
     expect(mockedGmailFetch).not.toHaveBeenCalled();
@@ -394,7 +387,7 @@ describe("sendEmail — record filing", () => {
       where: { id: threadId },
     });
     expect(thread.matterId).toBe(
-      BASE_SEND.scope.kind === "matter" ? BASE_SEND.scope.matterId : null
+      BASE_SEND.scope.kind === "matter" ? BASE_SEND.scope.matterId : null,
     );
   });
 });
@@ -415,12 +408,8 @@ describe("sendEmail — validation", () => {
   test("rejects empty recipients and empty body", async () => {
     const { userId } = await seedActor();
     const { accountId } = await seedEmailAccount({ userId });
-    expect((await sendEmail(accountId, { ...BASE_SEND, to: [] })).ok).toBe(
-      false
-    );
-    expect(
-      (await sendEmail(accountId, { ...BASE_SEND, bodyText: "   " })).ok
-    ).toBe(false);
+    expect((await sendEmail(accountId, { ...BASE_SEND, to: [] })).ok).toBe(false);
+    expect((await sendEmail(accountId, { ...BASE_SEND, bodyText: "   " })).ok).toBe(false);
     expect(mockedGmailFetch).not.toHaveBeenCalled();
   });
 });
@@ -439,7 +428,7 @@ describe("sendEmail — wire + local upsert", () => {
     expect(mockedGmailFetch).toHaveBeenCalledWith(
       accountId,
       "/users/me/messages/send",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
     const { mime, threadId } = sentPayload();
     expect(threadId).toBeUndefined(); // fresh compose — no thread pin
@@ -472,9 +461,7 @@ describe("sendEmail — wire + local upsert", () => {
     const msg = thread?.messages[0];
     expect(msg?.externalId).toBe("gm-9");
     expect(msg?.fromEmail).toBe("me@firm.com");
-    expect(JSON.parse(msg?.toRecipients ?? "[]")).toEqual([
-      { email: "alice@example.com" },
-    ]);
+    expect(JSON.parse(msg?.toRecipients ?? "[]")).toEqual([{ email: "alice@example.com" }]);
     if (result.ok) expect(result.threadId).toBe(thread?.id);
   });
 
@@ -544,7 +531,7 @@ describe("sendEmail — outbound HTML sanitization (Email v1.1)", () => {
     await sendEmail(accountId, {
       ...BASE_SEND,
       bodyHtml:
-        '<p>Hi</p><script>alert(1)</script>' +
+        "<p>Hi</p><script>alert(1)</script>" +
         '<p onclick="steal()">Click <a href="javascript:alert(2)">here</a></p>' +
         '<img src="https://evil.example/pixel.png" onerror="alert(3)">' +
         '<iframe src="https://evil.example"></iframe>' +
@@ -569,8 +556,7 @@ describe("sendEmail — outbound HTML sanitization (Email v1.1)", () => {
     const { accountId } = await seedEmailAccount({ userId });
     mockedGmailFetch.mockResolvedValue(gmailOk("gm-9", "gt-9"));
 
-    const rich =
-      "<p>Hi <strong>Alice</strong>,</p><ul><li><p>One</p></li><li><p>Two</p></li></ul>";
+    const rich = "<p>Hi <strong>Alice</strong>,</p><ul><li><p>One</p></li><li><p>Two</p></li></ul>";
     await sendEmail(accountId, { ...BASE_SEND, bodyHtml: rich });
 
     expect(wireHtml(sentPayload().mime)).toBe(rich);
@@ -604,7 +590,7 @@ describe("sendEmail — failure paths preserve the draft contract", () => {
     const { userId } = await seedActor();
     const { accountId } = await seedEmailAccount({ userId });
     mockedGmailFetch.mockRejectedValue(
-      new GmailAuthError("Reconnect this mailbox from Settings.", accountId)
+      new GmailAuthError("Reconnect this mailbox from Settings.", accountId),
     );
     const result = await sendEmail(accountId, BASE_SEND);
     expect(result).toEqual({
@@ -626,9 +612,7 @@ describe("sendEmail — failure paths preserve the draft contract", () => {
   test("non-2xx Gmail response → {ok:false} with the status", async () => {
     const { userId } = await seedActor();
     const { accountId } = await seedEmailAccount({ userId });
-    mockedGmailFetch.mockResolvedValue(
-      new Response("quota", { status: 429 })
-    );
+    mockedGmailFetch.mockResolvedValue(new Response("quota", { status: 429 }));
     const result = await sendEmail(accountId, BASE_SEND);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/429/);
@@ -655,9 +639,7 @@ describe("replyToThread — gate + ownership", () => {
     });
     mockedGmailFetch.mockResolvedValue(gmailOk());
     await replyToThread(threadId, BASE_REPLY);
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "communication.send_email"
-    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith("communication.send_email");
   });
 
   test("another user's thread does not resolve", async () => {
@@ -730,9 +712,7 @@ describe("replyToThread — recipient derivation on the wire", () => {
     const { mime } = sentPayload();
     const headersBlock = mime.slice(0, mime.indexOf("\r\n\r\n"));
     const unfolded = headersBlock.replace(/\r\n[ \t]/g, " ");
-    expect(unfolded).toMatch(
-      /^To: Alice <alice@example\.com>, bob@example\.com$/m
-    );
+    expect(unfolded).toMatch(/^To: Alice <alice@example\.com>, bob@example\.com$/m);
     expect(unfolded).toMatch(/^Cc: carol@example\.com$/m);
     // My own address appears in From (of course) but never as a
     // recipient — case-insensitive exclusion covers the "ME@firm.com"
@@ -779,9 +759,7 @@ describe("replyToThread — recipient derivation on the wire", () => {
     });
     expect(result.ok).toBe(true);
     const { mime } = sentPayload();
-    const unfolded = mime
-      .slice(0, mime.indexOf("\r\n\r\n"))
-      .replace(/\r\n[ \t]/g, " ");
+    const unfolded = mime.slice(0, mime.indexOf("\r\n\r\n")).replace(/\r\n[ \t]/g, " ");
     expect(unfolded).toMatch(/^To: Alice <alice@example\.com>, bob@example\.com$/m);
     expect(unfolded).toMatch(/^Cc: carol@example\.com$/m);
   });
@@ -905,8 +883,7 @@ describe("replyToThread — outbound HTML sanitization (Email v1.1)", () => {
 
     await replyToThread(threadId, {
       ...BASE_REPLY,
-      bodyHtml:
-        '<p>Done.</p><script>alert(1)</script><img src="https://evil.example/p.png">',
+      bodyHtml: '<p>Done.</p><script>alert(1)</script><img src="https://evil.example/p.png">',
     });
 
     const html = wireHtml(sentPayload().mime);
@@ -1011,9 +988,7 @@ describe("replyToThread — local persistence", () => {
       fromEmail: "alice@example.com",
       to: [{ email: "me@firm.com" }],
     });
-    mockedGmailFetch.mockRejectedValue(
-      new GmailAuthError("Reconnect.", accountId)
-    );
+    mockedGmailFetch.mockRejectedValue(new GmailAuthError("Reconnect.", accountId));
     const result = await replyToThread(threadId, BASE_REPLY);
     expect(result.ok).toBe(false);
     expect(await prisma.emailMessage.count()).toBe(1); // nothing appended
@@ -1081,9 +1056,7 @@ describe("replyToThread — file on reply", () => {
   test("filing succeeds, Gmail fails: thread stays filed", async () => {
     const { accountId, threadId } = await unfiled();
     const { leadId } = await seedLead();
-    mockedGmailFetch.mockRejectedValue(
-      new GmailAuthError("Reconnect.", accountId)
-    );
+    mockedGmailFetch.mockRejectedValue(new GmailAuthError("Reconnect.", accountId));
     const result = await replyToThread(threadId, {
       ...BASE_REPLY,
       scope: { kind: "lead", leadId },
@@ -1107,16 +1080,16 @@ describe("replyToThread — file on reply", () => {
     const real = prisma.emailThread.findFirst.bind(prisma.emailThread);
     // The reply's own read sees the thread unfiled; the filing re-read
     // happens after another tab filed it to the matter.
-    const spy = vi
-      .spyOn(prisma.emailThread, "findFirst")
-      .mockImplementationOnce((async (args: never) => {
-        const stale = await real(args);
-        await prisma.emailThread.update({
-          where: { id: threadId },
-          data: { matterId },
-        });
-        return stale;
-      }) as never);
+    const spy = vi.spyOn(prisma.emailThread, "findFirst").mockImplementationOnce((async (
+      args: never,
+    ) => {
+      const stale = await real(args);
+      await prisma.emailThread.update({
+        where: { id: threadId },
+        data: { matterId },
+      });
+      return stale;
+    }) as never);
     mockedGmailFetch.mockResolvedValue(gmailOk("gm-2", "gt-1"));
     const result = await replyToThread(threadId, {
       ...BASE_REPLY,
@@ -1193,9 +1166,7 @@ describe("send — a post-send persistence failure is NOT a failure (F276)", () 
     const { userId } = await seedActor();
     const { accountId } = await seedEmailAccount({ userId });
     mockedGmailFetch.mockResolvedValue(gmailOk("gm-9", "gt-9"));
-    const spy = vi
-      .spyOn(prisma.emailMessage, "upsert")
-      .mockRejectedValueOnce(new Error("db down"));
+    const spy = vi.spyOn(prisma.emailMessage, "upsert").mockRejectedValueOnce(new Error("db down"));
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const result = await sendEmail(accountId, BASE_SEND);
@@ -1220,9 +1191,7 @@ describe("send — a post-send persistence failure is NOT a failure (F276)", () 
       to: [{ email: "me@firm.com" }],
     });
     mockedGmailFetch.mockResolvedValue(gmailOk("gm-9", "gt-1"));
-    const spy = vi
-      .spyOn(prisma.emailMessage, "upsert")
-      .mockRejectedValueOnce(new Error("db down"));
+    const spy = vi.spyOn(prisma.emailMessage, "upsert").mockRejectedValueOnce(new Error("db down"));
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const result = await replyToThread(threadId, BASE_REPLY);
@@ -1291,25 +1260,18 @@ describe("send — size and address hardening (F702)", () => {
     const { userId } = await seedActor();
     const { accountId } = await seedEmailAccount({ userId });
     const longAddr = `${"a".repeat(250)}@example.com`;
-    expect(
-      (await sendEmail(accountId, { ...BASE_SEND, to: [longAddr] })).ok
-    ).toBe(false);
-    expect(
-      (await sendEmail(accountId, { ...BASE_SEND, subject: "s".repeat(999) }))
-        .ok
-    ).toBe(false);
+    expect((await sendEmail(accountId, { ...BASE_SEND, to: [longAddr] })).ok).toBe(false);
+    expect((await sendEmail(accountId, { ...BASE_SEND, subject: "s".repeat(999) })).ok).toBe(false);
     expect(
       (
         await sendEmail(accountId, {
           ...BASE_SEND,
           bodyText: "x".repeat(1_000_001),
         })
-      ).ok
+      ).ok,
     ).toBe(false);
     const many = Array.from({ length: 51 }, (_, i) => `u${i}@example.com`);
-    expect((await sendEmail(accountId, { ...BASE_SEND, to: many })).ok).toBe(
-      false
-    );
+    expect((await sendEmail(accountId, { ...BASE_SEND, to: many })).ok).toBe(false);
     // 50 To + 51 Cc: Cc alone is over the per-field cap.
     const fifty = many.slice(0, 50);
     const cc = fifty.map((a) => `cc-${a}`);
@@ -1341,7 +1303,7 @@ describe("attachments on send", () => {
 
   async function seedDoc(
     scope: { matterId: string } | { leadId: string },
-    over?: { name?: string; fileSize?: number; fileUrl?: string | null }
+    over?: { name?: string; fileSize?: number; fileUrl?: string | null },
   ): Promise<string> {
     const doc = await prisma.document.create({
       data: {
@@ -1366,7 +1328,7 @@ describe("attachments on send", () => {
     const [, url, init] = mockedGmailFetch.mock.calls[call];
     const body = init?.body as string;
     const boundary = /boundary=(\S+)/.exec(
-      new Headers(init?.headers).get("content-type") ?? ""
+      new Headers(init?.headers).get("content-type") ?? "",
     )![1];
     const parts = body.split(`--${boundary}`);
     const json = parts[1].split("\r\n\r\n")[1].trim();
@@ -1556,7 +1518,7 @@ describe("attachments on send", () => {
     });
     // Only the restricted-lead bypass is withheld.
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key) => !String(key).includes("restricted")
+      async (key) => !String(key).includes("restricted"),
     );
     const { leadId } = await seedLead({ restricted: true });
     const walledDoc = await seedDoc({ leadId }, { fileUrl: null });
@@ -1566,7 +1528,7 @@ describe("attachments on send", () => {
         ...BASE_REPLY,
         scope: { kind: "lead", leadId },
         attachmentDocumentIds: [walledDoc],
-      })
+      }),
     ).rejects.toThrow("NEXT_NOT_FOUND");
     expect(readStoredBytes).not.toHaveBeenCalled();
     expect(mockedGmailFetch).not.toHaveBeenCalled();
@@ -1597,7 +1559,7 @@ describe("attachments on send", () => {
     const { accountId } = await seedEmailAccount({ userId });
     const docId = await seedDoc(matterOf());
     mockedGmailFetch.mockRejectedValue(
-      Object.assign(new Error("timed out"), { name: "TimeoutError" })
+      Object.assign(new Error("timed out"), { name: "TimeoutError" }),
     );
     const result = await sendEmail(accountId, {
       ...BASE_SEND,

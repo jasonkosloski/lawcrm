@@ -64,8 +64,7 @@ export default async function MatterCommunicationPage({
         ? "portal"
         : "email";
   const rawThread = firstParam(sp.thread);
-  const requestedThreadId =
-    typeof rawThread === "string" ? rawThread : null;
+  const requestedThreadId = typeof rawThread === "string" ? rawThread : null;
 
   // Every fetch below depends only on the URL (`id` / `?channel` /
   // `?thread`), so run them as a single wave — the reader is
@@ -95,15 +94,13 @@ export default async function MatterCommunicationPage({
     // Contact options load only once the log-call gate passes —
     // chained onto the check rather than a separate await stage.
     currentUserHasPermission("communication.log_call").then((canLogCall) =>
-      canLogCall ? listContactPickerOptions({ priorityMatterId: id }) : null
+      canLogCall ? listContactPickerOptions({ priorityMatterId: id }) : null,
     ),
     channel === "phone" ? listMessengerItemsForMatter(id) : null,
     channel === "email" ? listThreadsForMatter(id, parsePageParam(sp.page)) : null,
     channel === "email" ? getFilingMatterOptions() : null,
     channel === "email" ? getFilingLeadOptions() : null,
-    channel === "email" && requestedThreadId
-      ? getThreadById(requestedThreadId)
-      : null,
+    channel === "email" && requestedThreadId ? getThreadById(requestedThreadId) : null,
     currentUserHasPermission("communication.edit_call"),
     currentUserHasPermission("communication.delete_call"),
     // Re-file options for the edit dialog — phone channel only, and
@@ -111,7 +108,7 @@ export default async function MatterCommunicationPage({
     // per-request cached, so the duplicate check costs nothing).
     channel === "phone"
       ? currentUserHasPermission("communication.edit_call").then((can) =>
-          can ? getFilingMatterOptions() : null
+          can ? getFilingMatterOptions() : null,
         )
       : null,
     getCurrentUserTimeZone(),
@@ -120,20 +117,13 @@ export default async function MatterCommunicationPage({
   if (!matter) notFound();
 
   const logCallButton = contacts ? (
-    <LogCallButton
-      contacts={contacts}
-      fixedMatter={{ id: matter.id, name: matter.name }}
-    />
+    <LogCallButton contacts={contacts} fixedMatter={{ id: matter.id, name: matter.name }} />
   ) : null;
 
   if (channel === "portal") {
     return (
       <div className="p-5 flex flex-col flex-1 min-h-0 gap-3">
-        <ChannelToggle
-          basePath={`/matters/${id}/communication`}
-          active="portal"
-          showPortal
-        />
+        <ChannelToggle basePath={`/matters/${id}/communication`} active="portal" showPortal />
         {portalConversation && (
           <PortalConversation
             matterId={id}
@@ -180,9 +170,7 @@ export default async function MatterCommunicationPage({
   // not the current page, so a thread off this page still opens.
   const threadList = threads?.rows ?? [];
   const selectedThread =
-    requestedThread && requestedThread.matter?.id === id
-      ? requestedThread
-      : null;
+    requestedThread && requestedThread.matter?.id === id ? requestedThread : null;
 
   return (
     <div className="p-5 flex flex-col flex-1 min-h-0 gap-3">
@@ -193,9 +181,7 @@ export default async function MatterCommunicationPage({
           showPortal={canViewPortal}
         />
         <div className="flex items-center gap-2">
-          <ComposeEmailLauncher
-            initialScope={{ kind: "matter", matterId: id }}
-          />
+          <ComposeEmailLauncher initialScope={{ kind: "matter", matterId: id }} />
           {logCallButton}
         </div>
       </div>

@@ -39,14 +39,12 @@ export function EmptyState({
       className={cn(
         "flex flex-col items-center gap-2 px-4 py-8 text-center",
         framed && "rounded-lg border border-dashed border-line-2 bg-card",
-        className
+        className,
       )}
     >
       {Icon && <Icon size={18} className="text-ink-4" aria-hidden="true" />}
       <div className="text-sm font-semibold text-ink">{title}</div>
-      {description && (
-        <div className="text-xs text-ink-3 max-w-sm">{description}</div>
-      )}
+      {description && <div className="text-xs text-ink-3 max-w-sm">{description}</div>}
       {children && <div className="mt-1">{children}</div>}
     </div>
   );

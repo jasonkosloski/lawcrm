@@ -63,10 +63,7 @@ export type CallMatterOption = { id: string; name: string };
 /** Subset of ContactPickerOption the composer actually renders —
  *  lets entry points (lead detail) pre-select a contact without
  *  fetching the full picker row. */
-export type CallContactOption = Pick<
-  ContactPickerOption,
-  "id" | "name" | "organization" | "phone"
->;
+export type CallContactOption = Pick<ContactPickerOption, "id" | "name" | "organization" | "phone">;
 
 export function LogCallButton({
   contacts,
@@ -117,7 +114,7 @@ export function LogCallButton({
 function initialFields(
   edit: EditableCallLog | undefined,
   fixedContact: CallContactOption | undefined,
-  tz: string
+  tz: string,
 ) {
   return {
     selected: fixedContact ?? null,
@@ -161,10 +158,11 @@ export function CallLogDialog({
   // Mode is fixed per mount (the kebab menu mounts an edit dialog,
   // the buttons mount create dialogs), so picking the action once
   // is safe.
-  const [state, formAction, isPending] = useDialogActionState<
-    CallLogFormState,
-    FormData
-  >(edit ? updateCallLog : logCall, callLogInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<CallLogFormState, FormData>(
+    edit ? updateCallLog : logCall,
+    callLogInitialState,
+    open,
+  );
 
   useEffect(() => {
     if (state.status === "ok") onOpenChange(false);
@@ -227,9 +225,7 @@ function CallLogFormBody({
 
   // Contact typeahead (create mode only)
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<CallContactOption | null>(
-    init.selected
-  );
+  const [selected, setSelected] = useState<CallContactOption | null>(init.selected);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
 
   // Call fields
@@ -259,7 +255,7 @@ function CallLogFormBody({
         (c) =>
           c.name.toLowerCase().includes(q) ||
           (c.organization ?? "").toLowerCase().includes(q) ||
-          (c.phone ?? "").replace(/\D/g, "").includes(q.replace(/\D/g, "") || " ")
+          (c.phone ?? "").replace(/\D/g, "").includes(q.replace(/\D/g, "") || " "),
       )
       .slice(0, 6);
   }, [query, contacts]);
@@ -291,19 +287,18 @@ function CallLogFormBody({
         <DialogDescription>
           {edit ? (
             <>
-              Correct this logged call — outcome, timing, summary, or
-              matter filing. The contact can&apos;t change; re-log the
-              call if it was with someone else.
+              Correct this logged call — outcome, timing, summary, or matter filing. The contact
+              can&apos;t change; re-log the call if it was with someone else.
             </>
           ) : fixedMatter ? (
             <>
-              Record a phone call that happened off-app — it files
-              to <span className="text-ink-2">{fixedMatter.name}</span>.
+              Record a phone call that happened off-app — it files to{" "}
+              <span className="text-ink-2">{fixedMatter.name}</span>.
             </>
           ) : (
             <>
-              Record a phone call that happened off-app — it files
-              into the contact&apos;s message thread.
+              Record a phone call that happened off-app — it files into the contact&apos;s message
+              thread.
             </>
           )}
         </DialogDescription>
@@ -315,25 +310,19 @@ function CallLogFormBody({
         ) : (
           <input type="hidden" name="contactId" value={selected?.id ?? ""} />
         )}
-        {!edit && fixedMatter && (
-          <input type="hidden" name="matterId" value={fixedMatter.id} />
-        )}
+        {!edit && fixedMatter && <input type="hidden" name="matterId" value={fixedMatter.id} />}
 
         {/* Contact — fixed label chip in edit mode, typeahead
             otherwise (chip once picked). */}
         {edit ? (
           <div className="flex items-center gap-2 h-8 px-2.5 rounded-md border border-line bg-paper-2/50 text-xs text-ink-2">
             <UserCheck size={13} className="text-ink-3 shrink-0" />
-            <span className="font-medium truncate flex-1">
-              {edit.contactLabel}
-            </span>
+            <span className="font-medium truncate flex-1">{edit.contactLabel}</span>
           </div>
         ) : selected ? (
           <div className="flex items-center gap-2 h-8 px-2.5 rounded-md border border-brand-200 bg-brand-soft/40 text-xs text-ink-2">
             <UserCheck size={13} className="text-brand-700 shrink-0" />
-            <span className="font-medium truncate flex-1">
-              {selected.name}
-            </span>
+            <span className="font-medium truncate flex-1">{selected.name}</span>
             {selected.organization && (
               <span className="text-2xs font-mono text-ink-4 truncate">
                 {selected.organization}
@@ -369,11 +358,7 @@ function CallLogFormBody({
               placeholder="Who was the call with? Type to search contacts"
               className={cn(inputClass(!!errs.contactId), "w-full")}
             />
-            {errs.contactId && (
-              <div className="text-2xs text-warn mt-0.5">
-                {errs.contactId[0]}
-              </div>
-            )}
+            {errs.contactId && <div className="text-2xs text-warn mt-0.5">{errs.contactId[0]}</div>}
             {suggestionsOpen && suggestions.length > 0 && (
               <div
                 role="listbox"
@@ -391,9 +376,7 @@ function CallLogFormBody({
                     className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-brand-tint"
                   >
                     <UserCheck size={12} className="text-ink-4 shrink-0" />
-                    <span className="font-medium text-ink truncate">
-                      {c.name}
-                    </span>
+                    <span className="font-medium text-ink truncate">{c.name}</span>
                     <span className="text-2xs font-mono text-ink-4 truncate ml-auto">
                       {c.phone ?? "no phone"}
                     </span>
@@ -484,26 +467,14 @@ function CallLogFormBody({
 
         {/* Non-field failures (item vanished, provider-synced item
             slipped through) — surface verbatim. */}
-        {errs.form && (
-          <div className="text-2xs text-warn">{errs.form[0]}</div>
-        )}
+        {errs.form && <div className="text-2xs text-warn">{errs.form[0]}</div>}
 
         <DialogFooter>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => onOpenChange(false)}
-          >
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button type="submit" disabled={isPending || (!edit && !selected)}>
-            {edit
-              ? isPending
-                ? "Saving…"
-                : "Save changes"
-              : isPending
-                ? "Logging…"
-                : "Log call"}
+            {edit ? (isPending ? "Saving…" : "Save changes") : isPending ? "Logging…" : "Log call"}
           </Button>
         </DialogFooter>
       </form>

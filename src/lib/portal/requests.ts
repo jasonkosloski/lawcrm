@@ -5,7 +5,6 @@ import { portalMatterWhere } from "@/lib/portal-access";
 import { PORTAL_TIME_ZONE } from "@/lib/portal/time-zone";
 import { dateOnlyKey, daysUntilDateOnly } from "@/lib/format-date";
 
-
 export type PortalRequest = {
   id: string;
   title: string;
@@ -48,10 +47,7 @@ export async function listPortalRequests(
       returnNote: true,
       status: true,
     },
-    orderBy: [
-      { dueDate: { sort: "asc", nulls: "last" } },
-      { createdAt: "asc" },
-    ],
+    orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
   });
   // Clients have no profile zone; "today" is the firm's default zone.
   const tz = PORTAL_TIME_ZONE;
@@ -62,10 +58,7 @@ export async function listPortalRequests(
       instructions: r.instructions,
       dueDate: r.dueDate ? dateOnlyKey(r.dueDate) : null,
       returnNote: r.returnNote,
-      overdue:
-        r.status === "open" &&
-        !!r.dueDate &&
-        daysUntilDateOnly(r.dueDate, tz) < 0,
+      overdue: r.status === "open" && !!r.dueDate && daysUntilDateOnly(r.dueDate, tz) < 0,
     };
     if (r.status === "open") groups.open.push(req);
     else if (r.status === "submitted") groups.submitted.push(req);
@@ -75,9 +68,7 @@ export async function listPortalRequests(
 }
 
 /** Open (incl. sent back) request counts per matter, live access only. */
-export async function countOpenRequestsByMatter(
-  identityId: string,
-): Promise<Map<string, number>> {
+export async function countOpenRequestsByMatter(identityId: string): Promise<Map<string, number>> {
   const rows = await prisma.documentRequest.groupBy({
     by: ["matterId"],
     where: { status: "open", matter: portalMatterWhere(identityId) },

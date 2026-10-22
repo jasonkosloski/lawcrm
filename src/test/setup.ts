@@ -47,11 +47,7 @@ if (typeof realFetch === "function") {
     // Duck-typed (not `instanceof URL`): a URL from another realm
     // (happy-dom) would otherwise yield `undefined` and fail open.
     const raw =
-      typeof input === "string"
-        ? input
-        : "href" in input
-          ? String(input.href)
-          : String(input.url);
+      typeof input === "string" ? input : "href" in input ? String(input.href) : String(input.url);
     let host: string | null = null;
     try {
       host = new URL(raw).hostname.toLowerCase();
@@ -59,16 +55,12 @@ if (typeof realFetch === "function") {
       // Relative URL: no network host to protect. An absolute-looking
       // value that still fails to parse is rejected, not allowed.
       if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) || raw.startsWith("//")) {
-        return Promise.reject(
-          new Error(`Blocked unparseable network request in tests: ${raw}.`)
-        );
+        return Promise.reject(new Error(`Blocked unparseable network request in tests: ${raw}.`));
       }
     }
     if (host !== null && !LOOPBACK.has(host)) {
       return Promise.reject(
-        new Error(
-          `Blocked real network request in tests: ${raw}. Mock fetch in this test.`
-        )
+        new Error(`Blocked real network request in tests: ${raw}. Mock fetch in this test.`),
       );
     }
     return realFetch(input, init);

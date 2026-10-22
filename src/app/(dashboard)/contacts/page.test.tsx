@@ -70,12 +70,10 @@ describe("ContactsPage", () => {
   });
 
   test("a list that hit the cap says so", async () => {
-    mockedList.mockResolvedValue(
-      Array.from({ length: CONTACT_LIST_LIMIT }, (_, i) => row(i))
-    );
+    mockedList.mockResolvedValue(Array.from({ length: CONTACT_LIST_LIMIT }, (_, i) => row(i)));
     render(await ContactsPage(props()));
     expect(screen.getByRole("status")).toHaveTextContent(
-      `Showing the first ${CONTACT_LIST_LIMIT} contacts`
+      `Showing the first ${CONTACT_LIST_LIMIT} contacts`,
     );
   });
 
@@ -83,9 +81,7 @@ describe("ContactsPage", () => {
     mockedList.mockResolvedValue([row(1)]);
     render(await ContactsPage(props({ q: " whitfield ", type: "client" })));
 
-    expect(
-      screen.getByRole("searchbox", { name: "Search contacts" })
-    ).toHaveValue(" whitfield ");
+    expect(screen.getByRole("searchbox", { name: "Search contacts" })).toHaveValue(" whitfield ");
     expect(mockedList).toHaveBeenCalledWith({
       search: " whitfield ",
       type: "client",

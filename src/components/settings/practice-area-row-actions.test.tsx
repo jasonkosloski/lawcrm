@@ -20,10 +20,7 @@ vi.mock("@/app/actions/practice-areas", () => ({
 }));
 
 import { notifyError } from "@/lib/feedback";
-import {
-  movePracticeArea,
-  setPracticeAreaActive,
-} from "@/app/actions/practice-areas";
+import { movePracticeArea, setPracticeAreaActive } from "@/app/actions/practice-areas";
 import { PracticeAreaRowActions } from "./practice-area-row-actions";
 
 beforeEach(() => {
@@ -41,7 +38,7 @@ describe("PracticeAreaRowActions", () => {
         activeMatterCount={0}
         canMoveUp={false}
         canMoveDown
-      />
+      />,
     );
     expect(screen.getByRole("button", { name: "Move up" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Move down" })).toBeEnabled();
@@ -53,7 +50,7 @@ describe("PracticeAreaRowActions", () => {
         activeMatterCount={0}
         canMoveUp
         canMoveDown={false}
-      />
+      />,
     );
     expect(screen.getByRole("button", { name: "Move up" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Move down" })).toBeDisabled();
@@ -61,20 +58,14 @@ describe("PracticeAreaRowActions", () => {
 
   test("an enabled move click reaches the action", async () => {
     const user = userEvent.setup();
-    render(
-      <PracticeAreaRowActions areaId="a1" isActive activeMatterCount={0} />
-    );
+    render(<PracticeAreaRowActions areaId="a1" isActive activeMatterCount={0} />);
     await user.click(screen.getByRole("button", { name: "Move down" }));
-    await waitFor(() =>
-      expect(movePracticeArea).toHaveBeenCalledWith("a1", "down")
-    );
+    await waitFor(() => expect(movePracticeArea).toHaveBeenCalledWith("a1", "down"));
   });
 
   test("archive with matters toasts with the shared wording and does not call the action", async () => {
     const user = userEvent.setup();
-    render(
-      <PracticeAreaRowActions areaId="a1" isActive activeMatterCount={3} />
-    );
+    render(<PracticeAreaRowActions areaId="a1" isActive activeMatterCount={3} />);
     await user.click(screen.getByRole("button", { name: "Archive" }));
     expect(setPracticeAreaActive).not.toHaveBeenCalled();
     const msg = vi.mocked(notifyError).mock.calls[0][0] as string;

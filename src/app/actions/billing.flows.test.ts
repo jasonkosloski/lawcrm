@@ -9,15 +9,7 @@
  * see billing.concurrency.test.ts for real overlapping transactions.
  */
 
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
@@ -57,10 +49,7 @@ import {
   updateInvoiceLineItem,
 } from "@/app/actions/billing";
 import { Prisma } from "@/generated/prisma/client";
-import {
-  billingInitialState,
-  lineItemEditInitialState,
-} from "@/lib/billing-form";
+import { billingInitialState, lineItemEditInitialState } from "@/lib/billing-form";
 import {
   resetDb,
   seedContact,
@@ -139,9 +128,7 @@ const setTrust = (n: number) =>
   prisma.matter.update({ where: { id: matterId }, data: { trustBalance: n } });
 
 const trustBalance = async () =>
-  (
-    await prisma.matter.findUniqueOrThrow({ where: { id: matterId } })
-  ).trustBalance.toNumber();
+  (await prisma.matter.findUniqueOrThrow({ where: { id: matterId } })).trustBalance.toNumber();
 
 /** Matter.trustBalance must always equal the ledger's signed sum. */
 async function expectLedgerMatchesBalance(initial = 0) {
@@ -149,9 +136,7 @@ async function expectLedgerMatchesBalance(initial = 0) {
     where: { matterId },
     _sum: { amount: true },
   });
-  expect(await trustBalance()).toBe(
-    initial + (agg._sum.amount?.toNumber() ?? 0)
-  );
+  expect(await trustBalance()).toBe(initial + (agg._sum.amount?.toNumber() ?? 0));
 }
 
 const trustForm = (type: string, amount: string, date?: string) => {
@@ -163,11 +148,7 @@ const trustForm = (type: string, amount: string, date?: string) => {
   return fd;
 };
 
-const payForm = (
-  amount: string,
-  source = "check",
-  extra: Record<string, string> = {}
-) => {
+const payForm = (amount: string, source = "check", extra: Record<string, string> = {}) => {
   const fd = new FormData();
   fd.set("amount", amount);
   fd.set("source", source);
@@ -200,7 +181,7 @@ describe("trust ledger — manual transactions", () => {
     const res = await addTrustTransaction(
       matterId,
       billingInitialState,
-      trustForm("deposit", "$1,250.50")
+      trustForm("deposit", "$1,250.50"),
     );
     expect(res.status).toBe("ok");
     const rows = await prisma.trustTransaction.findMany({ where: { matterId } });
@@ -229,7 +210,7 @@ describe("trust ledger — manual transactions", () => {
     const res = await addTrustTransaction(
       matterId,
       billingInitialState,
-      trustForm("disbursement", "40.01")
+      trustForm("disbursement", "40.01"),
     );
     expect(res.status).toBe("error");
     expect(res.error).toMatch(/overdraw/i);
@@ -241,7 +222,7 @@ describe("trust ledger — manual transactions", () => {
     const res = await addTrustTransaction(
       matterId,
       billingInitialState,
-      trustForm("deposit", "10.005")
+      trustForm("deposit", "10.005"),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.amount?.length).toBeGreaterThan(0);
@@ -252,7 +233,7 @@ describe("trust ledger — manual transactions", () => {
     await addTrustTransaction(
       matterId,
       billingInitialState,
-      trustForm("deposit", "10", "2026-03-05")
+      trustForm("deposit", "10", "2026-03-05"),
     );
     // 2026-11-01T01:00Z is still Oct 31 at 7 pm in Denver.
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-01T01:00:00Z") });
@@ -281,9 +262,7 @@ describe("recordInvoicePayment", () => {
         { matterId, userId: denied, role: "co_counsel" },
       ],
     });
-    vi.mocked(userHasPermission).mockImplementation(
-      async (id: string) => id !== denied
-    );
+    vi.mocked(userHasPermission).mockImplementation(async (id: string) => id !== denied);
     const id = await makeInvoice({ status: "sent", total: 100 });
     const res = await recordInvoicePayment(id, billingInitialState, payForm("30"));
     expect(res.status).toBe("ok");
@@ -331,7 +310,7 @@ describe("recordInvoicePayment", () => {
     const res = await recordInvoicePayment(
       id,
       billingInitialState,
-      payForm("40", "trust", { reference: "REF-1" })
+      payForm("40", "trust", { reference: "REF-1" }),
     );
     expect(res.status).toBe("ok");
 
@@ -341,7 +320,7 @@ describe("recordInvoicePayment", () => {
     expect(txns[0]!.amount.toNumber()).toBe(-40);
     expect(txns[0]!.invoiceId).toBe(id);
     expect(txns[0]!.description).toBe(
-      `Payment to invoice ${(await prisma.invoice.findUniqueOrThrow({ where: { id } })).invoiceNumber}`
+      `Payment to invoice ${(await prisma.invoice.findUniqueOrThrow({ where: { id } })).invoiceNumber}`,
     );
 
     const pay = await prisma.invoicePayment.findFirstOrThrow({ where: { invoiceId: id } });
@@ -376,7 +355,7 @@ describe("recordInvoicePayment", () => {
     const edit = await updateInvoiceLineItem(
       timeEntryId,
       lineItemEditInitialState,
-      lineForm("325.50", "0.33")
+      lineForm("325.50", "0.33"),
     );
     expect(edit.status).toBe("ok");
     const inv = await prisma.invoice.findFirstOrThrow({ where: { matterId } });
@@ -398,7 +377,11 @@ describe("recordInvoicePayment", () => {
 
   test("a picked date is stored at UTC midnight regardless of the server zone", async () => {
     const id = await makeInvoice({ status: "sent" });
-    await recordInvoicePayment(id, billingInitialState, payForm("10", "check", { date: "2026-04-15" }));
+    await recordInvoicePayment(
+      id,
+      billingInitialState,
+      payForm("10", "check", { date: "2026-04-15" }),
+    );
     const pay = await prisma.invoicePayment.findFirstOrThrow({ where: { invoiceId: id } });
     expect(pay.date.toISOString()).toBe("2026-04-15T00:00:00.000Z");
   });
@@ -406,9 +389,7 @@ describe("recordInvoicePayment", () => {
   test("a failing team lookup after commit does not turn the saved payment into an error", async () => {
     const id = await makeInvoice({ status: "sent", total: 100 });
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(prisma.matterTeamMember, "findMany").mockRejectedValueOnce(
-      new Error("pool timeout")
-    );
+    vi.spyOn(prisma.matterTeamMember, "findMany").mockRejectedValueOnce(new Error("pool timeout"));
     const res = await recordInvoicePayment(id, billingInitialState, payForm("25"));
     expect(res.status).toBe("ok");
     expect(consoleSpy).toHaveBeenCalled();
@@ -419,7 +400,11 @@ describe("recordInvoicePayment", () => {
     const id = await makeInvoice({ status: "sent", total: 100 });
     const { contactId } = await seedContact({ name: "Pat Client", email: "pat@example.com" });
     await prisma.matter.update({ where: { id: matterId }, data: { clientId: contactId } });
-    await recordInvoicePayment(id, billingInitialState, payForm("25", "check", { notifyClient: "true" }));
+    await recordInvoicePayment(
+      id,
+      billingInitialState,
+      payForm("25", "check", { notifyClient: "true" }),
+    );
     const inv = await prisma.invoice.findUniqueOrThrow({ where: { id } });
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { matterId, title: { contains: "emailed to" } },
@@ -487,7 +472,7 @@ describe("sendInvoice", () => {
     const res = await sendInvoice(
       id,
       billingInitialState,
-      sendForm({ applyTrust: "true", trustAmount: "30.01" })
+      sendForm({ applyTrust: "true", trustAmount: "30.01" }),
     );
     expect(res.status).toBe("error");
     expect(res.error).toMatch(/at most \$30\.00/);
@@ -552,7 +537,9 @@ describe("$0 (unpriced) invoices", () => {
     const res = await approveInvoice(invoiceId);
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/price the line items/i);
-    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })).status).toBe("draft");
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })).status).toBe(
+      "draft",
+    );
   });
 
   test("send refuses a $0 invoice: it must not flip to 'paid' and lock its time entries", async () => {
@@ -573,7 +560,7 @@ describe("$0 (unpriced) invoices", () => {
   test("pricing the lines first makes the same invoice approvable and sendable", async () => {
     const { invoiceId, timeEntryId } = await unpricedInvoice();
     expect(
-      (await updateInvoiceLineItem(timeEntryId, lineItemEditInitialState, lineForm("200"))).status
+      (await updateInvoiceLineItem(timeEntryId, lineItemEditInitialState, lineForm("200"))).status,
     ).toBe("ok");
     expect((await approveInvoice(invoiceId)).ok).toBe(true);
     expect((await sendInvoice(invoiceId, billingInitialState, sendForm())).status).toBe("ok");
@@ -599,7 +586,7 @@ describe("approveInvoice", () => {
     expect((await approveInvoice(id)).ok).toBe(true);
     expect((await prisma.invoice.findUniqueOrThrow({ where: { id } })).status).toBe("approved");
     expect(
-      await prisma.activityLog.count({ where: { matterId, title: { contains: "approved" } } })
+      await prisma.activityLog.count({ where: { matterId, title: { contains: "approved" } } }),
     ).toBe(1);
   });
 
@@ -623,16 +610,17 @@ describe("approveInvoice", () => {
   test("a total edited between the read and the write is refused", async () => {
     const id = await makeInvoice({ status: "draft", total: 100 });
     const realFind = prisma.invoice.findUnique.bind(prisma.invoice);
-    vi.spyOn(prisma.invoice, "findUnique").mockImplementationOnce(realFind as never) // 1st read: matter-access resolver
-    .mockImplementationOnce((async (args: unknown) => {
-      const row = await realFind(args as never);
-      // A line-item edit commits after the approver's read.
-      await prisma.invoice.update({
-        where: { id },
-        data: { totalAmount: 250, subtotal: 250 },
-      });
-      return row;
-    }) as never);
+    vi.spyOn(prisma.invoice, "findUnique")
+      .mockImplementationOnce(realFind as never) // 1st read: matter-access resolver
+      .mockImplementationOnce((async (args: unknown) => {
+        const row = await realFind(args as never);
+        // A line-item edit commits after the approver's read.
+        await prisma.invoice.update({
+          where: { id },
+          data: { totalAmount: 250, subtotal: 250 },
+        });
+        return row;
+      }) as never);
     const res = await approveInvoice(id);
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/changed/i);
@@ -655,7 +643,7 @@ describe("approveInvoice", () => {
       new Prisma.PrismaClientKnownRequestError("gone", {
         code: "P2025",
         clientVersion: "test",
-      })
+      }),
     );
     const res = await approveInvoice(id);
     expect(res).toEqual({ ok: false, error: "Invoice not found." });
@@ -676,9 +664,11 @@ describe("deleteInvoice", () => {
     const te = await prisma.timeEntry.findUniqueOrThrow({ where: { id: timeEntryId } });
     expect(te.invoiceId).toBeNull();
     expect(te.status).toBe("billable");
-    expect((await prisma.expense.findUniqueOrThrow({ where: { id: expenseId } })).invoiceId).toBeNull();
     expect(
-      await prisma.activityLog.count({ where: { matterId, title: { contains: "deleted" } } })
+      (await prisma.expense.findUniqueOrThrow({ where: { id: expenseId } })).invoiceId,
+    ).toBeNull();
+    expect(
+      await prisma.activityLog.count({ where: { matterId, title: { contains: "deleted" } } }),
     ).toBe(1);
   });
 
@@ -763,15 +753,19 @@ describe("bundleAsInternalRecord", () => {
     expect(inv.totalAmount.toNumber()).toBe(400);
     expect(inv.paidAmount.toNumber()).toBe(400);
     expect(inv.issueDate.getTime()).toBe(inv.dueDate.getTime());
-    expect((await prisma.timeEntry.findUniqueOrThrow({ where: { id: t.timeEntryId } })).status).toBe("billed");
+    expect(
+      (await prisma.timeEntry.findUniqueOrThrow({ where: { id: t.timeEntryId } })).status,
+    ).toBe("billed");
     for (const e of [e1, e2]) {
-      expect((await prisma.expense.findUniqueOrThrow({ where: { id: e.expenseId } })).invoiceId).toBe(inv.id);
+      expect(
+        (await prisma.expense.findUniqueOrThrow({ where: { id: e.expenseId } })).invoiceId,
+      ).toBe(inv.id);
     }
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { matterId, title: { contains: "bundled" } },
     });
     expect(log.detail).toBe(
-      "1 time entry + 2 expenses · $400.00 (Settled; fee collected elsewhere)"
+      "1 time entry + 2 expenses · $400.00 (Settled; fee collected elsewhere)",
     );
   });
 
@@ -791,7 +785,9 @@ describe("bundleAsInternalRecord", () => {
     await bundleAsInternalRecord(matterId, billingInitialState, notesForm());
     const inv = await prisma.invoice.findFirstOrThrow({ where: { matterId } });
     expect(inv.totalAmount.toNumber()).toBe(100);
-    expect((await prisma.timeEntry.findUniqueOrThrow({ where: { id: nc.timeEntryId } })).invoiceId).toBeNull();
+    expect(
+      (await prisma.timeEntry.findUniqueOrThrow({ where: { id: nc.timeEntryId } })).invoiceId,
+    ).toBeNull();
   });
 
   test("requires a reason", async () => {
@@ -810,13 +806,15 @@ describe("invoice numbers", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2027-01-01T03:00:00Z") });
     await seedTimeEntry({ matterId, userId });
     await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
-    expect((await prisma.invoice.findFirstOrThrow({ where: { matterId } })).invoiceNumber).toBe("2026-001");
+    expect((await prisma.invoice.findFirstOrThrow({ where: { matterId } })).invoiceNumber).toBe(
+      "2026-001",
+    );
 
     vi.mocked(getCurrentUserTimeZone).mockResolvedValue("Asia/Tokyo");
     await seedTimeEntry({ matterId, userId });
     await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
     const numbers = (await prisma.invoice.findMany({ select: { invoiceNumber: true } })).map(
-      (i) => i.invoiceNumber
+      (i) => i.invoiceNumber,
     );
     expect(numbers.sort()).toEqual(["2026-001", "2027-001"]);
   });
@@ -838,10 +836,18 @@ describe("updateInvoiceLineItem — unparseable numbers", () => {
   test("non-numeric rate or hours come back as field errors, never a raw DecimalError", async () => {
     const { timeEntryId } = await seedTimeEntry({ matterId, userId });
     await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
-    const badRate = await updateInvoiceLineItem(timeEntryId, lineItemEditInitialState, lineForm("abc"));
+    const badRate = await updateInvoiceLineItem(
+      timeEntryId,
+      lineItemEditInitialState,
+      lineForm("abc"),
+    );
     expect(badRate.status).toBe("error");
     expect(badRate.errors?.rate?.length).toBeGreaterThan(0);
-    const badHours = await updateInvoiceLineItem(timeEntryId, lineItemEditInitialState, lineForm("100", "x"));
+    const badHours = await updateInvoiceLineItem(
+      timeEntryId,
+      lineItemEditInitialState,
+      lineForm("100", "x"),
+    );
     expect(badHours.status).toBe("error");
     expect(badHours.errors?.hours?.length).toBeGreaterThan(0);
   });
@@ -849,7 +855,11 @@ describe("updateInvoiceLineItem — unparseable numbers", () => {
   test("a leading/trailing-space rate is trimmed and accepted", async () => {
     const { timeEntryId } = await seedTimeEntry({ matterId, userId });
     await generateInvoiceFromWip(matterId, billingInitialState, new FormData());
-    const res = await updateInvoiceLineItem(timeEntryId, lineItemEditInitialState, lineForm(" 100 ", " 1.5 "));
+    const res = await updateInvoiceLineItem(
+      timeEntryId,
+      lineItemEditInitialState,
+      lineForm(" 100 ", " 1.5 "),
+    );
     expect(res.status).toBe("ok");
     const te = await prisma.timeEntry.findUniqueOrThrow({ where: { id: timeEntryId } });
     expect(te.amount?.toNumber()).toBe(150);

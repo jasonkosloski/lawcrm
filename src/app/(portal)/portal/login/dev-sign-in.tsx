@@ -1,10 +1,7 @@
 "use client";
 
 import { useActionState, useEffect } from "react";
-import {
-  devPortalSignIn,
-  type PortalVerifyState,
-} from "@/app/actions/portal-session";
+import { devPortalSignIn, type PortalVerifyState } from "@/app/actions/portal-session";
 import { Button } from "@/components/ui/button";
 
 export type DevPortalUser = {
@@ -19,10 +16,10 @@ export type DevPortalUser = {
  * `portal.localhost` outside production, and the action re-checks that.
  */
 export function DevSignIn({ users }: { users: DevPortalUser[] }) {
-  const [state, formAction, pending] = useActionState<
-    PortalVerifyState,
-    FormData
-  >(devPortalSignIn, { status: "idle" });
+  const [state, formAction, pending] = useActionState<PortalVerifyState, FormData>(
+    devPortalSignIn,
+    { status: "idle" },
+  );
 
   useEffect(() => {
     // Full navigation so the request goes through the portal proxy rewrite.
@@ -37,8 +34,8 @@ export function DevSignIn({ users }: { users: DevPortalUser[] }) {
       <div className="flex flex-col gap-1">
         <p className="text-sm font-medium text-ink">Dev sign-in</p>
         <p className="text-xs text-ink-3">
-          Local development only. Invite a client from a matter&rsquo;s Portal
-          card to list them here.
+          Local development only. Invite a client from a matter&rsquo;s Portal card to list them
+          here.
         </p>
       </div>
       {state.status === "invalid" ? (
@@ -52,16 +49,12 @@ export function DevSignIn({ users }: { users: DevPortalUser[] }) {
         <ul className="flex flex-col gap-2">
           {users.map((u) => (
             <li key={u.identityId}>
-              <form
-                action={formAction}
-                className="flex items-center justify-between gap-3"
-              >
+              <form action={formAction} className="flex items-center justify-between gap-3">
                 <input type="hidden" name="identityId" value={u.identityId} />
                 <div className="min-w-0 text-sm">
                   <p className="truncate font-medium text-ink-2">{u.name}</p>
                   <p className="truncate text-xs text-ink-3">
-                    {u.email} · {u.matterCount}{" "}
-                    {u.matterCount === 1 ? "matter" : "matters"}
+                    {u.email} · {u.matterCount} {u.matterCount === 1 ? "matter" : "matters"}
                   </p>
                 </div>
                 <Button

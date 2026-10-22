@@ -28,15 +28,11 @@ import { Button } from "@/components/ui/button";
 
 const DEFAULT_COLOR = "#2563a8";
 
-export function CreatePracticeAreaForm({
-  firmTemplate,
-}: {
-  firmTemplate?: string;
-}) {
-  const [state, formAction, isPending] = useActionState<
-    PracticeAreaFormState,
-    FormData
-  >(createPracticeArea, practiceAreaInitialState);
+export function CreatePracticeAreaForm({ firmTemplate }: { firmTemplate?: string }) {
+  const [state, formAction, isPending] = useActionState<PracticeAreaFormState, FormData>(
+    createPracticeArea,
+    practiceAreaInitialState,
+  );
 
   const vals = state.values ?? {};
   const errs = state.errors ?? {};
@@ -75,7 +71,12 @@ export function CreatePracticeAreaForm({
           />
         </Field>
 
-        <Field label="Label" htmlFor="label" error={errs.label} hint="Optional — longer label for sidebar">
+        <Field
+          label="Label"
+          htmlFor="label"
+          error={errs.label}
+          hint="Optional — longer label for sidebar"
+        >
           <input
             id="label"
             name="label"
@@ -109,15 +110,8 @@ export function CreatePracticeAreaForm({
         </Field>
 
         <div className="flex flex-col">
-          <span className="text-xs font-medium text-ink-2 mb-1 invisible">
-            submit
-          </span>
-          <Button
-            size="sm"
-            type="submit"
-            disabled={isPending}
-            className="hover:bg-brand-600"
-          >
+          <span className="text-xs font-medium text-ink-2 mb-1 invisible">submit</span>
+          <Button size="sm" type="submit" disabled={isPending} className="hover:bg-brand-600">
             {isPending ? "Adding…" : "Add area"}
           </Button>
         </div>
@@ -152,8 +146,8 @@ export function CreatePracticeAreaForm({
       <RequiredFieldsGroup tracksSol={hasSol} error={errs.requiredMatterFields} />
 
       <div className="text-2xs text-ink-4">
-        New areas start with the default 10-stage lifecycle (Intake →
-        Closed). Rename, reorder, or replace them on the detail page.
+        New areas start with the default 10-stage lifecycle (Intake → Closed). Rename, reorder, or
+        replace them on the detail page.
       </div>
     </form>
   );

@@ -16,11 +16,7 @@ import { SettingsNav } from "@/components/settings/settings-nav";
 import { getCurrentUserPermissions } from "@/lib/permission-check";
 import { requireUser } from "@/lib/current-user";
 
-export default async function SettingsLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
   await requireUser();
   // Resolve once at the layout, threaded into the nav so each item
   // can decide its own visibility. Each underlying write also
@@ -34,10 +30,7 @@ export default async function SettingsLayout({
         {/* Vertical stack below `lg` (nav strip on top, then content);
             two-pane (rail + content) at lg+. */}
         <div className="flex flex-col lg:flex-row h-full">
-          <SettingsNav
-            isAdmin={isAdmin}
-            grantedPermissions={Array.from(granted)}
-          />
+          <SettingsNav isAdmin={isAdmin} grantedPermissions={Array.from(granted)} />
           <div className="flex-1 min-w-0 p-3 sm:p-6 overflow-y-auto">{children}</div>
         </div>
       </div>

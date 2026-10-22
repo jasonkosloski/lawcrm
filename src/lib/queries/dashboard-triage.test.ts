@@ -205,9 +205,7 @@ describe("deadlines", () => {
       "unowned, my team",
     ]);
     vi.mocked(getCurrentUserId).mockResolvedValue(other);
-    expect((await groupOf("deadlines"))?.rows.map((r) => r.title)).toEqual([
-      "someone else's",
-    ]);
+    expect((await groupOf("deadlines"))?.rows.map((r) => r.title)).toEqual(["someone else's"]);
   });
 
   test("legacy stored 'overdue' status still shows", async () => {

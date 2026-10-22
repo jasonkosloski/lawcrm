@@ -43,10 +43,7 @@ vi.mock("@/lib/permission-check", () => ({
 
 import { requireUser } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
-import {
-  getMatterActivity,
-  getMatterActivityTypeCounts,
-} from "@/lib/queries/matter-detail";
+import { getMatterActivity, getMatterActivityTypeCounts } from "@/lib/queries/matter-detail";
 import { getMatterById } from "@/lib/queries/matters";
 import MatterTimelinePage, { groupByDay } from "./page";
 
@@ -81,7 +78,7 @@ describe("MatterTimelinePage — session + money gating", () => {
         canViewSettlement: false,
         canViewExpense: false,
         canViewBilling: false,
-      })
+      }),
     );
     expect(getMatterActivityTypeCounts).toHaveBeenCalledWith("m1", {
       canViewSettlement: false,
@@ -93,7 +90,7 @@ describe("MatterTimelinePage — session + money gating", () => {
   it("each key is resolved independently", async () => {
     vi.mocked(requireUser).mockResolvedValue("u1");
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key: string) => key === "matters.expense.view"
+      async (key: string) => key === "matters.expense.view",
     );
     await renderTimeline();
     expect(getMatterActivityTypeCounts).toHaveBeenCalledWith("m1", {
@@ -106,7 +103,7 @@ describe("MatterTimelinePage — session + money gating", () => {
   it("billing.view (trust deposit rows) is resolved on its own", async () => {
     vi.mocked(requireUser).mockResolvedValue("u1");
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key: string) => key === "billing.view"
+      async (key: string) => key === "billing.view",
     );
     await renderTimeline();
     expect(getMatterActivityTypeCounts).toHaveBeenCalledWith("m1", {
@@ -126,8 +123,7 @@ describe("MatterTimelinePage — ?type= filter", () => {
   });
 
   const typesPassed = (): readonly string[] | undefined =>
-    (vi.mocked(getMatterActivity).mock.calls[0][1] as { types?: string[] })
-      .types;
+    (vi.mocked(getMatterActivity).mock.calls[0][1] as { types?: string[] }).types;
 
   it.each(["constructor", "toString", "__proto__", "hasOwnProperty"])(
     "prototype key ?type=%s falls back to All instead of crashing",
@@ -136,7 +132,7 @@ describe("MatterTimelinePage — ?type= filter", () => {
       vi.mocked(currentUserHasPermission).mockResolvedValue(true);
       await renderTimeline({ type: key });
       expect(typesPassed()).toBeUndefined();
-    }
+    },
   );
 
   it("an unknown ?type= falls back to All", async () => {
@@ -200,12 +196,9 @@ describe("groupByDay", () => {
     // 07:00 UTC July 6 = 1:00 AM July 6 Denver.
     // Same UTC day, different Denver days → two headers.
     const groups = groupByDay(
-      [
-        row("late", "2026-07-06T07:00:00.000Z"),
-        row("early", "2026-07-06T05:00:00.000Z"),
-      ],
+      [row("late", "2026-07-06T07:00:00.000Z"), row("early", "2026-07-06T05:00:00.000Z")],
       tz,
-      now
+      now,
     );
     expect(groups.map((g) => g.key)).toEqual(["2026-07-06", "2026-07-05"]);
     expect(groups.map((g) => g.label)).toEqual(["Today", "Yesterday"]);
@@ -213,12 +206,9 @@ describe("groupByDay", () => {
 
   it("keeps same-user-day rows in one group, preserving row order", () => {
     const groups = groupByDay(
-      [
-        row("b", "2026-07-06T16:30:00.000Z"),
-        row("a", "2026-07-06T14:00:00.000Z"),
-      ],
+      [row("b", "2026-07-06T16:30:00.000Z"), row("a", "2026-07-06T14:00:00.000Z")],
       tz,
-      now
+      now,
     );
     expect(groups).toHaveLength(1);
     expect(groups[0]!.items.map((r) => r.id)).toEqual(["b", "a"]);

@@ -123,7 +123,7 @@ function decodeCssEscapes(s: string): string {
         return String.fromCodePoint(cp);
       }
       return ch === "\n" ? "" : (ch ?? "");
-    }
+    },
   );
 }
 
@@ -176,7 +176,7 @@ const URL_FUNCTION = new RegExp(
     String.raw`|'((?:[^'\\\n]|\\[\s\S])*)'` +
     String.raw`|((?:[^)\\\s"'(]|\\[\s\S])*))` +
     String.raw`[ \t\n\r\f]*\)`,
-  "gi"
+  "gi",
 );
 
 function isInertUrlTarget(raw: string): boolean {
@@ -196,16 +196,11 @@ export function neutralizeExternalCssUrls(cssText: string): {
   let neutralized = 0;
   const css = cssText.replace(
     URL_FUNCTION,
-    (
-      match,
-      dq: string | undefined,
-      sq: string | undefined,
-      bare: string | undefined
-    ) => {
+    (match, dq: string | undefined, sq: string | undefined, bare: string | undefined) => {
       if (isInertUrlTarget(dq ?? sq ?? bare ?? "")) return match;
       neutralized += 1;
       return "url()";
-    }
+    },
   );
   return { css, neutralized };
 }
@@ -213,9 +208,7 @@ export function neutralizeExternalCssUrls(cssText: string): {
 /** True when `css[openIdx]` is the `(` of a `url(` function (name read
  *  through escapes). */
 function isUrlFunctionParen(css: string, openIdx: number): boolean {
-  const lookback = decodeCssEscapes(
-    css.slice(Math.max(0, openIdx - 24), openIdx)
-  );
+  const lookback = decodeCssEscapes(css.slice(Math.max(0, openIdx - 24), openIdx));
   return /(?:^|[^\w\-\u0080-￿])url$/i.test(lookback);
 }
 
@@ -230,7 +223,7 @@ function walk(
   css: string,
   from: number,
   to: number,
-  onChar: (index: number, ch: string, depth: number) => boolean | void
+  onChar: (index: number, ch: string, depth: number) => boolean | void,
 ): { closed: boolean } {
   let depth = 0;
   let closed = true;
@@ -346,7 +339,7 @@ const MAX_Z_INDEX = 10;
  *  rewritten) declaration, or null to drop it. */
 function sanitizeDeclaration(
   raw: string,
-  allowedProps: ReadonlySet<string> | null
+  allowedProps: ReadonlySet<string> | null,
 ): { text: string; neutralized: number } | null {
   if (raw.trim() === "") return { text: raw, neutralized: 0 };
   if (/[{}]/.test(raw)) return null;
@@ -362,10 +355,7 @@ function sanitizeDeclaration(
   if (allowedProps && !allowedProps.has(prop)) return null;
   // Test both the comment-stripped and the raw-decoded view so a
   // comment cannot be used to hide (or fake) a function name.
-  if (
-    FETCH_FUNCTION.test(view) ||
-    FETCH_FUNCTION.test(decodeCssEscapes(raw).toLowerCase())
-  ) {
+  if (FETCH_FUNCTION.test(view) || FETCH_FUNCTION.test(decodeCssEscapes(raw).toLowerCase())) {
     return null;
   }
   if (prop === "position" && /\b(?:fixed|sticky)\b/.test(value)) return null;
@@ -382,11 +372,7 @@ function sanitizeDeclaration(
       .slice((m.index ?? 0) + 4)
       .trimStart()
       .replace(/^["']/, "");
-    if (!(
-      target.startsWith(")") ||
-      target.startsWith("data:") ||
-      target.startsWith("blob:")
-    )) {
+    if (!(target.startsWith(")") || target.startsWith("data:") || target.startsWith("blob:"))) {
       return null;
     }
   }
@@ -395,7 +381,7 @@ function sanitizeDeclaration(
 
 function sanitizeDeclarationList(
   body: string,
-  allowedProps: ReadonlySet<string> | null = null
+  allowedProps: ReadonlySet<string> | null = null,
 ): { css: string; neutralized: number; changed: boolean } {
   const { pieces, unsafe } = splitDeclarations(body);
   if (unsafe) return { css: "", neutralized: 1, changed: true };
@@ -531,9 +517,7 @@ export function sanitizeDocxStyleSheet(css: string): {
   return { css: changed ? out.join("") : css, neutralized, changed };
 }
 
-export function sanitizeRenderedDocx(
-  root: HTMLElement
-): RenderedDocxSanitationSummary {
+export function sanitizeRenderedDocx(root: HTMLElement): RenderedDocxSanitationSummary {
   const summary: RenderedDocxSanitationSummary = {
     removedNodes: 0,
     neutralizedLinks: 0,

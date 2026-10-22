@@ -7,11 +7,7 @@
 
 import { NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import {
-  PortalUploadError,
-  onBeforeGenerateToken,
-  onUploadCompleted,
-} from "./portal-blob-upload";
+import { PortalUploadError, onBeforeGenerateToken, onUploadCompleted } from "./portal-blob-upload";
 
 export const dynamic = "force-dynamic";
 
@@ -44,9 +40,6 @@ export async function POST(request: Request): Promise<Response> {
       status,
       message: err instanceof Error ? err.message : String(err),
     });
-    return NextResponse.json(
-      { error: known ? err.message : GENERIC_UPLOAD_ERROR },
-      { status }
-    );
+    return NextResponse.json({ error: known ? err.message : GENERIC_UPLOAD_ERROR }, { status });
   }
 }

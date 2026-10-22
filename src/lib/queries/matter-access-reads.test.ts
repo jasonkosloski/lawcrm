@@ -81,8 +81,18 @@ beforeAll(() => {
 beforeEach(async () => {
   await resetDb();
   ({ firmId, defaultRoleId } = await seedFirm());
-  ({ userId: alice } = await seedUser({ firmId, name: "Alice", initials: "AL", roleIds: [defaultRoleId] }));
-  ({ userId: bob } = await seedUser({ firmId, name: "Bob", initials: "BO", roleIds: [defaultRoleId] }));
+  ({ userId: alice } = await seedUser({
+    firmId,
+    name: "Alice",
+    initials: "AL",
+    roleIds: [defaultRoleId],
+  }));
+  ({ userId: bob } = await seedUser({
+    firmId,
+    name: "Bob",
+    initials: "BO",
+    roleIds: [defaultRoleId],
+  }));
   ({ areaId, stageId } = await seedPracticeArea());
   ({ matterId: alphaId } = await seedMatter({
     practiceAreaId: areaId,
@@ -167,14 +177,12 @@ describe("trust column (billing.view, ADR-038)", () => {
       { ...EMPTY_FILTER, trust: "has" },
       { field: "trust", dir: "desc" },
       alice,
-      "UTC"
+      "UTC",
     );
     // Filter ignored: Bravo (zero trust) is still listed.
     expect(rows).toHaveLength(2);
     expect(rows.every((r) => r.trustBalance === null)).toBe(true);
-    expect(
-      await countMatters({ ...EMPTY_FILTER, trust: "has" }, alice, "UTC")
-    ).toBe(2);
+    expect(await countMatters({ ...EMPTY_FILTER, trust: "has" }, alice, "UTC")).toBe(2);
   });
 
   test("with billing.view the balance, sort and filter work", async () => {
@@ -183,11 +191,9 @@ describe("trust column (billing.view, ADR-038)", () => {
       { ...EMPTY_FILTER, trust: "has" },
       { field: "trust", dir: "desc" },
       alice,
-      "UTC"
+      "UTC",
     );
-    expect(rows.map((r) => [r.name, r.trustBalance])).toEqual([
-      ["Alpha Matter zebra", 5000],
-    ]);
+    expect(rows.map((r) => [r.name, r.trustBalance])).toEqual([["Alpha Matter zebra", 5000]]);
   });
 });
 

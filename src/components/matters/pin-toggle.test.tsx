@@ -49,13 +49,9 @@ describe("PinToggle", () => {
     mockedSet.mockResolvedValue({ ok: false, pinned: false, error: "Couldn't update the pin." });
     render(<PinToggle matterId="m1" initialPinned={false} />);
     fireEvent.click(screen.getByRole("button", { name: "Pin matter" }));
+    await waitFor(() => expect(notifyError).toHaveBeenCalledWith("Couldn't update the pin."));
     await waitFor(() =>
-      expect(notifyError).toHaveBeenCalledWith("Couldn't update the pin.")
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Pin matter" })
-      ).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Pin matter" })).toBeInTheDocument(),
     );
   });
 

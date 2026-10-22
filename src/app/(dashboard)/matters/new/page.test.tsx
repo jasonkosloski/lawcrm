@@ -46,7 +46,15 @@ vi.mock("@/lib/permission-check", () => ({
 }));
 vi.mock("@/lib/queries/venues", () => ({
   listVenues: vi.fn(async () => [
-    { id: "v1", name: "Denver", city: null, county: null, state: "CO", isActive: true, matterCount: 0 },
+    {
+      id: "v1",
+      name: "Denver",
+      city: null,
+      county: null,
+      state: "CO",
+      isActive: true,
+      matterCount: 0,
+    },
   ]),
 }));
 vi.mock("@/lib/firm", () => ({
@@ -100,9 +108,7 @@ describe("NewMatterPage — matters.create gate", () => {
     render(await NewMatterPage());
     expect(listVenues).toHaveBeenCalledWith({ activeOnly: true });
     expect(currentUserHasPermission).toHaveBeenCalledWith("venues.add");
-    const o = JSON.parse(
-      screen.getByTestId("new-matter-form").getAttribute("data-options")!
-    );
+    const o = JSON.parse(screen.getByTestId("new-matter-form").getAttribute("data-options")!);
     expect(o.venues).toHaveLength(1);
     expect(o.canAddVenue).toBe(true);
     expect(o.firmState).toBe("CO");
@@ -128,8 +134,22 @@ describe("NewMatterPage — drafts and the Engagement section", () => {
     vi.mocked(requirePermission).mockResolvedValue("user_1");
     vi.mocked(currentUserHasPermission).mockResolvedValue(true);
     vi.mocked(prisma.practiceArea.findMany).mockResolvedValue([
-      { id: "a1", name: "PI", originatingDocLabel: "Retainer", allowedBillingTypes: [], defaultBillingType: "contingent", stages: [] },
-      { id: "a2", name: "Crim", originatingDocLabel: null, allowedBillingTypes: [], defaultBillingType: "contingent", stages: [] },
+      {
+        id: "a1",
+        name: "PI",
+        originatingDocLabel: "Retainer",
+        allowedBillingTypes: [],
+        defaultBillingType: "contingent",
+        stages: [],
+      },
+      {
+        id: "a2",
+        name: "Crim",
+        originatingDocLabel: null,
+        allowedBillingTypes: [],
+        defaultBillingType: "contingent",
+        stages: [],
+      },
     ] as never);
     vi.mocked(listMatterDrafts).mockResolvedValue([{ id: "d1" }] as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
@@ -174,7 +194,7 @@ describe("NewMatterPage — drafts and the Engagement section", () => {
     vi.mocked(requirePermission).mockResolvedValue("user_1");
     vi.mocked(loadAccessibleDraft).mockResolvedValue(null);
     await expect(
-      NewMatterPage({ searchParams: Promise.resolve({ draft: "nope" }) })
+      NewMatterPage({ searchParams: Promise.resolve({ draft: "nope" }) }),
     ).rejects.toThrow("NEXT_REDIRECT:/matters/new?draftGone=1");
     expect(prisma.practiceArea.findMany).not.toHaveBeenCalled();
   });

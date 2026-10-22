@@ -26,10 +26,7 @@ import { formatPhone } from "@/lib/format-phone";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getFirmGoals } from "@/lib/firm";
 import { currentUserHasPermission } from "@/lib/permission-check";
-import {
-  activityMoneyFilters,
-  resolveActivityMoneyAccess,
-} from "@/lib/activity-money-filters";
+import { activityMoneyFilters, resolveActivityMoneyAccess } from "@/lib/activity-money-filters";
 import { canViewEventDetails } from "@/lib/calendar-visibility";
 import { filterAccessibleLeadIds } from "@/lib/lead-access";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
@@ -58,9 +55,7 @@ const keyParts = (key: string): [number, number, number] =>
 /** First day of the viewer's current month, as a date-only value. */
 const startOfMonthDateOnly = (tz: string): Date => {
   const [y, m] = keyParts(todayKey(tz));
-  return parseDateOnly(
-    `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-01`
-  )!;
+  return parseDateOnly(`${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-01`)!;
 };
 
 /** Shape consumed by the KPI tile grid. */
@@ -191,8 +186,7 @@ const formatTime = (d: Date, tz: string): string => {
     minute: "2-digit",
     hour12: false,
   }).formatToParts(d);
-  const get = (type: string): number =>
-    Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const get = (type: string): number => Number(parts.find((p) => p.type === type)?.value ?? 0);
   const h = get("hour") % 24; // some ICU builds emit 24 for midnight
   const m = get("minute");
   const suffix = h >= 12 ? "p" : "a";
@@ -248,19 +242,17 @@ export async function getTodayAgenda(tz: string): Promise<AgendaItem[]> {
   // the agenda as "Busy" blocks (canViewEventDetails.matterAccessible).
   const accessibleMatters = await filterAccessibleMatterIds(
     viewerId,
-    events.flatMap((e) => (e.matter ? [e.matter.id] : []))
+    events.flatMap((e) => (e.matter ? [e.matter.id] : [])),
   );
   // Lead wall (ADR-049): events on hidden leads are Busy as well.
   const accessibleLeads = await filterAccessibleLeadIds(
     viewerId,
-    events.flatMap((e) => (e.leadId ? [e.leadId] : []))
+    events.flatMap((e) => (e.leadId ? [e.leadId] : [])),
   );
 
   // All-day rows lead the agenda, then timed events in start order
   // (Array.sort is stable, so the DB's startTime order is kept).
-  const ordered = [...events].sort(
-    (a, b) => Number(b.isAllDay) - Number(a.isAllDay)
-  );
+  const ordered = [...events].sort((a, b) => Number(b.isAllDay) - Number(a.isAllDay));
 
   return ordered.map((e) => {
     const time = e.isAllDay ? "All day" : formatTime(e.startTime, tz);
@@ -268,12 +260,9 @@ export async function getTodayAgenda(tz: string): Promise<AgendaItem[]> {
       viewerId,
       createdById: e.createdById,
       eventVisibility: e.visibility,
-      creatorDefaultEventVisibility:
-        e.createdBy?.defaultEventVisibility ?? null,
+      creatorDefaultEventVisibility: e.createdBy?.defaultEventVisibility ?? null,
       matterId: e.matter?.id ?? null,
-      attendeeUserIds: e.attendees
-        .map((a) => a.userId)
-        .filter((id): id is string => !!id),
+      attendeeUserIds: e.attendees.map((a) => a.userId).filter((id): id is string => !!id),
       matterTeamUserIds: e.matter?.teamMembers.map((t) => t.userId) ?? [],
       matterAccessible: e.matter ? accessibleMatters.has(e.matter.id) : true,
       leadId: e.leadId,
@@ -316,10 +305,7 @@ export type ActivityItem = {
 // reads identically to every other relative-time surface across
 // the app (matter Timeline, settings/activity, etc.). `tz` only
 // matters for the >30-day fallback, which renders a calendar date.
-export async function getRecentActivity(
-  tz: string,
-  limit = 5
-): Promise<ActivityItem[]> {
+export async function getRecentActivity(tz: string, limit = 5): Promise<ActivityItem[]> {
   const [moneyAccess, canViewFirmActivity] = await Promise.all([
     resolveActivityMoneyAccess(),
     currentUserHasPermission("firm.view_activity"),
@@ -395,10 +381,7 @@ export async function getFollowUpsDueToday(tz: string): Promise<FollowUpItem[]> 
       ? []
       : [
           {
-            OR: [
-              { defaultMatterId: null },
-              { defaultMatter: hiddenMatterWhere },
-            ],
+            OR: [{ defaultMatterId: null }, { defaultMatter: hiddenMatterWhere }],
           },
         ];
   const [emails, messages] = await Promise.all([
@@ -446,9 +429,7 @@ export async function getFollowUpsDueToday(tz: string): Promise<FollowUpItem[]> 
     ...messages.map((t) => ({
       id: t.id,
       kind: "messenger" as const,
-      label:
-        t.contact?.name ??
-        (formatPhone(t.contactPhone) || "Unknown number"),
+      label: t.contact?.name ?? (formatPhone(t.contactPhone) || "Unknown number"),
       followUpAt: t.followUpAt!,
       isOverdue: isOverdue(t.followUpAt!),
       matterName: t.defaultMatter?.name ?? null,
@@ -494,10 +475,7 @@ export type DeadlinesCard = {
  * budget, and overdue rows are capped (the most recent lapses show;
  * the rest are reported in `overdueHidden`).
  */
-export async function getUpcomingDeadlines(
-  tz: string,
-  withinDays = 7
-): Promise<DeadlinesCard> {
+export async function getUpcomingDeadlines(tz: string, withinDays = 7): Promise<DeadlinesCard> {
   // Due dates are date-only (UTC midnight, ADR-012): the window starts
   // at the viewer's today and ends at the end of (today + withinDays);
   // the countdown is calendar days against the viewer's today key.
@@ -672,8 +650,7 @@ export async function getMyOpenTasks(tz: string): Promise<MyTasksGrouped> {
       daysUntilDue: t.dueDate ? daysUntilDateOnly(t.dueDate, tz) : null,
       matterId: t.matterId,
       // Intake tasks carry their lead as the context line.
-      matterName:
-        t.matter?.name ?? (t.lead ? `Intake · ${t.lead.name}` : null),
+      matterName: t.matter?.name ?? (t.lead ? `Intake · ${t.lead.name}` : null),
       leadId: t.leadId,
     };
 
@@ -749,9 +726,7 @@ export async function getFirmPulse(tz: string): Promise<FirmPulse | null> {
 
   const billed = billedAgg._sum.totalAmount ?? new Prisma.Decimal(0);
   const collected = billedAgg._sum.paidAmount ?? new Prisma.Decimal(0);
-  const collectionRate = billed.gt(0)
-    ? collected.div(billed).mul(100).toNumber()
-    : 0;
+  const collectionRate = billed.gt(0) ? collected.div(billed).mul(100).toNumber() : 0;
 
   return {
     billableMtd: mtdAgg._sum.hours ?? 0,

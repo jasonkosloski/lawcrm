@@ -11,9 +11,7 @@ vi.mock("@/app/actions/notes", () => ({
   markMatterNotesRead: vi.fn(async () => ({ ok: true })),
 }));
 vi.mock("./note-card", () => ({
-  NoteCard: ({ note }: { note: { id: string } }) => (
-    <div data-testid="card">{note.id}</div>
-  ),
+  NoteCard: ({ note }: { note: { id: string } }) => <div data-testid="card">{note.id}</div>,
 }));
 
 import { NO_NOTE_ACCESS } from "@/lib/note-constants";
@@ -47,11 +45,8 @@ describe("NotesTabBody search", () => {
       <NotesTabBody
         scope={{ kind: "matter", matterId: "m1" }}
         access={NO_NOTE_ACCESS}
-        notes={[
-          note("a", "<p>Call Smith &amp; Jones tomorrow</p>"),
-          note("b", "<p>Unrelated</p>"),
-        ]}
-      />
+        notes={[note("a", "<p>Call Smith &amp; Jones tomorrow</p>"), note("b", "<p>Unrelated</p>")]}
+      />,
     );
     await user.type(screen.getByPlaceholderText("Search notes…"), "Smith & Jones");
     const cards = screen.getAllByTestId("card");
@@ -65,7 +60,7 @@ describe("NotesTabBody search", () => {
         scope={{ kind: "matter", matterId: "m1" }}
         access={NO_NOTE_ACCESS}
         notes={[note("a", "<p>if x &lt; 5 then stop</p>")]}
-      />
+      />,
     );
     await user.type(screen.getByPlaceholderText("Search notes…"), "x < 5");
     expect(screen.getAllByTestId("card")).toHaveLength(1);
@@ -78,7 +73,7 @@ describe("NotesTabBody search", () => {
         scope={{ kind: "matter", matterId: "m1" }}
         access={NO_NOTE_ACCESS}
         notes={[note("a", "<p>x</p>")]}
-      />
+      />,
     );
     const pill = screen.getByRole("button", { name: /^Note\s*1$/ });
     expect(pill).toHaveAttribute("aria-pressed", "false");

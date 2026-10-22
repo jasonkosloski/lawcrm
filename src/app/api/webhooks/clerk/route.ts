@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     // secret is distinguishable from a stale timestamp or bad header.
     console.warn(
       "[clerk-webhook] verification failed:",
-      err instanceof Error ? err.message : String(err)
+      err instanceof Error ? err.message : String(err),
     );
     return new Response("Invalid signature", { status: 401 });
   }

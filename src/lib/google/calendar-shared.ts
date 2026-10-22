@@ -29,8 +29,7 @@ export const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 /** OAuth scope required for two-way event sync. Connections made
  *  before this scope joined the connect flow lack it — gate on
  *  hasCalendarScope and prompt to reconnect. */
-export const CALENDAR_EVENTS_SCOPE =
-  "https://www.googleapis.com/auth/calendar.events";
+export const CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
 /** extendedProperties.private key carrying the CRM event id. */
 export const LAWCRM_MARKER_KEY = "lawcrmEventId";
@@ -109,7 +108,7 @@ export function eventToGoogleResource(
     zoomUrl?: string | null;
     /** CRM visibility; "private" pushes as a Google private event. */
     visibility?: string | null;
-  }
+  },
 ): GoogleEventResource {
   const body = event.description?.trim() || null;
   const zoomLine = event.zoomUrl ? `Zoom: ${event.zoomUrl}` : null;
@@ -156,9 +155,7 @@ export function eventToGoogleResource(
  * inclusive end (minus one day), both date-only (UTC midnight).
  * A malformed `date` makes the resource unmappable (null).
  */
-export function googleEventToCrmFields(
-  g: GoogleEventResource
-): CrmEventFields | null {
+export function googleEventToCrmFields(g: GoogleEventResource): CrmEventFields | null {
   const startRaw = g.start?.dateTime ?? g.start?.date;
   const endRaw = g.end?.dateTime ?? g.end?.date;
   if (!startRaw || !endRaw) return null;
@@ -170,17 +167,14 @@ export function googleEventToCrmFields(
     const start = parseDateOnly(g.start!.date!);
     const endExclusive = g.end?.date ? parseDateOnly(g.end.date) : null;
     if (!start || !endExclusive) return null;
-    const inclusiveEnd = parseDateOnly(
-      addDaysToKey(dateOnlyKey(endExclusive), -1)
-    );
+    const inclusiveEnd = parseDateOnly(addDaysToKey(dateOnlyKey(endExclusive), -1));
     startTime = start;
     endTime = inclusiveEnd ?? start;
     if (endTime.getTime() < startTime.getTime()) endTime = startTime;
   } else {
     startTime = new Date(startRaw);
     endTime = new Date(endRaw);
-    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()))
-      return null;
+    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) return null;
   }
 
   return {
@@ -205,7 +199,7 @@ export function googleEventToCrmFields(
  */
 export function stripZoomLine(
   description: string | null,
-  zoomUrl: string | null | undefined
+  zoomUrl: string | null | undefined,
 ): string | null {
   if (!description || !zoomUrl) return description;
   const line = `Zoom: ${zoomUrl}`;

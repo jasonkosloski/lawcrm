@@ -18,24 +18,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
-import {
-  ADMIN_ROLE_NAME,
-  DEFAULT_ROLE_NAME,
-  getCurrentFirm,
-} from "@/lib/firm";
-import {
-  getCurrentUserPermissions,
-  requirePermissionResult,
-} from "@/lib/permission-check";
-import {
-  ADMIN_ONLY_PERMISSIONS,
-  isKnownPermission,
-  permissionLabel,
-} from "@/lib/permissions";
-import {
-  roleInitialState,
-  type RoleFormState,
-} from "@/lib/role-form";
+import { ADMIN_ROLE_NAME, DEFAULT_ROLE_NAME, getCurrentFirm } from "@/lib/firm";
+import { getCurrentUserPermissions, requirePermissionResult } from "@/lib/permission-check";
+import { ADMIN_ONLY_PERMISSIONS, isKnownPermission, permissionLabel } from "@/lib/permissions";
+import { roleInitialState, type RoleFormState } from "@/lib/role-form";
 
 /** Gate denial as form state — role forms render `_form`, so a
  *  denied caller sees why nothing happened (no silent redirect). */
@@ -43,9 +29,7 @@ function denied(error: string): RoleFormState {
   return { status: "error", errors: { _form: [error] } };
 }
 
-const RESERVED_NAMES = new Set(
-  [ADMIN_ROLE_NAME, DEFAULT_ROLE_NAME].map((n) => n.toLowerCase())
-);
+const RESERVED_NAMES = new Set([ADMIN_ROLE_NAME, DEFAULT_ROLE_NAME].map((n) => n.toLowerCase()));
 
 // The "meta" permissions (ADMIN_ONLY_PERMISSIONS in
 // src/lib/permissions.ts: manage_permissions, manage_roles,
@@ -68,7 +52,7 @@ const roleSchema = z.object({
     // system roles ("admin" matches "Admin" too).
     .refine(
       (v) => !RESERVED_NAMES.has(v.toLowerCase()),
-      'Reserved name — "Admin" and "default" are managed by the system.'
+      'Reserved name — "Admin" and "default" are managed by the system.',
     ),
   description: z.string().trim().max(400).optional().or(z.literal("")),
 });
@@ -77,7 +61,7 @@ const roleSchema = z.object({
 
 export async function createRoleAction(
   _prev: RoleFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<RoleFormState> {
   const gate = await requirePermissionResult("firm.manage_roles");
   if (!gate.ok) return denied(gate.error);
@@ -136,7 +120,7 @@ export async function createRoleAction(
 export async function updateRoleAction(
   roleId: string,
   _prev: RoleFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<RoleFormState> {
   const gate = await requirePermissionResult("firm.manage_roles");
   if (!gate.ok) return denied(gate.error);
@@ -221,9 +205,7 @@ export async function updateRoleAction(
 
 // ── Delete ──────────────────────────────────────────────────────────────
 
-export async function deleteRoleAction(
-  roleId: string
-): Promise<RoleFormState> {
+export async function deleteRoleAction(roleId: string): Promise<RoleFormState> {
   const gate = await requirePermissionResult("firm.manage_roles");
   if (!gate.ok) return denied(gate.error);
   const actorId = gate.userId;
@@ -286,7 +268,7 @@ export async function deleteRoleAction(
 export async function setRolePermissionAction(
   roleId: string,
   permission: string,
-  granted: boolean
+  granted: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   // Distinct permission from manage_roles — granting permissions
   // is a higher-trust act than naming roles, since it controls

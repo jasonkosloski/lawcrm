@@ -91,15 +91,14 @@ beforeEach(async () => {
   mockedUser.mockResolvedValue(editor);
 });
 
-const docRow = () =>
-  prisma.document.findUniqueOrThrow({ where: { id: documentId } });
+const docRow = () => prisma.document.findUniqueOrThrow({ where: { id: documentId } });
 const logs = () => prisma.activityLog.findMany({ where: { type: "document" } });
 
 describe("updateDocumentMetadata", () => {
   test("without documents.edit it redirects and changes nothing", async () => {
     mockedUser.mockResolvedValue(noKey);
     await expect(
-      updateDocumentMetadata(documentId, { name: "New.pdf", category: "filing" })
+      updateDocumentMetadata(documentId, { name: "New.pdf", category: "filing" }),
     ).rejects.toThrow("NEXT_REDIRECT");
     expect((await docRow()).name).toBe("Complaint.pdf");
     expect(await logs()).toHaveLength(0);
@@ -108,7 +107,7 @@ describe("updateDocumentMetadata", () => {
   test("a user outside the matter team is walled off (404) despite the key", async () => {
     mockedUser.mockResolvedValue(outsider);
     await expect(
-      updateDocumentMetadata(documentId, { name: "New.pdf", category: "filing" })
+      updateDocumentMetadata(documentId, { name: "New.pdf", category: "filing" }),
     ).rejects.toThrow("NEXT_NOT_FOUND");
     expect((await docRow()).name).toBe("Complaint.pdf");
     expect(await logs()).toHaveLength(0);
@@ -122,17 +121,18 @@ describe("updateDocumentMetadata", () => {
     });
     mockedUser.mockResolvedValue(outsider);
     await expect(
-      updateDocumentMetadata(leadDoc.id, { name: "X.pdf", category: "other" })
+      updateDocumentMetadata(leadDoc.id, { name: "X.pdf", category: "other" }),
     ).rejects.toThrow("NEXT_NOT_FOUND");
-    expect(
-      (await prisma.document.findUniqueOrThrow({ where: { id: leadDoc.id } })).name
-    ).toBe("Intake.pdf");
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: leadDoc.id } })).name).toBe(
+      "Intake.pdf",
+    );
   });
 
   test("rejects an empty or over-long name", async () => {
-    expect(
-      await updateDocumentMetadata(documentId, { name: "   ", category: "filing" })
-    ).toEqual({ ok: false, error: "Name can't be empty." });
+    expect(await updateDocumentMetadata(documentId, { name: "   ", category: "filing" })).toEqual({
+      ok: false,
+      error: "Name can't be empty.",
+    });
     const long = await updateDocumentMetadata(documentId, {
       name: "a".repeat(256),
       category: "filing",
@@ -249,9 +249,9 @@ describe("documents_edit_permission migration", () => {
     const sql = readFileSync(
       path.join(
         process.cwd(),
-        "prisma/migrations/20261021120000_documents_edit_permission/migration.sql"
+        "prisma/migrations/20261021120000_documents_edit_permission/migration.sql",
       ),
-      "utf8"
+      "utf8",
     );
     await prisma.$executeRawUnsafe(sql);
     await prisma.$executeRawUnsafe(sql); // second run: no duplicate, no error

@@ -14,24 +14,13 @@
 
 import { DueLabel } from "@/components/shared/due-label";
 import { Card } from "@/components/ui/card";
-import {
-  TaskRowMenu,
-  TaskStatusToggle,
-} from "@/components/tasks/task-row-actions";
+import { TaskRowMenu, TaskStatusToggle } from "@/components/tasks/task-row-actions";
 import { EntitySourceChip } from "@/components/matters/entity-source-chip";
 import { RowAttachedNotes } from "@/components/matters/row-attached-notes";
-import {
-  TASK_STATUSES,
-  TASK_STATUS_LABEL,
-  type TaskStatus,
-} from "@/lib/constants/task-status";
+import { TASK_STATUSES, TASK_STATUS_LABEL, type TaskStatus } from "@/lib/constants/task-status";
 import type { TaskRow } from "@/lib/queries/matter-detail";
 import type { AssigneeOption } from "@/lib/queries/team";
-import {
-  dateOnlyKey,
-  daysUntilDateOnly,
-  formatDateOnly,
-} from "@/lib/format-date";
+import { dateOnlyKey, daysUntilDateOnly, formatDateOnly } from "@/lib/format-date";
 
 // Ordering follows the canonical status list; labels are centralized
 // (src/lib/constants/task-status.ts). Widened to string-indexable
@@ -39,10 +28,7 @@ import {
 const STATUS_ORDER: readonly string[] = TASK_STATUSES;
 const STATUS_LABEL: Record<string, string> = TASK_STATUS_LABEL;
 
-const PRIORITY_META: Record<
-  string,
-  { label: string; className: string }
-> = {
+const PRIORITY_META: Record<string, { label: string; className: string }> = {
   urgent: {
     label: "Urgent",
     className: "bg-warn-soft text-warn border-warn-border",
@@ -100,35 +86,31 @@ export function TaskListByStatus({
   return (
     <>
       {orderedStatuses.map((status) => {
-      const rows = byStatus.get(status)!;
-      return (
-        <section key={status}>
-          <div className="flex items-center gap-2 mb-2">
-            <h2 className="text-xs font-medium text-ink-3">
-              {STATUS_LABEL[status] ?? status}
-            </h2>
-            <span className="text-2xs font-mono text-ink-4">
-              {rows.length}
-            </span>
-          </div>
-          <Card className="p-0 overflow-hidden">
-            <ul className="divide-y divide-line">
-              {rows.map((t) => (
-                <TaskItem
-                  key={t.id}
-                  task={t}
-                  matterId={matterId}
-                  assignees={assignees}
-                  tz={tz}
-                  updatedAt={updatedAtById.get(t.id) ?? ""}
-                  perms={perms}
-                />
-              ))}
-            </ul>
-          </Card>
-        </section>
-      );
-    })}
+        const rows = byStatus.get(status)!;
+        return (
+          <section key={status}>
+            <div className="flex items-center gap-2 mb-2">
+              <h2 className="text-xs font-medium text-ink-3">{STATUS_LABEL[status] ?? status}</h2>
+              <span className="text-2xs font-mono text-ink-4">{rows.length}</span>
+            </div>
+            <Card className="p-0 overflow-hidden">
+              <ul className="divide-y divide-line">
+                {rows.map((t) => (
+                  <TaskItem
+                    key={t.id}
+                    task={t}
+                    matterId={matterId}
+                    assignees={assignees}
+                    tz={tz}
+                    updatedAt={updatedAtById.get(t.id) ?? ""}
+                    perms={perms}
+                  />
+                ))}
+              </ul>
+            </Card>
+          </section>
+        );
+      })}
     </>
   );
 }
@@ -162,29 +144,17 @@ function TaskItem({
         canEdit={perms.canEdit}
       />
       <div className="flex-1 min-w-0">
-        <div
-          className={
-            "text-xs " +
-            (done ? "text-ink-3 line-through" : "font-medium text-ink")
-          }
-        >
+        <div className={"text-xs " + (done ? "text-ink-3 line-through" : "font-medium text-ink")}>
           {task.title}
         </div>
         {task.description && (
-          <div className="text-2xs text-ink-3 truncate max-w-xl">
-            {task.description}
-          </div>
+          <div className="text-2xs text-ink-3 truncate max-w-xl">{task.description}</div>
         )}
         <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
           {matterId && task.spawnedFrom && (
-            <EntitySourceChip
-              source={task.spawnedFrom}
-              matterId={matterId}
-            />
+            <EntitySourceChip source={task.spawnedFrom} matterId={matterId} />
           )}
-          {matterId && (
-            <RowAttachedNotes notes={task.attachedNotes} matterId={matterId} />
-          )}
+          {matterId && <RowAttachedNotes notes={task.attachedNotes} matterId={matterId} />}
         </div>
       </div>
       <span
@@ -195,9 +165,7 @@ function TaskItem({
       <span className="w-28 text-right shrink-0">
         {task.dueDate && daysLeft !== null ? (
           done ? (
-            <span className="text-2xs text-ink-4">
-              {formatDateOnly(task.dueDate, "short")}
-            </span>
+            <span className="text-2xs text-ink-4">{formatDateOnly(task.dueDate, "short")}</span>
           ) : (
             <DueLabel dueDate={task.dueDate} days={daysLeft} />
           )

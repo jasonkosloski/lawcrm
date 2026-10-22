@@ -89,7 +89,7 @@ function useCollapsed(key: string | undefined): [boolean, () => void] {
   const collapsed = useSyncExternalStore(
     subscribeToCollapse,
     () => (key ? readCollapsed(key) : false),
-    () => false
+    () => false,
   );
   const toggle = useCallback(() => {
     if (!key) return;
@@ -115,11 +115,7 @@ function useCollapsed(key: string | undefined): [boolean, () => void] {
  *   current URL — so a practice-area link lights up when its filter is
  *   active, and coexists with the Matters parent being lit.
  */
-function isActive(
-  href: string,
-  pathname: string,
-  searchParams: URLSearchParams
-): boolean {
+function isActive(href: string, pathname: string, searchParams: URLSearchParams): boolean {
   if (href === "/") return pathname === "/";
   const [hrefPath, hrefQuery] = href.split("?");
   if (!pathname.startsWith(hrefPath)) return false;
@@ -133,8 +129,7 @@ function isActive(
 
 /** Format small numeric badges. Returns undefined when the count is zero
  *  so the badge is omitted entirely. */
-const numBadge = (n: number): string | undefined =>
-  n > 0 ? n.toString() : undefined;
+const numBadge = (n: number): string | undefined => (n > 0 ? n.toString() : undefined);
 
 export function SidebarNav({
   data,
@@ -263,7 +258,7 @@ export function SidebarNav({
       <div
         className={cn(
           "fixed inset-0 z-30 bg-ink/40 transition-opacity lg:hidden",
-          open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
         )}
         aria-hidden={!open}
         onClick={close}
@@ -277,7 +272,7 @@ export function SidebarNav({
           "fixed inset-y-0 left-0 z-40 transition-transform lg:transition-none",
           open ? "translate-x-0" : "-translate-x-full",
           // lg+: persistent column, no transform.
-          "lg:static lg:translate-x-0"
+          "lg:static lg:translate-x-0",
         )}
         // Closed on mobile = translated off-canvas but still in the
         // DOM, so `inert` pulls its links out of the tab order and
@@ -286,73 +281,69 @@ export function SidebarNav({
         // query instead of a plain `!open`.
         inert={!open && !isDesktop}
       >
-      {/* ── Firm mark + command palette trigger ─────────────────────────── */}
-      <div className="flex items-center justify-between h-14 px-4">
-        <div className="flex items-center gap-2.5">
-          <div
-            aria-hidden
-            className="flex items-center justify-center w-7 h-7 rounded-md bg-brand-700 text-white font-display text-[15px] font-semibold tracking-tight"
-          >
-            k
+        {/* ── Firm mark + command palette trigger ─────────────────────────── */}
+        <div className="flex items-center justify-between h-14 px-4">
+          <div className="flex items-center gap-2.5">
+            <div
+              aria-hidden
+              className="flex items-center justify-center w-7 h-7 rounded-md bg-brand-700 text-white font-display text-[15px] font-semibold tracking-tight"
+            >
+              k
+            </div>
+            <span className="font-display text-[15px] font-medium text-ink">Kosloski Law</span>
           </div>
-          <span className="font-display text-[15px] font-medium text-ink">
-            Kosloski Law
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={openPalette}
-            className="hidden lg:inline-flex items-center h-6 px-1.5 rounded border border-line bg-white text-2xs text-ink-4 hover:text-ink hover:border-input transition-colors"
-            title="Search and commands (⌘K)"
-            aria-label="Search and commands"
-          >
-            ⌘K
-          </button>
-          {/* Close button — mobile drawer only. lg+ users never
+          <div className="flex items-center gap-1">
+            <button
+              onClick={openPalette}
+              className="hidden lg:inline-flex items-center h-6 px-1.5 rounded border border-line bg-white text-2xs text-ink-4 hover:text-ink hover:border-input transition-colors"
+              title="Search and commands (⌘K)"
+              aria-label="Search and commands"
+            >
+              ⌘K
+            </button>
+            {/* Close button — mobile drawer only. lg+ users never
               see it because the sidebar isn't a drawer there. */}
-          <button
-            onClick={close}
-            className="lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-md text-ink-3 hover:text-ink hover:bg-paper-2"
-            title="Close navigation"
-            aria-label="Close navigation"
-          >
-            <X size={18} />
-          </button>
-        </div>
-      </div>
-
-      {/* ── Navigation groups ────────────────────────────────────────────── */}
-      <nav className="flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin">
-        {sections.map((section, si) => (
-          <NavGroup
-            key={si}
-            section={section}
-            pathname={pathname}
-            searchParams={searchParams}
-            onNavigate={close}
-          />
-        ))}
-      </nav>
-
-      {/* ── User profile strip ───────────────────────────────────────────── */}
-      <div className="border-t border-line">
-        <div className="flex items-center gap-2.5 px-4 py-3">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-2xs font-semibold bg-paper-2 text-ink-2">
-              {user?.initials ?? "??"}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex flex-col min-w-0 flex-1">
-            <span className="text-sm font-medium text-ink truncate">
-              {user?.name ?? "Not signed in"}
-            </span>
-            <span className="text-2xs text-ink-4">
-              {user?.jobTitle || "—"}
-            </span>
+            <button
+              onClick={close}
+              className="lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-md text-ink-3 hover:text-ink hover:bg-paper-2"
+              title="Close navigation"
+              aria-label="Close navigation"
+            >
+              <X size={18} />
+            </button>
           </div>
-          <SignOutButton />
         </div>
-      </div>
+
+        {/* ── Navigation groups ────────────────────────────────────────────── */}
+        <nav className="flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin">
+          {sections.map((section, si) => (
+            <NavGroup
+              key={si}
+              section={section}
+              pathname={pathname}
+              searchParams={searchParams}
+              onNavigate={close}
+            />
+          ))}
+        </nav>
+
+        {/* ── User profile strip ───────────────────────────────────────────── */}
+        <div className="border-t border-line">
+          <div className="flex items-center gap-2.5 px-4 py-3">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="text-2xs font-semibold bg-paper-2 text-ink-2">
+                {user?.initials ?? "??"}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-sm font-medium text-ink truncate">
+                {user?.name ?? "Not signed in"}
+              </span>
+              <span className="text-2xs text-ink-4">{user?.jobTitle || "—"}</span>
+            </div>
+            <SignOutButton />
+          </div>
+        </div>
       </aside>
     </>
   );
@@ -404,16 +395,11 @@ function NavGroup({
             <ChevronRight
               size={13}
               aria-hidden
-              className={cn(
-                "transition-transform",
-                collapsed ? "rotate-0" : "rotate-90"
-              )}
+              className={cn("transition-transform", collapsed ? "rotate-0" : "rotate-90")}
             />
           </button>
         ) : (
-          <div className="px-2.5 pb-1.5 text-2xs font-medium text-ink-4">
-            {section.label}
-          </div>
+          <div className="px-2.5 pb-1.5 text-2xs font-medium text-ink-4">{section.label}</div>
         ))}
       {!collapsed && (
         <div id={listId} className="flex flex-col gap-px">
@@ -430,7 +416,7 @@ function NavGroup({
                   "flex items-center gap-2.5 h-[30px] px-2.5 rounded-md text-sm transition-colors",
                   active
                     ? "bg-sidebar-accent text-ink font-medium"
-                    : "text-ink-2 hover:bg-paper-2 hover:text-ink"
+                    : "text-ink-2 hover:bg-paper-2 hover:text-ink",
                 )}
               >
                 {item.dotColor && (
@@ -445,10 +431,7 @@ function NavGroup({
                     size={16}
                     strokeWidth={1.75}
                     aria-hidden
-                    className={cn(
-                      "shrink-0",
-                      active ? "text-ink" : "text-ink-4"
-                    )}
+                    className={cn("shrink-0", active ? "text-ink" : "text-ink-4")}
                   />
                 )}
                 <span className="truncate">{item.label}</span>
@@ -456,7 +439,7 @@ function NavGroup({
                   <span
                     className={cn(
                       "ml-auto text-2xs tabular-nums",
-                      item.queue ? "font-semibold text-ink" : "text-ink-4"
+                      item.queue ? "font-semibold text-ink" : "text-ink-4",
                     )}
                   >
                     {item.badge}

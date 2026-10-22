@@ -9,7 +9,7 @@ import type { OutgoingEmail } from "@/lib/email/drivers";
  */
 export async function emailLivePortalUsers(
   matterId: string,
-  body: Omit<OutgoingEmail, "to">
+  body: Omit<OutgoingEmail, "to">,
 ): Promise<{ sent: number; failed: number }> {
   const firm = await prisma.firm.findFirst({ select: { portalEnabled: true } });
   if (!firm?.portalEnabled) return { sent: 0, failed: 0 };

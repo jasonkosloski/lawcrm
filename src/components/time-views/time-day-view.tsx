@@ -61,14 +61,10 @@ export function TimeDayView({
       <div
         className={cn(
           "grid grid-cols-1 gap-4 items-start",
-          showTimerLane ? "lg:grid-cols-3" : "lg:grid-cols-2"
+          showTimerLane ? "lg:grid-cols-3" : "lg:grid-cols-2",
         )}
       >
-        <Lane
-          title="Logged"
-          count={day.logged.length}
-          empty="No manual entries this day."
-        >
+        <Lane title="Logged" count={day.logged.length} empty="No manual entries this day.">
           {day.logged.map((e) => (
             <EntryCard key={e.id} entry={e} />
           ))}
@@ -86,9 +82,7 @@ export function TimeDayView({
 
         {showTimerLane && (
           <Lane title="Timer" count={timer ? 1 : 0} empty="No timer running.">
-            {timer && (
-              <TimerCard timer={timer} userTz={userTz} asOf={asOf} />
-            )}
+            {timer && <TimerCard timer={timer} userTz={userTz} asOf={asOf} />}
           </Lane>
         )}
       </div>
@@ -112,17 +106,12 @@ function TargetLine({
   return (
     <div className="rounded-md border border-line bg-card px-3 sm:px-4 py-3 flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-2xs font-medium text-ink-3">
-          Day total
-        </span>
+        <span className="text-2xs font-medium text-ink-3">Day total</span>
         <span className="text-xs font-mono">
-          <span className={met ? "text-ok" : "text-ink"}>
-            {formatHours(totalHours)}h
-          </span>
+          <span className={met ? "text-ok" : "text-ink"}>{formatHours(totalHours)}h</span>
           <span className="text-ink-4">
             {" "}
-            of {formatHours(goal)}h target ·{" "}
-            {formatHours(billableHours)}h billable
+            of {formatHours(goal)}h target · {formatHours(billableHours)}h billable
           </span>
         </span>
       </div>
@@ -152,9 +141,7 @@ function Lane({
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <h2 className="text-xs font-medium text-ink-3">
-          {title}
-        </h2>
+        <h2 className="text-xs font-medium text-ink-3">{title}</h2>
         <span className="text-2xs font-mono text-ink-4">{count}</span>
       </div>
       {count === 0 ? (
@@ -168,29 +155,17 @@ function Lane({
   );
 }
 
-function EntryCard({
-  entry,
-  showSource = false,
-}: {
-  entry: DayTimeEntry;
-  showSource?: boolean;
-}) {
+function EntryCard({ entry, showSource = false }: { entry: DayTimeEntry; showSource?: boolean }) {
   const status = timeEntryStatusBadge(entry.status);
   return (
     <div className="rounded-md border border-line bg-card p-2.5 flex flex-col gap-1.5">
       <div className="flex items-start justify-between gap-2">
-        <span className="text-xs font-medium text-ink leading-tight">
-          {entry.activity}
-        </span>
-        <span className="text-xs font-mono text-ink shrink-0">
-          {formatHours(entry.hours)}h
-        </span>
+        <span className="text-xs font-medium text-ink leading-tight">{entry.activity}</span>
+        <span className="text-xs font-mono text-ink shrink-0">{formatHours(entry.hours)}h</span>
       </div>
 
       {entry.narrative && (
-        <p className="text-2xs text-ink-3 leading-snug line-clamp-2">
-          {entry.narrative}
-        </p>
+        <p className="text-2xs text-ink-3 leading-snug line-clamp-2">{entry.narrative}</p>
       )}
 
       <div className="flex items-center gap-1.5 flex-wrap">
@@ -217,18 +192,10 @@ function EntryCard({
         >
           {status.label}
         </span>
-        {showSource && (
-          <Badge variant="neutral">
-            via {timeSourceLabel(entry.source)}
-          </Badge>
-        )}
-        {!entry.billable && (
-          <span className="text-2xs text-ink-4">Non-billable</span>
-        )}
+        {showSource && <Badge variant="neutral">via {timeSourceLabel(entry.source)}</Badge>}
+        {!entry.billable && <span className="text-2xs text-ink-4">Non-billable</span>}
         {entry.noCharge && <span className="text-2xs text-warn">No-charge</span>}
-        {entry.privileged && (
-          <span className="text-2xs text-brand-700">Privileged</span>
-        )}
+        {entry.privileged && <span className="text-2xs text-brand-700">Privileged</span>}
       </div>
     </div>
   );
@@ -238,19 +205,8 @@ function EntryCard({
  *  render time (server), so it's the value as of page load — the
  *  ticking display + start/stop controls belong to the timer
  *  widget, not this page. */
-function TimerCard({
-  timer,
-  userTz,
-  asOf,
-}: {
-  timer: RunningTimer;
-  userTz: string;
-  asOf: Date;
-}) {
-  const elapsedHours = Math.max(
-    0,
-    (asOf.getTime() - timer.startedAt.getTime()) / (60 * 60 * 1000)
-  );
+function TimerCard({ timer, userTz, asOf }: { timer: RunningTimer; userTz: string; asOf: Date }) {
+  const elapsedHours = Math.max(0, (asOf.getTime() - timer.startedAt.getTime()) / (60 * 60 * 1000));
   return (
     <div className="rounded-md border border-brand-200 bg-brand-soft/40 p-2.5 flex flex-col gap-1.5">
       <div className="flex items-start justify-between gap-2">
@@ -258,9 +214,7 @@ function TimerCard({
           <Radio size={12} className="animate-pulse" />
           Running
         </span>
-        <span className="text-xs font-mono text-ink shrink-0">
-          {formatHours(elapsedHours)}h
-        </span>
+        <span className="text-xs font-mono text-ink shrink-0">{formatHours(elapsedHours)}h</span>
       </div>
       <div className="text-2xs text-ink-3">
         Started {formatDate(timer.startedAt, "time", userTz)}

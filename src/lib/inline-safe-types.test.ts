@@ -29,7 +29,7 @@ describe("INLINE_SAFE_TYPES", () => {
         "audio/ogg",
         "text/plain",
         "text/csv",
-      ].sort()
+      ].sort(),
     );
   });
 });

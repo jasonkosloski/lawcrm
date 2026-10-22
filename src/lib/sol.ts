@@ -33,16 +33,14 @@ export type SolPeriod = {
 };
 
 export function isSolPeriodUnit(v: unknown): v is SolPeriodUnit {
-  return (
-    typeof v === "string" && (SOL_PERIOD_UNITS as readonly string[]).includes(v)
-  );
+  return typeof v === "string" && (SOL_PERIOD_UNITS as readonly string[]).includes(v);
 }
 
 /** Build a period from the two nullable DB columns. Null unless BOTH
  *  are present and the amount is a positive integer. */
 export function toSolPeriod(
   amount: number | null | undefined,
-  unit: string | null | undefined
+  unit: string | null | undefined,
 ): SolPeriod | null {
   if (
     typeof amount !== "number" ||
@@ -81,7 +79,7 @@ export function addUtcMonths(date: Date, months: number): Date {
  *  across a DST boundary in the server's zone. */
 export function computeSolDate(
   incidentDate: Date | null | undefined,
-  period: SolPeriod | null | undefined
+  period: SolPeriod | null | undefined,
 ): Date | null {
   if (!incidentDate || !period || !(period.amount > 0)) return null;
   switch (period.unit) {

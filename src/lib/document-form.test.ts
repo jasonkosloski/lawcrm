@@ -7,9 +7,10 @@ describe("parseUploadMeta", () => {
   });
 
   test("trims the display name and accepts a known category", () => {
-    expect(
-      parseUploadMeta({ name: "  Complaint v2 ", category: "pleading" })
-    ).toEqual({ name: "Complaint v2", category: "pleading" });
+    expect(parseUploadMeta({ name: "  Complaint v2 ", category: "pleading" })).toEqual({
+      name: "Complaint v2",
+      category: "pleading",
+    });
   });
 
   test("rejects an unknown category", () => {

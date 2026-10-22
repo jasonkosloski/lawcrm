@@ -92,12 +92,7 @@ export default async function PrintInvoicePage({
           edge-to-edge of the printable area. */}
       <main className="max-w-3xl mx-auto print:max-w-none print:mx-0 p-6 print:p-0">
         <div className="border border-line print:border-0 rounded-md print:rounded-none overflow-hidden bg-white">
-          <InvoicePreview
-            invoice={invoice}
-            firm={firm}
-            timeZone={timeZone}
-            printMode
-          />
+          <InvoicePreview invoice={invoice} firm={firm} timeZone={timeZone} printMode />
         </div>
       </main>
     </div>

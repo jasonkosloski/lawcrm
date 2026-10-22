@@ -6,15 +6,7 @@
  * `date-fns`.
  */
 
-import {
-  addDays,
-  addMonths,
-  format,
-  isValid,
-  parseISO,
-  startOfDay,
-  startOfMonth,
-} from "date-fns";
+import { addDays, addMonths, format, isValid, parseISO, startOfDay, startOfMonth } from "date-fns";
 import {
   addDaysToKey,
   dateKeyInTz,
@@ -45,7 +37,7 @@ export const DEFAULT_SHOW: CalendarShow = "all";
  */
 export function filterCalendarItems<T extends { kind: "event" | "deadline" }>(
   items: readonly T[],
-  show: CalendarShow
+  show: CalendarShow,
 ): T[] {
   if (show === "deadlines") return items.filter((i) => i.kind === "deadline");
   return [...items];
@@ -95,13 +87,11 @@ export function isWeekend(date: Date): boolean {
 export function parseCalendarParams(
   sp: Record<string, string | string[] | undefined>,
   tz: string,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): { view: CalendarView; focal: Date; show: CalendarShow } {
   const rawView = Array.isArray(sp.view) ? sp.view[0] : sp.view;
   const view: CalendarView =
-    rawView === "week" || rawView === "month" || rawView === "day"
-      ? rawView
-      : DEFAULT_VIEW;
+    rawView === "week" || rawView === "month" || rawView === "day" ? rawView : DEFAULT_VIEW;
 
   // Only the exact value "deadlines" flips the filter — anything
   // else (missing, garbage, tampered) falls back to the default so
@@ -140,7 +130,7 @@ export function buildCalendarHref(
   view: CalendarView,
   focal: Date,
   override: { view?: CalendarView; focal?: Date; show?: CalendarShow } = {},
-  show: CalendarShow = DEFAULT_SHOW
+  show: CalendarShow = DEFAULT_SHOW,
 ): string {
   const v = override.view ?? view;
   const d = override.focal ?? focal;
@@ -174,13 +164,9 @@ export function buildCalendarHref(
  */
 export function calendarDayInTz(
   focal: Date,
-  tz: string
+  tz: string,
 ): { day: Date; rangeStart: Date; rangeEnd: Date } {
-  const [y, m, d] = toDateParam(focal).split("-").map(Number) as [
-    number,
-    number,
-    number,
-  ];
+  const [y, m, d] = toDateParam(focal).split("-").map(Number) as [number, number, number];
   return {
     day: new Date(Date.UTC(y, m - 1, d, 12)),
     rangeStart: instantInTz(y, m, d, 0, 0, tz),
@@ -195,11 +181,7 @@ export function calendarDayInTz(
  * mid-day, so `toDateParam` round-trips it losslessly across DST
  * transitions and month/year boundaries.
  */
-export function stepCalendarFocal(
-  view: CalendarView,
-  focal: Date,
-  dir: 1 | -1
-): Date {
+export function stepCalendarFocal(view: CalendarView, focal: Date, dir: 1 | -1): Date {
   if (view === "day") return addDays(focal, dir);
   if (view === "week") return addDays(focal, 7 * dir);
   return addMonths(startOfMonth(focal), dir);
@@ -274,12 +256,10 @@ export type LayoutResult<T> = {
  *  new cluster may begin if no other event bridges the gap.
  */
 export function layoutOverlappingEvents<T extends LayoutInput>(
-  events: readonly T[]
+  events: readonly T[],
 ): LayoutResult<T>[] {
   if (events.length === 0) return [];
-  const sorted = [...events].sort(
-    (a, b) => a.start.getTime() - b.start.getTime()
-  );
+  const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
 
   const result: LayoutResult<T>[] = [];
 
@@ -349,7 +329,7 @@ const MAX_EVENT_DAYS = 366;
 export function eventDayKeys(
   event: { startTime: Date; endTime: Date; isAllDay: boolean },
   tz: string,
-  within?: { first: DayKey; last: DayKey }
+  within?: { first: DayKey; last: DayKey },
 ): DayKey[] {
   let first: DayKey;
   let last: DayKey;
@@ -370,11 +350,7 @@ export function eventDayKeys(
     if (last > within.last) last = within.last;
   }
   const keys: DayKey[] = [];
-  for (
-    let k = first;
-    k <= last && keys.length < MAX_EVENT_DAYS;
-    k = addDaysToKey(k, 1)
-  ) {
+  for (let k = first; k <= last && keys.length < MAX_EVENT_DAYS; k = addDaysToKey(k, 1)) {
     keys.push(k);
   }
   return keys;

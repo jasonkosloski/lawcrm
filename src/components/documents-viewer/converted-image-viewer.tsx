@@ -52,7 +52,10 @@ function failureDetail(err: unknown, what: string): string {
 
 function Status({ children }: { children: React.ReactNode }) {
   return (
-    <div role="status" className="flex flex-1 items-center justify-center rounded-lg border border-line bg-paper-2 p-8 text-xs text-ink-4">
+    <div
+      role="status"
+      className="flex flex-1 items-center justify-center rounded-lg border border-line bg-paper-2 p-8 text-xs text-ink-4"
+    >
       {children}
     </div>
   );
@@ -103,11 +106,19 @@ export function TiffViewer({ src, name }: { src: string; name: string }) {
             break;
           case "page":
             setPages((p) =>
-              p ? p.map((pg, i) => (i === msg.index ? { state: "ready", width: msg.width, height: msg.height, rgba: msg.rgba } : pg)) : p
+              p
+                ? p.map((pg, i) =>
+                    i === msg.index
+                      ? { state: "ready", width: msg.width, height: msg.height, rgba: msg.rgba }
+                      : pg,
+                  )
+                : p,
             );
             break;
           case "page-error":
-            setPages((p) => (p ? p.map((pg, i) => (i === msg.index ? { state: "failed" } : pg)) : p));
+            setPages((p) =>
+              p ? p.map((pg, i) => (i === msg.index ? { state: "failed" } : pg)) : p,
+            );
             break;
           case "done":
             if (timer) clearTimeout(timer);
@@ -118,10 +129,9 @@ export function TiffViewer({ src, name }: { src: string; name: string }) {
             break;
         }
       };
-      worker.postMessage(
-        { buffer, maxPages: TIFF_MAX_PAGES, maxPixels: TIFF_MAX_PAGE_PIXELS },
-        [buffer]
-      );
+      worker.postMessage({ buffer, maxPages: TIFF_MAX_PAGES, maxPixels: TIFF_MAX_PAGE_PIXELS }, [
+        buffer,
+      ]);
     })();
     return () => {
       controller.abort();
@@ -131,7 +141,14 @@ export function TiffViewer({ src, name }: { src: string; name: string }) {
   }, [src]);
 
   if (error) {
-    return <ViewerFallbackCard title="Preview unavailable" detail={error} downloadHref={`${src}?download=1`} downloadName={name} />;
+    return (
+      <ViewerFallbackCard
+        title="Preview unavailable"
+        detail={error}
+        downloadHref={`${src}?download=1`}
+        downloadName={name}
+      />
+    );
   }
   if (!pages) return <Status>Loading TIFF…</Status>;
 
@@ -176,7 +193,11 @@ function TiffCanvas({
     if (!canvas || !ctx) return;
     canvas.width = page.width;
     canvas.height = page.height;
-    ctx.putImageData(new ImageData(new Uint8ClampedArray(page.rgba), page.width, page.height), 0, 0);
+    ctx.putImageData(
+      new ImageData(new Uint8ClampedArray(page.rgba), page.width, page.height),
+      0,
+      0,
+    );
   }, [page]);
   return (
     <canvas
@@ -202,7 +223,11 @@ export function HeicViewer({ src, name }: { src: string; name: string }) {
       try {
         const buffer = await fetchBytes(src, controller.signal);
         const { heicTo } = await import("heic-to/next");
-        const jpeg = await heicTo({ blob: new Blob([buffer], { type: "image/heic" }), type: "image/jpeg", quality: 0.92 });
+        const jpeg = await heicTo({
+          blob: new Blob([buffer], { type: "image/heic" }),
+          type: "image/jpeg",
+          quality: 0.92,
+        });
         if (controller.signal.aborted) return;
         objectUrl = URL.createObjectURL(jpeg);
         setUrl(objectUrl);
@@ -220,7 +245,14 @@ export function HeicViewer({ src, name }: { src: string; name: string }) {
   }, [src]);
 
   if (error) {
-    return <ViewerFallbackCard title="Preview unavailable" detail={error} downloadHref={`${src}?download=1`} downloadName={name} />;
+    return (
+      <ViewerFallbackCard
+        title="Preview unavailable"
+        detail={error}
+        downloadHref={`${src}?download=1`}
+        downloadName={name}
+      />
+    );
   }
   if (!url) return <Status>Converting photo…</Status>;
   return <ImageViewer src={url} name={name} />;

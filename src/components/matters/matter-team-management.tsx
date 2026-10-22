@@ -23,10 +23,7 @@ import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
-import {
-  addMatterTeamMember,
-  removeMatterTeamMember,
-} from "@/app/actions/matters";
+import { addMatterTeamMember, removeMatterTeamMember } from "@/app/actions/matters";
 import {
   MATTER_TEAM_ROLES,
   MATTER_TEAM_ROLE_LABEL,
@@ -65,9 +62,7 @@ export function MatterTeamManagement({
   const [pending, startTransition] = useTransition();
   // Which operation is in flight, so only the Add button reads "Adding…"
   // during an add (not during a removal).
-  const [pendingKind, setPendingKind] = useState<"add" | "remove" | null>(
-    null
-  );
+  const [pendingKind, setPendingKind] = useState<"add" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const addUserSelectId = useId();
   const addRoleSelectId = useId();
@@ -118,8 +113,7 @@ export function MatterTeamManagement({
     if (
       !(await confirmAction({
         title: `Remove ${name} from this matter?`,
-        description:
-          "They stay in the audit trail but won't appear in the active roster.",
+        description: "They stay in the audit trail but won't appear in the active roster.",
         confirmLabel: "Remove member",
         destructive: true,
       }))
@@ -144,25 +138,19 @@ export function MatterTeamManagement({
       <div>
         <div className="text-sm font-semibold text-ink">Team</div>
         <div className="text-2xs text-ink-4 mt-0.5">
-          Add or remove people from the case team. Removals are
-          soft — former members stay logged on the matter for
-          historical attribution.
+          Add or remove people from the case team. Removals are soft — former members stay logged on
+          the matter for historical attribution.
         </div>
       </div>
 
       {/* Active members */}
       <div className="border border-line rounded-md overflow-hidden">
         {active.length === 0 ? (
-          <div className="px-3 py-3 text-2xs text-ink-4 italic">
-            No active team members yet.
-          </div>
+          <div className="px-3 py-3 text-2xs text-ink-4 italic">No active team members yet.</div>
         ) : (
           <ul className="divide-y divide-line">
             {active.map((m) => (
-              <li
-                key={m.membershipId}
-                className="flex items-center gap-3 px-3 py-2"
-              >
+              <li key={m.membershipId} className="flex items-center gap-3 px-3 py-2">
                 <div className="w-7 h-7 rounded-full bg-paper-2 text-ink-3 flex items-center justify-center text-2xs font-mono shrink-0">
                   {m.initials ?? m.name.slice(0, 1).toUpperCase()}
                 </div>
@@ -184,11 +172,7 @@ export function MatterTeamManagement({
                   // The server always refuses to remove the lead; make
                   // that visible instead of offering a dead-end button.
                   disabled={pending || m.role === "lead"}
-                  title={
-                    m.role === "lead"
-                      ? "Promote another member to lead first"
-                      : undefined
-                  }
+                  title={m.role === "lead" ? "Promote another member to lead first" : undefined}
                   aria-label={`Remove ${m.name}`}
                   className="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-4 hover:bg-warn-soft hover:text-warn disabled:opacity-50"
                 >
@@ -205,10 +189,7 @@ export function MatterTeamManagement({
       {candidates.length > 0 && (
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1 flex-1 min-w-48">
-            <label
-              htmlFor={addUserSelectId}
-              className="text-2xs font-medium text-ink-3"
-            >
+            <label htmlFor={addUserSelectId} className="text-2xs font-medium text-ink-3">
               Add member
             </label>
             <NativeSelect
@@ -228,19 +209,14 @@ export function MatterTeamManagement({
             </NativeSelect>
           </div>
           <div className="flex flex-col gap-1 w-44">
-            <label
-              htmlFor={addRoleSelectId}
-              className="text-2xs font-medium text-ink-3"
-            >
+            <label htmlFor={addRoleSelectId} className="text-2xs font-medium text-ink-3">
               Role
             </label>
             <NativeSelect
               className="w-full"
               id={addRoleSelectId}
               value={addRole}
-              onChange={(e) =>
-                setAddRole(e.target.value as MatterTeamRole)
-              }
+              onChange={(e) => setAddRole(e.target.value as MatterTeamRole)}
               disabled={pending}
             >
               {MATTER_TEAM_ROLES.map((r) => (
@@ -269,25 +245,16 @@ export function MatterTeamManagement({
           edit. */}
       {former.length > 0 && (
         <div className="flex flex-col gap-1.5 pt-2 border-t border-line">
-          <div className="text-2xs font-medium text-ink-3">
-            Former members
-          </div>
+          <div className="text-2xs font-medium text-ink-3">Former members</div>
           <ul className="border border-line rounded-md overflow-hidden divide-y divide-line">
             {former.map((m) => (
-              <li
-                key={m.membershipId}
-                className="flex items-center gap-3 px-3 py-2 opacity-70"
-              >
+              <li key={m.membershipId} className="flex items-center gap-3 px-3 py-2 opacity-70">
                 <div className="w-7 h-7 rounded-full bg-paper-2 text-ink-4 flex items-center justify-center text-2xs font-mono shrink-0">
                   {m.initials ?? m.name.slice(0, 1).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs text-ink-3 truncate">{m.name}</div>
-                  <div
-                    className={cn(
-                      "text-2xs text-ink-4 truncate"
-                    )}
-                  >
+                  <div className={cn("text-2xs text-ink-4 truncate")}>
                     {matterTeamRoleLabel(m.role)}
                     <span className="ml-1 italic">(former)</span>
                   </div>

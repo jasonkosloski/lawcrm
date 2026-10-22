@@ -29,10 +29,7 @@ vi.mock("@/lib/permission-check", () => ({
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
-import {
-  convertNoteToTask,
-  convertTaskToDeadline,
-} from "@/app/actions/conversions";
+import { convertNoteToTask, convertTaskToDeadline } from "@/app/actions/conversions";
 import { inboxActionInitialState } from "@/lib/inbox-action-form";
 import {
   resetDb,
@@ -127,11 +124,7 @@ describe("conversion action gates", () => {
 
   test("convertTaskToDeadline gates on deadlines.create", async () => {
     const taskId = await seedTask();
-    await convertTaskToDeadline(
-      taskId,
-      inboxActionInitialState,
-      taskToDeadlineForm()
-    );
+    await convertTaskToDeadline(taskId, inboxActionInitialState, taskToDeadlineForm());
     expect(mockedRequirePermission).toHaveBeenCalledWith("deadlines.create");
   });
 
@@ -148,11 +141,7 @@ describe("conversion action gates", () => {
 describe("convertNoteToTask", () => {
   test("creates a task back-linked to the note; note stays intact", async () => {
     const noteId = await seedNote();
-    const res = await convertNoteToTask(
-      noteId,
-      inboxActionInitialState,
-      noteToTaskForm()
-    );
+    const res = await convertNoteToTask(noteId, inboxActionInitialState, noteToTaskForm());
     expect(res.status).toBe("ok");
 
     const task = await prisma.task.findFirst({ where: { noteId } });
@@ -171,11 +160,7 @@ describe("convertNoteToTask", () => {
       data: { leadId, authorId: userId, content: "Sensitive intake detail" },
       select: { id: true },
     });
-    const res = await convertNoteToTask(
-      note.id,
-      inboxActionInitialState,
-      noteToTaskForm()
-    );
+    const res = await convertNoteToTask(note.id, inboxActionInitialState, noteToTaskForm());
     expect(res.status).toBe("ok");
     const task = await prisma.task.findFirst({ where: { noteId: note.id } });
     expect(task!.matterId).toBeNull();
@@ -187,11 +172,7 @@ describe("convertNoteToTask", () => {
   });
 
   test("rejects when the note no longer exists", async () => {
-    const res = await convertNoteToTask(
-      "missing",
-      inboxActionInitialState,
-      noteToTaskForm()
-    );
+    const res = await convertNoteToTask("missing", inboxActionInitialState, noteToTaskForm());
     expect(res.status).toBe("error");
     expect(res.errors?.title?.[0]).toMatch(/no longer exists/i);
   });
@@ -211,11 +192,7 @@ describe("convertNoteToTask", () => {
 describe("convertTaskToDeadline", () => {
   test("creates a deadline back-linked to the task; task stays intact", async () => {
     const taskId = await seedTask();
-    const res = await convertTaskToDeadline(
-      taskId,
-      inboxActionInitialState,
-      taskToDeadlineForm()
-    );
+    const res = await convertTaskToDeadline(taskId, inboxActionInitialState, taskToDeadlineForm());
     expect(res.status).toBe("ok");
 
     const deadline = await prisma.deadline.findFirst({
@@ -235,7 +212,7 @@ describe("convertTaskToDeadline", () => {
     const res = await convertTaskToDeadline(
       "missing",
       inboxActionInitialState,
-      taskToDeadlineForm()
+      taskToDeadlineForm(),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.title?.[0]).toMatch(/no longer exists/i);

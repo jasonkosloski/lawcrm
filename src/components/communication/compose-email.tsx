@@ -35,10 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import {
-  SelectField,
-  TextField,
-} from "@/components/matters/captures/primary-fields";
+import { SelectField, TextField } from "@/components/matters/captures/primary-fields";
 import { RichTextEditor } from "@/components/shared/rich-text-editor-lazy";
 import { parseAddressList } from "@/lib/google/mime";
 import { htmlToText } from "@/lib/html-to-text";
@@ -46,10 +43,7 @@ import { isBodyEmpty } from "@/lib/email-signature-body";
 import { sendEmail } from "@/app/actions/email-send";
 import { notifySuccess } from "@/lib/feedback";
 import type { RecordScope } from "@/lib/record-scope";
-import type {
-  FilingLeadOption,
-  FilingMatterOption,
-} from "@/lib/queries/communication";
+import type { FilingLeadOption, FilingMatterOption } from "@/lib/queries/communication";
 import { blockEnterSubmit, LabeledField } from "./labeled-field";
 import { RecordPicker } from "./record-picker";
 import { SendAttachmentsField } from "./send-attachments-field";
@@ -102,9 +96,7 @@ export function ComposeEmailButton({
   const [cc, setCc] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState(signature ?? "");
-  const [scope, setScope] = useState<RecordScope | null>(
-    initialScope ?? null,
-  );
+  const [scope, setScope] = useState<RecordScope | null>(initialScope ?? null);
   const [changingRecord, setChangingRecord] = useState(false);
   const [attachments, setAttachments] = useState<AttachableDocument[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -268,18 +260,12 @@ export function ComposeEmailButton({
               aria-labelledby="compose-record-label"
               className="flex flex-col gap-1"
             >
-              <span
-                id="compose-record-label"
-                className="text-2xs font-medium text-ink-3"
-              >
+              <span id="compose-record-label" className="text-2xs font-medium text-ink-3">
                 Matter or lead
               </span>
               {scope && !changingRecord ? (
                 <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    data-testid="compose-record"
-                    className="flex-1 truncate text-xs text-ink"
-                  >
+                  <span data-testid="compose-record" className="flex-1 truncate text-xs text-ink">
                     {scopeLabel}
                   </span>
                   <Button
@@ -313,9 +299,7 @@ export function ComposeEmailButton({
 
             {accounts.length > 1 && (
               <div className="flex items-center gap-2">
-                <span className="text-2xs font-medium text-ink-3 shrink-0 w-10">
-                  From
-                </span>
+                <span className="text-2xs font-medium text-ink-3 shrink-0 w-10">From</span>
                 <div className="flex-1">
                   <SelectField
                     name="accountId"
@@ -357,11 +341,7 @@ export function ComposeEmailButton({
                 ariaLabel="Subject"
               />
             </LabeledField>
-            <RichTextEditor
-              initialHTML={body}
-              onChange={setBody}
-              placeholder="Write your email…"
-            />
+            <RichTextEditor initialHTML={body} onChange={setBody} placeholder="Write your email…" />
             <SendAttachmentsField
               scope={scope}
               value={attachments}
@@ -386,11 +366,7 @@ export function ComposeEmailButton({
               <Button
                 type="submit"
                 disabled={
-                  isPending ||
-                  uploading ||
-                  !scope ||
-                  !to.trim() ||
-                  isBodyEmpty(body, signature)
+                  isPending || uploading || !scope || !to.trim() || isBodyEmpty(body, signature)
                 }
               >
                 {isPending ? "Sending…" : "Send"}

@@ -14,7 +14,7 @@ import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 export async function rehomeLeadDocuments(
   tx: Tx,
   leadId: string,
-  matterId: string
+  matterId: string,
 ): Promise<number> {
   const [matterRoots, leadRoots] = await Promise.all([
     tx.documentFolder.findMany({
@@ -87,7 +87,7 @@ export async function resolveLeadUploadTarget(
   folderId: string | null,
   /** The matter-wall check (`canAccessMatter`) — injected so this
    *  module stays free of the auth import chain. */
-  canAccess: (userId: string, matterId: string) => Promise<boolean>
+  canAccess: (userId: string, matterId: string) => Promise<boolean>,
 ): Promise<LeadUploadTarget> {
   await tx.$queryRaw`SELECT id FROM "leads" WHERE id = ${leadId} FOR SHARE`;
   const lead = await tx.lead.findUnique({

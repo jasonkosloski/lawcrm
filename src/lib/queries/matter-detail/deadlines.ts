@@ -5,16 +5,8 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
-import {
-  resolveTz,
-  EVENT_REF_SELECT,
-  scrubEventRef,
-} from "./shared";
-import {
-  EntitySource,
-  AttachedNotePreview,
-  resolveEntitySource,
-} from "./tasks";
+import { resolveTz, EVENT_REF_SELECT, scrubEventRef } from "./shared";
+import { EntitySource, AttachedNotePreview, resolveEntitySource } from "./tasks";
 import { daysUntilDateOnly } from "@/lib/format-date";
 
 // ── Deadlines ────────────────────────────────────────────────────────────
@@ -53,12 +45,9 @@ export type MatterListOptions = {
 
 export async function getMatterDeadlines(
   matterId: string,
-  options: MatterListOptions = {}
+  options: MatterListOptions = {},
 ): Promise<DeadlineRow[]> {
-  const [viewerId, tz] = await Promise.all([
-    getCurrentUserId(),
-    resolveTz(options.tz),
-  ]);
+  const [viewerId, tz] = await Promise.all([getCurrentUserId(), resolveTz(options.tz)]);
   const rows = await prisma.deadline.findMany({
     where: { matterId, ...(options.openOnly ? { status: "open" } : {}) },
     take: options.limit,
@@ -134,7 +123,5 @@ export async function getMatterDeadlines(
   // Open deadlines first, then completed / waived history, each by due
   // date (the page header's promise). Array#sort is stable, so the
   // due-date order from the query survives within each group.
-  return shaped.sort(
-    (a, b) => Number(a.status !== "open") - Number(b.status !== "open")
-  );
+  return shaped.sort((a, b) => Number(a.status !== "open") - Number(b.status !== "open"));
 }

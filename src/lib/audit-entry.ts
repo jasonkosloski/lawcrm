@@ -48,7 +48,7 @@ export async function logSettingsChange(
   userId: string,
   title: string,
   changes: Array<string | null> = [],
-  skipIfNoChanges = false
+  skipIfNoChanges = false,
 ): Promise<void> {
   const list = changes.filter((c): c is string => c !== null);
   if (list.length === 0 && skipIfNoChanges) return;

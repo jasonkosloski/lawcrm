@@ -48,10 +48,7 @@ vi.mock("@/components/matters/captures/event-composer", () => ({
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { getLeadEvents } from "@/lib/queries/matter-detail";
-import {
-  getCalendarEventById,
-  getEventNotes,
-} from "@/lib/queries/calendar";
+import { getCalendarEventById, getEventNotes } from "@/lib/queries/calendar";
 import LeadEventsPage from "./page";
 
 const ev = (over: Partial<MatterEventRow> = {}): MatterEventRow => ({
@@ -73,9 +70,7 @@ const ev = (over: Partial<MatterEventRow> = {}): MatterEventRow => ({
 });
 
 const lead = (stage: string, convertedMatterId: string | null = null) =>
-  vi
-    .mocked(prisma.lead.findUnique)
-    .mockResolvedValue({ stage, convertedMatterId } as never);
+  vi.mocked(prisma.lead.findUnique).mockResolvedValue({ stage, convertedMatterId } as never);
 
 const renderPage = async (event?: string) => {
   const ui = await LeadEventsPage({
@@ -92,12 +87,13 @@ describe("LeadEventsPage", () => {
     lead("meeting");
     vi.mocked(getLeadEvents).mockResolvedValue([ev()]);
     await renderPage();
-    expect(
-      JSON.parse(screen.getByTestId("event-composer").getAttribute("data-scope")!)
-    ).toEqual({ kind: "lead", leadId: "lead_1" });
-    expect(
-      screen.getByRole("link", { name: /consultation/i }).getAttribute("href")
-    ).toBe("/intake/lead_1/events?event=evt_1");
+    expect(JSON.parse(screen.getByTestId("event-composer").getAttribute("data-scope")!)).toEqual({
+      kind: "lead",
+      leadId: "lead_1",
+    });
+    expect(screen.getByRole("link", { name: /consultation/i }).getAttribute("href")).toBe(
+      "/intake/lead_1/events?event=evt_1",
+    );
   });
 
   test("no events.create: no composer", async () => {
@@ -131,8 +127,8 @@ describe("LeadEventsPage", () => {
     lead("converted", "m_9");
     await renderPage();
     expect(screen.queryByTestId("event-composer")).toBeNull();
-    expect(
-      screen.getByRole("link", { name: /open matter events/i }).getAttribute("href")
-    ).toBe("/matters/m_9/events");
+    expect(screen.getByRole("link", { name: /open matter events/i }).getAttribute("href")).toBe(
+      "/matters/m_9/events",
+    );
   });
 });

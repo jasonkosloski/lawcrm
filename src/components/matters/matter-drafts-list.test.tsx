@@ -105,7 +105,7 @@ describe("MatterDraftsList", () => {
     await user.click(screen.getByRole("button", { name: "Delete" }));
     await user.click(await screen.findByRole("button", { name: "Delete draft" }));
     expect(
-      await screen.findByText("Only the person who started this draft can delete it.")
+      await screen.findByText("Only the person who started this draft can delete it."),
     ).toBeTruthy();
   });
 });

@@ -79,11 +79,7 @@ beforeEach(async () => {
 });
 afterEach(() => cap.restore());
 
-async function identityFor(
-  contactId: string,
-  email: string,
-  opts: { revoked?: boolean } = {}
-) {
+async function identityFor(contactId: string, email: string, opts: { revoked?: boolean } = {}) {
   const identity = await prisma.portalIdentity.create({ data: { contactId, email } });
   await prisma.portalMatterAccess.create({
     data: {
@@ -207,7 +203,11 @@ describe("sendInvoice via portal", () => {
     await identityFor(clientId, "c@example.com");
     await prisma.matter.update({ where: { id: matterId }, data: { trustBalance: 2000 } });
     const id = await makeInvoice();
-    const res = await sendInvoice(id, billingInitialState, form({ applyTrust: "true", trustAmount: "100" }));
+    const res = await sendInvoice(
+      id,
+      billingInitialState,
+      form({ applyTrust: "true", trustAmount: "100" }),
+    );
     expect(res.status).toBe("ok");
     expect(await statusOf(id)).toBe("partial");
   });
@@ -230,7 +230,11 @@ describe("sendInvoice via portal", () => {
 
   test("email method with an empty recipient is refused: status unchanged", async () => {
     const id = await makeInvoice();
-    const res = await sendInvoice(id, billingInitialState, form({ method: "email", recipient: "" }));
+    const res = await sendInvoice(
+      id,
+      billingInitialState,
+      form({ method: "email", recipient: "" }),
+    );
     expect(res.status).toBe("error");
     expect(res.errors?.recipient).toEqual(["Recipient is required"]);
     expect(await statusOf(id)).toBe("approved");
@@ -238,10 +242,16 @@ describe("sendInvoice via portal", () => {
 
   test("email method emails the invoice PDF", async () => {
     const id = await makeInvoice();
-    const res = await sendInvoice(id, billingInitialState, form({ method: "email", recipient: "x@example.com" }));
+    const res = await sendInvoice(
+      id,
+      billingInitialState,
+      form({ method: "email", recipient: "x@example.com" }),
+    );
     expect(res.status).toBe("ok");
     expect(cap.sent).toHaveLength(1);
-    const log = await prisma.activityLog.findFirstOrThrow({ where: { matterId, title: { contains: "emailed to" } } });
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { matterId, title: { contains: "emailed to" } },
+    });
     expect(log.title).toBe("Invoice 2026-901 emailed to x@example.com");
   });
 });

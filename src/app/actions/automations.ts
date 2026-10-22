@@ -31,11 +31,7 @@ import {
   packOffset,
   wouldCreateCycle,
 } from "@/lib/automations/deadline-plan";
-import {
-  AUTO_APPLY_TRIGGERS,
-  applyDeadlineRules,
-  applyTaskList,
-} from "@/lib/automations/apply";
+import { AUTO_APPLY_TRIGGERS, applyDeadlineRules, applyTaskList } from "@/lib/automations/apply";
 import type {
   ApplyRuleResult,
   ApplyTaskListResult,
@@ -48,10 +44,7 @@ const SETTINGS_PATH = "/settings/automations";
 
 /** Serialize manual applies per matter so a double submit (or two
  *  users) can't both pass the duplicate check and both create. */
-async function lockMatterForApply(
-  tx: Pick<Tx, "$executeRaw">,
-  matterId: string
-) {
+async function lockMatterForApply(tx: Pick<Tx, "$executeRaw">, matterId: string) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`automation-apply:${matterId}`}))`;
 }
 
@@ -85,7 +78,11 @@ const ruleSchema = z
       ctx.addIssue({ code: "custom", path: ["amount"], message: "That's over 100 years" });
     }
     if (v.anchor === "rule" && !v.anchorRuleId) {
-      ctx.addIssue({ code: "custom", path: ["anchorRuleId"], message: "Pick the rule this one counts from" });
+      ctx.addIssue({
+        code: "custom",
+        path: ["anchorRuleId"],
+        message: "Pick the rule this one counts from",
+      });
     }
   });
 
@@ -94,7 +91,7 @@ type RuleInput = z.infer<typeof ruleSchema>;
 /** Validate the anchor rule exists and the link wouldn't loop. */
 async function checkAnchorRule(
   ruleId: string | null,
-  input: RuleInput
+  input: RuleInput,
 ): Promise<AutomationFormState | null> {
   if (input.anchor !== "rule") return null;
   const anchorId = input.anchorRuleId!;
@@ -104,9 +101,7 @@ async function checkAnchorRule(
   if (!all.some((r) => r.id === anchorId)) {
     return fail("anchorRuleId", "That rule no longer exists");
   }
-  const anchorOf = new Map(
-    all.filter((r) => r.id !== ruleId).map((r) => [r.id, r.anchorRuleId])
-  );
+  const anchorOf = new Map(all.filter((r) => r.id !== ruleId).map((r) => [r.id, r.anchorRuleId]));
   if (wouldCreateCycle(ruleId, anchorId, anchorOf)) {
     return fail("anchorRuleId", "That would make rules count from each other in a loop");
   }
@@ -129,7 +124,7 @@ function ruleData(input: RuleInput) {
 
 export async function createDeadlineRule(
   _prev: AutomationFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<AutomationFormState> {
   const userId = await requirePermission("automations.deadline_rule.create");
   const parsed = ruleSchema.safeParse(Object.fromEntries(formData.entries()));
@@ -154,12 +149,15 @@ export async function createDeadlineRule(
 export async function updateDeadlineRule(
   ruleId: string,
   _prev: AutomationFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<AutomationFormState> {
   const userId = await requirePermission("automations.deadline_rule.edit");
   const parsed = ruleSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) return { status: "error", errors: parsed.error.flatten().fieldErrors };
-  const existing = await prisma.deadlineRule.findUnique({ where: { id: ruleId }, select: { id: true } });
+  const existing = await prisma.deadlineRule.findUnique({
+    where: { id: ruleId },
+    select: { id: true },
+  });
   if (!existing) return fail("_form", "Rule not found");
   const bad = await checkAnchorRule(ruleId, parsed.data);
   if (bad) return bad;
@@ -187,7 +185,7 @@ export async function updateDeadlineRule(
 /** Archive / restore. Archived rules are skipped by every apply path. */
 export async function setDeadlineRuleActive(
   ruleId: string,
-  isActive: boolean
+  isActive: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("automations.deadline_rule.edit");
   let rule;
@@ -211,9 +209,7 @@ export async function setDeadlineRuleActive(
   return { ok: true };
 }
 
-export async function deleteDeadlineRule(
-  ruleId: string
-): Promise<{ ok: boolean; error?: string }> {
+export async function deleteDeadlineRule(ruleId: string): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("automations.deadline_rule.delete");
   const rule = await prisma.deadlineRule.findUnique({
     where: { id: ruleId },
@@ -237,7 +233,8 @@ export async function deleteDeadlineRule(
     if (isForeignKeyViolation(err)) {
       return {
         ok: false,
-        error: "Another rule now counts from this one. Change or delete it first, or archive this rule instead.",
+        error:
+          "Another rule now counts from this one. Change or delete it first, or archive this rule instead.",
       };
     }
     throw err;
@@ -279,7 +276,7 @@ const taskListSchema = z.object({
       z
         .array(itemSchema)
         .min(1, "Add at least one task")
-        .max(100, "A list can hold up to 100 tasks")
+        .max(100, "A list can hold up to 100 tasks"),
     ),
 });
 
@@ -304,7 +301,7 @@ function itemRows(items: z.infer<typeof itemSchema>[]) {
 
 export async function createTaskList(
   _prev: AutomationFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<AutomationFormState> {
   const userId = await requirePermission("automations.task_list.create");
   const parsed = parseTaskList(formData);
@@ -335,12 +332,15 @@ export async function createTaskList(
 export async function updateTaskList(
   taskListId: string,
   _prev: AutomationFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<AutomationFormState> {
   const userId = await requirePermission("automations.task_list.edit");
   const parsed = parseTaskList(formData);
   if (!parsed.success) return { status: "error", errors: parsed.error.flatten().fieldErrors };
-  const existing = await prisma.taskList.findUnique({ where: { id: taskListId }, select: { id: true } });
+  const existing = await prisma.taskList.findUnique({
+    where: { id: taskListId },
+    select: { id: true },
+  });
   if (!existing) return fail("_form", "Task list not found");
 
   try {
@@ -372,7 +372,7 @@ export async function updateTaskList(
 
 export async function setTaskListActive(
   taskListId: string,
-  isActive: boolean
+  isActive: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("automations.task_list.edit");
   let list;
@@ -396,11 +396,12 @@ export async function setTaskListActive(
   return { ok: true };
 }
 
-export async function deleteTaskList(
-  taskListId: string
-): Promise<{ ok: boolean; error?: string }> {
+export async function deleteTaskList(taskListId: string): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("automations.task_list.delete");
-  const list = await prisma.taskList.findUnique({ where: { id: taskListId }, select: { name: true } });
+  const list = await prisma.taskList.findUnique({
+    where: { id: taskListId },
+    select: { name: true },
+  });
   if (!list) return { ok: false, error: "Task list not found." };
   // Items + AutoApply rows cascade; created tasks keep their rows.
   try {
@@ -421,49 +422,51 @@ export async function deleteTaskList(
 
 // ── Defaults (AutoApply) ───────────────────────────────────────────
 
-const defaultSchema = z
-  .object({
-    trigger: z.enum(AUTO_APPLY_TRIGGERS).default("matter_created"),
-    /** "" = every practice area. */
-    practiceAreaId: z.string().trim().optional().or(z.literal("")),
-    target: z
-      .string()
-      .regex(/^(rule|list):.+$/, "Pick a deadline rule or task list"),
-  });
+const defaultSchema = z.object({
+  trigger: z.enum(AUTO_APPLY_TRIGGERS).default("matter_created"),
+  /** "" = every practice area. */
+  practiceAreaId: z.string().trim().optional().or(z.literal("")),
+  target: z.string().regex(/^(rule|list):.+$/, "Pick a deadline rule or task list"),
+});
 
 export async function addAutoApply(
   _prev: AutomationFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<AutomationFormState> {
   const userId = await requirePermission("automations.defaults.create");
   const parsed = defaultSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) return { status: "error", errors: parsed.error.flatten().fieldErrors };
   const { trigger } = parsed.data;
   const practiceAreaId = parsed.data.practiceAreaId || null;
-  const [kind, targetId] = [
-    parsed.data.target.slice(0, 4),
-    parsed.data.target.slice(5),
-  ];
+  const [kind, targetId] = [parsed.data.target.slice(0, 4), parsed.data.target.slice(5)];
 
   let label: string;
   if (kind === "rule") {
-    const rule = await prisma.deadlineRule.findUnique({ where: { id: targetId }, select: { title: true } });
+    const rule = await prisma.deadlineRule.findUnique({
+      where: { id: targetId },
+      select: { title: true },
+    });
     if (!rule) return fail("target", "That rule no longer exists");
     label = `deadline rule "${rule.title}"`;
   } else {
-    const list = await prisma.taskList.findUnique({ where: { id: targetId }, select: { name: true } });
+    const list = await prisma.taskList.findUnique({
+      where: { id: targetId },
+      select: { name: true },
+    });
     if (!list) return fail("target", "That task list no longer exists");
     label = `task list "${list.name}"`;
   }
   let areaName = "all practice areas";
   if (practiceAreaId) {
-    const area = await prisma.practiceArea.findUnique({ where: { id: practiceAreaId }, select: { name: true } });
+    const area = await prisma.practiceArea.findUnique({
+      where: { id: practiceAreaId },
+      select: { name: true },
+    });
     if (!area) return fail("practiceAreaId", "That practice area no longer exists");
     areaName = area.name;
   }
 
-  const target =
-    kind === "rule" ? { deadlineRuleId: targetId } : { taskListId: targetId };
+  const target = kind === "rule" ? { deadlineRuleId: targetId } : { taskListId: targetId };
   const dupe = await prisma.autoApply.findFirst({
     where: { trigger, practiceAreaId, ...target },
     select: { id: true },
@@ -490,7 +493,7 @@ export async function addAutoApply(
 }
 
 export async function removeAutoApply(
-  autoApplyId: string
+  autoApplyId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("automations.defaults.delete");
   const row = await prisma.autoApply.findUnique({
@@ -539,7 +542,7 @@ function revalidateMatter(matterId: string, tab: "deadlines" | "tasks") {
 export async function applyDeadlineRuleToMatter(
   matterId: string,
   ruleId: string,
-  opts: { anchorDate?: string; force?: boolean } = {}
+  opts: { anchorDate?: string; force?: boolean } = {},
 ): Promise<ApplyRuleResult> {
   const userId = await requirePermission("deadlines.create");
   await assertMatterAccess(matterId);
@@ -548,7 +551,10 @@ export async function applyDeadlineRuleToMatter(
   }
   const [matter, rule, tz] = await Promise.all([
     prisma.matter.findUnique({ where: { id: matterId }, select: { id: true } }),
-    prisma.deadlineRule.findFirst({ where: { id: ruleId, isActive: true }, select: { title: true, anchorLabel: true, anchor: true } }),
+    prisma.deadlineRule.findFirst({
+      where: { id: ruleId, isActive: true },
+      select: { title: true, anchorLabel: true, anchor: true },
+    }),
     getCurrentUserTimeZone(),
   ]);
   if (!matter) return { status: "error", error: "Matter not found." };
@@ -602,7 +608,7 @@ export async function applyDeadlineRuleToMatter(
 export async function applyTaskListToMatter(
   matterId: string,
   taskListId: string,
-  opts: { force?: boolean } = {}
+  opts: { force?: boolean } = {},
 ): Promise<ApplyTaskListResult> {
   const userId = await requirePermission("tasks.create");
   await assertMatterAccess(matterId);

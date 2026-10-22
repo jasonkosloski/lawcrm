@@ -54,8 +54,7 @@ export function MatterNameTemplateField({
   error?: string[];
 }) {
   const [value, setValue] = useState(defaultValue);
-  const effective =
-    value.trim() === "" && placeholder !== undefined ? placeholder : value;
+  const effective = value.trim() === "" && placeholder !== undefined ? placeholder : value;
   const parsed = parseTemplate(effective);
   const id = `${name}-field`;
 
@@ -97,8 +96,7 @@ export function MatterNameTemplateField({
         <ul className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4">
           {TOKEN_HELP.map((t) => (
             <li key={t.token}>
-              <code className="font-mono text-ink-3">{`{${t.token}}`}</code>{" "}
-              {t.meaning}
+              <code className="font-mono text-ink-3">{`{${t.token}}`}</code> {t.meaning}
             </li>
           ))}
         </ul>

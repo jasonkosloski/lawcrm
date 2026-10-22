@@ -43,14 +43,12 @@ const PERCENT_INITIAL = {
 /** Existing settlements render compact; expand to reach the form. */
 async function expandForm() {
   await userEvent.click(
-    screen.getByRole("button", { name: /edit gross \/ fee \/ costs \/ status/i })
+    screen.getByRole("button", { name: /edit gross \/ fee \/ costs \/ status/i }),
   );
 }
 
 function hiddenFirmFee(container: HTMLElement): HTMLInputElement {
-  const input = container.querySelector<HTMLInputElement>(
-    'input[name="firmFee"]'
-  );
+  const input = container.querySelector<HTMLInputElement>('input[name="firmFee"]');
   expect(input).not.toBeNull();
   return input!;
 }
@@ -58,11 +56,7 @@ function hiddenFirmFee(container: HTMLElement): HTMLInputElement {
 describe("SettlementComposer — hidden firmFee round-trip", () => {
   test("explicit-fee settlement (percent null) round-trips the stored fee", async () => {
     const { container } = render(
-      <SettlementComposer
-        matterId="m1"
-        initial={EXPLICIT_FEE_INITIAL}
-        canEdit
-      />
+      <SettlementComposer matterId="m1" initial={EXPLICIT_FEE_INITIAL} canEdit />,
     );
     await expandForm();
     expect(hiddenFirmFee(container).value).toBe("27500.50");
@@ -70,16 +64,14 @@ describe("SettlementComposer — hidden firmFee round-trip", () => {
 
   test("percent-driven settlement submits '' so the action recomputes from percent", async () => {
     const { container } = render(
-      <SettlementComposer matterId="m1" initial={PERCENT_INITIAL} canEdit />
+      <SettlementComposer matterId="m1" initial={PERCENT_INITIAL} canEdit />,
     );
     await expandForm();
     expect(hiddenFirmFee(container).value).toBe("");
   });
 
   test("new settlement (initial null) submits ''", () => {
-    const { container } = render(
-      <SettlementComposer matterId="m1" initial={null} canEdit />
-    );
+    const { container } = render(<SettlementComposer matterId="m1" initial={null} canEdit />);
     // No existing settlement → form renders expanded immediately.
     expect(hiddenFirmFee(container).value).toBe("");
   });
@@ -88,37 +80,25 @@ describe("SettlementComposer — hidden firmFee round-trip", () => {
 describe("SettlementComposer — permission gating", () => {
   test("no canEdit + no settlement shows the permission hint", () => {
     render(<SettlementComposer matterId="m1" initial={null} canEdit={false} />);
-    expect(
-      screen.getByText(/Settlement\.edit permission required/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Settlement\.edit permission required/i)).toBeInTheDocument();
   });
 
   test("no canEdit + existing settlement renders nothing (read view is elsewhere)", () => {
     const { container } = render(
-      <SettlementComposer
-        matterId="m1"
-        initial={PERCENT_INITIAL}
-        canEdit={false}
-      />
+      <SettlementComposer matterId="m1" initial={PERCENT_INITIAL} canEdit={false} />,
     );
     expect(container.firstChild).toBeNull();
   });
 });
 
 describe("SettlementComposer — status rules + re-seed (F115 / F116)", () => {
-  const statusSelect = () =>
-    screen.getByRole("combobox") as HTMLSelectElement;
-  const optionValues = () =>
-    Array.from(statusSelect().options).map((o) => o.value);
+  const statusSelect = () => screen.getByRole("combobox") as HTMLSelectElement;
+  const optionValues = () => Array.from(statusSelect().options).map((o) => o.value);
 
   test("a new settlement offers no status choice — it posts 'pending'", () => {
-    const { container } = render(
-      <SettlementComposer matterId="m1" initial={null} canEdit />
-    );
+    const { container } = render(<SettlementComposer matterId="m1" initial={null} canEdit />);
     expect(screen.queryByRole("combobox")).toBeNull();
-    const hidden = container.querySelector<HTMLInputElement>(
-      'input[name="status"]'
-    );
+    const hidden = container.querySelector<HTMLInputElement>('input[name="status"]');
     expect(hidden?.value).toBe("pending");
   });
 
@@ -128,7 +108,7 @@ describe("SettlementComposer — status rules + re-seed (F115 / F116)", () => {
         matterId="m1"
         initial={{ ...PERCENT_INITIAL, status: "approved" }}
         canEdit
-      />
+      />,
     );
     await expandForm();
     expect(optionValues()).toEqual(["approved", "pending", "disbursed"]);
@@ -141,13 +121,13 @@ describe("SettlementComposer — status rules + re-seed (F115 / F116)", () => {
         initial={{ ...PERCENT_INITIAL, status: "approved" }}
         canEdit
         canApprove={false}
-      />
+      />,
     );
     await expandForm();
     expect(screen.queryByRole("combobox")).toBeNull();
-    expect(
-      container.querySelector<HTMLInputElement>('input[name="status"]')?.value
-    ).toBe("approved");
+    expect(container.querySelector<HTMLInputElement>('input[name="status"]')?.value).toBe(
+      "approved",
+    );
     // The read-only value is not a labelable control, so its label is
     // plain text and not a <label for> pointing at nothing.
     expect(container.querySelector('label[for$="-status"]')).toBeNull();
@@ -156,7 +136,7 @@ describe("SettlementComposer — status rules + re-seed (F115 / F116)", () => {
 
   test("re-seeds from the server copy when it changes (auto-promotion must not be posted back as 'pending')", async () => {
     const { container, rerender } = render(
-      <SettlementComposer matterId="m1" initial={PERCENT_INITIAL} canEdit />
+      <SettlementComposer matterId="m1" initial={PERCENT_INITIAL} canEdit />,
     );
     await expandForm();
     expect(statusSelect().value).toBe("pending");
@@ -172,13 +152,12 @@ describe("SettlementComposer — status rules + re-seed (F115 / F116)", () => {
           advancedCosts: 2500,
         }}
         canEdit
-      />
+      />,
     );
     expect(statusSelect().value).toBe("approved");
-    expect(
-      container.querySelector<HTMLInputElement>('input[name="advancedCosts"]')
-        ?.value
-    ).toBe("2500.00");
+    expect(container.querySelector<HTMLInputElement>('input[name="advancedCosts"]')?.value).toBe(
+      "2500.00",
+    );
   });
 });
 
@@ -211,7 +190,7 @@ describe("SettlementComposer — labels, errors, save (F889 / F891)", () => {
       expect(
         await screen.findByRole("button", {
           name: /edit gross \/ fee \/ costs \/ status/i,
-        })
+        }),
       ).toBeInTheDocument();
     }
   });

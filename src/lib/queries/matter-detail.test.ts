@@ -195,11 +195,8 @@ describe("matter activity — settlement / expense amounts are permission-gated"
       canViewExpense?: boolean;
       canViewBilling?: boolean;
     },
-    types?: string[]
-  ) =>
-    (await getMatterActivity(matterId, { ...access, types }))
-      .map((r) => r.title)
-      .sort();
+    types?: string[],
+  ) => (await getMatterActivity(matterId, { ...access, types })).map((r) => r.title).sort();
 
   test("viewer without either key sees neither settlement nor expense rows", async () => {
     expect(await titles({})).toEqual(["Complaint filed", "Note added"]);
@@ -217,21 +214,22 @@ describe("matter activity — settlement / expense amounts are permission-gated"
     expect(t).toContain("Settlement opened · gross $250000.00");
     expect(t).toContain("Lien added · Aetna · $12000.00");
     expect(t.some((x) => x.startsWith("Expense "))).toBe(false);
-    expect(
-      await getMatterActivityTypeCounts(matterId, { canViewSettlement: true })
-    ).toEqual({ settlement: 2, filing: 1, note: 1 });
+    expect(await getMatterActivityTypeCounts(matterId, { canViewSettlement: true })).toEqual({
+      settlement: 2,
+      filing: 1,
+      note: 1,
+    });
   });
 
   test("expense.view alone reveals expense rows but not settlements", async () => {
     const t = await titles({ canViewExpense: true });
     expect(t).toContain("Expense logged · $450.00 · Court reporter");
     expect(t).toContain("Expense deleted · $450.00 · Court reporter");
-    expect(t.some((x) => x.includes("Settlement") || x.includes("Lien"))).toBe(
-      false
-    );
-    expect(
-      await getMatterActivityTypeCounts(matterId, { canViewExpense: true })
-    ).toEqual({ filing: 3, note: 1 });
+    expect(t.some((x) => x.includes("Settlement") || x.includes("Lien"))).toBe(false);
+    expect(await getMatterActivityTypeCounts(matterId, { canViewExpense: true })).toEqual({
+      filing: 3,
+      note: 1,
+    });
   });
 
   test("billing.view alone reveals trust deposit rows and nothing else money-bearing", async () => {
@@ -244,9 +242,11 @@ describe("matter activity — settlement / expense amounts are permission-gated"
     expect(await titles({ canViewBilling: true }, ["deposit"])).toEqual([
       "Trust deposit · $5000.00",
     ]);
-    expect(
-      await getMatterActivityTypeCounts(matterId, { canViewBilling: true })
-    ).toEqual({ deposit: 1, filing: 1, note: 1 });
+    expect(await getMatterActivityTypeCounts(matterId, { canViewBilling: true })).toEqual({
+      deposit: 1,
+      filing: 1,
+      note: 1,
+    });
   });
 
   test("holding all three keys shows everything", async () => {
@@ -255,7 +255,7 @@ describe("matter activity — settlement / expense amounts are permission-gated"
         canViewSettlement: true,
         canViewExpense: true,
         canViewBilling: true,
-      })
+      }),
     ).toHaveLength(7);
   });
 
@@ -285,8 +285,7 @@ describe("getMatterNotes - render-time re-sanitization", () => {
         matterId,
         authorId: userId,
         type: "note",
-        content:
-          '<p class="fixed inset-0 z-50 bg-white">pwn</p><script>alert(1)</script>',
+        content: '<p class="fixed inset-0 z-50 bg-white">pwn</p><script>alert(1)</script>',
       },
     });
     const notes = await getMatterNotes(matterId);
@@ -348,7 +347,7 @@ describe("deadlines / tasks — calendar-day math in the viewer's zone", () => {
     await dl("Yesterday", "2026-04-26");
     await dl("Tomorrow", "2026-04-28");
     const byTitle = Object.fromEntries(
-      (await getMatterDeadlines(matterId)).map((d) => [d.title, d])
+      (await getMatterDeadlines(matterId)).map((d) => [d.title, d]),
     );
     expect(byTitle["Yesterday"].daysUntil).toBe(-1);
     expect(byTitle["Yesterday"].isOverdue).toBe(true);
@@ -402,7 +401,7 @@ describe("deadlines / tasks — calendar-day math in the viewer's zone", () => {
       ],
     });
     const byTitle = Object.fromEntries(
-      (await getMatterTasks(matterId)).map((t) => [t.title, t.daysUntilDue])
+      (await getMatterTasks(matterId)).map((t) => [t.title, t.daysUntilDue]),
     );
     expect(byTitle).toEqual({
       Today: 0,
@@ -468,7 +467,7 @@ describe("getMatterEvents — upcoming split", () => {
       endTime: new Date("2026-04-28T04:00:00Z"),
     });
     const flags = Object.fromEntries(
-      (await getMatterEvents(matterId)).map((e) => [e.title, e.isUpcoming])
+      (await getMatterEvents(matterId)).map((e) => [e.title, e.isUpcoming]),
     );
     expect(flags).toEqual({
       "All day today": true,
@@ -553,9 +552,7 @@ describe("getMatterNotes — labels and pinned filter", () => {
         parentNoteId: parent.id,
       },
     });
-    const reply = (await getMatterNotes(matterId)).find(
-      (n) => n.parentNoteId === parent.id
-    );
+    const reply = (await getMatterNotes(matterId)).find((n) => n.parentNoteId === parent.id);
     expect(reply?.link).toMatchObject({
       kind: "parent",
       label: "Call w/ Smith & Jones",

@@ -5,10 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { deleteFile } from "@/lib/file-storage";
 import { createNotifications } from "@/lib/notifications";
 import { logPortalEvent } from "@/lib/portal/audit";
-import {
-  PORTAL_DAILY_UPLOAD_CAP,
-  checkPortalUpload,
-} from "@/lib/portal/upload-policy";
+import { PORTAL_DAILY_UPLOAD_CAP, checkPortalUpload } from "@/lib/portal/upload-policy";
 import { DAY_MS } from "@/lib/format-date";
 
 /**
@@ -47,8 +44,7 @@ export type RecordPortalUploadInput = {
 };
 
 export type RecordPortalUploadResult =
-  | { ok: true; documentId: string; requestClosed: boolean }
-  | { ok: false; error: string };
+  { ok: true; documentId: string; requestClosed: boolean } | { ok: false; error: string };
 
 export const PORTAL_UPLOADS_FOLDER_NAME = "From client";
 export const PORTAL_UPLOAD_NOTE_MAX = 500;
@@ -66,8 +62,7 @@ export async function portalUploadsInLastDay(identityId: string): Promise<number
   });
 }
 
-export const DAILY_LIMIT_ERROR =
-  "You've reached today's upload limit. Please try again tomorrow.";
+export const DAILY_LIMIT_ERROR = "You've reached today's upload limit. Please try again tomorrow.";
 export const REQUEST_CLOSED_ERROR = "This request was closed by the firm.";
 
 /**
@@ -159,10 +154,7 @@ async function portalUploadsFolder(tx: Tx, matterId: string): Promise<string> {
 
 /** open -> submitted for this matter's request, or keep a request this
  *  same batch already submitted. True when the file should link to it. */
-async function claimRequest(
-  tx: Tx,
-  input: RecordPortalUploadInput
-): Promise<boolean> {
+async function claimRequest(tx: Tx, input: RecordPortalUploadInput): Promise<boolean> {
   if (!input.requestId) return false;
   const batchFiles = {
     portalBatchId: input.batchId,
@@ -207,7 +199,7 @@ type Outcome =
     };
 
 export async function recordPortalUpload(
-  input: RecordPortalUploadInput
+  input: RecordPortalUploadInput,
 ): Promise<RecordPortalUploadResult> {
   const note = input.note?.trim().slice(0, PORTAL_UPLOAD_NOTE_MAX) || null;
 
@@ -349,7 +341,7 @@ async function notifyTeam(input: RecordPortalUploadInput): Promise<void> {
         body: matter?.name ?? null,
         link: `/matters/${input.matterId}/documents`,
         matterId: input.matterId,
-      }
+      },
     );
   } catch (err) {
     console.error("[portal-upload] notify failed", err);

@@ -11,9 +11,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn().mockResolvedValue("test-user"),
-  requirePermissionResult: vi
-    .fn()
-    .mockResolvedValue({ ok: true, userId: "test-user" }),
+  requirePermissionResult: vi.fn().mockResolvedValue({ ok: true, userId: "test-user" }),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("@/lib/clerk-admin", () => ({
@@ -142,11 +140,9 @@ describe("inviteFirmMember", () => {
     const res = await inviteFirmMember(teamInitialState, inviteForm());
     expect(res.status).toBe("ok");
     expect(res.warning).toBe(
-      "Member added, but the invitation email didn't send. Use Resend invite."
+      "Member added, but the invitation email didn't send. Use Resend invite.",
     );
-    expect(
-      await prisma.user.count({ where: { email: "new.hire@example.com" } })
-    ).toBe(1);
+    expect(await prisma.user.count({ where: { email: "new.hire@example.com" } })).toBe(1);
   });
 });
 
@@ -158,9 +154,9 @@ describe("deactivate / reactivate", () => {
     expect(res.status).toBe("ok");
     expect(res.warning).toBeUndefined();
     expect(mBan).toHaveBeenCalledWith("user_clerk_1");
-    const titles = (
-      await prisma.activityLog.findMany({ where: { type: "auth" } })
-    ).map((l) => l.title);
+    const titles = (await prisma.activityLog.findMany({ where: { type: "auth" } })).map(
+      (l) => l.title,
+    );
     expect(titles).toContain("Sign-in blocked (deactivated)");
   });
 
@@ -171,7 +167,7 @@ describe("deactivate / reactivate", () => {
     const res = await updateFirmMember(id, teamInitialState, updateForm(false));
     expect(res.status).toBe("ok");
     expect(res.warning).toBe(
-      "Deactivated. They can't use the CRM, but the sign-in service didn't confirm signing them out. Use Sign out everywhere to retry."
+      "Deactivated. They can't use the CRM, but the sign-in service didn't confirm signing them out. Use Sign out everywhere to retry.",
     );
     const auth = await resolveStaffUser("user_clerk_1", "s");
     expect(auth.status).toBe("no_access");
@@ -184,9 +180,9 @@ describe("deactivate / reactivate", () => {
     expect(res.status).toBe("ok");
     expect(mUnban).toHaveBeenCalledWith("user_clerk_1");
     expect(mBan).not.toHaveBeenCalled();
-    const titles = (
-      await prisma.activityLog.findMany({ where: { type: "auth" } })
-    ).map((l) => l.title);
+    const titles = (await prisma.activityLog.findMany({ where: { type: "auth" } })).map(
+      (l) => l.title,
+    );
     expect(titles).toContain("Sign-in unblocked (reactivated)");
   });
 
@@ -197,19 +193,15 @@ describe("deactivate / reactivate", () => {
     const res = await updateFirmMember(id, teamInitialState, updateForm(true));
     expect(res.status).toBe("ok");
     expect(res.warning).toBe(
-      "Reactivated, but the sign-in service still blocks their sign-in. Deactivate and reactivate them to retry."
+      "Reactivated, but the sign-in service still blocks their sign-in. Deactivate and reactivate them to retry.",
     );
-    expect(
-      (await prisma.user.findUniqueOrThrow({ where: { id } })).isActive
-    ).toBe(true);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id } })).isActive).toBe(true);
   });
 
   test("deactivating a never-signed-in member revokes their pending invitation", async () => {
     await actingAdmin();
     const m = await seedUser({ firmId, roleIds: [defaultRoleId] });
-    const email = (
-      await prisma.user.findUniqueOrThrow({ where: { id: m.userId } })
-    ).email;
+    const email = (await prisma.user.findUniqueOrThrow({ where: { id: m.userId } })).email;
     const res = await updateFirmMember(m.userId, teamInitialState, updateForm(false));
     expect(res.status).toBe("ok");
     expect(res.warning).toBeUndefined();
@@ -250,9 +242,9 @@ describe("signOutFirmMemberEverywhere", () => {
     const res = await signOutFirmMemberEverywhere(id);
     expect(res.status).toBe("ok");
     expect(mRevokeAll).toHaveBeenCalledWith("user_clerk_1");
-    const titles = (
-      await prisma.activityLog.findMany({ where: { type: "auth" } })
-    ).map((l) => l.title);
+    const titles = (await prisma.activityLog.findMany({ where: { type: "auth" } })).map(
+      (l) => l.title,
+    );
     expect(titles).toContain("Signed out everywhere by an administrator");
   });
 
@@ -282,9 +274,9 @@ describe("resetFirmMemberSignInLink", () => {
     const u = await prisma.user.findUniqueOrThrow({ where: { id } });
     expect(u.clerkUserId).toBeNull();
     expect(mRevokeAll).toHaveBeenCalledWith("user_clerk_1");
-    const titles = (
-      await prisma.activityLog.findMany({ where: { type: "auth" } })
-    ).map((l) => l.title);
+    const titles = (await prisma.activityLog.findMany({ where: { type: "auth" } })).map(
+      (l) => l.title,
+    );
     expect(titles).toContain("Sign-in link reset by an administrator");
   });
 
@@ -295,14 +287,14 @@ describe("resetFirmMemberSignInLink", () => {
     const res = await resetFirmMemberSignInLink(id);
     expect(res.status).toBe("error");
     expect(res.errors?._form?.[0]).toBe(
-      "Couldn't sign them out of the sign-in service, so the link was not reset. Try again."
+      "Couldn't sign them out of the sign-in service, so the link was not reset. Try again.",
     );
-    expect(
-      (await prisma.user.findUniqueOrThrow({ where: { id } })).clerkUserId
-    ).toBe("user_clerk_1");
-    const titles = (
-      await prisma.activityLog.findMany({ where: { type: "auth" } })
-    ).map((l) => l.title);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id } })).clerkUserId).toBe(
+      "user_clerk_1",
+    );
+    const titles = (await prisma.activityLog.findMany({ where: { type: "auth" } })).map(
+      (l) => l.title,
+    );
     expect(titles).not.toContain("Sign-in link reset by an administrator");
   });
 
@@ -314,9 +306,9 @@ describe("resetFirmMemberSignInLink", () => {
     });
     const res = await resetFirmMemberSignInLink(me);
     expect(res.status).toBe("error");
-    expect(
-      (await prisma.user.findUniqueOrThrow({ where: { id: me } })).clerkUserId
-    ).toBe("user_me");
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: me } })).clerkUserId).toBe(
+      "user_me",
+    );
   });
 });
 
@@ -372,10 +364,9 @@ describe("escalation guard", () => {
       expect(r.errors?._form?.[0]).toMatch(/Only an Admin/);
     }
     expect(mRevokeAll).not.toHaveBeenCalled();
-    expect(
-      (await prisma.user.findUniqueOrThrow({ where: { id: admin.userId } }))
-        .clerkUserId
-    ).toBe("user_admin");
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: admin.userId } })).clerkUserId).toBe(
+      "user_admin",
+    );
   });
 
   test("a denied permission gate writes and calls nothing", async () => {

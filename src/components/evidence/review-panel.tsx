@@ -32,10 +32,7 @@
 
 import { Flag } from "lucide-react";
 import { plural } from "@/lib/utils";
-import {
-  FlagComposer,
-  type ComposerAnchor,
-} from "./flag-composer";
+import { FlagComposer, type ComposerAnchor } from "./flag-composer";
 import { MomentsRail, type RailMoment } from "./moments-rail";
 import { Button } from "@/components/ui/button";
 
@@ -114,9 +111,7 @@ export function ReviewPanel({
       <div className="flex items-center gap-1.5 text-2xs font-medium text-ink-3">
         <Flag className="h-3 w-3" aria-hidden />
         Flags
-        <span className="font-mono normal-case">
-          {plural(moments.length, "flag")}
-        </span>
+        <span className="font-mono normal-case">{plural(moments.length, "flag")}</span>
       </div>
       <MomentsRail
         documentId={documentId}
@@ -159,9 +154,7 @@ export function ReviewPanel({
       </div>
 
       {/* ── Moments rail ───────────────────────────────────────── */}
-      <div className="flex flex-col gap-2 lg:w-80 lg:shrink-0 lg:overflow-y-auto">
-        {rail}
-      </div>
+      <div className="flex flex-col gap-2 lg:w-80 lg:shrink-0 lg:overflow-y-auto">{rail}</div>
     </div>
   );
 }

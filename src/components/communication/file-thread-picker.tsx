@@ -25,17 +25,10 @@ import Link from "next/link";
 import { Briefcase, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { notifyError } from "@/lib/feedback";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { setEmailThreadRecord } from "@/app/actions/email-filing";
 import type { RecordScope } from "@/lib/record-scope";
-import type {
-  FilingLeadOption,
-  FilingMatterOption,
-} from "@/lib/queries/communication";
+import type { FilingLeadOption, FilingMatterOption } from "@/lib/queries/communication";
 import { RecordPicker } from "./record-picker";
 
 export function FileThreadPicker({
@@ -86,18 +79,14 @@ export function FileThreadPicker({
   };
 
   const option =
-    current?.kind === "matter"
-      ? matters.find((m) => m.id === current.matterId)
-      : undefined;
+    current?.kind === "matter" ? matters.find((m) => m.id === current.matterId) : undefined;
   const matterColor = currentMeta?.color ?? option?.color ?? null;
   const matterArea = currentMeta?.area ?? option?.area ?? null;
 
   const chip = current ? (
     <Link
       href={
-        current.kind === "matter"
-          ? `/matters/${current.matterId}`
-          : `/intake/${current.leadId}`
+        current.kind === "matter" ? `/matters/${current.matterId}` : `/intake/${current.leadId}`
       }
       className="inline-flex items-center gap-1.5 font-mono text-ink-3 hover:text-brand-700"
     >
@@ -165,9 +154,7 @@ export function FileThreadPicker({
         {trigger}
         <PopoverContent align="start" className="w-72">
           <div className="flex flex-col gap-2">
-            <div className="text-2xs font-medium text-ink-3">
-              File to matter or lead
-            </div>
+            <div className="text-2xs font-medium text-ink-3">File to matter or lead</div>
             <RecordPicker
               matters={matters}
               leads={leads}

@@ -11,10 +11,7 @@
  *     litigation task set) that feeds the composer pickers
  */
 
-import {
-  TIME_ENTRY_STATUS_LABEL,
-  type TimeEntryStatus,
-} from "@/lib/constants/time-entry-status";
+import { TIME_ENTRY_STATUS_LABEL, type TimeEntryStatus } from "@/lib/constants/time-entry-status";
 
 export type TimeEntryFormState = {
   status: "idle" | "ok" | "error";
@@ -63,9 +60,7 @@ export function roundElapsedToBillingIncrement(elapsedMs: number): number {
  */
 export function formatElapsed(elapsedMs: number): string {
   const totalSeconds =
-    !Number.isFinite(elapsedMs) || elapsedMs <= 0
-      ? 0
-      : Math.floor(elapsedMs / 1000);
+    !Number.isFinite(elapsedMs) || elapsedMs <= 0 ? 0 : Math.floor(elapsedMs / 1000);
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
@@ -103,9 +98,7 @@ export function timeEntryStatusBadge(status: string): {
   label: string;
   className: string;
 } {
-  const key = (
-    Object.hasOwn(STATUS_BADGE_CLASS, status) ? status : "draft"
-  ) as TimeEntryStatus;
+  const key = (Object.hasOwn(STATUS_BADGE_CLASS, status) ? status : "draft") as TimeEntryStatus;
   return {
     label: TIME_ENTRY_STATUS_LABEL[key],
     className: STATUS_BADGE_CLASS[key],
@@ -124,9 +117,7 @@ export const TIME_ENTRY_SOURCE_LABEL: Record<string, string> = {
 };
 
 export const timeEntrySourceLabel = (source: string): string =>
-  Object.hasOwn(TIME_ENTRY_SOURCE_LABEL, source)
-    ? TIME_ENTRY_SOURCE_LABEL[source]!
-    : source;
+  Object.hasOwn(TIME_ENTRY_SOURCE_LABEL, source) ? TIME_ENTRY_SOURCE_LABEL[source]! : source;
 
 // ── Start–end duration mode ─────────────────────────────────────────────
 
@@ -140,10 +131,7 @@ export const timeEntrySourceLabel = (source: string): string =>
  * Result is rounded to 2 decimals so 20 minutes shows as 0.33, not
  * 0.3333333333333333.
  */
-export function computeHoursFromTimeRange(
-  start: string,
-  end: string
-): number | null {
+export function computeHoursFromTimeRange(start: string, end: string): number | null {
   const parse = (v: string): number | null => {
     const m = /^(\d{1,2}):(\d{2})$/.exec(v);
     if (!m) return null;
@@ -214,7 +202,7 @@ export const UTBMS_LITIGATION_TASK_CODES: readonly UtbmsCode[] = [
 ];
 
 const UTBMS_CODE_SET: ReadonlySet<string> = new Set(
-  [...UTBMS_ACTIVITY_CODES, ...UTBMS_LITIGATION_TASK_CODES].map((c) => c.code)
+  [...UTBMS_ACTIVITY_CODES, ...UTBMS_LITIGATION_TASK_CODES].map((c) => c.code),
 );
 
 /** Server-side validation guard: only codes from the catalog are
@@ -228,7 +216,7 @@ export function isKnownUtbmsCode(code: string): boolean {
  *  to the bare code for values written before the catalog existed. */
 export function utbmsCodeLabel(code: string): string {
   const match = [...UTBMS_ACTIVITY_CODES, ...UTBMS_LITIGATION_TASK_CODES].find(
-    (c) => c.code === code
+    (c) => c.code === code,
   );
   return match ? `${match.code} — ${match.label}` : code;
 }

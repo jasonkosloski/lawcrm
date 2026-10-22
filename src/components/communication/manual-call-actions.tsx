@@ -102,12 +102,7 @@ export function ManualCallActions({
       </DropdownMenu>
 
       {canEdit && (
-        <CallLogDialog
-          open={editOpen}
-          onOpenChange={setEditOpen}
-          matters={matters}
-          edit={item}
-        />
+        <CallLogDialog open={editOpen} onOpenChange={setEditOpen} matters={matters} edit={item} />
       )}
     </>
   );

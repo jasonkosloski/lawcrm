@@ -33,11 +33,7 @@ import {
   LEAD_OPEN_STAGES,
   LEAD_CLOSED_STAGES,
 } from "./lead-stage";
-import {
-  INVOICE_STATUSES,
-  INVOICE_KINDS,
-  INVOICE_KIND_LABEL,
-} from "./invoice-status";
+import { INVOICE_STATUSES, INVOICE_KINDS, INVOICE_KIND_LABEL } from "./invoice-status";
 import { EVENT_TYPES, EVENT_TYPE_LABEL } from "./calendar-event-type";
 import {
   FLAG_CATEGORIES,
@@ -58,10 +54,7 @@ function expectNoDuplicates(values: readonly string[]) {
   expect(new Set(values).size).toBe(values.length);
 }
 
-function expectLabelsCover(
-  values: readonly string[],
-  labels: Record<string, string>
-) {
+function expectLabelsCover(values: readonly string[], labels: Record<string, string>) {
   expect(Object.keys(labels).sort()).toEqual([...values].sort());
   for (const v of values) {
     expect(labels[v]).toBeTruthy();
@@ -140,9 +133,7 @@ describe("lead stage", () => {
 
   test("order / open / closed partitions cover the full set", () => {
     expect([...LEAD_STAGE_ORDER].sort()).toEqual([...LEAD_STAGES].sort());
-    expect([...LEAD_OPEN_STAGES, ...LEAD_CLOSED_STAGES].sort()).toEqual(
-      [...LEAD_STAGES].sort()
-    );
+    expect([...LEAD_OPEN_STAGES, ...LEAD_CLOSED_STAGES].sort()).toEqual([...LEAD_STAGES].sort());
   });
 });
 
@@ -168,9 +159,7 @@ describe("flag category", () => {
   });
 
   test("every category has a tone and every tone has chip classes", () => {
-    expect(Object.keys(FLAG_CATEGORY_TONE).sort()).toEqual(
-      [...FLAG_CATEGORIES].sort()
-    );
+    expect(Object.keys(FLAG_CATEGORY_TONE).sort()).toEqual([...FLAG_CATEGORIES].sort());
     for (const c of FLAG_CATEGORIES) {
       const tone = FLAG_CATEGORY_TONE[c];
       expect(FLAG_TONE_CHIP_CLASS[tone]).toBeTruthy();

@@ -35,7 +35,9 @@ function run(cmd: string, args: string[], env: NodeJS.ProcessEnv = process.env) 
 
 function migrationFolders(): string[] {
   return readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && existsSync(path.join(MIGRATIONS_DIR, d.name, "migration.sql")))
+    .filter(
+      (d) => d.isDirectory() && existsSync(path.join(MIGRATIONS_DIR, d.name, "migration.sql")),
+    )
     .map((d) => d.name);
 }
 
@@ -44,12 +46,12 @@ async function appliedMigrations(url: string): Promise<Set<string>> {
   await client.connect();
   try {
     const exists = await client.query<{ t: string | null }>(
-      `SELECT to_regclass('public._prisma_migrations') AS t`
+      `SELECT to_regclass('public._prisma_migrations') AS t`,
     );
     if (!exists.rows[0]?.t) return new Set();
     const rows = await client.query<{ migration_name: string }>(
       `SELECT migration_name FROM _prisma_migrations
-        WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL`
+        WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL`,
     );
     return new Set(rows.rows.map((r) => r.migration_name));
   } finally {
@@ -77,7 +79,7 @@ async function migrate() {
       name,
       sql: readFileSync(path.join(MIGRATIONS_DIR, name, "migration.sql"), "utf8"),
       allowDestructive: existsSync(path.join(MIGRATIONS_DIR, name, ALLOW_DESTRUCTIVE_FILE)),
-    }))
+    })),
   );
   if (blocked.length > 0) {
     console.error(
@@ -85,7 +87,7 @@ async function migrate() {
         formatBlocked(blocked) +
         `\nThe running deployment may still use what these remove. Once it no longer does, add an ` +
         `${ALLOW_DESTRUCTIVE_FILE} file (the reason) to the migration folder, or apply it by hand ` +
-        "(docs/DEPLOY_BACKFILLS.md)."
+        "(docs/DEPLOY_BACKFILLS.md).",
     );
     process.exit(1);
   }

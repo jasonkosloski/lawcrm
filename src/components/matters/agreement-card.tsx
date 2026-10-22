@@ -13,10 +13,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import {
-  updateMatterAgreement,
-  type AgreementFormState,
-} from "@/app/actions/matter-agreement";
+import { updateMatterAgreement, type AgreementFormState } from "@/app/actions/matter-agreement";
 import { AgreementFields } from "./agreement-fields";
 import { Field } from "@/components/ui/field";
 import { AGREEMENT_STATUS_LABEL, type AgreementStatus } from "@/lib/originating-doc";
@@ -48,7 +45,7 @@ export function AgreementCard({
   const [editing, setEditing] = useState(false);
   const [state, formAction, pending] = useActionState(
     updateMatterAgreement.bind(null, matterId),
-    initial
+    initial,
   );
   const [status, setStatus] = useState(agreement?.status ?? "not_sent");
   const [signedDate, setSignedDate] = useState(agreement?.signedDate ?? "");
@@ -114,9 +111,7 @@ export function AgreementCard({
                 ))}
               </NativeSelect>
             </Field>
-            {errs._form && (
-              <div className="text-2xs text-warn">{errs._form[0]}</div>
-            )}
+            {errs._form && <div className="text-2xs text-warn">{errs._form[0]}</div>}
             <div className="flex items-center justify-end gap-2">
               <Button
                 type="button"

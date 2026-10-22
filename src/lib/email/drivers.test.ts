@@ -57,7 +57,10 @@ describe("resendDriver", () => {
 
 describe("resendDriver idempotency and errors", () => {
   const headersOf = (fn: ReturnType<typeof stubFetch>) =>
-    ((fn.mock.calls[0] as unknown as [string, RequestInit])[1].headers ?? {}) as Record<string, string>;
+    ((fn.mock.calls[0] as unknown as [string, RequestInit])[1].headers ?? {}) as Record<
+      string,
+      string
+    >;
 
   it("forwards idempotencyKey as the Idempotency-Key header, not in the body", async () => {
     vi.stubEnv("EMAIL_FROM", "Litgox <noreply@litgox.com>");
@@ -78,7 +81,10 @@ describe("resendDriver idempotency and errors", () => {
     vi.stubEnv("EMAIL_FROM", "Litgox <noreply@litgox.com>");
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response(JSON.stringify({ message: "Domain not verified" }), { status: 403 })),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ message: "Domain not verified" }), { status: 403 }),
+      ),
     );
     expect(await resendDriver("k")(base)).toEqual({
       ok: false,
@@ -88,7 +94,10 @@ describe("resendDriver idempotency and errors", () => {
 
   it("falls back to the status when the error body isn't JSON", async () => {
     vi.stubEnv("EMAIL_FROM", "Litgox <noreply@litgox.com>");
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>", { status: 502 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("<html>", { status: 502 })),
+    );
     expect(await resendDriver("k")(base)).toEqual({ ok: false, error: "Resend responded 502" });
   });
 });

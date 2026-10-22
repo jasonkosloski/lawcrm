@@ -49,9 +49,7 @@ describe("EmailSignatureForm", () => {
     await user.type(field(), "<p>Jane Doe</p>");
     await user.click(screen.getByRole("button", { name: /save signature/i }));
 
-    await waitFor(() =>
-      expect(mockedSave).toHaveBeenCalledWith("<p>Jane Doe</p>")
-    );
+    await waitFor(() => expect(mockedSave).toHaveBeenCalledWith("<p>Jane Doe</p>"));
     expect(await screen.findByText("Saved")).toBeInTheDocument();
   });
 
@@ -61,8 +59,6 @@ describe("EmailSignatureForm", () => {
     render(<EmailSignatureForm signature={null} />);
 
     await user.click(screen.getByRole("button", { name: /save signature/i }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Signature is too long."
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("Signature is too long.");
   });
 });

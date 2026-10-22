@@ -22,15 +22,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  DateField,
-  TextField,
-  TextareaField,
-} from "@/components/matters/captures/primary-fields";
-import {
-  DurationFields,
-  UtbmsCodeSelect,
-} from "@/components/time-entries/time-entry-fields";
+import { DateField, TextField, TextareaField } from "@/components/matters/captures/primary-fields";
+import { DurationFields, UtbmsCodeSelect } from "@/components/time-entries/time-entry-fields";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { todayKey } from "@/lib/format-date";
 import {
@@ -49,10 +42,7 @@ export function LogTimeOnEntityDialog({
   onOpenChange: (open: boolean) => void;
   /** Pre-bound server action — `addTimeEntryToTask.bind(null, id)` or
    *  `addTimeEntryToDeadline.bind(null, id)` from the call site. */
-  action: (
-    prev: NoteAttachmentFormState,
-    formData: FormData
-  ) => Promise<NoteAttachmentFormState>;
+  action: (prev: NoteAttachmentFormState, formData: FormData) => Promise<NoteAttachmentFormState>;
   /** What the time is being logged against, shown in the dialog
    *  description so context is obvious. */
   parentLabel: string;
@@ -61,10 +51,11 @@ export function LogTimeOnEntityDialog({
   // Wrapped useActionState: masks state left over from a previous
   // open, so a failed attempt's errors don't reappear when the
   // dialog is reopened. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    NoteAttachmentFormState,
-    FormData
-  >(action, noteAttachmentInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<NoteAttachmentFormState, FormData>(
+    action,
+    noteAttachmentInitialState,
+    open,
+  );
 
   // "Today" is the calendar day in the user's profile zone (the same
   // zone the server renders in), not whatever the browser is set to.
@@ -114,12 +105,8 @@ export function LogTimeOnEntityDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            Log time on {parentKind}
-          </DialogTitle>
-          <DialogDescription className="truncate">
-            {parentLabel}
-          </DialogDescription>
+          <DialogTitle>Log time on {parentKind}</DialogTitle>
+          <DialogDescription className="truncate">{parentLabel}</DialogDescription>
         </DialogHeader>
 
         <form action={formAction} className="flex flex-col gap-3">
@@ -131,11 +118,7 @@ export function LogTimeOnEntityDialog({
               placeholder="Date"
               error={errs.date?.[0]}
             />
-            <DurationFields
-              hours={hours}
-              onHoursChange={setHours}
-              error={errs.hours?.[0]}
-            />
+            <DurationFields hours={hours} onHoursChange={setHours} error={errs.hours?.[0]} />
           </div>
 
           <TextField
@@ -156,11 +139,7 @@ export function LogTimeOnEntityDialog({
             error={errs.narrative?.[0]}
           />
 
-          <UtbmsCodeSelect
-            value={utbmsCode}
-            onChange={setUtbmsCode}
-            error={errs.utbmsCode?.[0]}
-          />
+          <UtbmsCodeSelect value={utbmsCode} onChange={setUtbmsCode} error={errs.utbmsCode?.[0]} />
 
           <div className="flex flex-wrap items-center gap-4 text-xs">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -193,17 +172,10 @@ export function LogTimeOnEntityDialog({
           </div>
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={isPending || !hours.trim() || !activity.trim()}
-            >
+            <Button type="submit" disabled={isPending || !hours.trim() || !activity.trim()}>
               {isPending ? "Logging…" : "Log time"}
             </Button>
           </DialogFooter>

@@ -148,7 +148,7 @@ describe("setMatterPin", () => {
   test("pinning an unknown matter is an error result, not an FK 500", async () => {
     // Unknown == hidden: the matter wall answers with notFound().
     await expect(setMatterPin("no-such-matter", true)).rejects.toThrow(
-      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/
+      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/,
     );
     expect(await prisma.userMatterPin.count()).toBe(0);
   });

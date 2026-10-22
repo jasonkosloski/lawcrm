@@ -15,9 +15,7 @@ vi.mock("next/navigation", () => ({
 import { MatterTabs } from "./matter-tabs";
 
 function active(): string | null {
-  const link = screen
-    .getAllByRole("link")
-    .find((l) => l.getAttribute("aria-current") === "page");
+  const link = screen.getAllByRole("link").find((l) => l.getAttribute("aria-current") === "page");
   return link?.textContent ?? null;
 }
 
@@ -67,6 +65,6 @@ describe("MatterTabs", () => {
       pathname = `/matters/m1/${slug}`;
       render(<MatterTabs matterId="m1" />);
       expect(screen.queryByRole("button")).toBeNull();
-    }
+    },
   );
 });

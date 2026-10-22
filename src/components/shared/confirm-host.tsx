@@ -31,7 +31,7 @@ export function ConfirmHost() {
         setReq(next);
         setOpen(true);
       }),
-    []
+    [],
   );
 
   function settle(ok: boolean) {
@@ -51,9 +51,7 @@ export function ConfirmHost() {
         <DialogContent showCloseButton={false} className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{req.title}</DialogTitle>
-            {req.description ? (
-              <DialogDescription>{req.description}</DialogDescription>
-            ) : null}
+            {req.description ? <DialogDescription>{req.description}</DialogDescription> : null}
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => settle(false)}>
@@ -62,11 +60,7 @@ export function ConfirmHost() {
             <Button
               autoFocus
               variant={req.destructive ? "destructive" : "default"}
-              className={
-                req.destructive
-                  ? "bg-danger text-white hover:bg-danger/90"
-                  : undefined
-              }
+              className={req.destructive ? "bg-danger text-white hover:bg-danger/90" : undefined}
               onClick={() => settle(true)}
             >
               {req.confirmLabel ?? "Continue"}

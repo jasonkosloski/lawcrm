@@ -15,11 +15,7 @@ vi.mock("./mailbox-drawer", () => ({ MailboxDrawerTrigger: () => null }));
 vi.mock("./compose-email-launcher", () => ({ ComposeEmailLauncher: () => null }));
 vi.mock("./thread-row-actions", () => ({ ThreadRowActions: () => null }));
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -64,10 +60,8 @@ describe("rowHref", () => {
   test.each(["unread", "starred", "archived", "unfiled", "filed", "untimed"] as const)(
     "%s is preserved",
     (filter) => {
-      expect(rowHref("t1", filter, null)).toBe(
-        `/communication?filter=${filter}&thread=t1`
-      );
-    }
+      expect(rowHref("t1", filter, null)).toBe(`/communication?filter=${filter}&thread=t1`);
+    },
   );
 
   test("page > 1 is preserved; page 1 stays out of the URL", () => {
@@ -81,9 +75,7 @@ describe("rowHref", () => {
   });
 
   test("matter drill-down is preserved alongside the filter", () => {
-    expect(rowHref("t1", "all", "m1")).toBe(
-      "/communication?filter=all&matter=m1&thread=t1"
-    );
+    expect(rowHref("t1", "all", "m1")).toBe("/communication?filter=all&matter=m1&thread=t1");
   });
 
   test("rendered rows link with the active filter", () => {
@@ -92,7 +84,7 @@ describe("rowHref", () => {
         threads={[row({ id: "a" }), row({ id: "b" })]}
         filter="all"
         selectedThreadId={null}
-      />
+      />,
     );
     const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
     expect(hrefs).toEqual([
@@ -109,7 +101,7 @@ describe("filing chip", () => {
         threads={[row({ lead: { id: "l1", name: "Pat Prospect" } })]}
         filter="all"
         selectedThreadId={null}
-      />
+      />,
     );
     expect(screen.getByText("Pat Prospect")).toBeInTheDocument();
     expect(screen.getByText("Lead")).toBeInTheDocument();
@@ -120,7 +112,7 @@ describe("filing chip", () => {
 describe("header count", () => {
   test("exact below the cap", () => {
     render(
-      <ThreadList threads={[row(), row({ id: "t2" })]} filter="inbox" selectedThreadId={null} />
+      <ThreadList threads={[row(), row({ id: "t2" })]} filter="inbox" selectedThreadId={null} />,
     );
     expect(screen.getByText("2 threads")).toBeInTheDocument();
   });
@@ -132,23 +124,21 @@ describe("header count", () => {
         filter="all"
         selectedThreadId={null}
         paging={{ page: 2, pageCount: 3, total: 250, pageSize: 100 }}
-      />
+      />,
     );
     expect(screen.getByText("250 threads")).toBeInTheDocument();
     expect(screen.getByText(/101–200 of 250/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Older/ })).toHaveAttribute(
       "href",
-      "/communication?filter=all&page=3"
+      "/communication?filter=all&page=3",
     );
     expect(screen.getByRole("link", { name: /Newer/ })).toHaveAttribute(
       "href",
-      "/communication?filter=all"
+      "/communication?filter=all",
     );
     // Rows keep the page so opening a thread doesn't reset the list.
     expect(
-      screen.getAllByRole("link").find((l) =>
-        l.getAttribute("href")?.includes("thread=a")
-      )
+      screen.getAllByRole("link").find((l) => l.getAttribute("href")?.includes("thread=a")),
     ).toHaveAttribute("href", "/communication?filter=all&page=2&thread=a");
   });
 });
@@ -166,7 +156,7 @@ describe("follow-up chip", () => {
         filter="inbox"
         selectedThreadId={null}
         tz="America/Denver"
-      />
+      />,
     );
     return screen.getByTitle(/Follow up by/);
   };

@@ -27,10 +27,7 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  dateKeyInTz,
-  formatDate,
-  formatDayBucket} from "@/lib/format-date";
+import { dateKeyInTz, formatDate, formatDayBucket } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,10 +47,7 @@ import { firstParam } from "@/lib/search-params";
 /// it surfaces. Key "all" is the default and skips filtering. Keep
 /// the union narrow per pill — overlapping buckets confuse the
 /// matter-history mental model.
-const FILTER_BUCKETS: Record<
-  string,
-  { label: string; types: readonly string[] }
-> = {
+const FILTER_BUCKETS: Record<string, { label: string; types: readonly string[] }> = {
   all: { label: "All", types: [] },
   filings: { label: "Case activity", types: ["filing"] },
   communications: { label: "Communications", types: ["email", "call"] },
@@ -100,9 +94,7 @@ export default async function MatterTimelinePage({
   // Own-property check: `in` also matches prototype keys
   // ("constructor", "toString"), which would crash on bucket.types.
   const filterKey =
-    typeof rawType === "string" && Object.hasOwn(FILTER_BUCKETS, rawType)
-      ? rawType
-      : "all";
+    typeof rawType === "string" && Object.hasOwn(FILTER_BUCKETS, rawType) ? rawType : "all";
   const bucket = FILTER_BUCKETS[filterKey];
 
   // Settlement + expense rows carry amounts in their titles; show
@@ -129,10 +121,7 @@ export default async function MatterTimelinePage({
 
   const countFor = (key: string): number => {
     if (key === "all") return totalCount;
-    return FILTER_BUCKETS[key].types.reduce(
-      (sum, t) => sum + (counts[t] ?? 0),
-      0
-    );
+    return FILTER_BUCKETS[key].types.reduce((sum, t) => sum + (counts[t] ?? 0), 0);
   };
 
   // Group rows by day so the timeline reads like a journal —
@@ -155,9 +144,7 @@ export default async function MatterTimelinePage({
             <Link
               key={key}
               href={
-                key === "all"
-                  ? `/matters/${id}/timeline`
-                  : `/matters/${id}/timeline?type=${key}`
+                key === "all" ? `/matters/${id}/timeline` : `/matters/${id}/timeline?type=${key}`
               }
               scroll={false}
               className={cn(
@@ -166,16 +153,11 @@ export default async function MatterTimelinePage({
                   ? "bg-paper-2 text-ink border-ink-5"
                   : count === 0
                     ? "bg-paper text-ink-4 border-line opacity-60 cursor-default pointer-events-none"
-                    : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700"
+                    : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700",
               )}
             >
               {FILTER_BUCKETS[key].label}
-              <span
-                className={cn(
-                  "font-mono text-2xs",
-                  active ? "text-white/80" : "text-ink-4"
-                )}
-              >
+              <span className={cn("font-mono text-2xs", active ? "text-white/80" : "text-ink-4")}>
                 {count}
               </span>
             </Link>
@@ -213,9 +195,7 @@ export default async function MatterTimelinePage({
                             <Icon size={12} />
                           </span>
                           <div className="min-w-0 flex-1">
-                            <div className="text-xs text-ink leading-snug">
-                              {row.title}
-                            </div>
+                            <div className="text-xs text-ink leading-snug">{row.title}</div>
                             {row.detail && (
                               <div className="text-2xs text-ink-4 mt-0.5 leading-relaxed truncate">
                                 {row.detail}
@@ -225,9 +205,7 @@ export default async function MatterTimelinePage({
                               <span className="inline-block px-1.5 py-px rounded-full border border-line bg-white">
                                 {row.source}
                               </span>
-                              {row.authorName && (
-                                <span>· {row.authorName}</span>
-                              )}
+                              {row.authorName && <span>· {row.authorName}</span>}
                               <span className="font-mono">
                                 · {formatDate(row.timestamp, "datetime", tz)}
                               </span>
@@ -246,8 +224,8 @@ export default async function MatterTimelinePage({
 
       {rows.length > 0 && rows.length === MATTER_ACTIVITY_LIMIT && (
         <div className="text-2xs text-ink-4 text-center">
-          Showing the most recent {MATTER_ACTIVITY_LIMIT} events. Older
-          entries land in the future archive view.
+          Showing the most recent {MATTER_ACTIVITY_LIMIT} events. Older entries land in the future
+          archive view.
         </div>
       )}
     </div>
@@ -265,7 +243,7 @@ export default async function MatterTimelinePage({
 export function groupByDay<T extends { id: string; timestamp: Date }>(
   rows: T[],
   tz: string,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Array<{
   key: string;
   label: string;

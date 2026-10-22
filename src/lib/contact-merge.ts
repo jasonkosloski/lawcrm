@@ -17,9 +17,7 @@ const CONFLICT_RANK: Record<string, number> = {
 
 /** flagged > override > clear. Unknown values rank as clear. */
 export function mergeConflictStatus(survivor: string, loser: string): string {
-  return (CONFLICT_RANK[loser] ?? 0) > (CONFLICT_RANK[survivor] ?? 0)
-    ? loser
-    : survivor;
+  return (CONFLICT_RANK[loser] ?? 0) > (CONFLICT_RANK[survivor] ?? 0) ? loser : survivor;
 }
 
 /**
@@ -31,7 +29,7 @@ export function mergeConflictStatus(survivor: string, loser: string): string {
 export function mergeContactNotes(
   survivorNotes: string | null,
   loserNotes: string | null,
-  loserName: string
+  loserName: string,
 ): { notes: string | null; tooLong: boolean } {
   const l = loserNotes?.trim();
   if (!l) return { notes: survivorNotes, tooLong: false };
@@ -65,9 +63,7 @@ function hasRepresentation(p: PartyDetails): boolean {
 }
 
 function describeRepresentation(p: PartyDetails): string {
-  const who = [p.representationName, p.representationFirm]
-    .filter(Boolean)
-    .join(", ");
+  const who = [p.representationName, p.representationFirm].filter(Boolean).join(", ");
   if (p.isRepresented === false) return "pro se";
   return who ? `represented by ${who}` : "represented";
 }
@@ -84,7 +80,7 @@ function describeRepresentation(p: PartyDetails): string {
 export function mergePartyDetails(
   survivor: PartyDetails,
   loser: PartyDetails,
-  loserName: string
+  loserName: string,
 ): PartyDetails {
   const merged: PartyDetails = { ...survivor };
   merged.role = survivor.role ?? loser.role;
@@ -109,9 +105,7 @@ export function mergePartyDetails(
       survivor.representationName === loser.representationName &&
       survivor.representationFirm === loser.representationFirm;
     if (!same) {
-      notes.push(
-        `(${loserName} was also listed as ${describeRepresentation(loser)})`
-      );
+      notes.push(`(${loserName} was also listed as ${describeRepresentation(loser)})`);
     }
   }
 

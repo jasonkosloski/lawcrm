@@ -37,19 +37,10 @@ import {
 import { AgreementFields } from "@/components/matters/agreement-fields";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Section } from "@/components/matters/form-primitives";
-import {
-  SelectField,
-  TextField,
-} from "@/components/matters/captures/primary-fields";
+import { SelectField, TextField } from "@/components/matters/captures/primary-fields";
 import { convertLeadToMatter } from "@/app/actions/leads";
-import {
-  convertLeadInitialState,
-  type ConvertLeadFormState,
-} from "@/lib/lead-conversion-form";
-import {
-  agreementGateErrors,
-  originatingDocLabel,
-} from "@/lib/originating-doc";
+import { convertLeadInitialState, type ConvertLeadFormState } from "@/lib/lead-conversion-form";
+import { agreementGateErrors, originatingDocLabel } from "@/lib/originating-doc";
 import { BILLING_TYPE_OPTIONS } from "@/lib/billing-type";
 import type { PracticeAreaOption } from "@/lib/queries/practice-area-options";
 import { Field } from "@/components/ui/field";
@@ -91,18 +82,17 @@ export function ConvertLeadButton({
   // the dialog is reopened. (Success redirects to the new matter, so
   // there's no close-on-success handling here.) See
   // src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    ConvertLeadFormState,
-    FormData
-  >(action, convertLeadInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<ConvertLeadFormState, FormData>(
+    action,
+    convertLeadInitialState,
+    open,
+  );
 
   const [name, setName] = useState(defaultMatterName);
   const [areaId, setAreaId] = useState(areas[0]?.id ?? "");
-  const [stageId, setStageId] = useState(
-    firstNonTerminalStage(areas[0])?.id ?? ""
-  );
+  const [stageId, setStageId] = useState(firstNonTerminalStage(areas[0])?.id ?? "");
   const [billingType, setBillingType] = useState<string>(
-    areas[0]?.defaultBillingType ?? "contingent"
+    areas[0]?.defaultBillingType ?? "contingent",
   );
   const [warningsReviewed, setWarningsReviewed] = useState(false);
   const [agreementStatus, setAgreementStatus] = useState("not_sent");
@@ -143,10 +133,7 @@ export function ConvertLeadButton({
     // Keep the billing type only if the new area offers it; otherwise
     // take that area's default.
     const next = areas.find((a) => a.id === nextAreaId);
-    if (
-      next &&
-      !(next.allowedBillingTypes as string[]).includes(billingType)
-    ) {
+    if (next && !(next.allowedBillingTypes as string[]).includes(billingType)) {
       setBillingType(next.defaultBillingType);
     }
   };
@@ -162,7 +149,7 @@ export function ConvertLeadButton({
         signedDate,
         hasOriginatingFile: docId !== "",
       },
-      { required: requireOriginatingDoc, label: agreementLabel, today: todayKey }
+      { required: requireOriginatingDoc, label: agreementLabel, today: todayKey },
     );
     // The gate's key for the document is the matter form's; the action
     // (and this dialog's select) call it originatingDocumentId.
@@ -170,7 +157,7 @@ export function ConvertLeadButton({
       Object.entries(found).map(([k, v]) => [
         k === "originatingFileId" ? "originatingDocumentId" : k,
         [v as string],
-      ])
+      ]),
     );
     setGateErrors(mapped);
     if (Object.keys(mapped).length > 0) return;
@@ -181,38 +168,41 @@ export function ConvertLeadButton({
   const selectedArea = areas.find((a) => a.id === areaId);
   const stagesForArea = selectedArea?.stages ?? [];
   const billingOptions = BILLING_TYPE_OPTIONS.filter((o) =>
-    selectedArea?.allowedBillingTypes.includes(o.value)
+    selectedArea?.allowedBillingTypes.includes(o.value),
   );
 
   const agreementLabel = originatingDocLabel({
-    originatingDocLabel:
-      areas.find((a) => a.id === areaId)?.originatingDocLabel ?? null,
+    originatingDocLabel: areas.find((a) => a.id === areaId)?.originatingDocLabel ?? null,
   });
   const errs = state.errors ?? {};
   const engagementErrors: Record<string, string[] | undefined> = {
     agreementStatus: gateErrors.agreementStatus ?? errs.agreementStatus,
-    agreementSignedDate:
-      gateErrors.agreementSignedDate ?? errs.agreementSignedDate,
-    originatingDocumentId:
-      gateErrors.originatingDocumentId ?? errs.originatingDocumentId,
+    agreementSignedDate: gateErrors.agreementSignedDate ?? errs.agreementSignedDate,
+    originatingDocumentId: gateErrors.originatingDocumentId ?? errs.originatingDocumentId,
   };
   const formError = errs._form?.[0];
   // The three selects have no inline error slot, so their server field
   // errors (area/stage retired while the dialog was open, billing type not offered) are
   // surfaced in one banner — otherwise the submit just silently stops.
-  const fieldError =
-    errs.practiceAreaId?.[0] ?? errs.stageId?.[0] ?? errs.billingType?.[0];
+  const fieldError = errs.practiceAreaId?.[0] ?? errs.stageId?.[0] ?? errs.billingType?.[0];
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger render={<Button size="sm"><ArrowRight />Convert to matter</Button>} />
+      <DialogTrigger
+        render={
+          <Button size="sm">
+            <ArrowRight />
+            Convert to matter
+          </Button>
+        }
+      />
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Convert lead to matter</DialogTitle>
           <DialogDescription>
-            Creates the matter, the client contact, and your team assignment in
-            one step. The lead&apos;s case summary, location, incident date,
-            and injuries become the matter&apos;s description.
+            Creates the matter, the client contact, and your team assignment in one step. The
+            lead&apos;s case summary, location, incident date, and injuries become the matter&apos;s
+            description.
           </DialogDescription>
         </DialogHeader>
 
@@ -228,8 +218,8 @@ export function ConvertLeadButton({
           )}
           {areas.length === 0 ? (
             <div className="text-xs text-warn p-3 rounded-md bg-warn-soft border border-warn-border">
-              No practice areas exist yet. Create one in Settings → Practice
-              areas before converting a lead.
+              No practice areas exist yet. Create one in Settings → Practice areas before converting
+              a lead.
             </div>
           ) : (
             <>
@@ -319,10 +309,10 @@ export function ConvertLeadButton({
                   />
                   <span>
                     The conflict check found {state.conflictWarnings} possible{" "}
-                    {state.conflictWarnings === 1 ? "conflict" : "conflicts"}{" "}
-                    (shown on the lead&apos;s Overview). I&apos;ve reviewed{" "}
-                    {state.conflictWarnings === 1 ? "it" : "them"} and they
-                    don&apos;t prevent taking this matter.
+                    {state.conflictWarnings === 1 ? "conflict" : "conflicts"} (shown on the
+                    lead&apos;s Overview). I&apos;ve reviewed{" "}
+                    {state.conflictWarnings === 1 ? "it" : "them"} and they don&apos;t prevent
+                    taking this matter.
                   </span>
                 </label>
               )}
@@ -340,11 +330,7 @@ export function ConvertLeadButton({
           )}
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setOpen(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button

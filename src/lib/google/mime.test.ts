@@ -98,9 +98,11 @@ describe("isValidEmailAddress", () => {
 
 describe("parseAddressList", () => {
   test("splits on commas and semicolons, trims, keeps order", () => {
-    expect(
-      parseAddressList("a@x.com, b@y.com ;c@z.com").addresses
-    ).toEqual(["a@x.com", "b@y.com", "c@z.com"]);
+    expect(parseAddressList("a@x.com, b@y.com ;c@z.com").addresses).toEqual([
+      "a@x.com",
+      "b@y.com",
+      "c@z.com",
+    ]);
   });
 
   test("dedupes case-insensitively, first spelling wins", () => {
@@ -127,18 +129,14 @@ describe("encodeHeaderText (RFC 2047)", () => {
   });
 
   test("strips CR/LF injection attempts", () => {
-    expect(encodeHeaderText("Fake\r\nBcc: evil@x.com")).toBe(
-      "Fake Bcc: evil@x.com"
-    );
+    expect(encodeHeaderText("Fake\r\nBcc: evil@x.com")).toBe("Fake Bcc: evil@x.com");
   });
 
   test("non-ASCII becomes a UTF-8 B encoded-word that decodes back", () => {
     const encoded = encodeHeaderText("Née Müller — čest");
     expect(encoded).toMatch(/^=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=$/);
     const b64 = encoded.slice("=?UTF-8?B?".length, -2);
-    expect(Buffer.from(b64, "base64").toString("utf-8")).toBe(
-      "Née Müller — čest"
-    );
+    expect(Buffer.from(b64, "base64").toString("utf-8")).toBe("Née Müller — čest");
   });
 
   test("long non-ASCII text splits into ≤75-char encoded words that reassemble", () => {
@@ -151,11 +149,7 @@ describe("encodeHeaderText (RFC 2047)", () => {
       expect(w).toMatch(/^=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=$/);
     }
     const decoded = words
-      .map((w) =>
-        Buffer.from(w.slice("=?UTF-8?B?".length, -2), "base64").toString(
-          "utf-8"
-        )
-      )
+      .map((w) => Buffer.from(w.slice("=?UTF-8?B?".length, -2), "base64").toString("utf-8"))
       .join("");
     expect(decoded).toBe(subject);
   });
@@ -168,19 +162,19 @@ describe("formatAddress", () => {
 
   test("plain ASCII display name", () => {
     expect(formatAddress({ name: "Alice Client", email: "a@b.com" })).toBe(
-      "Alice Client <a@b.com>"
+      "Alice Client <a@b.com>",
     );
   });
 
   test("name with specials gets quoted with escapes", () => {
-    expect(
-      formatAddress({ name: 'Kosloski, Jason "JK"', email: "a@b.com" })
-    ).toBe('"Kosloski, Jason \\"JK\\"" <a@b.com>');
+    expect(formatAddress({ name: 'Kosloski, Jason "JK"', email: "a@b.com" })).toBe(
+      '"Kosloski, Jason \\"JK\\"" <a@b.com>',
+    );
   });
 
   test("non-ASCII name becomes an encoded word", () => {
     expect(formatAddress({ name: "Zoë", email: "a@b.com" })).toMatch(
-      /^=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?= <a@b\.com>$/
+      /^=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?= <a@b\.com>$/,
     );
   });
 
@@ -192,7 +186,7 @@ describe("formatAddress", () => {
 describe("formatRfc2822Date", () => {
   test("renders UTC with +0000", () => {
     expect(formatRfc2822Date(new Date("2026-07-06T15:30:05Z"))).toBe(
-      "Mon, 06 Jul 2026 15:30:05 +0000"
+      "Mon, 06 Jul 2026 15:30:05 +0000",
     );
   });
 });
@@ -201,18 +195,14 @@ describe("formatRfc2822Date", () => {
 
 describe("buildMimeMessage", () => {
   test("carries From/To/Cc/Subject/Date and multipart content type", () => {
-    const msg = buildMimeMessage(
-      baseInput({ cc: [{ email: "cc@example.com" }] })
-    );
+    const msg = buildMimeMessage(baseInput({ cc: [{ email: "cc@example.com" }] }));
     expect(header(msg, "From")).toBe("Jason Kosloski <jason@firm.com>");
     expect(header(msg, "To")).toBe("Alice Client <alice@example.com>");
     expect(header(msg, "Cc")).toBe("cc@example.com");
     expect(header(msg, "Subject")).toBe("Retainer agreement");
     expect(header(msg, "Date")).toBe("Mon, 06 Jul 2026 15:30:05 +0000");
     expect(header(msg, "MIME-Version")).toBe("1.0");
-    expect(header(msg, "Content-Type")).toBe(
-      `multipart/alternative; boundary="${BOUNDARY}"`
-    );
+    expect(header(msg, "Content-Type")).toBe(`multipart/alternative; boundary="${BOUNDARY}"`);
   });
 
   test("omits Message-ID (Gmail assigns it) and reply headers by default", () => {
@@ -225,17 +215,11 @@ describe("buildMimeMessage", () => {
   test("multiple recipients fold one mailbox per line and unfold to a list", () => {
     const msg = buildMimeMessage(
       baseInput({
-        to: [
-          { email: "a@x.com" },
-          { name: "B", email: "b@y.com" },
-          { email: "c@z.com" },
-        ],
-      })
+        to: [{ email: "a@x.com" }, { name: "B", email: "b@y.com" }, { email: "c@z.com" }],
+      }),
     );
     // Raw form is folded (continuation lines start with a space)…
-    expect(splitMessage(msg).headers).toContain(
-      "To: a@x.com,\r\n B <b@y.com>,\r\n c@z.com"
-    );
+    expect(splitMessage(msg).headers).toContain("To: a@x.com,\r\n B <b@y.com>,\r\n c@z.com");
     // …and unfolds to the full list.
     expect(header(msg, "To")).toBe("a@x.com, B <b@y.com>, c@z.com");
   });
@@ -259,9 +243,7 @@ describe("buildMimeMessage", () => {
   });
 
   test("base64 part lines are wrapped at 76 columns", () => {
-    const msg = buildMimeMessage(
-      baseInput({ text: "long line ".repeat(100) })
-    );
+    const msg = buildMimeMessage(baseInput({ text: "long line ".repeat(100) }));
     const b64Lines = parts(msg)[0].split("\r\n\r\n")[1].split("\r\n");
     expect(b64Lines.length).toBeGreaterThan(1);
     for (const line of b64Lines) {
@@ -274,12 +256,10 @@ describe("buildMimeMessage", () => {
       baseInput({
         inReplyTo: "abc123@mail.gmail.com",
         references: ["<r1@mail.gmail.com>", "r2@mail.gmail.com"],
-      })
+      }),
     );
     expect(header(msg, "In-Reply-To")).toBe("<abc123@mail.gmail.com>");
-    expect(header(msg, "References")).toBe(
-      "<r1@mail.gmail.com> <r2@mail.gmail.com>"
-    );
+    expect(header(msg, "References")).toBe("<r1@mail.gmail.com> <r2@mail.gmail.com>");
   });
 
   test("non-ASCII subject is RFC 2047 encoded in place", () => {
@@ -287,15 +267,11 @@ describe("buildMimeMessage", () => {
     const raw = header(msg, "Subject") ?? "";
     expect(raw).toMatch(/^=\?UTF-8\?B\?/);
     const b64 = raw.slice("=?UTF-8?B?".length, -2);
-    expect(Buffer.from(b64, "base64").toString("utf-8")).toBe(
-      "Smlouva — návrh"
-    );
+    expect(Buffer.from(b64, "base64").toString("utf-8")).toBe("Smlouva — návrh");
   });
 
   test("header injection via subject cannot smuggle a header line", () => {
-    const msg = buildMimeMessage(
-      baseInput({ subject: "Hi\r\nBcc: evil@x.com" })
-    );
+    const msg = buildMimeMessage(baseInput({ subject: "Hi\r\nBcc: evil@x.com" }));
     // The payload survives INSIDE the Subject value, but no header
     // line may ever START with the smuggled name.
     const lines = splitMessage(msg).headers.split("\r\n");
@@ -304,9 +280,7 @@ describe("buildMimeMessage", () => {
   });
 
   test("throws without a To recipient", () => {
-    expect(() => buildMimeMessage(baseInput({ to: [] }))).toThrow(
-      /at least one/i
-    );
+    expect(() => buildMimeMessage(baseInput({ to: [] }))).toThrow(/at least one/i);
   });
 
   test("generated boundary (no override) never collides with part content", () => {
@@ -334,16 +308,12 @@ describe("buildMimeMessage with attachments", () => {
   test("nests the alternative part inside multipart/mixed", () => {
     const msg = buildMimeMessage(baseInput({ attachments: [pdf] }));
     const { headers, body } = splitMessage(msg);
-    expect(headers).toContain(
-      `Content-Type: multipart/mixed; boundary="mix_${BOUNDARY}"`
-    );
+    expect(headers).toContain(`Content-Type: multipart/mixed; boundary="mix_${BOUNDARY}"`);
     expect(body.startsWith(`--mix_${BOUNDARY}\r\n`)).toBe(true);
-    expect(body).toContain(
-      `Content-Type: multipart/alternative; boundary="${BOUNDARY}"`
-    );
+    expect(body).toContain(`Content-Type: multipart/alternative; boundary="${BOUNDARY}"`);
     // Alternative closes before the attachment; mixed closes last.
     expect(body.indexOf(`--${BOUNDARY}--`)).toBeLessThan(
-      body.indexOf("Content-Disposition: attachment")
+      body.indexOf("Content-Disposition: attachment"),
     );
     expect(body.endsWith(`--mix_${BOUNDARY}--\r\n`)).toBe(true);
   });
@@ -351,9 +321,7 @@ describe("buildMimeMessage with attachments", () => {
   test("attachment part carries type, filename and base64 bytes", () => {
     const msg = buildMimeMessage(baseInput({ attachments: [pdf] }));
     expect(msg).toContain('Content-Type: application/pdf; name="Retainer.pdf"');
-    expect(msg).toContain(
-      'Content-Disposition: attachment; filename="Retainer.pdf"\r\n'
-    );
+    expect(msg).toContain('Content-Disposition: attachment; filename="Retainer.pdf"\r\n');
     expect(msg).toContain(pdf.base64);
   });
 
@@ -373,7 +341,7 @@ describe("buildMimeMessage with attachments", () => {
     const msg = buildMimeMessage(
       baseInput({
         attachments: [{ ...pdf, contentType: "text/html\r\nX-Evil: 1" }],
-      })
+      }),
     );
     expect(msg).toContain("Content-Type: application/octet-stream;");
     expect(msg).not.toContain("X-Evil");
@@ -385,10 +353,8 @@ describe("long non-ASCII filenames", () => {
     const name = "訴状".repeat(40) + ".pdf";
     const msg = buildMimeMessage(
       baseInput({
-        attachments: [
-          { filename: name, contentType: "application/pdf", base64: "QQ==" },
-        ],
-      })
+        attachments: [{ filename: name, contentType: "application/pdf", base64: "QQ==" }],
+      }),
     );
     const lines = msg.split("\r\n");
     expect(lines.every((l) => l.length <= 998)).toBe(true);
@@ -426,9 +392,7 @@ describe("filenameParams", () => {
 
 describe("encodeMimeForGmail", () => {
   test("round-trips: base64url decodes to the exact message", () => {
-    const msg = buildMimeMessage(
-      baseInput({ text: "Dobrý den — ověření ✓", html: "<p>✓</p>" })
-    );
+    const msg = buildMimeMessage(baseInput({ text: "Dobrý den — ověření ✓", html: "<p>✓</p>" }));
     const raw = encodeMimeForGmail(msg);
     expect(raw).toMatch(/^[A-Za-z0-9_-]+$/); // url-safe alphabet, no padding
     expect(raw).not.toContain("\n"); // JSON field — never wrapped
@@ -441,13 +405,13 @@ describe("encodeMimeForGmail", () => {
 describe("plainTextToHtml", () => {
   test("blank-line paragraphs and single-newline breaks", () => {
     expect(plainTextToHtml("Hi Alice,\n\nline one\nline two")).toBe(
-      "<p>Hi Alice,</p><p>line one<br>line two</p>"
+      "<p>Hi Alice,</p><p>line one<br>line two</p>",
     );
   });
 
   test("escapes HTML so content can't inject markup", () => {
     expect(plainTextToHtml('<script>alert("x")</script> & so')).toBe(
-      "<p>&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; so</p>"
+      "<p>&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; so</p>",
     );
   });
 
@@ -465,18 +429,12 @@ describe("plainTextToHtml", () => {
 
 describe("buildReplySubject", () => {
   test("prefixes Re: once", () => {
-    expect(buildReplySubject("Settlement demand")).toBe(
-      "Re: Settlement demand"
-    );
+    expect(buildReplySubject("Settlement demand")).toBe("Re: Settlement demand");
   });
 
   test("does not stack Re: (any case, repeated)", () => {
-    expect(buildReplySubject("Re: Settlement demand")).toBe(
-      "Re: Settlement demand"
-    );
-    expect(buildReplySubject("RE: re: Settlement demand")).toBe(
-      "Re: Settlement demand"
-    );
+    expect(buildReplySubject("Re: Settlement demand")).toBe("Re: Settlement demand");
+    expect(buildReplySubject("RE: re: Settlement demand")).toBe("Re: Settlement demand");
   });
 
   test("empty subject stays a bare Re:", () => {
@@ -486,12 +444,7 @@ describe("buildReplySubject", () => {
 
 describe("deriveReplyRecipients", () => {
   const OWN = "me@firm.com";
-  const msg = (
-    fromEmail: string,
-    to: string[],
-    cc: string[] = [],
-    fromName = ""
-  ) => ({
+  const msg = (fromEmail: string, to: string[], cc: string[] = [], fromName = "") => ({
     fromName,
     fromEmail,
     toRecipients: to.map((email) => ({ email })),
@@ -505,7 +458,7 @@ describe("deriveReplyRecipients", () => {
         msg(OWN, ["alice@x.com"]), // my own reply came after
       ],
       OWN,
-      false
+      false,
     );
     expect(to).toEqual([{ name: "Alice", email: "alice@x.com" }]);
     expect(cc).toEqual([]);
@@ -515,7 +468,7 @@ describe("deriveReplyRecipients", () => {
     const { to, cc } = deriveReplyRecipients(
       [msg("alice@x.com", [OWN, "bob@y.com"], ["carol@z.com", OWN])],
       OWN,
-      true
+      true,
     );
     expect(to.map((a) => a.email)).toEqual(["alice@x.com", "bob@y.com"]);
     expect(cc.map((a) => a.email)).toEqual(["carol@z.com"]);
@@ -525,7 +478,7 @@ describe("deriveReplyRecipients", () => {
     const { to } = deriveReplyRecipients(
       [msg("alice@x.com", ["Me@FIRM.com", "bob@y.com"])],
       OWN,
-      true
+      true,
     );
     expect(to.map((a) => a.email)).toEqual(["alice@x.com", "bob@y.com"]);
   });
@@ -534,7 +487,7 @@ describe("deriveReplyRecipients", () => {
     const { to, cc } = deriveReplyRecipients(
       [msg("alice@x.com", ["alice@x.com", "bob@y.com"], ["BOB@y.com"])],
       OWN,
-      true
+      true,
     );
     expect(to.map((a) => a.email)).toEqual(["alice@x.com", "bob@y.com"]);
     expect(cc).toEqual([]);
@@ -544,7 +497,7 @@ describe("deriveReplyRecipients", () => {
     const { to, cc } = deriveReplyRecipients(
       [msg(OWN, ["alice@x.com"], ["carol@z.com"])],
       OWN,
-      false
+      false,
     );
     expect(to.map((a) => a.email)).toEqual(["alice@x.com"]);
     expect(cc).toEqual([]); // Cc only joins on reply-all
@@ -554,7 +507,7 @@ describe("deriveReplyRecipients", () => {
     const { to, cc } = deriveReplyRecipients(
       [msg(OWN, ["alice@x.com"], ["carol@z.com"])],
       OWN,
-      true
+      true,
     );
     expect(to.map((a) => a.email)).toEqual(["alice@x.com"]);
     expect(cc.map((a) => a.email)).toEqual(["carol@z.com"]);

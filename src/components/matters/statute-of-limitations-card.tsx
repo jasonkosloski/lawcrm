@@ -21,12 +21,7 @@
 import { useOptimistic, useTransition } from "react";
 import { CheckCircle2, Circle, Loader2, TriangleAlert } from "lucide-react";
 import { cn, plural } from "@/lib/utils";
-import {
-  dateOnlyKey,
-  daysUntilDateOnly,
-  formatDate,
-  formatDateOnly,
-} from "@/lib/format-date";
+import { dateOnlyKey, daysUntilDateOnly, formatDate, formatDateOnly } from "@/lib/format-date";
 import { computeSolDate, type SolPeriod } from "@/lib/sol";
 import { notifyError } from "@/lib/feedback";
 import { useUserTimeZone } from "@/components/user-time-zone";
@@ -78,8 +73,7 @@ export function StatuteOfLimitationsCard({
   statutePeriod,
   canEdit,
 }: StatuteOfLimitationsCardProps) {
-  const [optimisticSatisfied, setOptimisticSatisfied] =
-    useOptimistic(satisfied);
+  const [optimisticSatisfied, setOptimisticSatisfied] = useOptimistic(satisfied);
   const [pending, startTransition] = useTransition();
   // "Today" is the viewer's calendar day in their PROFILE zone - the
   // same zone the server render uses - so SSR and hydration agree
@@ -96,14 +90,9 @@ export function StatuteOfLimitationsCard({
 
   // Only claim "from incident" when the date matches incident + period
   // (needs the period; without it we can't tell, so keep the old copy).
-  const computedFromIncident = computeSolDate(
-    incidentDate,
-    statutePeriod
-  );
+  const computedFromIncident = computeSolDate(incidentDate, statutePeriod);
   const isManualDate =
-    !!date &&
-    !!computedFromIncident &&
-    dateOnlyKey(computedFromIncident) !== dateOnlyKey(date);
+    !!date && !!computedFromIncident && dateOnlyKey(computedFromIncident) !== dateOnlyKey(date);
 
   // No date set yet — gentle prompt instead of countdown chrome.
   if (!date) {
@@ -112,12 +101,9 @@ export function StatuteOfLimitationsCard({
         <CardContent className="px-4 py-3 flex items-center gap-3">
           <TriangleAlert size={16} className="text-warn shrink-0" />
           <div className="flex-1 min-w-0 text-xs text-ink-2">
-            <div className="font-medium text-ink">
-              No statute-of-limitations date set
-            </div>
+            <div className="font-medium text-ink">No statute-of-limitations date set</div>
             <div className="text-2xs text-ink-3">
-              This practice area tracks SOL — add the deadline via
-              Matter → Edit.
+              This practice area tracks SOL — add the deadline via Matter → Edit.
             </div>
           </div>
         </CardContent>
@@ -129,16 +115,15 @@ export function StatuteOfLimitationsCard({
   const past = days < 0;
 
   // Tone: satisfied dominates; otherwise escalate by days.
-  const tone: "ok" | "neutral" | "caution" | "warn" | "urgent" =
-    optimisticSatisfied
-      ? "ok"
-      : past
-        ? "urgent"
-        : days <= 30
-          ? "warn"
-          : days <= 60
-            ? "caution"
-            : "neutral";
+  const tone: "ok" | "neutral" | "caution" | "warn" | "urgent" = optimisticSatisfied
+    ? "ok"
+    : past
+      ? "urgent"
+      : days <= 30
+        ? "warn"
+        : days <= 60
+          ? "caution"
+          : "neutral";
 
   const toneClasses = {
     ok: "border-line bg-ok-soft/30",
@@ -168,9 +153,7 @@ export function StatuteOfLimitationsCard({
     <Card className={cn("transition-colors", toneClasses)}>
       <CardContent className="px-4 py-3 flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <div className="text-2xs font-medium text-ink-3">
-            Statute of limitations
-          </div>
+          <div className="text-2xs font-medium text-ink-3">Statute of limitations</div>
           {pending && (
             <span className="inline-flex items-center gap-1 text-2xs text-ink-4">
               <Loader2 size={10} className="animate-spin" />
@@ -181,12 +164,8 @@ export function StatuteOfLimitationsCard({
 
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
-            <div className={cn("text-sm font-semibold", labelTone)}>
-              {labelText}
-            </div>
-            <div className="text-2xs text-ink-3 font-mono">
-              {formatCalendarDate(date)}
-            </div>
+            <div className={cn("text-sm font-semibold", labelTone)}>{labelText}</div>
+            <div className="text-2xs text-ink-3 font-mono">{formatCalendarDate(date)}</div>
           </div>
 
           {canEdit ? (
@@ -200,7 +179,7 @@ export function StatuteOfLimitationsCard({
                 optimisticSatisfied
                   ? "bg-ok-soft text-ok border-line hover:border-ok"
                   : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700",
-                pending && "opacity-60 cursor-wait"
+                pending && "opacity-60 cursor-wait",
               )}
             >
               {optimisticSatisfied ? (
@@ -229,28 +208,18 @@ export function StatuteOfLimitationsCard({
             {incidentDate && isManualDate && (
               <span>
                 manual date (incident{" "}
-                <span className="font-mono">
-                  {formatCalendarDate(incidentDate)}
-                </span>{" "}
-                + period would give{" "}
-                <span className="font-mono">
-                  {formatCalendarDate(computedFromIncident!)}
-                </span>
-                )
+                <span className="font-mono">{formatCalendarDate(incidentDate)}</span> + period would
+                give <span className="font-mono">{formatCalendarDate(computedFromIncident!)}</span>)
               </span>
             )}
             {incidentDate && !isManualDate && (
               <span>
-                from incident{" "}
-                <span className="font-mono">
-                  {formatCalendarDate(incidentDate)}
-                </span>
+                from incident <span className="font-mono">{formatCalendarDate(incidentDate)}</span>
               </span>
             )}
             {citation && (
               <span>
-                {incidentDate && "·"} per{" "}
-                <span className="font-mono">{citation}</span>
+                {incidentDate && "·"} per <span className="font-mono">{citation}</span>
               </span>
             )}
           </div>

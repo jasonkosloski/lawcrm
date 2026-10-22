@@ -30,17 +30,13 @@ import PortalLayout from "./layout";
 
 describe("portal layout", () => {
   test("header and footer are hidden when printing", async () => {
-    const { container } = render(
-      await PortalLayout({ children: <p>content</p> }),
-    );
+    const { container } = render(await PortalLayout({ children: <p>content</p> }));
     expect(container.querySelector("header")?.className).toContain("print:hidden");
     expect(container.querySelector("footer")?.className).toContain("print:hidden");
   });
 
   test("main drops its padding and width cap when printing", async () => {
-    const { container } = render(
-      await PortalLayout({ children: <p>content</p> }),
-    );
+    const { container } = render(await PortalLayout({ children: <p>content</p> }));
     const cls = container.querySelector("main")?.className ?? "";
     expect(cls).toContain("print:p-0");
     expect(cls).toContain("print:max-w-none");

@@ -13,13 +13,7 @@
 
 import { ErrorCard } from "@/components/layout/error-card";
 
-export default function RootError({
-  error,
-  retry,
-}: {
-  error: unknown;
-  retry: () => void;
-}) {
+export default function RootError({ error, retry }: { error: unknown; retry: () => void }) {
   return (
     <div className="h-full overflow-y-auto">
       <ErrorCard error={error} retry={retry} label="Root error boundary caught:" />

@@ -1,12 +1,7 @@
 /** The Billing tab's Settlement waterfall card. */
 
 import { cn } from "@/lib/utils";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { SettlementApprovals } from "@/components/matters/settlement/settlement-approvals";
 import { SettlementComposer } from "@/components/matters/settlement/settlement-composer";
@@ -28,8 +23,7 @@ export function SettlementCard({
   canManageLiens: boolean;
   canApprove: boolean;
 }) {
-  const settlementLocked =
-    settlement?.status === "disbursed" || settlement?.status === "closed";
+  const settlementLocked = settlement?.status === "disbursed" || settlement?.status === "closed";
   // Liens move the client net, so they lock with the sign-offs
   // (approved) and the money (disbursed/closed). The server enforces
   // the same rule.
@@ -50,7 +44,7 @@ export function SettlementCard({
                   ? "bg-ok-soft text-ok border-line"
                   : settlement.status === "approved"
                     ? "bg-brand-soft text-brand-700 border-brand-200"
-                    : "bg-paper-2 text-ink-3 border-line"
+                    : "bg-paper-2 text-ink-3 border-line",
               )}
             >
               {settlement.status}
@@ -62,11 +56,9 @@ export function SettlementCard({
         {!settlement ? (
           <>
             <div className="text-2xs text-ink-4 leading-relaxed">
-              No settlement opened on this matter yet. Contingency
-              matters use this section to capture the gross
-              settlement, firm fee, advanced costs, and any liens —
-              the client&apos;s net distribution computes
-              automatically.
+              No settlement opened on this matter yet. Contingency matters use this section to
+              capture the gross settlement, firm fee, advanced costs, and any liens — the
+              client&apos;s net distribution computes automatically.
             </div>
             <SettlementComposer
               matterId={matterId}
@@ -83,28 +75,20 @@ export function SettlementCard({
                 client. */}
             <dl className="grid grid-cols-[1fr_auto] gap-y-1.5 text-xs">
               <dt className="text-ink-2 font-medium">Gross settlement</dt>
-              <dd className="font-mono text-ink">
-                {formatMoney(settlement.grossAmount)}
-              </dd>
+              <dd className="font-mono text-ink">{formatMoney(settlement.grossAmount)}</dd>
 
               <dt className="text-ink-3 pl-3">
                 Firm fee
                 {settlement.firmFeePercent !== null && (
-                  <span className="text-ink-4 ml-1">
-                    ({settlement.firmFeePercent}%)
-                  </span>
+                  <span className="text-ink-4 ml-1">({settlement.firmFeePercent}%)</span>
                 )}
               </dt>
-              <dd className="font-mono text-warn">
-                −{formatMoney(settlement.firmFee)}
-              </dd>
+              <dd className="font-mono text-warn">−{formatMoney(settlement.firmFee)}</dd>
 
               {settlement.advancedCosts > 0 && (
                 <>
                   <dt className="text-ink-3 pl-3">Advanced costs</dt>
-                  <dd className="font-mono text-warn">
-                    −{formatMoney(settlement.advancedCosts)}
-                  </dd>
+                  <dd className="font-mono text-warn">−{formatMoney(settlement.advancedCosts)}</dd>
                 </>
               )}
 
@@ -112,13 +96,9 @@ export function SettlementCard({
                 <>
                   <dt className="text-ink-3 pl-3">
                     Liens
-                    <span className="text-ink-4 ml-1">
-                      ({settlement.liens.length})
-                    </span>
+                    <span className="text-ink-4 ml-1">({settlement.liens.length})</span>
                   </dt>
-                  <dd className="font-mono text-warn">
-                    −{formatMoney(settlement.lienTotal)}
-                  </dd>
+                  <dd className="font-mono text-warn">−{formatMoney(settlement.lienTotal)}</dd>
                 </>
               )}
 
@@ -128,7 +108,7 @@ export function SettlementCard({
               <dd
                 className={cn(
                   "font-mono font-semibold pt-1.5 border-t border-line mt-1",
-                  settlement.clientNet < 0 ? "text-warn" : "text-ok"
+                  settlement.clientNet < 0 ? "text-warn" : "text-ok",
                 )}
               >
                 {settlement.clientNet < 0
@@ -145,9 +125,8 @@ export function SettlementCard({
                 role="alert"
                 className="px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn"
               >
-                Shortfall: the fee, costs and liens exceed the settlement
-                by {formatMoney(-settlement.clientNet)}. Resolve before
-                disbursing.
+                Shortfall: the fee, costs and liens exceed the settlement by{" "}
+                {formatMoney(-settlement.clientNet)}. Resolve before disbursing.
               </div>
             )}
 
@@ -160,9 +139,7 @@ export function SettlementCard({
               locked={liensLocked}
             />
 
-            {canManageLiens && !liensLocked && (
-              <SettlementLienForm settlementId={settlement.id} />
-            )}
+            {canManageLiens && !liensLocked && <SettlementLienForm settlementId={settlement.id} />}
 
             {/* Approval steps. Always rendered when present (read
                 view for everyone with view perm); the buttons only

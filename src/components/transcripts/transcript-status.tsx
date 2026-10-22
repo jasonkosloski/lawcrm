@@ -75,13 +75,7 @@ export function TranscribeButton({
 export function TranscribeUnavailable() {
   return (
     <div className="flex flex-col items-start gap-1">
-      <Button
-        variant="outline"
-        size="sm"
-        type="button"
-        disabled
-        className="opacity-60"
-      >
+      <Button variant="outline" size="sm" type="button" disabled className="opacity-60">
         Transcribe
       </Button>
       <p className="text-2xs text-ink-3">Transcription isn&apos;t set up yet.</p>

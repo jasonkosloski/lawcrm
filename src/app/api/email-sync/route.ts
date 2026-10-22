@@ -55,8 +55,7 @@ export async function GET(request: Request): Promise<Response> {
     }
 
     const transientFailures =
-      results.filter((r) => r.transient).length +
-      calendar.filter((c) => c.transient).length;
+      results.filter((r) => r.transient).length + calendar.filter((c) => c.transient).length;
     const ok = transientFailures === 0 && !calendarCrashed;
     if (!ok) {
       console.error("[email-sync] sweep finished with failures", {
@@ -65,41 +64,42 @@ export async function GET(request: Request): Promise<Response> {
       });
     }
 
-    return Response.json({
-      ok,
-      transientFailures,
-      calendarCrashed,
-      accounts: results.length,
-      // "skipped" passes (another sync held the account, reconnect
-      // required, deactivated owner) did not sync anything.
-      synced: results.filter((r) => r.ok && r.mode !== "skipped").length,
-      // Poisoned threads skipped this sweep (ids are in the error log
-      // and each account's syncError note).
-      failedThreads: results.reduce((n, r) => n + (r.failedThreads ?? 0), 0),
-      // Account ids only — no email addresses in cron logs.
-      results: results.map(
-        ({ accountId, ok, mode, threadsSynced, failedThreads, error }) => ({
+    return Response.json(
+      {
+        ok,
+        transientFailures,
+        calendarCrashed,
+        accounts: results.length,
+        // "skipped" passes (another sync held the account, reconnect
+        // required, deactivated owner) did not sync anything.
+        synced: results.filter((r) => r.ok && r.mode !== "skipped").length,
+        // Poisoned threads skipped this sweep (ids are in the error log
+        // and each account's syncError note).
+        failedThreads: results.reduce((n, r) => n + (r.failedThreads ?? 0), 0),
+        // Account ids only — no email addresses in cron logs.
+        results: results.map(({ accountId, ok, mode, threadsSynced, failedThreads, error }) => ({
           accountId,
           ok,
           mode,
           threadsSynced,
           ...(failedThreads ? { failedThreads } : {}),
           ...(error ? { error } : {}),
-        })
-      ),
-      calendar: calendar.map(
-        ({ accountId, ok, mode, imported, updated, deletedEvents, unlinked, error }) => ({
-          accountId,
-          ok,
-          mode,
-          imported,
-          updated,
-          deletedEvents,
-          unlinked,
-          ...(error ? { error } : {}),
-        })
-      ),
-    }, { status: ok ? 200 : 500 });
+        })),
+        calendar: calendar.map(
+          ({ accountId, ok, mode, imported, updated, deletedEvents, unlinked, error }) => ({
+            accountId,
+            ok,
+            mode,
+            imported,
+            updated,
+            deletedEvents,
+            unlinked,
+            ...(error ? { error } : {}),
+          }),
+        ),
+      },
+      { status: ok ? 200 : 500 },
+    );
   } catch (err) {
     console.error("[email-sync] sweep failed", err);
     return Response.json({ ok: false, error: "Sync failed" }, { status: 500 });

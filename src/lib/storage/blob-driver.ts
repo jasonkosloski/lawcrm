@@ -26,15 +26,7 @@
  * the pathname, which `blobPathname` recovers from it.
  */
 
-import {
-  BlobNotFoundError,
-  del,
-  get,
-  head,
-  issueSignedToken,
-  presignUrl,
-  put,
-} from "@vercel/blob";
+import { BlobNotFoundError, del, get, head, issueSignedToken, presignUrl, put } from "@vercel/blob";
 import { makeStorageKey } from "./storage-key";
 import type { StoredFile } from "./local-driver";
 
@@ -92,9 +84,7 @@ export async function deleteFileBlob(url: string): Promise<void> {
 /** Existence + size probe. `head` throws on a missing blob; the
  *  facade contract is `null` for "gone" (the download route maps
  *  that to 410). */
-export async function statFileBlob(
-  url: string
-): Promise<{ size: number } | null> {
+export async function statFileBlob(url: string): Promise<{ size: number } | null> {
   try {
     const meta = await head(url);
     return { size: meta.size };
@@ -161,11 +151,10 @@ function presignUrlUtf8(...args: Parameters<typeof presignUrl>): ReturnType<type
  */
 export async function signedBlobUrl(
   url: string,
-  opts: { download?: boolean; media?: boolean } = {}
+  opts: { download?: boolean; media?: boolean } = {},
 ): Promise<string> {
   const pathname = blobPathname(url);
-  const validUntil =
-    Date.now() + (opts.media ? SIGNED_MEDIA_URL_TTL_MS : SIGNED_URL_TTL_MS);
+  const validUntil = Date.now() + (opts.media ? SIGNED_MEDIA_URL_TTL_MS : SIGNED_URL_TTL_MS);
   const token = await issueSignedToken({
     pathname,
     operations: ["get"],
@@ -204,15 +193,10 @@ export async function signedBlobUrl(
  * the blob is gone. For previews/attachment copies — never point it
  * at GB-scale media.
  */
-export async function readBlobBytes(
-  url: string,
-  maxBytes?: number
-): Promise<Buffer | null> {
+export async function readBlobBytes(url: string, maxBytes?: number): Promise<Buffer | null> {
   const result = await get(url, {
     access: BLOB_ACCESS,
-    ...(maxBytes !== undefined
-      ? { headers: { range: `bytes=0-${maxBytes - 1}` } }
-      : {}),
+    ...(maxBytes !== undefined ? { headers: { range: `bytes=0-${maxBytes - 1}` } } : {}),
   });
   if (!result || result.statusCode !== 200) return null;
   const chunks: Uint8Array[] = [];

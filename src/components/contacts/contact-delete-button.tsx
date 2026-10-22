@@ -48,12 +48,7 @@ export function ContactDeleteButton({
   };
 
   return (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={onDelete}
-      disabled={pending}
-    >
+    <Button size="sm" variant="outline" onClick={onDelete} disabled={pending}>
       <Trash2 />
       {pending ? "Deleting…" : "Delete"}
     </Button>

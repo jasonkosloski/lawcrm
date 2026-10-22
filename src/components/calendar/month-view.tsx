@@ -11,11 +11,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { EventLink } from "./event-link";
 import { dateKeyInTz, dateOnlyKey, formatDate } from "@/lib/format-date";
-import type {
-  CalendarItem,
-  CalendarEventRow,
-  CalendarDeadlineRow,
-} from "@/lib/queries/calendar";
+import type { CalendarItem, CalendarEventRow, CalendarDeadlineRow } from "@/lib/queries/calendar";
 import { bucketItemsByDay, weekdayShort } from "./bucket-items";
 
 const MAX_ITEMS_PER_CELL = 3;
@@ -75,7 +71,7 @@ export function MonthView({
               key={w}
               className={cn(
                 "text-2xs font-mono text-center py-2 border-l border-line first:border-l-0",
-                isWeekendLabel ? "text-ink-4/80 bg-paper" : "text-ink-4"
+                isWeekendLabel ? "text-ink-4/80 bg-paper" : "text-ink-4",
               )}
             >
               {w}
@@ -102,11 +98,7 @@ export function MonthView({
               key={key}
               className={cn(
                 "border-l border-t border-line p-1 min-h-24 flex flex-col gap-1 first:border-l-0",
-                !isInMonth
-                  ? "bg-paper-2/40"
-                  : weekend
-                    ? "bg-paper"
-                    : "bg-white"
+                !isInMonth ? "bg-paper-2/40" : weekend ? "bg-paper" : "bg-white",
               )}
             >
               {/* Day number deep-links to the day's Day view. The
@@ -121,7 +113,7 @@ export function MonthView({
                     ? "bg-brand-700 text-white font-semibold hover:bg-brand-900"
                     : isInMonth
                       ? "text-ink-2 hover:bg-brand-tint hover:text-brand-700"
-                      : "text-ink-4 hover:bg-brand-tint hover:text-brand-700"
+                      : "text-ink-4 hover:bg-brand-tint hover:text-brand-700",
                 )}
               >
                 {day.getUTCDate()}
@@ -132,12 +124,10 @@ export function MonthView({
                     <EventPill key={item.id} event={item} userTz={userTz} />
                   ) : (
                     <DeadlinePill key={item.id} deadline={item} />
-                  )
+                  ),
                 )}
                 {overflow > 0 && (
-                  <div className="text-3xs text-ink-4 px-1 font-mono">
-                    +{overflow} more
-                  </div>
+                  <div className="text-3xs text-ink-4 px-1 font-mono">+{overflow} more</div>
                 )}
               </div>
             </div>
@@ -192,9 +182,7 @@ function EventPill({
         >
           <div className="truncate text-ink">All day: {event.title}</div>
           {event.matterName && (
-            <div className="truncate font-mono text-ink-4">
-              {event.matterName}
-            </div>
+            <div className="truncate font-mono text-ink-4">{event.matterName}</div>
           )}
         </div>
       </EventLink>
@@ -227,7 +215,7 @@ function DeadlinePill({ deadline }: { deadline: CalendarDeadlineRow }) {
       href={`/matters/${deadline.matterId}/deadlines`}
       className={cn(
         "px-1 py-0.5 rounded border text-3xs leading-tight flex items-center gap-1 overflow-hidden",
-        cls
+        cls,
       )}
       title={`${deadline.title} — ${deadline.matterName}`}
     >

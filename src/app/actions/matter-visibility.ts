@@ -21,7 +21,7 @@ const LABEL = { FIRM: "Everyone", TEAM: "Team only" } as const;
 
 export async function updateMatterVisibilityAction(
   _prev: MatterVisibilityState,
-  formData: FormData
+  formData: FormData,
 ): Promise<MatterVisibilityState> {
   const userId = await requireAdmin();
   const value = formData.get("matterVisibility");
@@ -39,11 +39,9 @@ export async function updateMatterVisibilityAction(
     where: { id: firm.id },
     data: { matterVisibility: value },
   });
-  await logSettingsChange(
-    userId,
-    `Matter visibility set to ${LABEL[value]}`,
-    [`Changed from ${LABEL[before.matterVisibility]} to ${LABEL[value]}`]
-  );
+  await logSettingsChange(userId, `Matter visibility set to ${LABEL[value]}`, [
+    `Changed from ${LABEL[before.matterVisibility]} to ${LABEL[value]}`,
+  ]);
   // Visibility changes every matter-scoped surface.
   revalidatePath("/", "layout");
   return { status: "ok" };

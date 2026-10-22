@@ -26,8 +26,7 @@ const NEXT_DAY_0730 = new Date("2026-10-22T13:30:00Z");
 const OVERNIGHT = new Date("2026-10-21T05:00:00Z");
 
 /** Unpaced runs keep the suite fast; pacing has its own test. */
-const run = (now: Date) =>
-  runNotificationEmailDelivery(now, { minSendIntervalMs: 0 });
+const run = (now: Date) => runNotificationEmailDelivery(now, { minSendIntervalMs: 0 });
 
 let firmId: string;
 let userId: string;
@@ -54,15 +53,17 @@ beforeEach(async () => {
 
 afterEach(() => mail.restore());
 
-function notify(over: {
-  type?: string;
-  title?: string;
-  matterId?: string | null;
-  readAt?: Date | null;
-  emailState?: string;
-  user?: string;
-  createdAt?: Date;
-} = {}) {
+function notify(
+  over: {
+    type?: string;
+    title?: string;
+    matterId?: string | null;
+    readAt?: Date | null;
+    emailState?: string;
+    user?: string;
+    createdAt?: Date;
+  } = {},
+) {
   return prisma.notification.create({
     data: {
       userId: over.user ?? userId,
@@ -103,10 +104,7 @@ describe("instant delivery", () => {
     await notify({ type: "portal_message", title: "Client wrote" });
     await notify({ type: "invoice_payment_recorded", title: "Paid" });
     await run(AT_0730_DENVER);
-    expect(mail.sent.map((m) => m.subject).sort()).toEqual([
-      "Client wrote",
-      "Paid",
-    ]);
+    expect(mail.sent.map((m) => m.subject).sort()).toEqual(["Client wrote", "Paid"]);
   });
 
   test("off skips", async () => {
@@ -205,17 +203,12 @@ describe("instant delivery", () => {
     expect(row.emailState).toBe("failed");
     // A failed row is not retried again.
     await run(AT_0730_DENVER);
-    expect(
-      (await prisma.notification.findUniqueOrThrow({ where: { id } })).emailAttempts
-    ).toBe(3);
+    expect((await prisma.notification.findUniqueOrThrow({ where: { id } })).emailAttempts).toBe(3);
   });
 
   test("concurrent runs send once", async () => {
     await notify();
-    await Promise.all([
-      run(AT_0730_DENVER),
-      run(AT_0730_DENVER),
-    ]);
+    await Promise.all([run(AT_0730_DENVER), run(AT_0730_DENVER)]);
     expect(mail.sent).toHaveLength(1);
   });
 });
@@ -250,9 +243,7 @@ describe("daily digest", () => {
       title: "Later task",
       createdAt: new Date("2026-10-21T14:00:00Z"),
     });
-    await run(
-      new Date(AT_0730_DENVER.getTime() + 60 * 60 * 1000)
-    );
+    await run(new Date(AT_0730_DENVER.getTime() + 60 * 60 * 1000));
     expect(mail.sent).toHaveLength(1);
     expect(await stateOf(later.id)).toBe("held");
 

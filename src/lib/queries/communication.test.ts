@@ -1,7 +1,7 @@
 /**
  * Integration tests for the email-thread read queries.
  *
-* Pinned here: the mailbox-scoping security boundary
+ * Pinned here: the mailbox-scoping security boundary
  * (getThreadById / listThreads / counts never reach another user's
  * mail), the Inbox archive/snooze matrix, and that every rail count
  * equals its list's length (the badge and the list must agree).
@@ -49,7 +49,6 @@ async function seedAccount(ownerId: string): Promise<string> {
   });
   return account.id;
 }
-
 
 beforeAll(() => {
   expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
@@ -324,7 +323,7 @@ describe("getFilingMatterOptions", () => {
 /** Bulk-seed `n` single-message threads, newest = index 0. */
 async function seedManyThreads(
   n: number,
-  opts: { accountId: string; matterId?: string; fromEmail?: string }
+  opts: { accountId: string; matterId?: string; fromEmail?: string },
 ): Promise<void> {
   const base = Date.parse("2026-01-01T00:00:00Z");
   const threads = await prisma.emailThread.createManyAndReturn({
@@ -362,7 +361,7 @@ describe("paging (no silent truncation)", () => {
     const second = await listThreads("all", undefined, 2);
     expect(second.page).toBe(2);
     expect(second.rows.map((r) => r.subject)).toEqual(
-      Array.from({ length: 5 }, (_, i) => `T${THREAD_PAGE_SIZE + i}`)
+      Array.from({ length: 5 }, (_, i) => `T${THREAD_PAGE_SIZE + i}`),
     );
     // No row appears on both pages.
     const ids = new Set(first.rows.map((r) => r.id));

@@ -48,11 +48,7 @@ export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps)
             <Menu size={18} />
           </button>
           <div className="flex flex-col gap-0.5 min-w-0">
-            {crumbs && (
-              <div className="text-2xs text-ink-4 truncate tabular-nums">
-                {crumbs}
-              </div>
-            )}
+            {crumbs && <div className="text-2xs text-ink-4 truncate tabular-nums">{crumbs}</div>}
             <div className="flex items-center gap-2.5 min-w-0">
               <h1 className="font-display text-lg sm:text-xl leading-tight font-medium tracking-[-0.015em] text-ink truncate">
                 {title}
@@ -60,9 +56,7 @@ export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps)
               {/* Subtitle chips hide below sm — they're contextual
                   decoration, not load-bearing. The crumbs already
                   carry the matter / page name. */}
-              <div className="hidden sm:flex items-center gap-2">
-                {subtitle}
-              </div>
+              <div className="hidden sm:flex items-center gap-2">{subtitle}</div>
             </div>
           </div>
         </div>
@@ -81,9 +75,7 @@ export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps)
           >
             <Search size={15} aria-hidden />
             <span className="hidden sm:inline whitespace-nowrap">Search</span>
-            <span className="hidden sm:inline ml-auto text-2xs text-ink-4">
-              ⌘K
-            </span>
+            <span className="hidden sm:inline ml-auto text-2xs text-ink-4">⌘K</span>
           </Button>
 
           {/* Bell sits between Search and per-page actions so it's

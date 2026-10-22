@@ -10,12 +10,10 @@ import userEvent from "@testing-library/user-event";
 
 import { NO_NOTE_ACCESS, type NoteFormState } from "@/lib/note-constants";
 
-const createNote = vi.fn<
-  (matterId: string, prev: NoteFormState, fd: FormData) => Promise<NoteFormState>
->();
-const createLeadNote = vi.fn<
-  (leadId: string, prev: NoteFormState, fd: FormData) => Promise<NoteFormState>
->();
+const createNote =
+  vi.fn<(matterId: string, prev: NoteFormState, fd: FormData) => Promise<NoteFormState>>();
+const createLeadNote =
+  vi.fn<(leadId: string, prev: NoteFormState, fd: FormData) => Promise<NoteFormState>>();
 vi.mock("@/app/actions/notes", () => ({
   createNote: (matterId: string, prev: NoteFormState, fd: FormData) =>
     createNote(matterId, prev, fd),
@@ -24,10 +22,7 @@ vi.mock("@/app/actions/notes", () => ({
 }));
 vi.mock("./note-editor", () => ({
   NoteEditor: ({ onChange }: { onChange: (html: string) => void }) => (
-    <textarea
-      data-testid="editor"
-      onChange={(e) => onChange(e.target.value)}
-    />
+    <textarea data-testid="editor" onChange={(e) => onChange(e.target.value)} />
   ),
 }));
 vi.mock("@/components/matters/captures/capture-stack", () => ({
@@ -61,7 +56,7 @@ describe("ReplyComposer", () => {
         parentNoteId="p1"
         access={access}
         onDone={vi.fn()}
-      />
+      />,
     );
     // No deadline (not permitted) and never event / sibling note.
     expect(screen.getByTestId("stack").dataset.kinds).toBe("task,time");
@@ -76,7 +71,7 @@ describe("ReplyComposer", () => {
         parentNoteId="p1"
         access={access}
         onDone={onDone}
-      />
+      />,
     );
     await user.type(screen.getByTestId("editor"), "agreed");
     await user.click(screen.getByRole("button", { name: /^reply$/i }));
@@ -100,17 +95,13 @@ describe("ReplyComposer", () => {
         parentNoteId="p1"
         access={access}
         onDone={onDone}
-      />
+      />,
     );
     await user.type(screen.getByTestId("editor"), "my reply");
     await user.click(screen.getByRole("button", { name: /^reply$/i }));
-    expect(
-      await screen.findByText("Parent note not found on this matter")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Parent note not found on this matter")).toBeInTheDocument();
     expect(onDone).not.toHaveBeenCalled();
-    expect((screen.getByTestId("editor") as HTMLTextAreaElement).value).toBe(
-      "my reply"
-    );
+    expect((screen.getByTestId("editor") as HTMLTextAreaElement).value).toBe("my reply");
   });
 
   test("on an intake note: posts through createLeadNote and offers no captures", async () => {
@@ -122,7 +113,7 @@ describe("ReplyComposer", () => {
         parentNoteId="p1"
         access={access}
         onDone={onDone}
-      />
+      />,
     );
     expect(screen.getByTestId("stack").dataset.kinds).toBe("");
     await user.type(screen.getByTestId("editor"), "called back");

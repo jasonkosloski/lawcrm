@@ -47,10 +47,8 @@ export function csvEscape(value: string | null | undefined): string {
  */
 export function buildCsv(
   header: readonly string[],
-  rows: ReadonlyArray<ReadonlyArray<string | null | undefined>>
+  rows: ReadonlyArray<ReadonlyArray<string | null | undefined>>,
 ): string {
-  const lines = [header, ...rows].map((cells) =>
-    cells.map(csvEscape).join(",")
-  );
+  const lines = [header, ...rows].map((cells) => cells.map(csvEscape).join(","));
   return lines.join("\r\n") + "\r\n";
 }

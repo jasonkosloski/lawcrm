@@ -34,8 +34,8 @@ export function EventPrivateToggle({
       <span>
         <span className="text-ink">Private event</span>
         <span className="block text-2xs text-ink-4 leading-relaxed mt-0.5">
-          Only you see the details. Everyone else, including invitees and
-          the matter team, sees &ldquo;Busy&rdquo; for this time.
+          Only you see the details. Everyone else, including invitees and the matter team, sees
+          &ldquo;Busy&rdquo; for this time.
         </span>
       </span>
     </label>

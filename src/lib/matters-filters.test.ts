@@ -34,35 +34,21 @@ describe("parseMattersParams — single-value scalars", () => {
 
   test("trust accepts known values, falls back to 'any' otherwise", () => {
     expect(parseMattersParams({ trust: "has" }).filter.trust).toBe("has");
-    expect(parseMattersParams({ trust: "over-10k" }).filter.trust).toBe(
-      "over-10k"
-    );
+    expect(parseMattersParams({ trust: "over-10k" }).filter.trust).toBe("over-10k");
     expect(parseMattersParams({ trust: "garbage" }).filter.trust).toBe("any");
   });
 
   test("deadline accepts known buckets, falls back to 'any' otherwise", () => {
-    expect(parseMattersParams({ deadline: "within-7d" }).filter.deadline).toBe(
-      "within-7d"
-    );
-    expect(parseMattersParams({ deadline: "overdue" }).filter.deadline).toBe(
-      "overdue"
-    );
-    expect(parseMattersParams({ deadline: "next-year" }).filter.deadline).toBe(
-      "any"
-    );
+    expect(parseMattersParams({ deadline: "within-7d" }).filter.deadline).toBe("within-7d");
+    expect(parseMattersParams({ deadline: "overdue" }).filter.deadline).toBe("overdue");
+    expect(parseMattersParams({ deadline: "next-year" }).filter.deadline).toBe("any");
   });
 
   test("flag params honor exact '1' value, ignore anything else", () => {
-    expect(parseMattersParams({ archived: "1" }).filter.includeArchived).toBe(
-      true
-    );
-    expect(parseMattersParams({ archived: "true" }).filter.includeArchived).toBe(
-      false
-    );
+    expect(parseMattersParams({ archived: "1" }).filter.includeArchived).toBe(true);
+    expect(parseMattersParams({ archived: "true" }).filter.includeArchived).toBe(false);
     expect(parseMattersParams({ pinned: "1" }).filter.pinnedOnly).toBe(true);
-    expect(parseMattersParams({ show_closed: "1" }).filter.showClosed).toBe(
-      true
-    );
+    expect(parseMattersParams({ show_closed: "1" }).filter.showClosed).toBe(true);
   });
 });
 
@@ -75,9 +61,7 @@ describe("parseMattersParams — multi-value", () => {
   });
 
   test("single `area` string still produces a one-element array", () => {
-    expect(parseMattersParams({ area: "§1983" }).filter.areas).toEqual([
-      "§1983",
-    ]);
+    expect(parseMattersParams({ area: "§1983" }).filter.areas).toEqual(["§1983"]);
   });
 
   test("empty / falsy values get dropped from multi-value arrays", () => {
@@ -101,15 +85,11 @@ describe("parseMattersParams — sort", () => {
   });
 
   test("unknown sort field falls back to default", () => {
-    expect(parseMattersParams({ sort: "garbage", dir: "asc" }).sort.field).toBe(
-      DEFAULT_SORT.field
-    );
+    expect(parseMattersParams({ sort: "garbage", dir: "asc" }).sort.field).toBe(DEFAULT_SORT.field);
   });
 
   test("unknown direction falls back to default", () => {
-    expect(parseMattersParams({ sort: "name", dir: "sideways" }).sort.dir).toBe(
-      DEFAULT_SORT.dir
-    );
+    expect(parseMattersParams({ sort: "name", dir: "sideways" }).sort.dir).toBe(DEFAULT_SORT.dir);
   });
 });
 
@@ -157,7 +137,7 @@ describe("buildMattersSearchParams — round-trip", () => {
         ...EMPTY_FILTER,
         areas: ["§1983", "Housing/FHA"],
       },
-      DEFAULT_SORT
+      DEFAULT_SORT,
     );
     expect(p.getAll("area")).toEqual(["§1983", "Housing/FHA"]);
   });
@@ -172,7 +152,7 @@ describe("buildMattersSearchParams — round-trip", () => {
         pinnedOnly: true,
         showClosed: true,
       },
-      DEFAULT_SORT
+      DEFAULT_SORT,
     );
     expect(p.get("trust")).toBe("has");
     expect(p.get("deadline")).toBe("within-7d");

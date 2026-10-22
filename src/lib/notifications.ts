@@ -72,9 +72,7 @@ export type CreateNotificationInput = {
  * primary action remain authoritative; observability never blocks
  * the source of truth.
  */
-export async function createNotification(
-  input: CreateNotificationInput
-): Promise<void> {
+export async function createNotification(input: CreateNotificationInput): Promise<void> {
   try {
     await prisma.notification.create({
       data: {
@@ -102,7 +100,7 @@ export async function createNotification(
  */
 export async function createNotifications(
   recipients: readonly string[],
-  shape: Omit<CreateNotificationInput, "userId">
+  shape: Omit<CreateNotificationInput, "userId">,
 ): Promise<void> {
   if (recipients.length === 0) return;
   const dedup = Array.from(new Set(recipients));

@@ -37,15 +37,11 @@ describe("CreatePracticeAreaForm after a server validation error", () => {
     render(<CreatePracticeAreaForm />);
 
     await user.type(screen.getByPlaceholderText(/1983, Employment/i), "§1983");
-    await user.click(
-      screen.getByRole("checkbox", { name: /track statute of limitations/i })
-    );
+    await user.click(screen.getByRole("checkbox", { name: /track statute of limitations/i }));
     await user.click(screen.getByRole("button", { name: /add area/i }));
 
     await waitFor(() =>
-      expect(
-        screen.getByText(/another practice area already uses that name/i)
-      ).toBeTruthy()
+      expect(screen.getByText(/another practice area already uses that name/i)).toBeTruthy(),
     );
     // The action received the SOL flag.
     const fd = mockedCreate.mock.calls[0][1] as FormData;
@@ -56,12 +52,11 @@ describe("CreatePracticeAreaForm after a server validation error", () => {
         screen.getByRole("checkbox", {
           name: /track statute of limitations/i,
         }) as HTMLInputElement
-      ).checked
+      ).checked,
     ).toBe(true);
-    expect(
-      (screen.getByPlaceholderText(/1983, Employment/i) as HTMLInputElement)
-        .value
-    ).toBe("§1983");
+    expect((screen.getByPlaceholderText(/1983, Employment/i) as HTMLInputElement).value).toBe(
+      "§1983",
+    );
   });
 
   test("name, label and colour inputs have accessible names", () => {
@@ -79,9 +74,7 @@ describe("CreatePracticeAreaForm required-field hint", () => {
     const user = userEvent.setup();
     render(<CreatePracticeAreaForm />);
     expect(screen.getByText(HINT)).toBeTruthy();
-    await user.click(
-      screen.getByRole("checkbox", { name: /track statute of limitations/i })
-    );
+    await user.click(screen.getByRole("checkbox", { name: /track statute of limitations/i }));
     expect(screen.queryByText(HINT)).toBeNull();
   });
 });

@@ -13,10 +13,7 @@ import { daysUntilDateOnly } from "@/lib/format-date";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
-import {
-  getRecordsRequestDetail,
-  listRecordsRequestTypes,
-} from "@/lib/queries/records-requests";
+import { getRecordsRequestDetail, listRecordsRequestTypes } from "@/lib/queries/records-requests";
 import { responsePeriodLabel } from "@/lib/records-requests/date-labels";
 import { RequestDetail } from "./request-detail";
 
@@ -34,16 +31,15 @@ export async function RequestDetailPage({
   // A lead has no expenses, so records.view (already enforced) suffices.
   const includeFees =
     scope.kind === "lead" || (await currentUserHasPermission("matters.expense.view"));
-  const [detail, tz, canEdit, canDelete, canUpload, canExpense, types] =
-    await Promise.all([
-      getRecordsRequestDetail(scope, requestId, { includeFees }),
-      getCurrentUserTimeZone(),
-      currentUserHasPermission("records.edit"),
-      currentUserHasPermission("records.delete"),
-      currentUserHasPermission("documents.upload"),
-      currentUserHasPermission("matters.expense.create"),
-      listRecordsRequestTypes({ activeOnly: true }),
-    ]);
+  const [detail, tz, canEdit, canDelete, canUpload, canExpense, types] = await Promise.all([
+    getRecordsRequestDetail(scope, requestId, { includeFees }),
+    getCurrentUserTimeZone(),
+    currentUserHasPermission("records.edit"),
+    currentUserHasPermission("records.delete"),
+    currentUserHasPermission("documents.upload"),
+    currentUserHasPermission("matters.expense.create"),
+    listRecordsRequestTypes({ activeOnly: true }),
+  ]);
   if (!detail) notFound();
 
   // The rule behind a computed due date (archived/ad hoc types → none).
@@ -87,9 +83,7 @@ export async function RequestDetailPage({
       types={types.map((t) => ({ id: t.id, name: t.name }))}
       users={users}
       templates={templates}
-      defaultTemplateId={
-        types.find((t) => t.id === detail.typeId)?.defaultTemplateId ?? null
-      }
+      defaultTemplateId={types.find((t) => t.id === detail.typeId)?.defaultTemplateId ?? null}
       storageDriver={activeStorageDriver()}
       linkableDocuments={linkable}
       can={{
@@ -99,9 +93,7 @@ export async function RequestDetailPage({
         fee: canEdit && (scope.kind === "lead" || (canExpense && includeFees)),
       }}
       writable={writable}
-      daysUntilDue={
-        detail.responseDueDate ? daysUntilDateOnly(detail.responseDueDate, tz) : null
-      }
+      daysUntilDue={detail.responseDueDate ? daysUntilDateOnly(detail.responseDueDate, tz) : null}
       daysSinceSent={detail.sentAt ? -daysUntilDateOnly(detail.sentAt, tz) : null}
       deadlineRule={deadlineRule}
     />

@@ -65,7 +65,7 @@ function shapeRow(
       role: { id: string; name: string; isSystem: boolean };
     }>;
   },
-  currentUserId: string
+  currentUserId: string,
 ): FirmUserRow {
   // Sort: Admin first, then other system roles, then custom alpha.
   const roles = r.userRoles
@@ -98,9 +98,7 @@ function shapeRow(
  * inactive users so admins can reactivate them; the page filters
  * if it wants to (today it just renders both with a chip).
  */
-export async function listFirmUsers(
-  currentUserId: string
-): Promise<FirmUserRow[]> {
+export async function listFirmUsers(currentUserId: string): Promise<FirmUserRow[]> {
   const firm = await getCurrentFirm();
   const rows = await prisma.user.findMany({
     where: { firmId: firm.id },
@@ -158,9 +156,7 @@ export async function listAssigneeOptions(): Promise<AssigneeOption[]> {
  *  manage_roles / manage_team_directory). Shared by the team actions
  *  (server-side escalation guard) and the team page (UI hides what
  *  the server would refuse). */
-export async function getPrivilegedRoleIds(
-  firmId: string
-): Promise<Set<string>> {
+export async function getPrivilegedRoleIds(firmId: string): Promise<Set<string>> {
   const rows = await prisma.role.findMany({
     where: {
       firmId,
@@ -227,9 +223,7 @@ export async function listFirmRoles(): Promise<FirmRoleRow[]> {
  *  treats Admin as "all granted" and the matrix renders Admin's
  *  column as locked-checked from the role row's name, not from
  *  this map. */
-export async function listRolePermissionGrants(): Promise<
-  Map<string, Set<string>>
-> {
+export async function listRolePermissionGrants(): Promise<Map<string, Set<string>>> {
   const firm = await getCurrentFirm();
   const rows = await prisma.rolePermission.findMany({
     where: { role: { firmId: firm.id } },

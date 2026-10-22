@@ -60,7 +60,9 @@ export function EmailPreview({
                 <>
                   <Paperclip className="h-3 w-3" aria-hidden />
                   {a.name}
-                  {a.size !== null && <span className="text-ink-4">· {formatFileSize(a.size)}</span>}
+                  {a.size !== null && (
+                    <span className="text-ink-4">· {formatFileSize(a.size)}</span>
+                  )}
                 </>
               );
               return (

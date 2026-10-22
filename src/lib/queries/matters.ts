@@ -22,22 +22,9 @@ import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { matterAccessWhere } from "@/lib/matter-access";
 import { ADMIN_ROLE_NAME } from "@/lib/role-constants";
 import { TIME_ENTRY_WIP_STATUSES } from "@/lib/constants/time-entry-status";
-import {
-  addDaysToKey,
-  daysUntilDateOnly,
-  dateOnlyRange,
-  todayKey,
-} from "@/lib/format-date";
-import {
-  BILLING_TYPE_LABEL,
-  billingTypeOf,
-  type BillingTypeOrLegacy,
-} from "@/lib/billing-type";
-import {
-  EMPTY_FILTER,
-  type MattersFilter,
-  type MattersSort,
-} from "@/lib/matters-filters";
+import { addDaysToKey, daysUntilDateOnly, dateOnlyRange, todayKey } from "@/lib/format-date";
+import { BILLING_TYPE_LABEL, billingTypeOf, type BillingTypeOrLegacy } from "@/lib/billing-type";
+import { EMPTY_FILTER, type MattersFilter, type MattersSort } from "@/lib/matters-filters";
 
 export type MatterListRow = {
   id: string;
@@ -77,7 +64,7 @@ function buildWhere(
   filter: MattersFilter,
   currentUserId: string,
   tz: string,
-  canViewTrust: boolean
+  canViewTrust: boolean,
 ) {
   const where: Record<string, unknown> = {};
 
@@ -95,16 +82,14 @@ function buildWhere(
 
   if (!filter.includeArchived) where.isArchived = false;
   if (filter.pinnedOnly) where.pins = { some: { userId: currentUserId } };
-  if (filter.areas.length > 0)
-    where.practiceArea = { name: { in: filter.areas } };
+  if (filter.areas.length > 0) where.practiceArea = { name: { in: filter.areas } };
 
   // Stage filter and the show-closed toggle both constrain the stage
   // relation. Closed stages are hidden by default; `showClosed` opts
   // them back in. When both are active we AND them together via a
   // compound relation filter.
   const stageConds: Array<Record<string, unknown>> = [];
-  if (filter.stages.length > 0)
-    stageConds.push({ name: { in: filter.stages } });
+  if (filter.stages.length > 0) stageConds.push({ name: { in: filter.stages } });
   if (!filter.showClosed) stageConds.push({ isTerminal: false });
   if (stageConds.length === 1) where.stage = stageConds[0];
   else if (stageConds.length > 1) where.stage = { AND: stageConds };
@@ -234,9 +219,7 @@ function makeComparator(sort: MattersSort) {
         diff = a.stageOrder - b.stageOrder;
         break;
       case "fee":
-        diff = BILLING_TYPE_LABEL[a.billingType].localeCompare(
-          BILLING_TYPE_LABEL[b.billingType]
-        );
+        diff = BILLING_TYPE_LABEL[a.billingType].localeCompare(BILLING_TYPE_LABEL[b.billingType]);
         break;
       case "trust":
         diff = (a.trustBalance ?? 0) - (b.trustBalance ?? 0);
@@ -284,7 +267,7 @@ export async function listMatters(
   currentUserId?: string,
   tz?: string,
   /** 1-based `?page=`; clamped into range. */
-  page = 1
+  page = 1,
 ): Promise<MattersPage> {
   const userId = currentUserId ?? (await getCurrentUserId());
   const zone = tz ?? (await getCurrentUserTimeZone());
@@ -294,10 +277,7 @@ export async function listMatters(
     sort = { field: "created", dir: "desc" };
   }
   const where = {
-    AND: [
-      await matterAccessWhere(userId),
-      buildWhere(filter, userId, zone, canViewTrust),
-    ],
+    AND: [await matterAccessWhere(userId), buildWhere(filter, userId, zone, canViewTrust)],
   };
   const matters = await prisma.matter.findMany({
     where,
@@ -348,9 +328,7 @@ export async function listMatters(
     color: m.color,
     leadInitials: m.teamMembers[0]?.user.initials ?? null,
     leadName: m.teamMembers[0]?.user.name ?? null,
-    nextDeadlineDays: m.deadlines[0]
-      ? daysUntilDateOnly(m.deadlines[0].dueDate, zone)
-      : null,
+    nextDeadlineDays: m.deadlines[0] ? daysUntilDateOnly(m.deadlines[0].dueDate, zone) : null,
     nextDeadlineDate: m.deadlines[0]?.dueDate ?? null,
     isPinned: m.pins.length > 0,
     isArchived: m.isArchived,
@@ -372,17 +350,14 @@ export async function listMatters(
 export async function countMatters(
   filter: MattersFilter = EMPTY_FILTER,
   currentUserId?: string,
-  tz?: string
+  tz?: string,
 ): Promise<number> {
   const userId = currentUserId ?? (await getCurrentUserId());
   const zone = tz ?? (await getCurrentUserTimeZone());
   const canViewTrust = await userCanViewTrust(userId);
   return prisma.matter.count({
     where: {
-      AND: [
-        await matterAccessWhere(userId),
-        buildWhere(filter, userId, zone, canViewTrust),
-      ],
+      AND: [await matterAccessWhere(userId), buildWhere(filter, userId, zone, canViewTrust)],
     },
   });
 }
@@ -402,7 +377,7 @@ export type MattersFilterOptions = {
  * are the ACTIVE leads of active users (what the lead filter matches).
  */
 export async function getMattersFilterOptions(
-  currentUserId?: string
+  currentUserId?: string,
 ): Promise<MattersFilterOptions> {
   const userId = currentUserId ?? (await getCurrentUserId());
   const access = await matterAccessWhere(userId);
@@ -444,16 +419,13 @@ export async function getMattersFilterOptions(
   // areas have slightly different stage sets.
   const stageFirstOrder = new Map<string, number>();
   for (const s of stages) {
-    if (!stageFirstOrder.has(s.name))
-      stageFirstOrder.set(s.name, s.order);
+    if (!stageFirstOrder.has(s.name)) stageFirstOrder.set(s.name, s.order);
   }
   const orderedStageNames = Array.from(stageFirstOrder.entries())
     .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
     .map(([name]) => name);
 
-  const billingTypes = Array.from(
-    new Set(matters.map((m) => billingTypeOf(m)))
-  ).sort();
+  const billingTypes = Array.from(new Set(matters.map((m) => billingTypeOf(m)))).sort();
   const leads = leadAssignments.map((a) => ({
     id: a.user.id,
     name: a.user.name,
@@ -517,10 +489,7 @@ export const getMatterById = cache(async (id: string) => {
         // Active first, then alphabetic by role within each bucket so
         // the overview's roster always reads the same way. Postgres
         // sorts NULLs LAST on ASC, so ask for them first explicitly.
-        orderBy: [
-          { removedAt: { sort: "asc", nulls: "first" } },
-          { role: "asc" },
-        ],
+        orderBy: [{ removedAt: { sort: "asc", nulls: "first" } }, { role: "asc" }],
       },
       pins: {
         where: { userId },
@@ -555,7 +524,7 @@ export const getMatterById = cache(async (id: string) => {
     practiceAreaHasStatuteOfLimitations: practiceArea.hasStatuteOfLimitations,
     practiceAreaStatutePeriod: toSolPeriod(
       practiceArea.statutePeriodAmount,
-      practiceArea.statutePeriodUnit
+      practiceArea.statutePeriodUnit,
     ),
     practiceAreaStatuteSourceCitation: practiceArea.statuteSourceCitation,
     practiceAreaOriginatingDocLabel: practiceArea.originatingDocLabel,

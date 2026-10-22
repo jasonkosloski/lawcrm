@@ -64,9 +64,7 @@ const FIRM_PROFILE_SELECT = {
 /** The firm a given user belongs to (no request/session needed, for
  *  post-commit work). Falls back to the first firm row (by id) when the user
  *  has none; null only when no firm exists at all. */
-export async function loadFirmProfileForUser(
-  userId: string
-): Promise<FirmProfile | null> {
+export async function loadFirmProfileForUser(userId: string): Promise<FirmProfile | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { firm: { select: FIRM_PROFILE_SELECT } },
@@ -97,7 +95,7 @@ export async function loadCurrentFirm(): Promise<FirmProfile> {
     // A signed-in user with no firm shouldn't happen — the seed
     // assigns every user to one and the future invite flow will too.
     throw new Error(
-      `User ${userId} has no firm assigned. This is a data integrity issue — re-run the seed or fix the row.`
+      `User ${userId} has no firm assigned. This is a data integrity issue — re-run the seed or fix the row.`,
     );
   }
   return user.firm;
@@ -105,8 +103,7 @@ export async function loadCurrentFirm(): Promise<FirmProfile> {
 
 /** The current user's firm, deduped per request (many query helpers
  *  and actions each resolve it once per render). */
-export const getCurrentFirm: () => Promise<FirmProfile> =
-  cache(loadCurrentFirm);
+export const getCurrentFirm: () => Promise<FirmProfile> = cache(loadCurrentFirm);
 
 /** The firm-level productivity targets. Deliberately NOT part of
  *  `FirmProfile` — the profile shape is mocked across many test
@@ -135,7 +132,7 @@ export async function loadFirmGoals(): Promise<FirmGoals> {
   });
   if (!user?.firm) {
     throw new Error(
-      `User ${userId} has no firm assigned. This is a data integrity issue — re-run the seed or fix the row.`
+      `User ${userId} has no firm assigned. This is a data integrity issue — re-run the seed or fix the row.`,
     );
   }
   return user.firm;

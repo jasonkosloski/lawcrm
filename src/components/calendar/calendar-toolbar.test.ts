@@ -29,21 +29,21 @@ describe("formatRangeLabel", () => {
 
   test("day view names the focal day itself", () => {
     expect(formatRangeLabel("day", focal("2026-07-15"), "America/Denver")).toBe(
-      "Wednesday, July 15, 2026"
+      "Wednesday, July 15, 2026",
     );
   });
 
   test("week view within one month", () => {
     // The week of Wed Jul 15 runs Sun Jul 12 - Sat Jul 18.
     expect(formatRangeLabel("week", focal("2026-07-15"), "America/Denver")).toBe(
-      "Week of Jul 12, 2026"
+      "Week of Jul 12, 2026",
     );
   });
 
   test("week view straddling a month boundary shows both ends", () => {
     // Sun Jun 28 - Sat Jul 4.
     expect(formatRangeLabel("week", focal("2026-07-01"), "America/Denver")).toBe(
-      "Jun 28 – Jul 4, 2026"
+      "Jun 28 – Jul 4, 2026",
     );
   });
 
@@ -51,9 +51,7 @@ describe("formatRangeLabel", () => {
     // The Next-month arrow lands on the 1st — the label must be the
     // month the grid shows.
     for (const tz of ["America/Denver", "UTC", "Asia/Tokyo"]) {
-      expect(formatRangeLabel("month", focal("2026-08-01"), tz)).toBe(
-        "August 2026"
-      );
+      expect(formatRangeLabel("month", focal("2026-08-01"), tz)).toBe("August 2026");
     }
   });
 
@@ -61,7 +59,7 @@ describe("formatRangeLabel", () => {
     // Sunday focal: the week STARTS on it (the grid builder is
     // Sunday-first), so the label must not slide back a week.
     expect(formatRangeLabel("week", focal("2026-07-12"), "America/Denver")).toBe(
-      "Week of Jul 12, 2026"
+      "Week of Jul 12, 2026",
     );
   });
 });
@@ -71,9 +69,7 @@ describe("todayFocalInTz", () => {
     // 2026-07-07T03:30Z is 9:30pm on July 6 in Denver (UTC-6, MDT).
     // The old server-TZ code on a UTC box would have said July 7.
     const now = new Date("2026-07-07T03:30:00Z");
-    expect(toDateParam(todayFocalInTz(now, "America/Denver"))).toBe(
-      "2026-07-06"
-    );
+    expect(toDateParam(todayFocalInTz(now, "America/Denver"))).toBe("2026-07-06");
   });
 
   test("early morning east of UTC rolls forward to the user's day", () => {

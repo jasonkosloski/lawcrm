@@ -78,9 +78,7 @@ describe("LeadRecordsRequestPage", () => {
   test("an open lead gets a writable body on the lead scope", async () => {
     findUnique.mockResolvedValue({ stage: "new", convertedMatterId: null });
     const el = await call();
-    const bodies = findAll(el, RequestDetailPage) as React.ReactElement<
-      Record<string, unknown>
-    >[];
+    const bodies = findAll(el, RequestDetailPage) as React.ReactElement<Record<string, unknown>>[];
     expect(bodies).toHaveLength(1);
     expect(bodies[0].props).toMatchObject({
       scope: { kind: "lead", leadId: "l1" },
@@ -94,9 +92,7 @@ describe("LeadRecordsRequestPage", () => {
     findUnique.mockResolvedValue({ stage: "converted", convertedMatterId: "m_9" });
     const el = await call();
     expect(hrefs(el)).toContain("/matters/m_9/records");
-    const bodies = findAll(el, RequestDetailPage) as React.ReactElement<
-      Record<string, unknown>
-    >[];
+    const bodies = findAll(el, RequestDetailPage) as React.ReactElement<Record<string, unknown>>[];
     expect(bodies[0].props.writable).toBe(false);
   });
 });

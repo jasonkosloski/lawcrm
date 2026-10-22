@@ -71,23 +71,23 @@ describe("GET /api/integrations/google/connect", () => {
     expect(res.status).toBe(307);
     const location = new URL(res.headers.get("location")!);
     expect(location.origin + location.pathname).toBe(
-      "https://accounts.google.com/o/oauth2/v2/auth"
+      "https://accounts.google.com/o/oauth2/v2/auth",
     );
     expect(location.searchParams.get("redirect_uri")).toBe(
-      "https://firm.example.org/api/integrations/google/callback"
+      "https://firm.example.org/api/integrations/google/callback",
     );
     expect(location.searchParams.get("access_type")).toBe("offline");
     expect(location.searchParams.get("prompt")).toBe("consent");
     expect(location.searchParams.get("scope")).toContain(
-      "https://www.googleapis.com/auth/gmail.modify"
+      "https://www.googleapis.com/auth/gmail.modify",
     );
     expect(location.searchParams.get("scope")).toContain(
-      "https://www.googleapis.com/auth/gmail.send"
+      "https://www.googleapis.com/auth/gmail.send",
     );
     // Calendar events scope rides the same consent — two-way
     // calendar sync gates on Google actually granting it.
     expect(location.searchParams.get("scope")).toContain(
-      "https://www.googleapis.com/auth/calendar.events"
+      "https://www.googleapis.com/auth/calendar.events",
     );
   });
 
@@ -96,7 +96,7 @@ describe("GET /api/integrations/google/connect", () => {
     const res = await GET(makeRequest("http://internal-host:3000"));
     const location = new URL(res.headers.get("location")!);
     expect(location.searchParams.get("redirect_uri")).toBe(
-      "https://public.example.com/api/integrations/google/callback"
+      "https://public.example.com/api/integrations/google/callback",
     );
   });
 
@@ -110,9 +110,7 @@ describe("GET /api/integrations/google/connect", () => {
     expect(setCookie).toContain("Max-Age=600");
 
     const nonce = /google_oauth_state=([^;]+)/.exec(setCookie)![1];
-    const state = new URL(res.headers.get("location")!).searchParams.get(
-      "state"
-    );
+    const state = new URL(res.headers.get("location")!).searchParams.get("state");
     // The state Google will echo back verifies against this cookie —
     // the exact pair the callback checks.
     expect(verifyOAuthState(state, nonce)).toBe(true);

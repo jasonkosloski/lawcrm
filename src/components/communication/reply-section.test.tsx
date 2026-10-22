@@ -123,7 +123,7 @@ describe("ReplySection", () => {
       expect(el.type).not.toBe(ReplyComposer);
       render(<>{el}</>);
       expect(screen.getByText("Reconnect Gmail")).toBeInTheDocument();
-    }
+    },
   );
 
   test("renders nothing when the thread isn't in the caller's mailbox", async () => {

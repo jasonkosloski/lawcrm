@@ -36,10 +36,7 @@ import {
   updatePracticeArea,
   updateStage,
 } from "@/app/actions/practice-areas";
-import {
-  practiceAreaInitialState,
-  stageInitialState,
-} from "@/lib/practice-area-constants";
+import { practiceAreaInitialState, stageInitialState } from "@/lib/practice-area-constants";
 import {
   resetDb,
   seedFirm,
@@ -117,9 +114,7 @@ describe("createPracticeArea", () => {
     });
     expect(url).toBe(`/settings/practice-areas/${area.id}`);
     expect(area.stages).toHaveLength(10);
-    expect(area.stages.map((s) => s.order)).toEqual([
-      0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-    ]);
+    expect(area.stages.map((s) => s.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(area.stages.filter((s) => s.isTerminal).map((s) => s.name)).toEqual([
       "Settled",
       "Closed",
@@ -147,7 +142,7 @@ describe("createPracticeArea", () => {
     await create({ hasStatuteOfLimitations: "on" });
     expect(
       (await prisma.practiceArea.findUniqueOrThrow({ where: { name: "Employment" } }))
-        .statutePeriodAmount
+        .statutePeriodAmount,
     ).toBeNull();
 
     await create({
@@ -169,8 +164,7 @@ describe("createPracticeArea", () => {
     await prisma.practiceArea.create({ data: { name: "Old", order: 7 } });
     await create();
     expect(
-      (await prisma.practiceArea.findUniqueOrThrow({ where: { name: "Employment" } }))
-        .order
+      (await prisma.practiceArea.findUniqueOrThrow({ where: { name: "Employment" } })).order,
     ).toBe(8);
   });
 
@@ -209,7 +203,7 @@ describe("createPracticeArea", () => {
           hasStatuteOfLimitations: "on",
           statutePeriodAmount: bad,
           statutePeriodUnit: "DAYS",
-        })
+        }),
       );
       expect(res.status).toBe("error");
       expect(res.errors?.statutePeriodAmount).toBeTruthy();
@@ -220,7 +214,7 @@ describe("createPracticeArea", () => {
         name: "No unit",
         hasStatuteOfLimitations: "on",
         statutePeriodAmount: "2",
-      })
+      }),
     );
     expect(noUnit.errors?.statutePeriodUnit).toBeTruthy();
     expect(await prisma.practiceArea.count()).toBe(1);
@@ -229,7 +223,7 @@ describe("createPracticeArea", () => {
   test("validates name + colour", async () => {
     const res = await createPracticeArea(
       practiceAreaInitialState,
-      areaForm({ name: " ", color: "blue" })
+      areaForm({ name: " ", color: "blue" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.name).toBeTruthy();
@@ -252,9 +246,7 @@ describe("updatePracticeArea", () => {
       statutePeriodUnit: "YEARS",
       statuteSourceCitation: "C.R.S. § 13-80-101",
     });
-    expect((await updatePracticeArea(id, practiceAreaInitialState, fd)).status).toBe(
-      "ok"
-    );
+    expect((await updatePracticeArea(id, practiceAreaInitialState, fd)).status).toBe("ok");
     let area = await prisma.practiceArea.findUniqueOrThrow({ where: { id } });
     expect(area.statutePeriodAmount).toBe(3);
     expect(area.statutePeriodUnit).toBe("YEARS");
@@ -279,7 +271,7 @@ describe("updatePracticeArea", () => {
     const res = await updatePracticeArea(
       id,
       practiceAreaInitialState,
-      areaForm({ name: "Housing" })
+      areaForm({ name: "Housing" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.name?.[0]).toMatch(/already uses/);
@@ -312,18 +304,14 @@ describe("updatePracticeArea", () => {
       data: { color: "#ff0000" },
     });
 
-    await updatePracticeArea(
-      areaId,
-      practiceAreaInitialState,
-      areaForm({ color: "#7c3aed" })
-    );
+    await updatePracticeArea(areaId, practiceAreaInitialState, areaForm({ color: "#7c3aed" }));
 
-    expect(
-      (await prisma.matter.findUniqueOrThrow({ where: { id: a.matterId } })).color
-    ).toBe("#7c3aed");
-    expect(
-      (await prisma.matter.findUniqueOrThrow({ where: { id: b.matterId } })).color
-    ).toBe("#ff0000");
+    expect((await prisma.matter.findUniqueOrThrow({ where: { id: a.matterId } })).color).toBe(
+      "#7c3aed",
+    );
+    expect((await prisma.matter.findUniqueOrThrow({ where: { id: b.matterId } })).color).toBe(
+      "#ff0000",
+    );
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { title: "Practice area updated — Employment" },
     });
@@ -353,10 +341,9 @@ describe("setPracticeAreaActive / setStageActive guards", () => {
     await prisma.matter.delete({ where: { id: matterId } });
     expect((await setStageActive(stageId, false)).ok).toBe(true);
     expect((await setPracticeAreaActive(areaId, false)).ok).toBe(true);
-    expect(
-      (await prisma.practiceArea.findUniqueOrThrow({ where: { id: areaId } }))
-        .isActive
-    ).toBe(false);
+    expect((await prisma.practiceArea.findUniqueOrThrow({ where: { id: areaId } })).isActive).toBe(
+      false,
+    );
     expect((await setPracticeAreaActive(areaId, true)).ok).toBe(true);
   });
 });
@@ -393,9 +380,7 @@ describe("movePracticeArea", () => {
     await movePracticeArea(c.id, "up");
     expect(await visible()).toEqual(["C", "A"]);
     // The archived row keeps its own position value.
-    expect(
-      (await prisma.practiceArea.findUniqueOrThrow({ where: { id: b.id } })).order
-    ).toBe(1);
+    expect((await prisma.practiceArea.findUniqueOrThrow({ where: { id: b.id } })).order).toBe(1);
   });
 
   test("the edges are no-ops (no swap with an archived neighbour)", async () => {
@@ -407,9 +392,7 @@ describe("movePracticeArea", () => {
     expect((await movePracticeArea(b.id, "down")).ok).toBe(true);
     expect((await movePracticeArea(a.id, "up")).ok).toBe(true);
     expect(await visible()).toEqual(["A", "B"]);
-    expect(
-      (await prisma.practiceArea.findUniqueOrThrow({ where: { id: c.id } })).order
-    ).toBe(2);
+    expect((await prisma.practiceArea.findUniqueOrThrow({ where: { id: c.id } })).order).toBe(2);
   });
 
   test("equal order values still produce a visible swap (renumbered)", async () => {
@@ -548,7 +531,7 @@ describe("matter-name template + required fields", () => {
     const res = await updatePracticeArea(
       id,
       practiceAreaInitialState,
-      tplForm("State v. {client_last}", ["caseNumber", "court"])
+      tplForm("State v. {client_last}", ["caseNumber", "court"]),
     );
     expect(res.status).toBe("ok");
     const area = await prisma.practiceArea.findUniqueOrThrow({ where: { id } });
@@ -557,9 +540,7 @@ describe("matter-name template + required fields", () => {
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { title: "Practice area updated — Employment" },
     });
-    expect(log.detail).toContain(
-      'Matter name template: "firm default" → "State v. {client_last}"'
-    );
+    expect(log.detail).toContain('Matter name template: "firm default" → "State v. {client_last}"');
     expect(log.detail).toContain("Required fields: none → caseNumber, court");
   });
 
@@ -578,7 +559,7 @@ describe("matter-name template + required fields", () => {
     const res = await updatePracticeArea(
       id,
       practiceAreaInitialState,
-      tplForm("{nope}", ["court"])
+      tplForm("{nope}", ["court"]),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.matterNameTemplate?.length).toBeGreaterThan(0);
@@ -590,11 +571,7 @@ describe("matter-name template + required fields", () => {
   test("unknown required key is a field error", async () => {
     await create();
     const id = await areaIdByName("Employment");
-    const res = await updatePracticeArea(
-      id,
-      practiceAreaInitialState,
-      tplForm(null, ["bogus"])
-    );
+    const res = await updatePracticeArea(id, practiceAreaInitialState, tplForm(null, ["bogus"]));
     expect(res.status).toBe("error");
     expect(res.errors?.requiredMatterFields).toEqual(["Unknown field: bogus"]);
   });
@@ -616,7 +593,7 @@ describe("matter-name template + required fields", () => {
     await create();
     expect(
       (await prisma.practiceArea.findFirstOrThrow({ where: { name: "Employment" } }))
-        .requiredMatterFields
+        .requiredMatterFields,
     ).toEqual([]);
     const fd = tplForm("{client_last} matter", ["venue"]);
     fd.set("name", "Torts");
@@ -637,16 +614,16 @@ describe("originatingDocLabel", () => {
 
     await updatePracticeArea(area.id, practiceAreaInitialState, areaForm());
     expect(
-      (await prisma.practiceArea.findUniqueOrThrow({ where: { id: area.id } })).originatingDocLabel
+      (await prisma.practiceArea.findUniqueOrThrow({ where: { id: area.id } })).originatingDocLabel,
     ).toBe("Retainer agreement");
 
     await updatePracticeArea(
       area.id,
       practiceAreaInitialState,
-      areaForm({ originatingDocLabel: "" })
+      areaForm({ originatingDocLabel: "" }),
     );
     expect(
-      (await prisma.practiceArea.findUniqueOrThrow({ where: { id: area.id } })).originatingDocLabel
+      (await prisma.practiceArea.findUniqueOrThrow({ where: { id: area.id } })).originatingDocLabel,
     ).toBeNull();
     const log = await prisma.activityLog.findFirst({
       where: { detail: { contains: "Originating document:" } },
@@ -673,7 +650,7 @@ describe("allowed billing types", () => {
     const res = await updatePracticeArea(
       id,
       practiceAreaInitialState,
-      billForm(["court_appointed"], "court_appointed")
+      billForm(["court_appointed"], "court_appointed"),
     );
     expect(res.status).toBe("ok");
     const a = await row(id);
@@ -692,7 +669,7 @@ describe("allowed billing types", () => {
     await updatePracticeArea(
       id,
       practiceAreaInitialState,
-      billForm(["pro_bono", "hourly", "hourly"], "hourly")
+      billForm(["pro_bono", "hourly", "hourly"], "hourly"),
     );
     expect((await row(id)).allowedBillingTypes).toEqual(["hourly", "pro_bono"]);
   });
@@ -714,7 +691,7 @@ describe("allowed billing types", () => {
     const res = await updatePracticeArea(
       id,
       practiceAreaInitialState,
-      billForm(["contingent"], "hourly")
+      billForm(["contingent"], "hourly"),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.defaultBillingType?.length).toBeGreaterThan(0);
@@ -729,7 +706,7 @@ describe("allowed billing types", () => {
     const res = await updatePracticeArea(
       id,
       practiceAreaInitialState,
-      billForm(["hybrid", "contingent"], "contingent")
+      billForm(["hybrid", "contingent"], "contingent"),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.allowedBillingTypes?.length).toBeGreaterThan(0);
@@ -738,15 +715,11 @@ describe("allowed billing types", () => {
   test("marker absent leaves billing fields unchanged", async () => {
     await create();
     const id = await areaIdByName("Employment");
-    await updatePracticeArea(
-      id,
-      practiceAreaInitialState,
-      billForm(["flat"], "flat")
-    );
+    await updatePracticeArea(id, practiceAreaInitialState, billForm(["flat"], "flat"));
     const res = await updatePracticeArea(
       id,
       practiceAreaInitialState,
-      billForm([], undefined, false)
+      billForm([], undefined, false),
     );
     expect(res.status).toBe("ok");
     const a = await row(id);

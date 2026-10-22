@@ -21,16 +21,13 @@ describe("staffAuthorizedParties", () => {
     vi.stubEnv("STAFF_ORIGINS", "https://crm.example.com, https://b.example.com");
     vi.stubEnv("VERCEL_URL", "hash.vercel.app");
     vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "portal.example.com");
-    expect(staffAuthorizedParties()).toEqual([
-      "https://crm.example.com",
-      "https://b.example.com",
-    ]);
+    expect(staffAuthorizedParties()).toEqual(["https://crm.example.com", "https://b.example.com"]);
   });
 
   it("drops malformed STAFF_ORIGINS entries (paths, junk, other schemes)", () => {
     vi.stubEnv(
       "STAFF_ORIGINS",
-      "https://ok.example.com,not a url,https://x.example.com/path,ftp://f.example.com,"
+      "https://ok.example.com,not a url,https://x.example.com/path,ftp://f.example.com,",
     );
     expect(staffAuthorizedParties()).toEqual(["https://ok.example.com"]);
   });
@@ -72,10 +69,7 @@ describe("staffAuthorizedParties", () => {
     vi.stubEnv("NODE_ENV", "development");
     expect(staffAuthorizedParties()).toEqual(["http://localhost:3000"]);
     vi.stubEnv("STAFF_ORIGINS", "https://crm.example.com");
-    expect(staffAuthorizedParties()).toEqual([
-      "https://crm.example.com",
-      "http://localhost:3000",
-    ]);
+    expect(staffAuthorizedParties()).toEqual(["https://crm.example.com", "http://localhost:3000"]);
   });
 
   it("production never includes localhost", () => {

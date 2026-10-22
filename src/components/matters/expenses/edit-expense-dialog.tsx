@@ -42,7 +42,7 @@ export function EditExpenseDialog({
   const [state, formAction, isPending] = useDialogActionState<ExpenseFormState, FormData>(
     updateExpense.bind(null, expense.id),
     expenseInitialState,
-    open
+    open,
   );
   const [draft, setDraft] = useState<ExpenseDraft>(expense);
   const patch = (p: Partial<ExpenseDraft>) => setDraft((d) => ({ ...d, ...p }));
@@ -64,17 +64,12 @@ export function EditExpenseDialog({
         <DialogHeader>
           <DialogTitle>Edit expense</DialogTitle>
           <DialogDescription>
-            The change is recorded on the matter&apos;s timeline (amount
-            changes include the old and new amounts).
+            The change is recorded on the matter&apos;s timeline (amount changes include the old and
+            new amounts).
           </DialogDescription>
         </DialogHeader>
         <form action={formAction} className="flex flex-col gap-3">
-          <ExpenseFields
-            matterId={matterId}
-            draft={draft}
-            onChange={patch}
-            errors={state.errors}
-          />
+          <ExpenseFields matterId={matterId} draft={draft} onChange={patch} errors={state.errors} />
           {state.error && <div className="text-2xs text-warn">{state.error}</div>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

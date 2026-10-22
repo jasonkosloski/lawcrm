@@ -23,11 +23,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/permission-check";
-import {
-  fileEmailThread,
-  revalidationPathsFor,
-  sameScope,
-} from "@/lib/email-filing";
+import { fileEmailThread, revalidationPathsFor, sameScope } from "@/lib/email-filing";
 import type { RecordScope } from "@/lib/record-scope";
 
 export async function setEmailThreadRecord(
@@ -44,10 +40,7 @@ export async function setEmailThreadRecord(
   if (sameScope(res.previous, res.scope)) return { ok: true };
 
   revalidatePath("/communication");
-  const paths = [
-    ...revalidationPathsFor(res.scope),
-    ...revalidationPathsFor(res.previous),
-  ];
+  const paths = [...revalidationPathsFor(res.scope), ...revalidationPathsFor(res.previous)];
   for (const p of new Set(paths)) revalidatePath(p);
   return { ok: true };
 }

@@ -5,6 +5,7 @@
 **Goal:** Folders created for records requests carry their source. They show a badge that links to the request or the Records tab, and they can't be renamed, moved or deleted. A folder containing a protected one can't be deleted either.
 
 **Architecture:**
+
 - Two new columns on `DocumentFolder`: `systemKind` and `recordsRequestId`.
 - A migration with a SQL backfill marks folders that already exist.
 - Records folder resolution switches from content inference to lookup by link.
@@ -45,6 +46,7 @@
 ### Task 1: Schema, migration with backfill, folder-kind constants
 
 **Files:**
+
 - Modify: `prisma/schema.prisma` (`DocumentFolder`, plus the inverse relation on `RecordsRequest`)
 - Create: `prisma/migrations/20261018200000_generated_folders/migration.sql`
 - Create: `src/lib/records-requests/folder-kinds.ts` + `folder-kinds.test.ts`
@@ -52,6 +54,7 @@
 - Modify: `docs/SCHEMA_NOTES.md` (or whichever schema-notes file the docs index lists now; check `docs/README.md`)
 
 **Interfaces:**
+
 - Produces in `folder-kinds.ts`:
   - `FOLDER_SYSTEM_KINDS` (tuple) and `type FolderSystemKind`
   - `isProtectedFolder(f: { systemKind: string | null }): boolean`
@@ -60,6 +63,7 @@
 - Produces in the schema: `DocumentFolder.systemKind String?`, `DocumentFolder.recordsRequestId String?` + relation, and `@@index([recordsRequestId])`.
 
 **Backfill rules (from the spec):**
+
 - A folder named "Records Requests" directly under a root "Investigation" folder, in the same scope (both case-insensitive), gets `records_root`.
 - Each of its child folders gets `records_request`, linked to the request owning the most documents tagged inside it or its direct subfolders. Ties go to the earliest request by `createdAt`. A child with no tagged documents is left alone.
 - A marked request folder's children named "Request documents" or "Responsive documents" get the matching kind and the same link.
@@ -81,11 +85,13 @@
 ### Task 2: Records folder resolution by link; request delete unprotects
 
 **Files:**
+
 - Modify: `src/lib/records-requests/folder.ts` (`resolveRecordsFolder`, `resolveRecordsRoleFolder`, `resolveRecordsRoot`, legacy adoption, `resolveRecordsUpload` if it infers ownership)
 - Modify: `src/lib/records-requests/folder.test.ts`
 - Modify: `src/app/actions/records-requests.ts` (`deleteRecordsRequest`) + its test
 
 **Interfaces:**
+
 - Consumes: Task 1's `kindForRole` and the new columns.
 - Produces: unchanged signatures. Behaviour changes:
   - `resolveRecordsFolder` returns `documentFolder.findFirst({ where: { recordsRequestId: request.id, systemKind: "records_request" } })` when one exists. Otherwise it creates one under Records Requests, using today's name builder with collision suffixing and `systemKind`/`recordsRequestId` set.
@@ -108,10 +114,12 @@
 ### Task 3: Server enforcement in folder actions
 
 **Files:**
+
 - Modify: `src/app/actions/document-folders.ts` (`renameFolder`, `moveFolder`, `deleteFolder`) + `document-folders.test.ts`
 - Modify: `src/app/actions/leads.test.ts` (one conversion assertion)
 
 **Interfaces:**
+
 - Consumes: Task 1's `isProtectedFolder`.
 - Produces: `renameFolder`, `moveFolder` and `deleteFolder` return `{ ok: false, error: <exact copy> }` as described in Global Constraints. The descendant check walks the scope's folders already loaded by `fetchScopeFolders`; use `collectDescendantIds` from `src/lib/folder-tree.ts` with the new field selected. Moving an ordinary folder into a protected one stays allowed.
 
@@ -128,6 +136,7 @@
 ### Task 4: UI badges and menus, docs
 
 **Files:**
+
 - Modify: `src/lib/queries/matter-detail.ts` (`getDocumentFolders`: also select `systemKind`, `recordsRequestId`, and `recordsRequest: { select: { subject: true } }`) and its return type
 - Modify: `src/lib/folder-tree.ts` (`FolderRecord` gets optional `systemKind?: string | null; recordsRequestId?: string | null; sourceTitle?: string | null` carried into `FolderNode`)
 - Modify: `src/components/matters/documents/folder-tree.tsx`, `src/components/documents/documents-browser.tsx` (subfolder rows), `src/components/documents-viewer/document-file-tree.tsx`, `src/components/matters/documents/folder-row-actions.tsx`
@@ -136,6 +145,7 @@
 - Docs: an ADR (generated folders carry their source; protection rules) in the decisions folder the docs index uses; the records-requests feature doc; a UI_PATTERNS note on the generated-folder badge
 
 **Interfaces:**
+
 - Consumes: Task 1's `folderSourceLink` and `isProtectedFolder`.
 - Produces:
   - `FolderSourceBadge({ folder, scope }: { folder: { systemKind: string | null; recordsRequestId: string | null; sourceTitle?: string | null }; scope: RecordScope })` renders null for an ordinary folder. Otherwise it renders a small chip `<Link>` (clipboard icon + label from `folderSourceLink`) with `title` = sourceTitle.

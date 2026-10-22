@@ -81,11 +81,7 @@ export async function notifyTaskAssigned(opts: {
     userId: ownerId,
     type: "task_assigned",
     title: `Task assigned: ${taskTitle}`,
-    body: matter
-      ? matter.name
-      : lead
-        ? `Intake · ${lead.name}`
-        : "Firm-wide task",
+    body: matter ? matter.name : lead ? `Intake · ${lead.name}` : "Firm-wide task",
     link: matterId
       ? `/matters/${matterId}/tasks`
       : lead && leadId

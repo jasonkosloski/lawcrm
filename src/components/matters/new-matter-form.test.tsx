@@ -52,12 +52,12 @@ vi.mock("react", async (importOriginal) => {
   const useActionState = (<State, Payload>(
     action: (state: Awaited<State>, payload: Payload) => State | Promise<State>,
     initialState: Awaited<State>,
-    permalink?: string
+    permalink?: string,
   ) =>
     actual.useActionState(
       action,
       (mountState.current as Awaited<State> | undefined) ?? initialState,
-      permalink
+      permalink,
     )) as typeof actual.useActionState;
   return { ...actual, useActionState };
 });
@@ -80,15 +80,11 @@ const options: NewMatterFormOptions = {
       requiredMatterFields: [],
       allowedBillingTypes: ["hourly", "flat", "contingent", "court_appointed", "pro_bono"],
       defaultBillingType: "contingent",
-      stages: [
-        { id: "stage1", name: "Intake", order: 0, isTerminal: false },
-      ],
+      stages: [{ id: "stage1", name: "Intake", order: 0, isTerminal: false }],
     },
   ],
   clients: [],
-  users: [
-    { id: "u1", name: "Jason Kosloski", jobTitle: "Attorney", initials: "JK" },
-  ],
+  users: [{ id: "u1", name: "Jason Kosloski", jobTitle: "Attorney", initials: "JK" }],
   currentUserId: "u1",
   canManageTeam: false,
   venues: [
@@ -131,7 +127,7 @@ describe("NewMatterForm — fresh mount", () => {
   test("the name hint shows the effective template text", () => {
     render(<NewMatterForm options={options} />);
     expect(
-      screen.getByText("{client_last}, {client_first} - {case_number} - {location}")
+      screen.getByText("{client_last}, {client_first} - {case_number} - {location}"),
     ).toBeTruthy();
   });
 });
@@ -145,13 +141,9 @@ describe("NewMatterForm — validation-error re-seed", () => {
     };
     render(<NewMatterForm options={options} />);
     // The regression: venue seeded empty instead of from vals.venueId.
-    expect(screen.getByPlaceholderText(/search or add a venue/i)).toHaveValue(
-      "Aurora"
-    );
+    expect(screen.getByPlaceholderText(/search or add a venue/i)).toHaveValue("Aurora");
     // Sibling controlled input, same contract.
-    expect(screen.getByLabelText(/case number/i)).toHaveValue(
-      "2026-CV-00481"
-    );
+    expect(screen.getByLabelText(/case number/i)).toHaveValue("2026-CV-00481");
   });
 
   test("a previously-submitted matter name is kept, not auto-overwritten", () => {
@@ -163,9 +155,7 @@ describe("NewMatterForm — validation-error re-seed", () => {
     render(<NewMatterForm options={options} />);
     // vals.name marks the field dirty, so the derived auto name must
     // not replace it even though the auto value ("Aurora") differs.
-    expect(screen.getByLabelText(/matter name/i)).toHaveValue(
-      "Alvarez, Maria - Custom Name"
-    );
+    expect(screen.getByLabelText(/matter name/i)).toHaveValue("Alvarez, Maria - Custom Name");
   });
 });
 
@@ -196,10 +186,7 @@ describe("NewMatterForm — selections survive a validation error (F095)", () =>
     const user = userEvent.setup();
     render(<NewMatterForm options={twoUsers} />);
 
-    await user.type(
-      screen.getByPlaceholderText(/client name/i),
-      "Alvarez, Maria"
-    );
+    await user.type(screen.getByPlaceholderText(/client name/i), "Alvarez, Maria");
     await user.selectOptions(screen.getByLabelText(/billing type/i), "hourly");
     await user.selectOptions(screen.getByLabelText(/lead attorney/i), "u2");
 
@@ -219,8 +206,7 @@ describe("NewMatterForm — selections survive a validation error (F095)", () =>
 });
 
 describe("NewMatterForm — conflict review (ADR-054)", () => {
-  const formData = () =>
-    new FormData(document.querySelector("form") as HTMLFormElement);
+  const formData = () => new FormData(document.querySelector("form") as HTMLFormElement);
 
   test("possible conflicts: the tick posts the result's fingerprint", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
@@ -298,9 +284,10 @@ describe("NewMatterForm — extra team members", () => {
     await userEvent.click(screen.getByRole("button", { name: /add team member/i }));
     const person = screen.getByLabelText("Team member 1");
     // u1 is the lead (current user) — only Pat is offered.
-    expect(
-      Array.from((person as HTMLSelectElement).options).map((o) => o.value)
-    ).toEqual(["", "u2"]);
+    expect(Array.from((person as HTMLSelectElement).options).map((o) => o.value)).toEqual([
+      "",
+      "u2",
+    ]);
     await userEvent.selectOptions(person, "u2");
     await userEvent.selectOptions(screen.getByLabelText("Role for team member 1"), "paralegal");
     const fd = new FormData(document.querySelector("form") as HTMLFormElement);
@@ -314,7 +301,7 @@ describe("NewMatterForm — billing type follows the practice area", () => {
   const areaOf = (
     id: string,
     allowed: AreaOptionT["allowedBillingTypes"],
-    def: AreaOptionT["defaultBillingType"]
+    def: AreaOptionT["defaultBillingType"],
   ): AreaOptionT => ({
     ...options.areas[0],
     id,
@@ -336,11 +323,10 @@ describe("NewMatterForm — billing type follows the practice area", () => {
             areaOf("B", ["court_appointed"], "court_appointed"),
           ],
         }}
-      />
+      />,
     );
     const select = () => screen.getByLabelText(/billing type/i);
-    const labels = () =>
-      Array.from(select().querySelectorAll("option")).map((o) => o.textContent);
+    const labels = () => Array.from(select().querySelectorAll("option")).map((o) => o.textContent);
     expect(labels()).toEqual(["Hourly", "Contingency"]);
     expect(select()).toHaveValue("hourly");
 

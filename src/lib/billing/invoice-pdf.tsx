@@ -8,15 +8,7 @@
  * payment dates are date-only values (ADR-012).
  */
 import "server-only";
-import {
-  Document,
-  Page,
-  StyleSheet,
-  Text,
-  View,
-  Font,
-  renderToBuffer,
-} from "@react-pdf/renderer";
+import { Document, Page, StyleSheet, Text, View, Font, renderToBuffer } from "@react-pdf/renderer";
 import path from "node:path";
 import {
   invoiceStatusLabel,
@@ -37,8 +29,7 @@ export function invoicePdfFilename(invoiceNumber: string): string {
 // Liberation Sans 2.1.5 (SIL OFL 1.1, see fonts/LICENSE.txt) covers Latin
 // incl. Vietnamese, Greek and Cyrillic, but not CJK. Shipped to Vercel via
 // outputFileTracingIncludes.
-const fontPath = (file: string) =>
-  path.join(process.cwd(), "src/lib/billing/fonts", file);
+const fontPath = (file: string) => path.join(process.cwd(), "src/lib/billing/fonts", file);
 Font.register({
   family: "LiberationSans",
   fonts: [
@@ -60,7 +51,13 @@ const s = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: LINE,
   },
-  label: { fontSize: 8, color: MUTED, fontFamily: "LiberationSans", fontWeight: "bold", marginBottom: 3 },
+  label: {
+    fontSize: 8,
+    color: MUTED,
+    fontFamily: "LiberationSans",
+    fontWeight: "bold",
+    marginBottom: 3,
+  },
   firmName: { fontSize: 14, fontFamily: "LiberationSans", fontWeight: "bold" },
   muted: { color: MUTED },
   bold: { fontFamily: "LiberationSans", fontWeight: "bold" },
@@ -114,9 +111,7 @@ function InvoicePdfDocument({
     [firm.city, firm.state, firm.zip].filter(Boolean).join(", "),
   ].filter(Boolean);
   const addr = invoice.clientAddress;
-  const cityLine = addr
-    ? [addr.city, addr.state, addr.zip].filter(Boolean).join(", ")
-    : "";
+  const cityLine = addr ? [addr.city, addr.state, addr.zip].filter(Boolean).join(", ") : "";
   const gap = invoice.paidAmount - invoice.paymentsRecordedTotal;
 
   return (
@@ -138,9 +133,7 @@ function InvoicePdfDocument({
             )}
           </View>
           <View>
-            <Text style={[s.label, s.right]}>
-              {isInternal ? "Internal Record" : "Invoice"}
-            </Text>
+            <Text style={[s.label, s.right]}>{isInternal ? "Internal Record" : "Invoice"}</Text>
             <Text style={s.invNo}>{invoice.invoiceNumber}</Text>
             <Text style={[s.muted, s.right, { marginTop: 3 }]}>
               {invoiceStatusLabel(invoice.status, invoice.kind as InvoiceKind)}
@@ -160,9 +153,7 @@ function InvoicePdfDocument({
               <>
                 <Text style={s.label}>Bill to</Text>
                 <Text style={s.bold}>{invoice.clientName ?? "—"}</Text>
-                {invoice.clientEmail && (
-                  <Text style={s.muted}>{invoice.clientEmail}</Text>
-                )}
+                {invoice.clientEmail && <Text style={s.muted}>{invoice.clientEmail}</Text>}
                 {addr?.line1 && <Text style={s.muted}>{addr.line1}</Text>}
                 {cityLine !== "" && <Text style={s.muted}>{cityLine}</Text>}
               </>
@@ -192,9 +183,7 @@ function InvoicePdfDocument({
             )}
             <View style={s.metaRow}>
               <Text style={s.metaKey}>Balance</Text>
-              <Text style={s.bold}>
-                {isVoid ? "—" : formatMoney(invoice.balance)}
-              </Text>
+              <Text style={s.bold}>{isVoid ? "—" : formatMoney(invoice.balance)}</Text>
             </View>
           </View>
         </View>
@@ -215,21 +204,15 @@ function InvoicePdfDocument({
               </View>
               {invoice.lineItems.map((li) => (
                 <View key={li.id} style={s.tr} wrap={false}>
-                  <Text style={{ width: 60 }}>
-                    {formatDateOnly(li.date, "short")}
-                  </Text>
+                  <Text style={{ width: 60 }}>{formatDateOnly(li.date, "short")}</Text>
                   <View style={{ flexGrow: 1, flexBasis: 0, paddingRight: 8 }}>
                     <Text>{li.activity}</Text>
-                    {li.narrative && (
-                      <Text style={s.muted}>{li.narrative}</Text>
-                    )}
+                    {li.narrative && <Text style={s.muted}>{li.narrative}</Text>}
                     <Text style={s.muted}>
                       {li.userName} — {li.userJobTitle}
                     </Text>
                   </View>
-                  <Text style={[{ width: 40 }, s.right]}>
-                    {li.hours.toFixed(2)}
-                  </Text>
+                  <Text style={[{ width: 40 }, s.right]}>{li.hours.toFixed(2)}</Text>
                   <Text style={[{ width: 60 }, s.right]}>
                     {li.rate !== null ? formatMoney(li.rate) : "—"}
                   </Text>
@@ -254,20 +237,14 @@ function InvoicePdfDocument({
             </View>
             {invoice.expenseLineItems.map((ex) => (
               <View key={ex.id} style={s.tr} wrap={false}>
-                <Text style={{ width: 60 }}>
-                  {formatDateOnly(ex.date, "short")}
-                </Text>
+                <Text style={{ width: 60 }}>{formatDateOnly(ex.date, "short")}</Text>
                 <View style={{ flexGrow: 1, flexBasis: 0, paddingRight: 8 }}>
                   <Text>{ex.description}</Text>
                   {ex.notes && <Text style={s.muted}>{ex.notes}</Text>}
                   {ex.utbmsCode && <Text style={s.muted}>{ex.utbmsCode}</Text>}
                 </View>
-                <Text style={{ width: 90 }}>
-                  {ex.category.replace(/_/g, " ")}
-                </Text>
-                <Text style={[{ width: 70 }, s.right]}>
-                  {formatMoney(ex.amount)}
-                </Text>
+                <Text style={{ width: 90 }}>{ex.category.replace(/_/g, " ")}</Text>
+                <Text style={[{ width: 70 }, s.right]}>{formatMoney(ex.amount)}</Text>
               </View>
             ))}
           </View>
@@ -288,9 +265,7 @@ function InvoicePdfDocument({
             )}
             <View style={s.totalFinal}>
               <Text>Total due</Text>
-              <Text>
-                {isVoid ? "Void — nothing due" : formatMoney(invoice.balance)}
-              </Text>
+              <Text>{isVoid ? "Void — nothing due" : formatMoney(invoice.balance)}</Text>
             </View>
           </View>
         </View>
@@ -307,27 +282,21 @@ function InvoicePdfDocument({
             </View>
             {invoice.payments.map((p) => (
               <View key={p.id} style={s.tr} wrap={false}>
-                <Text style={{ width: 60 }}>
-                  {formatDateOnly(p.date, "short")}
-                </Text>
+                <Text style={{ width: 60 }}>{formatDateOnly(p.date, "short")}</Text>
                 <View style={{ flexGrow: 1, flexBasis: 0, paddingRight: 8 }}>
                   <Text>
-                    {INVOICE_PAYMENT_SOURCE_LABEL[
-                      p.source as InvoicePaymentSource
-                    ] ?? p.source}
+                    {INVOICE_PAYMENT_SOURCE_LABEL[p.source as InvoicePaymentSource] ?? p.source}
                   </Text>
                   {p.description && <Text style={s.muted}>{p.description}</Text>}
                 </View>
                 <Text style={{ width: 90 }}>{p.reference ?? "—"}</Text>
-                <Text style={[{ width: 70 }, s.right]}>
-                  {formatMoney(p.amount)}
-                </Text>
+                <Text style={[{ width: 70 }, s.right]}>{formatMoney(p.amount)}</Text>
               </View>
             ))}
             {gap > 0.005 && (
               <Text style={[s.muted, { marginTop: 4, fontStyle: "italic" }]}>
-                An additional {formatMoney(gap)} was applied via Mark paid
-                without a recorded transaction.
+                An additional {formatMoney(gap)} was applied via Mark paid without a recorded
+                transaction.
               </Text>
             )}
           </View>
@@ -348,9 +317,7 @@ function InvoicePdfDocument({
 export async function renderInvoicePdf(
   invoice: InvoiceDetail,
   firm: FirmProfile,
-  timeZone: string
+  timeZone: string,
 ): Promise<Buffer> {
-  return renderToBuffer(
-    <InvoicePdfDocument invoice={invoice} firm={firm} timeZone={timeZone} />
-  );
+  return renderToBuffer(<InvoicePdfDocument invoice={invoice} firm={firm} timeZone={timeZone} />);
 }

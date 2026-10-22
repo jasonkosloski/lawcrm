@@ -9,11 +9,6 @@ describe("revalidateDeadlineSurfaces", () => {
   test("refreshes the deadlines tab, matter, dashboard and calendar", () => {
     revalidateDeadlineSurfaces("m1");
     const paths = vi.mocked(revalidatePath).mock.calls.map((c) => c[0]);
-    expect(paths).toEqual([
-      "/matters/m1/deadlines",
-      "/matters/m1",
-      "/",
-      "/calendar",
-    ]);
+    expect(paths).toEqual(["/matters/m1/deadlines", "/matters/m1", "/", "/calendar"]);
   });
 });

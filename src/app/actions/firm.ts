@@ -25,10 +25,7 @@ import { logSettingsChange } from "@/lib/audit-entry";
 import { dateOnlyKey, parseDateOnly } from "@/lib/format-date";
 import { parseTemplate } from "@/lib/matter-name-template";
 import { requirePermissionResult } from "@/lib/permission-check";
-import {
-  firmInitialState,
-  type FirmFormState,
-} from "@/lib/firm-form";
+import { firmInitialState, type FirmFormState } from "@/lib/firm-form";
 
 /** Goal fields arrive as strings from `<input type="number">`.
  *  Validated here (not just by the input's min/max — those are
@@ -43,7 +40,7 @@ const goalField = (label: string, max: number) =>
     .min(1, `${label} is required`)
     .refine(
       (v) => /^\d+(\.\d)?$/.test(v),
-      `${label} must be a number with at most one decimal place`
+      `${label} must be a number with at most one decimal place`,
     )
     .refine((v) => Number(v) > 0, `${label} must be greater than zero`)
     .refine((v) => Number(v) <= max, `${label} can't exceed ${max}`);
@@ -58,10 +55,7 @@ const firmSchema = z.object({
     .max(400)
     .optional()
     .or(z.literal(""))
-    .refine(
-      (v) => !v || /^https?:\/\//i.test(v),
-      "Website must start with http:// or https://"
-    ),
+    .refine((v) => !v || /^https?:\/\//i.test(v), "Website must start with http:// or https://"),
   phone: z.string().trim().max(40).optional().or(z.literal("")),
   email: z
     .string()
@@ -116,7 +110,7 @@ const PROFILE_FIELDS = [
 
 export async function updateFirmAction(
   _prev: FirmFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<FirmFormState> {
   // Gated on `firm.edit_info`. Admin always has it; other roles
   // pick it up via the matrix. A denial comes back as a form error
@@ -152,9 +146,7 @@ export async function updateFirmAction(
   // Validate the date before touching the DB — same friendly field
   // error the zod failures above get, instead of a Prisma 500.
   // Date-only value: stored at UTC midnight (ADR-012), no zone.
-  const establishedAt = data.establishedAt
-    ? parseDateOnly(data.establishedAt)
-    : null;
+  const establishedAt = data.establishedAt ? parseDateOnly(data.establishedAt) : null;
   if (data.establishedAt && !establishedAt) {
     return {
       status: "error",
@@ -165,10 +157,7 @@ export async function updateFirmAction(
 
   // Fresh (uncached) reads: the page re-renders after this action and
   // must not see the pre-edit row through a request-level cache.
-  const [firm, oldGoals] = await Promise.all([
-    loadCurrentFirm(),
-    loadFirmGoals(),
-  ]);
+  const [firm, oldGoals] = await Promise.all([loadCurrentFirm(), loadFirmGoals()]);
 
   const next = {
     name: data.name,
@@ -211,16 +200,9 @@ export async function updateFirmAction(
 
   // Audit trail: which fields changed (names only — never the EIN or
   // any other value), plus old -> new for the numeric goals.
-  const changed: string[] = PROFILE_FIELDS.filter(
-    (f) => (firm[f] ?? null) !== next[f]
-  );
-  if (
-    data.matterNameTemplate !== undefined &&
-    oldTemplate !== data.matterNameTemplate
-  ) {
-    changed.push(
-      `matterNameTemplate ("${oldTemplate ?? ""}" -> "${data.matterNameTemplate}")`
-    );
+  const changed: string[] = PROFILE_FIELDS.filter((f) => (firm[f] ?? null) !== next[f]);
+  if (data.matterNameTemplate !== undefined && oldTemplate !== data.matterNameTemplate) {
+    changed.push(`matterNameTemplate ("${oldTemplate ?? ""}" -> "${data.matterNameTemplate}")`);
   }
   const oldKey = firm.establishedAt ? dateOnlyKey(firm.establishedAt) : null;
   const newKey = establishedAt ? dateOnlyKey(establishedAt) : null;
@@ -231,9 +213,7 @@ export async function updateFirmAction(
     changed.push(`dailyHoursGoal (${oldGoals.dailyHoursGoal} -> ${newDaily})`);
   }
   if (newMonthly !== oldGoals.monthlyBillableGoal) {
-    changed.push(
-      `monthlyBillableGoal (${oldGoals.monthlyBillableGoal} -> ${newMonthly})`
-    );
+    changed.push(`monthlyBillableGoal (${oldGoals.monthlyBillableGoal} -> ${newMonthly})`);
   }
   if (changed.length > 0) {
     await logActivity({
@@ -253,9 +233,7 @@ export async function updateFirmAction(
 }
 
 /** Master switch for the client portal. Gated on `firm.edit_info`. */
-export async function setPortalEnabled(
-  enabled: boolean
-): Promise<{ ok: boolean; error?: string }> {
+export async function setPortalEnabled(enabled: boolean): Promise<{ ok: boolean; error?: string }> {
   const gate = await requirePermissionResult("firm.edit_info");
   if (!gate.ok) return { ok: false, error: gate.error };
 
@@ -287,9 +265,7 @@ export async function setPortalEnabled(
 /** Firm switch: matters need a signed originating document before they
  *  can be created or opened from a draft. Admin only (like matter
  *  visibility) because it changes what every attorney can do. */
-export async function setRequireOriginatingDoc(
-  on: boolean
-): Promise<{ ok: true }> {
+export async function setRequireOriginatingDoc(on: boolean): Promise<{ ok: true }> {
   const userId = await requireAdmin();
   const firm = await loadCurrentFirm();
   const before = await prisma.firm.findUniqueOrThrow({
@@ -308,7 +284,7 @@ export async function setRequireOriginatingDoc(
       : "Signed originating document no longer required to open a matter",
     [
       `Changed from ${before.requireOriginatingDoc ? "required" : "not required"} to ${on ? "required" : "not required"}`,
-    ]
+    ],
   );
   revalidatePath("/settings/firm");
   revalidatePath("/", "layout");

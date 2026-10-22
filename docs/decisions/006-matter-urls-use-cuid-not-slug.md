@@ -10,6 +10,7 @@
 **Rationale:** Matter names aren't guaranteed unique — two "Alvarez" cases, or cases named by short last-name plus case type, will collide. Disambiguating slugs with numeric suffixes (`alvarez-2`) is fragile and surprises users. Cuid is ugly but correct and collision-free by construction.
 
 **Trade-offs:**
+
 - (+) No collision risk, no disambiguation code to maintain
 - (+) No extra schema field, no migration
 - (-) URLs are long and not memorable — share/copy UX suffers slightly

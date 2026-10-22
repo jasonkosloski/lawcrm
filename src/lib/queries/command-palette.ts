@@ -56,11 +56,7 @@ export type PaletteUser = {
   jobTitle: string;
 };
 
-export type PaletteItem =
-  | PaletteMatter
-  | PaletteContact
-  | PaletteLead
-  | PaletteUser;
+export type PaletteItem = PaletteMatter | PaletteContact | PaletteLead | PaletteUser;
 
 export type PaletteData = {
   items: PaletteItem[];
@@ -131,47 +127,39 @@ export async function getPaletteData(): Promise<PaletteData> {
   ]);
 
   const items: PaletteItem[] = [
-    ...matters.map(
-      (m): PaletteMatter => ({
-        kind: "matter",
-        id: m.id,
-        name: m.name,
-        caseNumber: m.caseNumber,
-        area: m.practiceArea.name,
-        stage: m.stage.name,
-        color: m.color,
-        clientName: m.client?.name ?? null,
-        isPinned: m.pins.length > 0,
-      })
-    ),
-    ...contacts.map(
-      (c): PaletteContact => ({
-        kind: "contact",
-        id: c.id,
-        name: c.name,
-        email: c.email,
-        organization: c.organization,
-        contactType: c.type,
-      })
-    ),
-    ...leads.map(
-      (l): PaletteLead => ({
-        kind: "lead",
-        id: l.id,
-        name: l.name,
-        email: l.email,
-        stage: l.stage,
-      })
-    ),
-    ...users.map(
-      (u): PaletteUser => ({
-        kind: "user",
-        id: u.id,
-        name: u.name,
-        initials: u.initials,
-        jobTitle: u.jobTitle,
-      })
-    ),
+    ...matters.map((m): PaletteMatter => ({
+      kind: "matter",
+      id: m.id,
+      name: m.name,
+      caseNumber: m.caseNumber,
+      area: m.practiceArea.name,
+      stage: m.stage.name,
+      color: m.color,
+      clientName: m.client?.name ?? null,
+      isPinned: m.pins.length > 0,
+    })),
+    ...contacts.map((c): PaletteContact => ({
+      kind: "contact",
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      organization: c.organization,
+      contactType: c.type,
+    })),
+    ...leads.map((l): PaletteLead => ({
+      kind: "lead",
+      id: l.id,
+      name: l.name,
+      email: l.email,
+      stage: l.stage,
+    })),
+    ...users.map((u): PaletteUser => ({
+      kind: "user",
+      id: u.id,
+      name: u.name,
+      initials: u.initials,
+      jobTitle: u.jobTitle,
+    })),
   ];
 
   return { items, userId, canViewReports };

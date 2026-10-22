@@ -3,7 +3,6 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { DAY_MS } from "@/lib/format-date";
 
-
 /**
  * Delete portal records that can no longer do anything. Run hourly from the
  * notification-sweep cron.
@@ -13,7 +12,7 @@ import { DAY_MS } from "@/lib/format-date";
  *   - link-request throttle rows older than a day (the window is 15 min).
  */
 export async function prunePortalRecords(
-  now: Date
+  now: Date,
 ): Promise<{ sessions: number; tokens: number; linkRequests: number }> {
   const cutoff = new Date(now.getTime() - DAY_MS);
   const [sessions, tokens, linkRequests] = await prisma.$transaction([

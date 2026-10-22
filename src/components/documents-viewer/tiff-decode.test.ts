@@ -88,6 +88,8 @@ describe("decodeTiffPages", () => {
   });
 
   test("not a TIFF → an error message, never a throw", () => {
-    expect(run(new TextEncoder().encode("hello").buffer as ArrayBuffer)).toEqual([{ type: "error" }]);
+    expect(run(new TextEncoder().encode("hello").buffer as ArrayBuffer)).toEqual([
+      { type: "error" },
+    ]);
   });
 });

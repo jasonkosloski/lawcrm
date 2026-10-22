@@ -11,7 +11,8 @@ KPI tiles). That left nothing for an overdue deadline or a trust shortfall to st
 with. The rules that replaced it are in UI_PATTERNS (Identity, Type, Component Patterns).
 
 **Decision:**
-- **A floor, enforced by the tokens.** Nothing renders under 11px. Token *values*
+
+- **A floor, enforced by the tokens.** Nothing renders under 11px. Token _values_
   changed and names were kept (`text-2xs` 11.5, `text-xs` 12.5, `text-sm` 13.5, half-pixel
   steps chosen after a first pass at 12/13/14 scrolled too much on desktop; `ink-3`/`ink-4`
   darkened so every word-carrying tier is at least 4.5:1; `ink-5` for placeholders and
@@ -30,6 +31,7 @@ with. The rules that replaced it are in UI_PATTERNS (Identity, Type, Component P
   every due date.
 
 **Trade-offs:**
+
 - (+) One token edit fixed most of the legibility and contrast debt; screens stay consistent
   because they share the ramp.
 - (+) Urgent states are visible again because nothing else competes with them.

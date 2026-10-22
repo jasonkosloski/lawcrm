@@ -20,11 +20,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { formatDate } from "@/lib/format-date";
 import { formatPhone } from "@/lib/format-phone";
-import {
-  asCallOutcome,
-  formatCallDuration,
-  type EditableCallLog,
-} from "@/lib/call-log-form";
+import { asCallOutcome, formatCallDuration, type EditableCallLog } from "@/lib/call-log-form";
 import { isMissedCall } from "@/lib/call-log-form";
 import type { MatterMessengerItemRow } from "@/lib/queries/messenger";
 import { ManualCallActions } from "./manual-call-actions";
@@ -61,9 +57,7 @@ function itemLabel(item: MatterMessengerItemRow): string {
     return item.direction === "inbound" ? `Text from ${who}` : `Text to ${who}`;
   if (isMissedItem(item)) return `Missed call · ${who}`;
   if (isUnansweredOutbound(item)) return `Outbound call, no answer · ${who}`;
-  return item.direction === "inbound"
-    ? `Inbound call · ${who}`
-    : `Outbound call · ${who}`;
+  return item.direction === "inbound" ? `Inbound call · ${who}` : `Outbound call · ${who}`;
 }
 
 export function MatterPhoneLog({
@@ -96,8 +90,8 @@ export function MatterPhoneLog({
         <Phone size={14} className="text-ink-4 shrink-0" />
         <div className="text-xs text-ink-3 leading-relaxed">
           No calls or texts filed to this matter yet. Use{" "}
-          <span className="font-medium text-ink-2">Log call</span> to record
-          one, or file a thread from the main inbox.
+          <span className="font-medium text-ink-2">Log call</span> to record one, or file a thread
+          from the main inbox.
         </div>
       </Card>
     );
@@ -109,21 +103,15 @@ export function MatterPhoneLog({
         {items.map((item) => {
           const Icon = itemIcon(item);
           const missed = isMissedItem(item);
-          const duration =
-            item.kind === "call"
-              ? formatCallDuration(item.callDurationSec)
-              : null;
+          const duration = item.kind === "call" ? formatCallDuration(item.callDurationSec) : null;
           // Edit/delete only on manually logged calls — provider
           // items are immutable records.
           const showActions =
-            item.kind === "call" &&
-            item.isManual &&
-            (canEditCall || canDeleteCall);
+            item.kind === "call" && item.isManual && (canEditCall || canDeleteCall);
           const editable: EditableCallLog | null = showActions
             ? {
                 id: item.id,
-                contactLabel:
-                  item.contactName ?? formatPhone(item.contactPhone),
+                contactLabel: item.contactName ?? formatPhone(item.contactPhone),
                 direction: item.direction,
                 outcome: asCallOutcome(item.callStatus),
                 occurredAt: item.occurredAt,
@@ -143,31 +131,18 @@ export function MatterPhoneLog({
               >
                 <Icon
                   size={13}
-                  className={
-                    (missed ? "text-warn" : "text-ink-4") + " shrink-0 mt-0.5"
-                  }
+                  className={(missed ? "text-warn" : "text-ink-4") + " shrink-0 mt-0.5"}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span
-                      className={
-                        "font-medium truncate " +
-                        (missed ? "text-warn" : "text-ink")
-                      }
-                    >
+                    <span className={"font-medium truncate " + (missed ? "text-warn" : "text-ink")}>
                       {itemLabel(item)}
                     </span>
                     {duration && (
-                      <span className="text-2xs font-mono text-ink-4 shrink-0">
-                        {duration}
-                      </span>
+                      <span className="text-2xs font-mono text-ink-4 shrink-0">{duration}</span>
                     )}
                   </div>
-                  {item.body && (
-                    <div className="text-ink-3 truncate mt-0.5">
-                      {item.body}
-                    </div>
-                  )}
+                  {item.body && <div className="text-ink-3 truncate mt-0.5">{item.body}</div>}
                 </div>
                 <span className="text-2xs font-mono text-ink-4 shrink-0">
                   {formatDate(item.occurredAt, "datetime_medium", tz)}

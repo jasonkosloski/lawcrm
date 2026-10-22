@@ -26,10 +26,7 @@ describe("resolveDocumentRenderer — by content type", () => {
     ["audio/ogg", "audio"],
     ["text/plain", "text"],
     ["text/csv", "csv"],
-    [
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "docx",
-    ],
+    ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"],
     ["application/msword", "doc_legacy"],
   ];
   test.each(cases)("%s → %s", (contentType, expected) => {
@@ -39,12 +36,8 @@ describe("resolveDocumentRenderer — by content type", () => {
 
   test("content type is normalized — case + parameters ignored", () => {
     expect(resolveDocumentRenderer("Application/PDF", "file")).toBe("pdf");
-    expect(
-      resolveDocumentRenderer("text/csv; charset=utf-8", "file")
-    ).toBe("csv");
-    expect(resolveDocumentRenderer("VIDEO/MP4; codecs=avc1", "x")).toBe(
-      "video"
-    );
+    expect(resolveDocumentRenderer("text/csv; charset=utf-8", "file")).toBe("csv");
+    expect(resolveDocumentRenderer("VIDEO/MP4; codecs=avc1", "x")).toBe("video");
   });
 
   test("other text/* subtypes render as plain text (escaped pre)", () => {
@@ -54,12 +47,8 @@ describe("resolveDocumentRenderer — by content type", () => {
 
   test("active-content types never map to an inline renderer", () => {
     // These would be XSS if they ever reached an iframe/img inline.
-    expect(resolveDocumentRenderer("image/svg+xml", "file")).toBe(
-      "unsupported"
-    );
-    expect(resolveDocumentRenderer("application/xhtml+xml", "file")).toBe(
-      "unsupported"
-    );
+    expect(resolveDocumentRenderer("image/svg+xml", "file")).toBe("unsupported");
+    expect(resolveDocumentRenderer("application/xhtml+xml", "file")).toBe("unsupported");
   });
 });
 
@@ -98,20 +87,14 @@ describe("resolveDocumentRenderer — extension fallback", () => {
   });
 
   test("generic octet-stream defers to the extension", () => {
-    expect(
-      resolveDocumentRenderer("application/octet-stream", "dispatch.mp3")
-    ).toBe("audio");
-    expect(
-      resolveDocumentRenderer("application/octet-stream", "scene.jpg")
-    ).toBe("image");
+    expect(resolveDocumentRenderer("application/octet-stream", "dispatch.mp3")).toBe("audio");
+    expect(resolveDocumentRenderer("application/octet-stream", "scene.jpg")).toBe("image");
   });
 
   test("unrecognized type falls through to the extension", () => {
     // Uploaders sometimes declare vendor-specific types; the
     // extension is the better signal then.
-    expect(resolveDocumentRenderer("application/x-wav", "call.wav")).toBe(
-      "audio"
-    );
+    expect(resolveDocumentRenderer("application/x-wav", "call.wav")).toBe("audio");
   });
 
   test("typeless / mistyped PDFs preview too — pdf.js fetches the bytes itself", () => {
@@ -125,7 +108,10 @@ describe("resolveDocumentRenderer — extension fallback", () => {
 
   test("the new types resolve from their MIME types", () => {
     expect(
-      resolveDocumentRenderer("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "x")
+      resolveDocumentRenderer(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "x",
+      ),
     ).toBe("spreadsheet");
     expect(resolveDocumentRenderer("message/rfc822", "x")).toBe("eml");
     expect(resolveDocumentRenderer("application/vnd.ms-outlook", "x")).toBe("msg");
@@ -136,9 +122,7 @@ describe("resolveDocumentRenderer — extension fallback", () => {
   });
 
   test("known content type wins over a contradicting extension", () => {
-    expect(resolveDocumentRenderer("application/pdf", "misnamed.mp3")).toBe(
-      "pdf"
-    );
+    expect(resolveDocumentRenderer("application/pdf", "misnamed.mp3")).toBe("pdf");
   });
 });
 
@@ -153,8 +137,6 @@ describe("resolveDocumentRenderer — unsupported", () => {
   test("legacy spreadsheets / archives / slides are download-only", () => {
     expect(resolveDocumentRenderer("application/vnd.ms-excel", "billing.xls")).toBe("unsupported");
     expect(resolveDocumentRenderer(null, "deck.pptx")).toBe("unsupported");
-    expect(resolveDocumentRenderer("application/zip", "production.zip")).toBe(
-      "unsupported"
-    );
+    expect(resolveDocumentRenderer("application/zip", "production.zip")).toBe("unsupported");
   });
 });

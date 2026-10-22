@@ -71,10 +71,7 @@ describe("portal home", () => {
     expect(screen.getByText("Closed Matter")).toBeTruthy();
     expect(screen.queryByText("Uninvited Matter")).toBeNull();
     expect(screen.queryByText("Revoked Matter")).toBeNull();
-    const href = screen
-      .getByText("Open Matter")
-      .closest("a")
-      ?.getAttribute("href");
+    const href = screen.getByText("Open Matter").closest("a")?.getAttribute("href");
     expect(href).toBe(`/matters/${openId}`);
     expect(screen.getByText("Open")).toBeTruthy();
     expect(screen.getByText("Closed")).toBeTruthy();
@@ -133,12 +130,10 @@ describe("portal home", () => {
     });
     render(await PortalHome());
     expect(screen.getAllByText("New message")).toHaveLength(1);
-    expect(
-      screen.getByText("Open Matter").closest("a")?.textContent,
-    ).toContain("New message");
-    expect(
-      screen.getByText("Closed Matter").closest("a")?.textContent,
-    ).not.toContain("New message");
+    expect(screen.getByText("Open Matter").closest("a")?.textContent).toContain("New message");
+    expect(screen.getByText("Closed Matter").closest("a")?.textContent).not.toContain(
+      "New message",
+    );
   });
 });
 

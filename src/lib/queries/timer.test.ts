@@ -98,8 +98,6 @@ describe("getTimerMatterOptions", () => {
       where: { id: matterId },
       data: { isArchived: true },
     });
-    expect((await getTimerMatterOptions()).map((o) => o.id)).not.toContain(
-      matterId
-    );
+    expect((await getTimerMatterOptions()).map((o) => o.id)).not.toContain(matterId);
   });
 });

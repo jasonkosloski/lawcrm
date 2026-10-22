@@ -4,10 +4,7 @@
 
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import {
-  activityMoneyFilters,
-  type ActivityMoneyAccess,
-} from "@/lib/activity-money-filters";
+import { activityMoneyFilters, type ActivityMoneyAccess } from "@/lib/activity-money-filters";
 
 // ── Matter activity / timeline ─────────────────────────────────────────
 
@@ -47,7 +44,7 @@ export async function getMatterActivity(
   options: {
     types?: readonly string[];
     limit?: number;
-  } & ActivityMoneyAccess = {}
+  } & ActivityMoneyAccess = {},
 ): Promise<ActivityRow[]> {
   const where: Prisma.ActivityLogWhereInput = {
     matterId,
@@ -82,7 +79,7 @@ export async function getMatterActivity(
  *  filings / 12 notes" before clicking. */
 export async function getMatterActivityTypeCounts(
   matterId: string,
-  access: ActivityMoneyAccess = {}
+  access: ActivityMoneyAccess = {},
 ): Promise<Record<string, number>> {
   const grouped = await prisma.activityLog.groupBy({
     by: ["type"],

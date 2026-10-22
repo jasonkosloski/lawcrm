@@ -42,15 +42,9 @@ describe("decodeBase64Url", () => {
 });
 
 describe("extractBodyHtml — part charsets (F256)", () => {
-  const part = (
-    mimeType: string,
-    bytes: Buffer,
-    contentType?: string
-  ): GmailMessagePart => ({
+  const part = (mimeType: string, bytes: Buffer, contentType?: string): GmailMessagePart => ({
     mimeType,
-    ...(contentType
-      ? { headers: [{ name: "Content-Type", value: contentType }] }
-      : {}),
+    ...(contentType ? { headers: [{ name: "Content-Type", value: contentType }] } : {}),
     body: { data: bytes.toString("base64url") },
   });
 
@@ -59,9 +53,7 @@ describe("extractBodyHtml — part charsets (F256)", () => {
     const bytes = Buffer.from([
       0x63, 0x61, 0x66, 0xe9, 0x20, 0x93, 0x71, 0x94, 0x20, 0xa7, 0x20, 0x31,
     ]);
-    const html = extractBodyHtml(
-      part("text/plain", bytes, 'text/plain; charset="windows-1252"')
-    );
+    const html = extractBodyHtml(part("text/plain", bytes, 'text/plain; charset="windows-1252"'));
     expect(html).toBe("<p>café \u201cq\u201d § 1</p>");
     expect(html).not.toContain("\ufffd");
   });
@@ -79,24 +71,20 @@ describe("extractBodyHtml — part charsets (F256)", () => {
   it("keeps UTF-8 as the default with no header, a utf-8 header, or an unknown charset", () => {
     const utf8 = Buffer.from("<p>José ✓</p>", "utf8");
     expect(extractBodyHtml(part("text/html", utf8))).toBe("<p>José ✓</p>");
-    expect(
-      extractBodyHtml(part("text/html", utf8, "text/html; charset=utf-8"))
-    ).toBe("<p>José ✓</p>");
+    expect(extractBodyHtml(part("text/html", utf8, "text/html; charset=utf-8"))).toBe(
+      "<p>José ✓</p>",
+    );
     // Unknown charset label: decodeCharset falls back to UTF-8.
-    expect(
-      extractBodyHtml(part("text/html", utf8, "text/html; charset=x-bogus-9"))
-    ).toBe("<p>José ✓</p>");
+    expect(extractBodyHtml(part("text/html", utf8, "text/html; charset=x-bogus-9"))).toBe(
+      "<p>José ✓</p>",
+    );
   });
 
   it("reads the charset from a nested part inside multipart/alternative", () => {
     const payload: GmailMessagePart = {
       mimeType: "multipart/alternative",
       parts: [
-        part(
-          "text/plain",
-          Buffer.from("caf\xe9", "latin1"),
-          "text/plain; charset=iso-8859-1"
-        ),
+        part("text/plain", Buffer.from("caf\xe9", "latin1"), "text/plain; charset=iso-8859-1"),
       ],
     };
     expect(extractBodyHtml(payload)).toBe("<p>café</p>");
@@ -105,9 +93,9 @@ describe("extractBodyHtml — part charsets (F256)", () => {
 
 describe("decodeMimeWords", () => {
   it("decodes a UTF-8 B-encoded word", () => {
-    expect(
-      decodeMimeWords(`=?UTF-8?B?${Buffer.from("José Ávila").toString("base64")}?=`)
-    ).toBe("José Ávila");
+    expect(decodeMimeWords(`=?UTF-8?B?${Buffer.from("José Ávila").toString("base64")}?=`)).toBe(
+      "José Ávila",
+    );
   });
 
   it("decodes Q-encoding with underscores-as-spaces and =XX bytes", () => {
@@ -116,15 +104,12 @@ describe("decodeMimeWords", () => {
   });
 
   it("drops whitespace between adjacent encoded words (RFC 2047)", () => {
-    const word = (t: string) =>
-      `=?UTF-8?B?${Buffer.from(t).toString("base64")}?=`;
+    const word = (t: string) => `=?UTF-8?B?${Buffer.from(t).toString("base64")}?=`;
     expect(decodeMimeWords(`${word("Law ")} ${word("Firm")}`)).toBe("Law Firm");
   });
 
   it("passes plain text through untouched", () => {
-    expect(decodeMimeWords("Plain Subject — no encoding")).toBe(
-      "Plain Subject — no encoding"
-    );
+    expect(decodeMimeWords("Plain Subject — no encoding")).toBe("Plain Subject — no encoding");
   });
 });
 
@@ -136,9 +121,7 @@ describe("parseAddressList", () => {
   });
 
   it("parses quoted display names containing commas", () => {
-    expect(
-      parseAddressList('"Smith, Jane" <jane@firm.com>, Bob <bob@x.co>')
-    ).toEqual([
+    expect(parseAddressList('"Smith, Jane" <jane@firm.com>, Bob <bob@x.co>')).toEqual([
       { name: "Smith, Jane", email: "jane@firm.com" },
       { name: "Bob", email: "bob@x.co" },
     ]);
@@ -153,9 +136,7 @@ describe("parseAddressList", () => {
 
   it("decodes RFC 2047 display names", () => {
     const encoded = `=?UTF-8?B?${Buffer.from("José Ávila").toString("base64")}?= <jose@firm.mx>`;
-    expect(parseAddressList(encoded)).toEqual([
-      { name: "José Ávila", email: "jose@firm.mx" },
-    ]);
+    expect(parseAddressList(encoded)).toEqual([{ name: "José Ávila", email: "jose@firm.mx" }]);
   });
 
   it("skips group syntax / tokens without an @", () => {
@@ -171,7 +152,7 @@ describe("parseAddressList", () => {
 describe("textToHtml", () => {
   it("escapes HTML and wraps blank-line blocks in <p>, newlines in <br>", () => {
     expect(textToHtml("Hi <b>you</b>\nline two\n\nnext para")).toBe(
-      "<p>Hi &lt;b&gt;you&lt;/b&gt;<br>line two</p><p>next para</p>"
+      "<p>Hi &lt;b&gt;you&lt;/b&gt;<br>line two</p><p>next para</p>",
     );
   });
 
@@ -183,7 +164,7 @@ describe("textToHtml", () => {
 describe("decodeHtmlEntities", () => {
   it("decodes the entities Gmail snippets use", () => {
     expect(decodeHtmlEntities("Tom &amp; Jerry&#39;s &lt;brief&gt;&nbsp;&#8212;ok")).toBe(
-      "Tom & Jerry's <brief> —ok"
+      "Tom & Jerry's <brief> —ok",
     );
   });
 
@@ -248,9 +229,7 @@ describe("extractBodyHtml — MIME walk", () => {
       mimeType: "text/plain",
       body: { data: b64(TEXT_BODY) },
     };
-    expect(extractBodyHtml(payload)).toBe(
-      "<p>Hello counsel</p><p>Regards,<br>Jane</p>"
-    );
+    expect(extractBodyHtml(payload)).toBe("<p>Hello counsel</p><p>Regards,<br>Jane</p>");
   });
 
   it("never reads body data off an attachment part (filename set)", () => {
@@ -311,9 +290,7 @@ describe("labels + flags", () => {
 
   it("slugs Gmail label names into the custom:* namespace", () => {
     expect(gmailLabelSlug("Clients/Smith")).toBe("custom:clients_smith");
-    expect(gmailLabelSlug("  Opposing Counsel!  ")).toBe(
-      "custom:opposing_counsel"
-    );
+    expect(gmailLabelSlug("  Opposing Counsel!  ")).toBe("custom:opposing_counsel");
     expect(gmailLabelSlug("///")).toBe("custom:label");
   });
 
@@ -365,9 +342,7 @@ describe("parseGmailMessage", () => {
       internalDate: "1767000000000",
       payload: { mimeType: "multipart/mixed", parts: [] },
     };
-    expect(parseGmailMessage(m).bodyHtmlRaw).toBe(
-      "<p>It&#39;s scheduled &amp; confirmed</p>"
-    );
+    expect(parseGmailMessage(m).bodyHtmlRaw).toBe("<p>It&#39;s scheduled &amp; confirmed</p>");
   });
 
   it("headerValue is case-insensitive", () => {

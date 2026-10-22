@@ -61,9 +61,7 @@ export function MediaReview({
   canEditTranscript: boolean;
 }) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
-  const [composerAnchor, setComposerAnchor] = useState<ComposerAnchor | null>(
-    null
-  );
+  const [composerAnchor, setComposerAnchor] = useState<ComposerAnchor | null>(null);
 
   // Deep-link seek — once metadata is in (readyState 0 drops
   // currentTime writes in some browsers). Runs once per mount; the
@@ -105,16 +103,9 @@ export function MediaReview({
       }
     >
       {kind === "video" ? (
-        <VideoPlayer
-          src={src}
-          mediaRef={mediaRef as React.Ref<HTMLVideoElement>}
-        />
+        <VideoPlayer src={src} mediaRef={mediaRef as React.Ref<HTMLVideoElement>} />
       ) : (
-        <AudioPlayer
-          src={src}
-          name={name}
-          mediaRef={mediaRef as React.Ref<HTMLAudioElement>}
-        />
+        <AudioPlayer src={src} name={name} mediaRef={mediaRef as React.Ref<HTMLAudioElement>} />
       )}
     </div>
   );
@@ -131,9 +122,7 @@ export function MediaReview({
       canDelete={canDeleteTranscript}
       canEdit={canEditTranscript}
       canFlag={canCreate}
-      onFlagSelection={(span) =>
-        setComposerAnchor(spanToComposerAnchor(span))
-      }
+      onFlagSelection={(span) => setComposerAnchor(spanToComposerAnchor(span))}
       initialSeconds={initialSeconds}
     />
   );

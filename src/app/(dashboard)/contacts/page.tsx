@@ -26,9 +26,7 @@ import { requireUser } from "@/lib/current-user";
 import { inputClass } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
-export default async function ContactsPage({
-  searchParams,
-}: PageProps<"/contacts">) {
+export default async function ContactsPage({ searchParams }: PageProps<"/contacts">) {
   await requireUser();
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q : undefined;
@@ -77,10 +75,7 @@ export default async function ContactsPage({
             Search
           </Button>
           {(q || type) && (
-            <Link
-              href="/contacts"
-              className="text-2xs text-ink-4 hover:text-ink px-2"
-            >
+            <Link href="/contacts" className="text-2xs text-ink-4 hover:text-ink px-2">
               Clear
             </Link>
           )}
@@ -116,9 +111,8 @@ export default async function ContactsPage({
             role="status"
             className="text-xs text-ink-3 rounded-md border border-line bg-paper-2 px-3 py-2"
           >
-            Showing the first {CONTACT_LIST_LIMIT} contacts (A-Z). More match
-            than fit on the page — refine the search or pick a type to see the
-            rest.
+            Showing the first {CONTACT_LIST_LIMIT} contacts (A-Z). More match than fit on the page —
+            refine the search or pick a type to see the rest.
           </p>
         )}
 
@@ -136,63 +130,57 @@ export default async function ContactsPage({
           </Card>
         ) : (
           <>
-          {/* Mobile: card stack. The 6-col contacts table can't
+            {/* Mobile: card stack. The 6-col contacts table can't
               fit on a phone — collapse to one card per contact
               with name + type + organization + email/phone +
               matter count. Tablet+ keeps the table. */}
-          <ul className="md:hidden flex flex-col gap-2">
-            {rows.map((c) => (
-              <li key={c.id}>
-                <Link
-                  href={`/contacts/${c.id}`}
-                  className="block rounded border border-line bg-card p-3 hover:border-brand-300 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-ink truncate">
-                          {c.name}
-                        </span>
-                        {c.conflictStatus === "flagged" && (
-                          <span className="text-2xs font-medium text-warn">
-                            conflict
-                          </span>
+            <ul className="md:hidden flex flex-col gap-2">
+              {rows.map((c) => (
+                <li key={c.id}>
+                  <Link
+                    href={`/contacts/${c.id}`}
+                    className="block rounded border border-line bg-card p-3 hover:border-brand-300 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-ink truncate">{c.name}</span>
+                          {c.conflictStatus === "flagged" && (
+                            <span className="text-2xs font-medium text-warn">conflict</span>
+                          )}
+                        </div>
+                        <div className="text-2xs text-ink-3 mt-0.5">
+                          {CONTACT_TYPE_LABEL[c.type as keyof typeof CONTACT_TYPE_LABEL] ?? c.type}
+                          {c.organization ? ` · ${c.organization}` : ""}
+                        </div>
+                        {(c.email || c.phone) && (
+                          <div className="text-2xs font-mono text-ink-3 mt-1 truncate">
+                            {c.email ?? c.phone}
+                          </div>
                         )}
                       </div>
-                      <div className="text-2xs text-ink-3 mt-0.5">
-                        {CONTACT_TYPE_LABEL[
-                          c.type as keyof typeof CONTACT_TYPE_LABEL
-                        ] ?? c.type}
-                        {c.organization ? ` · ${c.organization}` : ""}
-                      </div>
-                      {(c.email || c.phone) && (
-                        <div className="text-2xs font-mono text-ink-3 mt-1 truncate">
-                          {c.email ?? c.phone}
-                        </div>
+                      {c.matterCount > 0 && (
+                        <span className="font-mono text-xs text-ink-3 shrink-0">
+                          {c.matterCount}
+                        </span>
                       )}
                     </div>
-                    {c.matterCount > 0 && (
-                      <span className="font-mono text-xs text-ink-3 shrink-0">
-                        {c.matterCount}
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+                  </Link>
+                </li>
+              ))}
+            </ul>
 
-          {/* Desktop: client table with checkbox selection + the
+            {/* Desktop: client table with checkbox selection + the
               bulk-action bar (set type / export CSV / deactivate).
               Selection is plain client state — not in the URL. */}
-          <div className="hidden md:block">
-            <ContactsTable
-              rows={rows}
-              canEdit={canEdit}
-              canDelete={canDelete}
-              canExport={canExport}
-            />
-          </div>
+            <div className="hidden md:block">
+              <ContactsTable
+                rows={rows}
+                canEdit={canEdit}
+                canDelete={canDelete}
+                canExport={canExport}
+              />
+            </div>
           </>
         )}
       </div>
@@ -222,14 +210,7 @@ function FilterPill({
       }
     >
       {label}
-      <span
-        className={
-          "font-mono " +
-          (active ? "text-ink-3" : "text-ink-4")
-        }
-      >
-        {count}
-      </span>
+      <span className={"font-mono " + (active ? "text-ink-3" : "text-ink-4")}>{count}</span>
     </Link>
   );
 }

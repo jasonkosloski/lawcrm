@@ -59,17 +59,13 @@ import userEvent from "@testing-library/user-event";
 import { DocumentsBrowser } from "./documents-browser";
 
 const grant = (keys: string[]) =>
-  vi
-    .mocked(currentUserHasPermission)
-    .mockImplementation(async (k: string) => keys.includes(k));
+  vi.mocked(currentUserHasPermission).mockImplementation(async (k: string) => keys.includes(k));
 
 const LEAD = { kind: "lead", leadId: "lead_1" } as const;
 const ALL = ["documents.upload", "documents.folder.create"];
 
 const renderBrowser = async (writable?: boolean) =>
-  render(
-    await DocumentsBrowser({ scope: LEAD, folderParam: null, writable })
-  );
+  render(await DocumentsBrowser({ scope: LEAD, folderParam: null, writable }));
 
 afterEach(() => vi.clearAllMocks());
 
@@ -110,8 +106,26 @@ describe("DocumentsBrowser", () => {
   test("a generated folder's row carries the source badge", async () => {
     grant(ALL);
     vi.mocked(getDocumentFolders).mockResolvedValueOnce([
-      { id: "g1", parentId: null, name: "Dr. Smith", order: 0, systemKind: "records_request", clientShared: false, recordsRequestId: "r1", sourceTitle: "Dr. Smith — Medical" },
-      { id: "o1", parentId: null, name: "Plain", order: 1, systemKind: null, clientShared: false, recordsRequestId: null, sourceTitle: null },
+      {
+        id: "g1",
+        parentId: null,
+        name: "Dr. Smith",
+        order: 0,
+        systemKind: "records_request",
+        clientShared: false,
+        recordsRequestId: "r1",
+        sourceTitle: "Dr. Smith — Medical",
+      },
+      {
+        id: "o1",
+        parentId: null,
+        name: "Plain",
+        order: 1,
+        systemKind: null,
+        clientShared: false,
+        recordsRequestId: null,
+        sourceTitle: null,
+      },
     ]);
     await renderBrowser();
     const badges = screen.getAllByRole("link", { name: /Records request/ });
@@ -122,16 +136,38 @@ describe("DocumentsBrowser", () => {
   describe("client sharing", () => {
     const MATTER = { kind: "matter", matterId: "m1" } as const;
     const folder = (over: Record<string, unknown>) => ({
-      id: "f1", parentId: null, name: "Medical", order: 0, systemKind: null,
-      clientShared: false, recordsRequestId: null, sourceTitle: null, ...over,
+      id: "f1",
+      parentId: null,
+      name: "Medical",
+      order: 0,
+      systemKind: null,
+      clientShared: false,
+      recordsRequestId: null,
+      sourceTitle: null,
+      ...over,
     });
     const doc = (over: Record<string, unknown>) => ({
-      id: "d1", name: "scan.pdf", category: "other", source: null, status: "final",
-      fileSize: 10, contentType: "application/pdf", hasFile: true, uploadedBy: "user_1",
-      uploaderInitials: "JK", uploaderName: "Jason", folderId: null, parentDocumentId: null,
-      clientShare: null, portalUploaderName: null, clientNote: null,
-      createdAt: new Date("2026-10-01T00:00:00Z"), isEmail: false, attachmentsPending: false,
-      attachments: [], ...over,
+      id: "d1",
+      name: "scan.pdf",
+      category: "other",
+      source: null,
+      status: "final",
+      fileSize: 10,
+      contentType: "application/pdf",
+      hasFile: true,
+      uploadedBy: "user_1",
+      uploaderInitials: "JK",
+      uploaderName: "Jason",
+      folderId: null,
+      parentDocumentId: null,
+      clientShare: null,
+      portalUploaderName: null,
+      clientNote: null,
+      createdAt: new Date("2026-10-01T00:00:00Z"),
+      isEmail: false,
+      attachmentsPending: false,
+      attachments: [],
+      ...over,
     });
     const renderMatter = async () =>
       render(await DocumentsBrowser({ scope: MATTER, folderParam: null }));
@@ -151,7 +187,9 @@ describe("DocumentsBrowser", () => {
 
     test("a per-file share and a hidden override", async () => {
       grant(["portal.view"]);
-      vi.mocked(getDocumentFolders).mockResolvedValueOnce([folder({ clientShared: true })] as never);
+      vi.mocked(getDocumentFolders).mockResolvedValueOnce([
+        folder({ clientShared: true }),
+      ] as never);
       listing([
         doc({ id: "d1", name: "a.pdf", clientShare: "shared" }),
         doc({ id: "d2", name: "b.pdf", clientShare: "hidden", folderId: "f1" }),
@@ -164,7 +202,9 @@ describe("DocumentsBrowser", () => {
 
     test("an archived document shows no Shared badge (the portal never shows it)", async () => {
       grant(["portal.view"]);
-      vi.mocked(getDocumentFolders).mockResolvedValueOnce([folder({ clientShared: true })] as never);
+      vi.mocked(getDocumentFolders).mockResolvedValueOnce([
+        folder({ clientShared: true }),
+      ] as never);
       listing([
         doc({ id: "d1", name: "a.pdf", clientShare: "shared", status: "archived" }),
         doc({ id: "d2", name: "b.pdf", clientShare: null, folderId: "f1", status: "archived" }),

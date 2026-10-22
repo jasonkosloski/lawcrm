@@ -27,11 +27,9 @@ describe("hoursField", () => {
       const res = hoursField.safeParse(v);
       expect(res.success).toBe(false);
       if (!res.success) {
-        expect(res.error.issues[0]!.message).toBe(
-          "Hours must be > 0 and ≤ 24"
-        );
+        expect(res.error.issues[0]!.message).toBe("Hours must be > 0 and ≤ 24");
       }
-    }
+    },
   );
 
   test("empty is 'Hours required'", () => {
@@ -64,9 +62,7 @@ describe("timeEntryFields", () => {
 
   test("activity is trimmed and required, capped at 200", () => {
     expect(schema.safeParse({ ...valid, activity: "   " }).success).toBe(false);
-    expect(
-      schema.safeParse({ ...valid, activity: "x".repeat(201) }).success
-    ).toBe(false);
+    expect(schema.safeParse({ ...valid, activity: "x".repeat(201) }).success).toBe(false);
   });
 
   test("checkbox fields accept only the literal 'on'", () => {

@@ -9,13 +9,7 @@ import Link from "next/link";
 import { Briefcase } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/empty-state";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { SortableHead } from "@/components/matters/sortable-header";
 import { BILLING_TYPE_LABEL } from "@/lib/billing-type";
 import { DueLabel } from "@/components/shared/due-label";
@@ -61,113 +55,101 @@ export function MattersTable({
       {/* Tablet+ desktop: the dense table. */}
       <Card className="p-0 overflow-hidden hidden md:block">
         <Table>
-        <TableHeader>
-          <TableRow>
-            <SortableHead field="name" className="pl-4">
-              Matter
-            </SortableHead>
-            <SortableHead field="area">Area</SortableHead>
-            <SortableHead field="lead">Lead</SortableHead>
-            <SortableHead field="stage">Stage</SortableHead>
-            {showTrust && (
-              <SortableHead field="trust" align="right" className="text-right">
-                Trust
-              </SortableHead>
-            )}
-            <SortableHead field="fee">Fee</SortableHead>
-            <SortableHead
-              field="deadline"
-              align="right"
-              className="text-right pr-4"
-            >
-              Next deadline
-            </SortableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {matters.length === 0 ? (
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={showTrust ? 7 : 6} className="p-0">
-                <EmptyState
-                  icon={Briefcase}
-                  title="No matters match"
-                  description="Try clearing a filter or two."
-                  className="py-12"
-                />
-              </TableCell>
+              <SortableHead field="name" className="pl-4">
+                Matter
+              </SortableHead>
+              <SortableHead field="area">Area</SortableHead>
+              <SortableHead field="lead">Lead</SortableHead>
+              <SortableHead field="stage">Stage</SortableHead>
+              {showTrust && (
+                <SortableHead field="trust" align="right" className="text-right">
+                  Trust
+                </SortableHead>
+              )}
+              <SortableHead field="fee">Fee</SortableHead>
+              <SortableHead field="deadline" align="right" className="text-right pr-4">
+                Next deadline
+              </SortableHead>
             </TableRow>
-          ) : (
-            matters.map((m) => (
-              // The name link is stretched over the whole row (after:
-              // pseudo-element), so the pointer cursor is honest.
-              <TableRow key={m.id} className="relative cursor-pointer">
-                <TableCell className="pl-4">
-                  <Link
-                    href={`/matters/${m.id}`}
-                    className="flex items-center gap-2 hover:text-brand-700 after:absolute after:inset-0"
-                  >
-                    <span
-                      className="w-1.5 h-1.5 rounded-full shrink-0"
-                      style={{ background: m.color }}
-                    />
-                    <span className="font-medium">{m.name}</span>
-                    {m.caseNumber && (
-                      <span className="text-2xs font-mono text-ink-4">
-                        {m.caseNumber}
-                      </span>
-                    )}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-xs text-ink-3">{m.area}</TableCell>
-                <TableCell>
-                  {m.leadInitials ? (
-                    <span
-                      className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-50 text-2xs font-mono font-medium text-brand-700 border border-brand-100"
-                      title={m.leadName ?? undefined}
-                    >
-                      {m.leadInitials}
-                    </span>
-                  ) : (
-                    <span className="text-2xs text-ink-4">—</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <StageChip stage={m.stage} isTerminal={m.stageIsTerminal} />
-                </TableCell>
-                {showTrust && (
-                  <TableCell
-                    className={"text-right font-mono text-xs " + trustTone(m.trustBalance)}
-                  >
-                    {formatMoney(m.trustBalance ?? 0)}
-                  </TableCell>
-                )}
-                <TableCell className="text-xs text-ink-3">
-                  {BILLING_TYPE_LABEL[m.billingType]}
-                </TableCell>
-                <TableCell className="text-right pr-4">
-                  {m.nextDeadlineDays === null ? (
-                    <span className="text-ink-4">—</span>
-                  ) : (
-                    <DueLabel dueDate={m.nextDeadlineDate} days={m.nextDeadlineDays} />
-                  )}
+          </TableHeader>
+          <TableBody>
+            {matters.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={showTrust ? 7 : 6} className="p-0">
+                  <EmptyState
+                    icon={Briefcase}
+                    title="No matters match"
+                    description="Try clearing a filter or two."
+                    className="py-12"
+                  />
                 </TableCell>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </Card>
+            ) : (
+              matters.map((m) => (
+                // The name link is stretched over the whole row (after:
+                // pseudo-element), so the pointer cursor is honest.
+                <TableRow key={m.id} className="relative cursor-pointer">
+                  <TableCell className="pl-4">
+                    <Link
+                      href={`/matters/${m.id}`}
+                      className="flex items-center gap-2 hover:text-brand-700 after:absolute after:inset-0"
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{ background: m.color }}
+                      />
+                      <span className="font-medium">{m.name}</span>
+                      {m.caseNumber && (
+                        <span className="text-2xs font-mono text-ink-4">{m.caseNumber}</span>
+                      )}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-xs text-ink-3">{m.area}</TableCell>
+                  <TableCell>
+                    {m.leadInitials ? (
+                      <span
+                        className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-50 text-2xs font-mono font-medium text-brand-700 border border-brand-100"
+                        title={m.leadName ?? undefined}
+                      >
+                        {m.leadInitials}
+                      </span>
+                    ) : (
+                      <span className="text-2xs text-ink-4">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <StageChip stage={m.stage} isTerminal={m.stageIsTerminal} />
+                  </TableCell>
+                  {showTrust && (
+                    <TableCell
+                      className={"text-right font-mono text-xs " + trustTone(m.trustBalance)}
+                    >
+                      {formatMoney(m.trustBalance ?? 0)}
+                    </TableCell>
+                  )}
+                  <TableCell className="text-xs text-ink-3">
+                    {BILLING_TYPE_LABEL[m.billingType]}
+                  </TableCell>
+                  <TableCell className="text-right pr-4">
+                    {m.nextDeadlineDays === null ? (
+                      <span className="text-ink-4">—</span>
+                    ) : (
+                      <DueLabel dueDate={m.nextDeadlineDate} days={m.nextDeadlineDays} />
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Card>
     </>
   );
 }
 
-function MatterCard({
-  m,
-  showTrust,
-}: {
-  m: MatterListRow;
-  showTrust: boolean;
-}) {
+function MatterCard({ m, showTrust }: { m: MatterListRow; showTrust: boolean }) {
   return (
     <li>
       <Link
@@ -181,13 +163,9 @@ function MatterCard({
           />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-medium text-ink truncate">
-                {m.name}
-              </span>
+              <span className="text-sm font-medium text-ink truncate">{m.name}</span>
               {m.caseNumber && (
-                <span className="text-2xs font-mono text-ink-4">
-                  {m.caseNumber}
-                </span>
+                <span className="text-2xs font-mono text-ink-4">{m.caseNumber}</span>
               )}
             </div>
             <div className="flex items-center gap-2 flex-wrap mt-1.5">
@@ -219,13 +197,7 @@ function MatterCard({
   );
 }
 
-function StageChip({
-  stage,
-  isTerminal,
-}: {
-  stage: string;
-  isTerminal: boolean;
-}) {
+function StageChip({ stage, isTerminal }: { stage: string; isTerminal: boolean }) {
   return (
     <span
       className={

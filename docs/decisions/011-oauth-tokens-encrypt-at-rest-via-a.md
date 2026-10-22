@@ -8,6 +8,7 @@
 **Decision:** AES-256-GCM field encryption enforced by a Prisma **query extension** (`src/lib/email-token-encryption.ts`) applied to the singleton in `src/lib/prisma.ts`. Every top-level `prisma.emailAccount` write encrypts both token fields (plain strings and `{ set }` forms); every read decrypts. The key is `EMAIL_TOKEN_KEY` — 32 bytes base64 (`openssl rand -base64 32`), per-environment, never committed. The wire format is versioned (`v1:<iv>:<tag>:<ciphertext>`) so a future key/algorithm rotation can introduce `v2` and re-encrypt lazily. Crypto primitives live in `src/lib/email-token-crypto.ts`.
 
 **Trade-offs:**
+
 - (+) Feature code (the upcoming OAuth flow) can't forget to encrypt — the data layer does it
 - (+) No new infrastructure; works the same on Vercel, local dev, and the test container
 - (+) Authenticated encryption (GCM) — tampered ciphertext fails loudly instead of decrypting to garbage

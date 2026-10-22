@@ -53,11 +53,7 @@ import {
   readStoredBytes,
 } from "@/lib/email-attachments";
 import { contentTypeForFilename } from "@/app/api/documents/upload/upload-config";
-import {
-  buildFolderTree,
-  flattenFolderTree,
-  type FlatFolder,
-} from "@/lib/folder-tree";
+import { buildFolderTree, flattenFolderTree, type FlatFolder } from "@/lib/folder-tree";
 
 export type FileAttachmentResult = {
   ok: boolean;
@@ -72,7 +68,7 @@ const FILING_FAILED_ERROR = "Could not file the attachment - try again.";
 export async function fileAttachmentToMatter(
   attachmentId: string,
   matterId: string,
-  folderId?: string | null
+  folderId?: string | null,
 ): Promise<FileAttachmentResult> {
   const userId = await requirePermission("documents.upload");
   await assertMatterAccess(matterId);
@@ -156,7 +152,7 @@ export async function fileAttachmentToMatter(
     const stored = await storeFile(
       new File([new Uint8Array(bytes)], attachment.filename, {
         type: contentType,
-      })
+      }),
     );
     storedKey = stored.key;
 
@@ -197,9 +193,7 @@ export async function fileAttachmentToMatter(
 /** Flattened folder tree for a matter — feeds the filing dialog's
  *  folder picker (fetched after the matter is chosen, so it can't
  *  ride in as page props). Session-gated read. */
-export async function listMatterFolders(
-  matterId: string
-): Promise<FlatFolder[]> {
+export async function listMatterFolders(matterId: string): Promise<FlatFolder[]> {
   await getCurrentUserId();
   await assertMatterAccess(matterId);
   const rows = await getDocumentFolders({ kind: "matter", matterId });

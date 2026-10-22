@@ -38,10 +38,7 @@ import {
 // UTC midnight and is read back in UTC — no time zone is ever applied.
 import { parseDateOnly } from "@/lib/format-date";
 import { MONEY_TOO_LARGE_MESSAGE, fitsMoneyColumn } from "@/lib/money";
-import {
-  currentUserHasAnyPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasAnyPermission, requirePermission } from "@/lib/permission-check";
 import {
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABEL,
@@ -92,7 +89,7 @@ const expenseSchema = z.object({
  *  null, the form posts "" when the user picks "—". */
 async function resolveReceiptDocumentId(
   matterId: string,
-  posted: string | undefined
+  posted: string | undefined,
 ): Promise<string | null> {
   if (!posted) return null;
   const doc = await prisma.document.findUnique({
@@ -113,16 +110,11 @@ const RECEIPT_SEARCH_LIMIT = 50;
  *  on the matter; a malformed payload returns nothing. */
 export async function searchReceiptDocuments(
   matterId: string,
-  query: string
+  query: string,
 ): Promise<ReceiptCandidate[]> {
   if (typeof matterId !== "string" || typeof query !== "string") return [];
   await getCurrentUserId();
-  if (
-    !(await currentUserHasAnyPermission([
-      "matters.expense.create",
-      "matters.expense.edit",
-    ]))
-  ) {
+  if (!(await currentUserHasAnyPermission(["matters.expense.create", "matters.expense.edit"]))) {
     return [];
   }
   await assertMatterAccess(matterId);
@@ -145,10 +137,7 @@ const BILLED_DELETE_ERROR =
 
 /** A guarded write (`invoiceId: null`) matched nothing: work out
  *  whether the row was billed in the meantime or is simply gone. */
-async function whyExpenseWriteFailed(
-  expenseId: string,
-  op: "edit" | "delete"
-): Promise<string> {
+async function whyExpenseWriteFailed(expenseId: string, op: "edit" | "delete"): Promise<string> {
   const row = await prisma.expense.findUnique({
     where: { id: expenseId },
     select: { invoiceId: true },
@@ -162,7 +151,7 @@ async function whyExpenseWriteFailed(
 export async function createExpense(
   matterId: string,
   _prev: ExpenseFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<ExpenseFormState> {
   await requirePermission("matters.expense.create");
   await assertMatterAccess(matterId);
@@ -187,10 +176,7 @@ export async function createExpense(
   // Cross-matter isolation guard for the receipt FK. Look up the
   // posted document and refuse if it lives on another matter.
   // Empty string is the "no receipt" sentinel.
-  const receiptDocumentId = await resolveReceiptDocumentId(
-    matter.id,
-    data.receiptDocumentId
-  );
+  const receiptDocumentId = await resolveReceiptDocumentId(matter.id, data.receiptDocumentId);
 
   const date = parseDateOnly(data.date);
   if (!date) {
@@ -235,7 +221,7 @@ export async function createExpense(
 export async function updateExpense(
   expenseId: string,
   _prev: ExpenseFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<ExpenseFormState> {
   await requirePermission("matters.expense.edit");
   await assertChildMatterAccess("expense", expenseId);
@@ -273,7 +259,7 @@ export async function updateExpense(
 
   const receiptDocumentId = await resolveReceiptDocumentId(
     existing.matterId,
-    data.receiptDocumentId
+    data.receiptDocumentId,
   );
 
   const date = parseDateOnly(data.date);
@@ -321,9 +307,7 @@ export async function updateExpense(
 
 // ── Delete ──────────────────────────────────────────────────────────────
 
-export async function deleteExpense(
-  expenseId: string
-): Promise<{ ok: boolean; error?: string }> {
+export async function deleteExpense(expenseId: string): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("matters.expense.delete");
   await assertChildMatterAccess("expense", expenseId);
   const actorId = await getCurrentUserId();

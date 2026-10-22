@@ -24,6 +24,6 @@ export function useIsDesktop(): boolean {
   return useSyncExternalStore(
     subscribeToDesktop,
     () => window.matchMedia(DESKTOP_QUERY).matches,
-    () => true
+    () => true,
   );
 }

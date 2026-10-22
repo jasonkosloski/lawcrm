@@ -31,7 +31,7 @@ const isDateOnly = (v: string): boolean => parseDateOnly(v) !== null;
  *  `parseWallClock(value, await getCurrentUserTimeZone())`. */
 export function checkEventTimes(
   data: { startTime: string; endTime: string },
-  ctx: z.RefinementCtx
+  ctx: z.RefinementCtx,
 ): void {
   const start = parseWallClock(data.startTime, "UTC");
   const end = parseWallClock(data.endTime, "UTC");

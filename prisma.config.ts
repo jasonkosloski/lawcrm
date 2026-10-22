@@ -5,10 +5,7 @@
 // explicitly need a separate non-pooled URL for migrations.
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
-import {
-  checkDestructiveDbAllowed,
-  isDestructivePrismaInvocation,
-} from "./src/lib/seed-guard";
+import { checkDestructiveDbAllowed, isDestructivePrismaInvocation } from "./src/lib/seed-guard";
 
 // This file loads for EVERY Prisma CLI command, including the
 // `migrate deploy` the operator runs against production on purpose,

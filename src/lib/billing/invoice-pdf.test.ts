@@ -100,9 +100,7 @@ async function extractText(buf: Buffer): Promise<string> {
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
-    parts.push(
-      content.items.map((it) => ("str" in it ? it.str : "")).join(" ")
-    );
+    parts.push(content.items.map((it) => ("str" in it ? it.str : "")).join(" "));
   }
   return parts.join("\n");
 }
@@ -136,11 +134,7 @@ describe("renderInvoicePdf fonts", () => {
     // Beyond WinAnsi (Ł, Đ, ć, stacked Vietnamese ễ) so built-in Helvetica
     // would garble it.
     const name = "Nguyễn Łukasz Đorđević — Ödön";
-    const buf = await renderInvoicePdf(
-      { ...invoice, clientName: name },
-      firm,
-      "America/Denver"
-    );
+    const buf = await renderInvoicePdf({ ...invoice, clientName: name }, firm, "America/Denver");
     const text = (await extractText(buf)).replace(/\s+/g, " ");
     expect(text).toContain(name);
   });

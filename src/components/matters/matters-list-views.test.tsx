@@ -42,12 +42,7 @@ function row(over: Partial<MatterListRow> = {}): MatterListRow {
 
 describe("MattersTable", () => {
   test("shows the billing type label, Court-appointed included", () => {
-    render(
-      <MattersTable
-        matters={[row({ billingType: "court_appointed" })]}
-        showTrust
-      />
-    );
+    render(<MattersTable matters={[row({ billingType: "court_appointed" })]} showTrust />);
     expect(screen.getByText("Court-appointed")).toBeTruthy();
   });
 
@@ -60,7 +55,7 @@ describe("MattersTable", () => {
           row({ id: "c", name: "C", trustBalance: -500.25 }),
           row({ id: "d", name: "D", trustBalance: 0 }),
         ]}
-      />
+      />,
     );
     // Rendered twice (mobile cards + desktop table).
     expect(screen.getAllByText("$1,234.50").length).toBeGreaterThan(0);
@@ -73,9 +68,7 @@ describe("MattersTable", () => {
 
   test("the name link is stretched over the whole row that advertises a pointer", () => {
     render(<MattersTable matters={[row()]} />);
-    const link = screen
-      .getAllByRole("link")
-      .find((l) => l.className.includes("after:absolute"));
+    const link = screen.getAllByRole("link").find((l) => l.className.includes("after:absolute"));
     expect(link).toBeDefined();
     expect(link!.className).toContain("after:inset-0");
     const tr = link!.closest("tr")!;
@@ -103,7 +96,7 @@ describe("MattersKanban", () => {
           row({ id: "b", stage: "Intake", stageOrder: 1 }),
           row({ id: "c", stage: "Trial", stageOrder: 5 }),
         ]}
-      />
+      />,
     );
     const headings = screen.getAllByRole("heading").map((h) => h.textContent);
     expect(headings).toEqual(["Intake", "Trial"]);
@@ -126,34 +119,25 @@ describe("EntitySourceChip", () => {
       <EntitySourceChip
         matterId="m1"
         source={{ kind: "message", id: "t1", label: "Call from Pat" }}
-      />
+      />,
     );
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
-      "/matters/m1/communication?channel=phone"
+      "/matters/m1/communication?channel=phone",
     );
   });
 
   test("note and email sources keep their matter-scoped hrefs", () => {
     const { rerender } = render(
-      <EntitySourceChip
-        matterId="m1"
-        source={{ kind: "note", id: "n1", label: "x" }}
-      />
+      <EntitySourceChip matterId="m1" source={{ kind: "note", id: "n1", label: "x" }} />,
     );
-    expect(screen.getByRole("link")).toHaveAttribute(
-      "href",
-      "/matters/m1/notes#note-n1"
-    );
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/matters/m1/notes#note-n1");
     rerender(
       <EntitySourceChip
         matterId="m1"
         source={{ kind: "email", id: "e1", label: "Re: settlement" }}
-      />
+      />,
     );
-    expect(screen.getByRole("link")).toHaveAttribute(
-      "href",
-      "/matters/m1/communication?thread=e1"
-    );
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/matters/m1/communication?thread=e1");
   });
 });

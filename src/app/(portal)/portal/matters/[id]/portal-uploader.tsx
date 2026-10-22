@@ -24,8 +24,7 @@ import { checkPortalUpload } from "@/lib/portal/upload-policy";
 import { makeStorageKey, type StorageDriver } from "@/lib/storage/storage-key";
 import { blobUploadErrorMessage } from "@/components/matters/documents/upload-errors";
 
-const CLOSED_MESSAGE =
-  "This request was closed by the firm. Your file was still sent.";
+const CLOSED_MESSAGE = "This request was closed by the firm. Your file was still sent.";
 
 type FileRow = { name: string; size: number; loaded: number };
 
@@ -98,9 +97,7 @@ export function PortalUploader({
   };
 
   const setLoaded = (i: number, loaded: number) =>
-    setRows((prev) =>
-      prev ? prev.map((r, j) => (j === i ? { ...r, loaded } : r)) : prev,
-    );
+    setRows((prev) => (prev ? prev.map((r, j) => (j === i ? { ...r, loaded } : r)) : prev));
 
   const sendBlob = async (files: File[], batchId: string) => {
     const controller = new AbortController();
@@ -249,9 +246,7 @@ export function PortalUploader({
             return (
               <li key={i} className="flex flex-col gap-1 text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-ink-2">
-                    {r.name}
-                  </span>
+                  <span className="min-w-0 flex-1 truncate text-ink-2">{r.name}</span>
                   {pct >= 100 ? (
                     <Check className="size-4 text-ok" aria-label="Sent" />
                   ) : (
@@ -320,10 +315,7 @@ export function PortalUploader({
           role="alert"
           className="flex items-start gap-2 rounded-lg border border-warn-border bg-warn-soft px-3 py-2 text-sm text-warn"
         >
-          <TriangleAlert
-            className="mt-0.5 size-4 shrink-0"
-            aria-hidden="true"
-          />
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <span>{error}</span>
         </p>
       ) : null}

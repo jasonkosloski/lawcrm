@@ -19,10 +19,10 @@ describe("invoiceEmail", () => {
   it("builds subjects by kind", () => {
     expect(invoiceEmail(base).subject).toBe("Invoice 2026-101 from Kosloski Law");
     expect(invoiceEmail({ ...base, kind: "resend" }).subject).toBe(
-      "Invoice 2026-101 from Kosloski Law"
+      "Invoice 2026-101 from Kosloski Law",
     );
     expect(invoiceEmail({ ...base, kind: "updated" }).subject).toBe(
-      "Updated invoice 2026-101 from Kosloski Law"
+      "Updated invoice 2026-101 from Kosloski Law",
     );
   });
 
@@ -64,9 +64,7 @@ describe("invoiceEmail", () => {
 describe("portalInvoiceUrl", () => {
   it("builds the portal invoice url", () => {
     vi.stubEnv("PORTAL_HOST", "portal.litgox.com");
-    expect(portalInvoiceUrl("m1", "i1")).toBe(
-      "https://portal.litgox.com/matters/m1/invoices/i1"
-    );
+    expect(portalInvoiceUrl("m1", "i1")).toBe("https://portal.litgox.com/matters/m1/invoices/i1");
   });
 });
 

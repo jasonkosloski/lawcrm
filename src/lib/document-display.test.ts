@@ -1,10 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { DOCUMENT_CATEGORIES } from "@/lib/document-form";
-import {
-  documentCategoryLabel,
-  documentStatusMeta,
-  formatFileSize,
-} from "./document-display";
+import { documentCategoryLabel, documentStatusMeta, formatFileSize } from "./document-display";
 
 describe("documentCategoryLabel", () => {
   test("every form category has a human label", () => {

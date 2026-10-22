@@ -12,14 +12,8 @@ import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import { type RecordScope } from "@/lib/record-scope";
-import {
-  RECORDS_REQUEST_STATUSES,
-  RECORDS_STATUS_LABEL,
-} from "@/lib/records-requests/status";
-import {
-  getRecordsRequests,
-  listRecordsRequestTypes,
-} from "@/lib/queries/records-requests";
+import { RECORDS_REQUEST_STATUSES, RECORDS_STATUS_LABEL } from "@/lib/records-requests/status";
+import { getRecordsRequests, listRecordsRequestTypes } from "@/lib/queries/records-requests";
 import { NewRequestComposer } from "./new-request-composer";
 import { RequestRow } from "./request-row";
 
@@ -86,9 +80,7 @@ export async function RecordsTab({
       {groups.map((g) => (
         <section key={g.status}>
           <div className="flex items-center gap-2 mb-2">
-            <h2 className="text-xs font-semibold text-ink-2">
-              {RECORDS_STATUS_LABEL[g.status]}
-            </h2>
+            <h2 className="text-xs font-semibold text-ink-2">{RECORDS_STATUS_LABEL[g.status]}</h2>
             <span className="text-2xs font-mono text-ink-4">{g.rows.length}</span>
           </div>
           <Card className="p-0 overflow-hidden">

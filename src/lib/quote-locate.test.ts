@@ -37,10 +37,7 @@ describe("locateQuote", () => {
 
   test("match spanning multiple chunks maps both endpoints", () => {
     // "the offi" | "cer drew his" | " weapon"
-    const loc = locateQuote(
-      ["the offi", "cer drew his", " weapon"],
-      "officer drew his weapon"
-    );
+    const loc = locateQuote(["the offi", "cer drew his", " weapon"], "officer drew his weapon");
     expect(loc).toEqual({
       startChunk: 0,
       startOffset: 4,
@@ -103,20 +100,18 @@ describe("locateQuote — whitespace-insensitive (F400)", () => {
   });
 
   test("table cells joined by tabs relocate", () => {
-    expect(
-      locateQuote(
-        ["Smith", "Officer", "2026-01-04"],
-        "Smith\tOfficer\t2026-01-04"
-      )
-    ).toEqual({ startChunk: 0, startOffset: 0, endChunk: 2, endOffset: 10 });
+    expect(locateQuote(["Smith", "Officer", "2026-01-04"], "Smith\tOfficer\t2026-01-04")).toEqual({
+      startChunk: 0,
+      startOffset: 0,
+      endChunk: 2,
+      endOffset: 10,
+    });
   });
 
   test("runs of spaces and NBSP in the document match single spaces in the quote", () => {
     const chunks = ["He left.  Then  she  left."];
     const loc = locateQuote(chunks, "left. Then she");
-    expect(chunks[0].slice(loc!.startOffset, loc!.endOffset)).toBe(
-      "left.  Then  she"
-    );
+    expect(chunks[0].slice(loc!.startOffset, loc!.endOffset)).toBe("left.  Then  she");
   });
 
   test("highlight ends on a real character, not trailing whitespace", () => {
@@ -155,9 +150,7 @@ describe("locateQuote — case folding that changes length (F1009)", () => {
     const loc = locateQuote(chunks, "x")!;
     expect(loc.startOffset).toBeLessThanOrEqual(chunks[loc.startChunk].length);
     expect(loc.endOffset).toBeLessThanOrEqual(chunks[loc.endChunk].length);
-    expect(
-      chunks[loc.startChunk].slice(loc.startOffset, loc.endOffset)
-    ).toBe("x");
+    expect(chunks[loc.startChunk].slice(loc.startOffset, loc.endOffset)).toBe("x");
   });
 
   test("astral characters (surrogate pairs) keep correct offsets", () => {

@@ -6,10 +6,7 @@
 
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/prisma";
-import {
-  visibleEmailMessageWhere,
-  visibleEmailThreadWhere,
-} from "@/lib/email-visibility";
+import { visibleEmailMessageWhere, visibleEmailThreadWhere } from "@/lib/email-visibility";
 import {
   resetDb,
   seedFirm,
@@ -87,12 +84,12 @@ describe("visibleEmailMessageWhere", () => {
     expect(
       await prisma.emailMessage.count({
         where: { id: aMessageId, ...visibleEmailMessageWhere(aId) },
-      })
+      }),
     ).toBe(1);
     expect(
       await prisma.emailMessage.count({
         where: { id: aMessageId, ...visibleEmailMessageWhere(bId) },
-      })
+      }),
     ).toBe(0);
   });
 });

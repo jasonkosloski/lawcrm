@@ -45,8 +45,18 @@ beforeEach(async () => {
   await resetDb();
   let defaultRoleId: string;
   ({ firmId, defaultRoleId } = await seedFirm());
-  ({ userId: alice } = await seedUser({ firmId, name: "Alice", initials: "AL", roleIds: [defaultRoleId] }));
-  ({ userId: bob } = await seedUser({ firmId, name: "Bob", initials: "BO", roleIds: [defaultRoleId] }));
+  ({ userId: alice } = await seedUser({
+    firmId,
+    name: "Alice",
+    initials: "AL",
+    roleIds: [defaultRoleId],
+  }));
+  ({ userId: bob } = await seedUser({
+    firmId,
+    name: "Bob",
+    initials: "BO",
+    roleIds: [defaultRoleId],
+  }));
   const { areaId, stageId } = await seedPracticeArea();
   const { matterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: alice });
   ({ documentId: docId } = await seedDocument({ matterId, contentType: "video/mp4" }));

@@ -43,11 +43,7 @@ export function TimeWeekView({
   todayKey: string;
 }) {
   const goal = dailyHoursGoal && dailyHoursGoal > 0 ? dailyHoursGoal : null;
-  const scale = Math.max(
-    MIN_SCALE_HOURS,
-    goal ?? 0,
-    ...week.days.map((d) => d.totalHours),
-  );
+  const scale = Math.max(MIN_SCALE_HOURS, goal ?? 0, ...week.days.map((d) => d.totalHours));
 
   // Legend: every matter/lead touched this week, deduped, widest
   // first. (Segments keyed by matter id — or lead id for intake
@@ -131,16 +127,13 @@ export function TimeWeekView({
                 style={{ background: m.matterColor }}
               />
               <span className="max-w-40 truncate">{m.matterName}</span>
-              <span className="font-mono text-ink-4">
-                {formatHours(m.hours)}h
-              </span>
+              <span className="font-mono text-ink-4">{formatHours(m.hours)}h</span>
             </Link>
           ))}
         </div>
       ) : (
         <div className="text-xs text-ink-4 text-center py-4">
-          No time logged this week yet — entries are added from a matter&rsquo;s
-          Time tab.
+          No time logged this week yet — entries are added from a matter&rsquo;s Time tab.
         </div>
       )}
     </div>
@@ -175,15 +168,8 @@ function DayRow({
         href={buildTimeHref("day", focal)}
         className="w-16 shrink-0 flex flex-col leading-tight hover:text-brand-700"
       >
-        <span
-          className={cn(
-            "text-2xs font-semibold",
-            isToday ? "text-brand-700" : "text-ink-3",
-          )}
-        >
-          {dayDate
-            ? formatDateOnly(dayDate, "short_weekday").split(",")[0]
-            : ""}
+        <span className={cn("text-2xs font-semibold", isToday ? "text-brand-700" : "text-ink-3")}>
+          {dayDate ? formatDateOnly(dayDate, "short_weekday").split(",")[0] : ""}
         </span>
         <span className="text-xs text-ink-4 font-mono">
           {dayDate ? formatDateOnly(dayDate, "short") : day.dayKey}

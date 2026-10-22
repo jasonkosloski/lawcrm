@@ -115,11 +115,7 @@ const taskForm = (overrides: Record<string, string> = {}): FormData => {
 
 describe("createTaskWithCaptures — assignee tri-state", () => {
   test("absent ownerId self-assigns (legacy behavior) with no notification", async () => {
-    const res = await createTaskWithCaptures(
-      matterId,
-      captureInitialState,
-      taskForm()
-    );
+    const res = await createTaskWithCaptures(matterId, captureInitialState, taskForm());
     expect(res.status).toBe("ok");
 
     const task = await prisma.task.findFirstOrThrow({ where: { matterId } });
@@ -133,7 +129,7 @@ describe("createTaskWithCaptures — assignee tri-state", () => {
     const res = await createTaskWithCaptures(
       matterId,
       captureInitialState,
-      taskForm({ ownerId: assignee.userId })
+      taskForm({ ownerId: assignee.userId }),
     );
     expect(res.status).toBe("ok");
 
@@ -154,7 +150,7 @@ describe("createTaskWithCaptures — assignee tri-state", () => {
     const res = await createTaskWithCaptures(
       matterId,
       captureInitialState,
-      taskForm({ ownerId: userId })
+      taskForm({ ownerId: userId }),
     );
     expect(res.status).toBe("ok");
     const task = await prisma.task.findFirstOrThrow({ where: { matterId } });
@@ -166,7 +162,7 @@ describe("createTaskWithCaptures — assignee tri-state", () => {
     const res = await createTaskWithCaptures(
       matterId,
       captureInitialState,
-      taskForm({ ownerId: "" })
+      taskForm({ ownerId: "" }),
     );
     expect(res.status).toBe("ok");
     const task = await prisma.task.findFirstOrThrow({ where: { matterId } });
@@ -184,7 +180,7 @@ describe("createTaskWithCaptures — assignee tri-state", () => {
     const res = await createTaskWithCaptures(
       matterId,
       captureInitialState,
-      taskForm({ ownerId: inactive.userId })
+      taskForm({ ownerId: inactive.userId }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.ownerId?.[0]).toMatch(/inactive|not found/i);
@@ -196,7 +192,7 @@ describe("createTaskWithCaptures — assignee tri-state", () => {
     const res = await createTaskWithCaptures(
       matterId,
       captureInitialState,
-      taskForm({ ownerId: "no-such-user" })
+      taskForm({ ownerId: "no-such-user" }),
     );
     expect(res.status).toBe("error");
     expect(await prisma.task.count()).toBe(0);
@@ -226,11 +222,7 @@ const eventForm = (over: Record<string, string> = {}): FormData => {
 describe("createTaskWithCaptures — zone lookup", () => {
   test("a task with no event sibling never looks up the user's time zone", async () => {
     mockedTz.mockClear();
-    const res = await createTaskWithCaptures(
-      matterId,
-      captureInitialState,
-      taskForm()
-    );
+    const res = await createTaskWithCaptures(matterId, captureInitialState, taskForm());
     expect(res.status).toBe("ok");
     expect(mockedTz).not.toHaveBeenCalled();
   });
@@ -239,11 +231,7 @@ describe("createTaskWithCaptures — zone lookup", () => {
 describe("createEventWithCaptures — instants", () => {
   test("a 9:00 AM Denver hearing is stored as 15:00Z (not 09:00Z)", async () => {
     mockedTz.mockResolvedValue("America/Denver");
-    const res = await createEventWithCaptures(
-      matterId,
-      captureInitialState,
-      eventForm()
-    );
+    const res = await createEventWithCaptures(matterId, captureInitialState, eventForm());
     expect(res.status).toBe("ok");
     const ev = await prisma.calendarEvent.findFirstOrThrow({
       where: { matterId },
@@ -292,7 +280,7 @@ describe("createEventWithCaptures — instants", () => {
     const res = await createEventWithCaptures(
       matterId,
       captureInitialState,
-      eventForm({ endTime: "2026-10-16T08:00" })
+      eventForm({ endTime: "2026-10-16T08:00" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.endTime?.[0]).toMatch(/after start/i);
@@ -322,11 +310,7 @@ const timeSibling = {
 
 describe("createDeadlineWithCaptures", () => {
   test("stores the due date at UTC midnight (ADR-012) in any server zone", async () => {
-    const res = await createDeadlineWithCaptures(
-      matterId,
-      captureInitialState,
-      deadlineForm()
-    );
+    const res = await createDeadlineWithCaptures(matterId, captureInitialState, deadlineForm());
     expect(res.status).toBe("ok");
     const d = await prisma.deadline.findFirstOrThrow({ where: { matterId } });
     expect(d.dueDate.toISOString()).toBe("2026-10-16T00:00:00.000Z");
@@ -337,7 +321,7 @@ describe("createDeadlineWithCaptures", () => {
     const res = await createDeadlineWithCaptures(
       matterId,
       captureInitialState,
-      deadlineForm({ dueDate: "2026-02-31" })
+      deadlineForm({ dueDate: "2026-02-31" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.dueDate?.[0]).toMatch(/invalid/i);
@@ -348,7 +332,7 @@ describe("createDeadlineWithCaptures", () => {
     const res = await createDeadlineWithCaptures(
       matterId,
       captureInitialState,
-      deadlineForm({ attachments: JSON.stringify([timeSibling]) })
+      deadlineForm({ attachments: JSON.stringify([timeSibling]) }),
     );
     expect(res.status).toBe("ok");
     const d = await prisma.deadline.findFirstOrThrow({ where: { matterId } });
@@ -363,11 +347,7 @@ describe("createDeadlineWithCaptures", () => {
   test("a stale matter id is a form error, not an FK crash, and writes nothing", async () => {
     // Unknown == hidden: the matter wall answers with notFound().
     await expect(
-      createDeadlineWithCaptures(
-        "no-such-matter",
-        captureInitialState,
-        deadlineForm()
-      )
+      createDeadlineWithCaptures("no-such-matter", captureInitialState, deadlineForm()),
     ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
     expect(await prisma.deadline.count()).toBe(0);
   });
@@ -378,7 +358,7 @@ describe("createTaskWithCaptures — siblings", () => {
     const res = await createTaskWithCaptures(
       matterId,
       captureInitialState,
-      taskForm({ attachments: JSON.stringify([timeSibling]) })
+      taskForm({ attachments: JSON.stringify([timeSibling]) }),
     );
     expect(res.status).toBe("ok");
     const task = await prisma.task.findFirstOrThrow({ where: { matterId } });
@@ -403,13 +383,11 @@ describe("createTaskWithCaptures — siblings", () => {
             isPinned: false,
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const note = await prisma.note.findFirstOrThrow({ where: { matterId } });
-    expect(note.content).toBe(
-      "Call w/ client<br>Re: &lt;Smith&gt; deposition"
-    );
+    expect(note.content).toBe("Call w/ client<br>Re: &lt;Smith&gt; deposition");
     const task = await prisma.task.findFirstOrThrow({ where: { matterId } });
     expect(note.taskId).toBe(task.id);
   });
@@ -423,8 +401,8 @@ describe("createTaskWithCaptures — siblings", () => {
       createTaskWithCaptures(
         matterId,
         captureInitialState,
-        taskForm({ attachments: JSON.stringify([timeSibling]) })
-      )
+        taskForm({ attachments: JSON.stringify([timeSibling]) }),
+      ),
     ).rejects.toThrow("NEXT_REDIRECT");
     expect(await prisma.task.count()).toBe(0);
     expect(await prisma.timeEntry.count()).toBe(0);
@@ -433,7 +411,7 @@ describe("createTaskWithCaptures — siblings", () => {
 
   test("a stale matter id is a form error and writes nothing", async () => {
     await expect(
-      createTaskWithCaptures("no-such-matter", captureInitialState, taskForm())
+      createTaskWithCaptures("no-such-matter", captureInitialState, taskForm()),
     ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
     expect(await prisma.task.count()).toBe(0);
   });
@@ -451,11 +429,7 @@ describe("createTimeEntryWithCaptures", () => {
   };
 
   test("stores the entry date at UTC midnight", async () => {
-    const res = await createTimeEntryWithCaptures(
-      matterId,
-      captureInitialState,
-      timeForm()
-    );
+    const res = await createTimeEntryWithCaptures(matterId, captureInitialState, timeForm());
     expect(res.status).toBe("ok");
     const e = await prisma.timeEntry.findFirstOrThrow({ where: { matterId } });
     expect(e.date.toISOString()).toBe("2026-10-16T00:00:00.000Z");
@@ -467,10 +441,8 @@ describe("createTimeEntryWithCaptures", () => {
       matterId,
       captureInitialState,
       timeForm({
-        attachments: JSON.stringify([
-          { kind: "task", tempId: "x", title: "" },
-        ]),
-      })
+        attachments: JSON.stringify([{ kind: "task", tempId: "x", title: "" }]),
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.attachmentErrors?.x?.title?.[0]).toBeTruthy();
@@ -507,11 +479,7 @@ describe("createLeadTask", () => {
   test("assigning someone else pings them with a link to the intake tab", async () => {
     const { leadId } = await seedLead({ name: "Pat Prospect" });
     const other = await seedUser({ firmId, email: "lead-assign@example.com" });
-    await createLeadTask(
-      leadId,
-      captureInitialState,
-      taskForm({ ownerId: other.userId })
-    );
+    await createLeadTask(leadId, captureInitialState, taskForm({ ownerId: other.userId }));
     const n = await prisma.notification.findFirstOrThrow({
       where: { userId: other.userId },
     });
@@ -528,17 +496,16 @@ describe("createLeadTask", () => {
         attachments: JSON.stringify([
           { tempId: "t1", kind: "deadline", title: "x", dueDate: "2026-11-01" },
         ]),
-      })
+      }),
     );
     expect(withSibling.status).toBe("error");
     // Unknown == hidden: the lead wall answers with notFound() (ADR-049).
-    await expect(
-      createLeadTask("ghost", captureInitialState, taskForm())
-    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
+    await expect(createLeadTask("ghost", captureInitialState, taskForm())).rejects.toThrow(
+      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/,
+    );
     await prisma.lead.update({ where: { id: leadId }, data: { stage: "converted" } });
     expect(
-      (await createLeadTask(leadId, captureInitialState, taskForm())).errors
-        ?._form?.[0]
+      (await createLeadTask(leadId, captureInitialState, taskForm())).errors?._form?.[0],
     ).toMatch(/already converted/i);
     expect(await prisma.task.count()).toBe(0);
   });
@@ -576,9 +543,7 @@ describe("createLeadEvent", () => {
     expect(ev.startTime.toISOString()).toBe("2026-11-02T10:00:00.000Z");
     expect(vi.mocked(pushEventToGoogle)).toHaveBeenCalledWith(ev.id);
     const paths = vi.mocked(revalidatePath).mock.calls.map((c) => c[0]);
-    expect(paths).toEqual(
-      expect.arrayContaining([`/intake/${leadId}/events`, "/calendar"])
-    );
+    expect(paths).toEqual(expect.arrayContaining([`/intake/${leadId}/events`, "/calendar"]));
   });
 
   test("refuses siblings and a converted lead", async () => {
@@ -590,7 +555,7 @@ describe("createLeadEvent", () => {
         attachments: JSON.stringify([
           { tempId: "t1", kind: "task", title: "Prep", priority: "normal" },
         ]),
-      })
+      }),
     );
     expect(withSibling.status).toBe("error");
     await prisma.lead.update({ where: { id: leadId }, data: { stage: "converted" } });

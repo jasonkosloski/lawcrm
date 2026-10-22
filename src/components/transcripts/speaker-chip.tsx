@@ -7,10 +7,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import {
-  renameTranscriptSpeaker,
-  setSegmentSpeaker,
-} from "@/app/actions/transcripts";
+import { renameTranscriptSpeaker, setSegmentSpeaker } from "@/app/actions/transcripts";
 import { notifyError } from "@/lib/feedback";
 import {
   Dialog,
@@ -176,18 +173,10 @@ function RenameDialog({
             </p>
           )}
           <DialogFooter>
-            <Button
-              variant="ghost"
-              type="button"
-              onClick={onClose}
-              className="text-sm"
-            >
+            <Button variant="ghost" type="button" onClick={onClose} className="text-sm">
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={pending}
-            >
+            <Button type="submit" disabled={pending}>
               Rename
             </Button>
           </DialogFooter>

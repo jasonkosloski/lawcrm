@@ -21,7 +21,7 @@ const blocked = blockedMigrations(
     name: path.basename(path.dirname(file)),
     sql: readFileSync(file, "utf8"),
     allowDestructive: existsSync(path.join(path.dirname(file), ALLOW_DESTRUCTIVE_FILE)),
-  }))
+  })),
 );
 
 if (blocked.length > 0) {
@@ -29,7 +29,7 @@ if (blocked.length > 0) {
     "check-destructive-migrations: the production build will refuse these (ADR-058):\n" +
       formatBlocked(blocked) +
       "\nSplit it expand/contract: ship code that no longer reads what is removed first, then\n" +
-      `add an ${ALLOW_DESTRUCTIVE_FILE} file (the reason) to the migration folder.`
+      `add an ${ALLOW_DESTRUCTIVE_FILE} file (the reason) to the migration folder.`,
   );
   process.exit(1);
 }

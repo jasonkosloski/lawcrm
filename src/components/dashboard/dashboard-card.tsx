@@ -29,9 +29,7 @@ export function DashboardCard({
         {count !== undefined && (
           <span className="text-xs font-normal text-ink-4 tabular-nums">{count}</span>
         )}
-        {warn && (
-          <LatePill tone="danger">{warn}</LatePill>
-        )}
+        {warn && <LatePill tone="danger">{warn}</LatePill>}
         {viewAllHref && (
           <Link
             href={viewAllHref}
@@ -54,19 +52,15 @@ export function DashboardCard({
   );
 }
 
-const ROW_CLASS =
-  "flex items-center gap-3 py-2 border-b border-line-2 last:border-b-0";
+const ROW_CLASS = "flex items-center gap-3 py-2 border-b border-line-2 last:border-b-0";
 
-export function DashboardRow({
-  href,
-  children,
-}: {
-  href?: string;
-  children: ReactNode;
-}) {
+export function DashboardRow({ href, children }: { href?: string; children: ReactNode }) {
   if (href) {
     return (
-      <Link href={href} className={cn(ROW_CLASS, "-mx-2 rounded-md px-2 transition-colors hover:bg-paper")}>
+      <Link
+        href={href}
+        className={cn(ROW_CLASS, "-mx-2 rounded-md px-2 transition-colors hover:bg-paper")}
+      >
         {children}
       </Link>
     );
@@ -79,20 +73,9 @@ const TONES = {
   muted: "bg-paper-2 text-ink-3",
 } as const;
 
-export function LatePill({
-  children,
-  tone,
-}: {
-  children: ReactNode;
-  tone: keyof typeof TONES;
-}) {
+export function LatePill({ children, tone }: { children: ReactNode; tone: keyof typeof TONES }) {
   return (
-    <span
-      className={cn(
-        "text-2xs font-medium px-2 py-0.5 rounded-full",
-        TONES[tone],
-      )}
-    >
+    <span className={cn("text-2xs font-medium px-2 py-0.5 rounded-full", TONES[tone])}>
       {children}
     </span>
   );

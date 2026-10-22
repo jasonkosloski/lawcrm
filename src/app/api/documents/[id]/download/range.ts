@@ -27,10 +27,7 @@ export type ResolvedRange =
  * backwards ranges are ignored (200 full) — only a syntactically
  * valid range that lies wholly past EOF is a 416.
  */
-export function resolveRangeHeader(
-  header: string | null,
-  size: number
-): ResolvedRange {
+export function resolveRangeHeader(header: string | null, size: number): ResolvedRange {
   if (!header) return { kind: "full" };
 
   const unitMatch = /^bytes=(.*)$/i.exec(header.trim());

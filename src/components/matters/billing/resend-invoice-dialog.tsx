@@ -26,10 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { resendInvoiceEmail } from "@/app/actions/billing";
-import {
-  billingInitialState,
-  type BillingFormState,
-} from "@/lib/billing-form";
+import { billingInitialState, type BillingFormState } from "@/lib/billing-form";
 import { notifySuccess, notifyWarning } from "@/lib/feedback";
 import { inputClass, FormErrorBanner } from "@/components/ui/field";
 
@@ -47,10 +44,11 @@ export function ResendInvoiceDialog({
   clientEmail: string | null;
 }) {
   const action = resendInvoiceEmail.bind(null, invoiceId);
-  const [state, formAction, isPending] = useDialogActionState<
-    BillingFormState,
-    FormData
-  >(action, billingInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<BillingFormState, FormData>(
+    action,
+    billingInitialState,
+    open,
+  );
 
   // Keyed on the state object: each submission returns a fresh one.
   useEffect(() => {
@@ -123,9 +121,7 @@ function ResendInvoiceForm({
           placeholder="client@example.com"
           className={cn(inputClass(!!errs.recipient, "md"), "text-sm")}
         />
-        {errs.recipient && (
-          <span className="text-2xs text-warn">{errs.recipient[0]}</span>
-        )}
+        {errs.recipient && <span className="text-2xs text-warn">{errs.recipient[0]}</span>}
       </div>
 
       {state.status === "error" && state.error && <FormErrorBanner message={state.error} />}

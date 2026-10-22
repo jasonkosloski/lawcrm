@@ -68,7 +68,7 @@ describe("getPortalCardData", () => {
   test("without billing.view: no billing fields and no billing queries", async () => {
     vi.mocked(assertMatterAccess).mockResolvedValue("u1");
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k === "portal.view"
+      async (k: string) => k === "portal.view",
     );
     const r = await getPortalCardData("m1");
     expect(r.portalBillingEnabled).toBeUndefined();
@@ -88,9 +88,9 @@ describe("getPortalCardData", () => {
       { clientId: "c2" },
       { clientId: "c1" },
     ] as never);
-    vi.mocked(prisma.portalMatterAccess.findMany).mockImplementation((async (
-      args: { where?: { identity?: unknown } }
-    ) =>
+    vi.mocked(prisma.portalMatterAccess.findMany).mockImplementation((async (args: {
+      where?: { identity?: unknown };
+    }) =>
       args.where?.identity
         ? [
             { identity: { contactId: "c2", contact: { name: "Zed" } } },
@@ -101,9 +101,9 @@ describe("getPortalCardData", () => {
     const r = await getPortalCardData("m1");
     expect(r.portalBillingEnabled).toBe(true);
     expect(r.billedPortalContacts).toEqual(["Amy", "Zed"]);
-    const call = vi
-      .mocked(prisma.invoice.findMany)
-      .mock.calls[0]![0] as { where: Record<string, unknown> };
+    const call = vi.mocked(prisma.invoice.findMany).mock.calls[0]![0] as {
+      where: Record<string, unknown>;
+    };
     expect(call.where).toMatchObject({
       matterId: "m1",
       kind: "client",

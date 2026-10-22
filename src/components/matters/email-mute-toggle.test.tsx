@@ -35,7 +35,7 @@ describe("EmailMuteToggle", () => {
     mockedSet.mockResolvedValue({ ok: true, muted: true });
     render(<EmailMuteToggle matterId="m1" initialMuted={false} />);
     fireEvent.click(
-      screen.getByRole("button", { name: "Mute email notifications for this matter" })
+      screen.getByRole("button", { name: "Mute email notifications for this matter" }),
     );
     await waitFor(() => expect(mockedSet).toHaveBeenCalledWith("m1", true));
   });
@@ -44,7 +44,7 @@ describe("EmailMuteToggle", () => {
     mockedSet.mockResolvedValue({ ok: false, muted: false, error: "nope" });
     render(<EmailMuteToggle matterId="m1" initialMuted={false} />);
     fireEvent.click(
-      screen.getByRole("button", { name: "Mute email notifications for this matter" })
+      screen.getByRole("button", { name: "Mute email notifications for this matter" }),
     );
     await waitFor(() => expect(notifyError).toHaveBeenCalledWith("nope"));
   });

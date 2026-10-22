@@ -91,15 +91,15 @@ describe("parseCallOccurredAt (composer value -> instant, user zone)", () => {
     // 14:30 on Jun 10 in Denver (MDT, UTC-6) is 20:30Z - whatever the
     // zone this test process runs in (the suite runs in both
     // America/Denver and UTC).
-    expect(
-      parseCallOccurredAt("2026-06-10T14:30", "America/Denver")?.toISOString()
-    ).toBe("2026-06-10T20:30:00.000Z");
-    expect(
-      parseCallOccurredAt("2026-06-10T14:30", "UTC")?.toISOString()
-    ).toBe("2026-06-10T14:30:00.000Z");
-    expect(
-      parseCallOccurredAt("2026-01-10T14:30", "America/Denver")?.toISOString()
-    ).toBe("2026-01-10T21:30:00.000Z"); // MST, UTC-7
+    expect(parseCallOccurredAt("2026-06-10T14:30", "America/Denver")?.toISOString()).toBe(
+      "2026-06-10T20:30:00.000Z",
+    );
+    expect(parseCallOccurredAt("2026-06-10T14:30", "UTC")?.toISOString()).toBe(
+      "2026-06-10T14:30:00.000Z",
+    );
+    expect(parseCallOccurredAt("2026-01-10T14:30", "America/Denver")?.toISOString()).toBe(
+      "2026-01-10T21:30:00.000Z",
+    ); // MST, UTC-7
   });
 
   it("round-trips through the edit prefill without drifting", () => {
@@ -114,11 +114,11 @@ describe("parseCallOccurredAt (composer value -> instant, user zone)", () => {
   });
 
   it("pins a date-only value to midnight of that day in the user's zone", () => {
-    expect(
-      parseCallOccurredAt("2026-06-10", "America/Denver")?.toISOString()
-    ).toBe("2026-06-10T06:00:00.000Z");
+    expect(parseCallOccurredAt("2026-06-10", "America/Denver")?.toISOString()).toBe(
+      "2026-06-10T06:00:00.000Z",
+    );
     expect(parseCallOccurredAt("2026-06-10", "UTC")?.toISOString()).toBe(
-      "2026-06-10T00:00:00.000Z"
+      "2026-06-10T00:00:00.000Z",
     );
   });
 

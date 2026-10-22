@@ -3,16 +3,10 @@
  * in the second pass): stored dates must be UTC midnight either way.
  */
 
-
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { dateOnlyKey } from "@/lib/format-date";
-import {
-  applyAutoDefaults,
-  applyDeadlineRules,
-  applyTaskList,
-  describeDefaults,
-} from "./apply";
+import { applyAutoDefaults, applyDeadlineRules, applyTaskList, describeDefaults } from "./apply";
 import {
   resetDb,
   seedFirm,
@@ -52,7 +46,13 @@ beforeEach(async () => {
 
 const makeRule = (over: Partial<Parameters<typeof prisma.deadlineRule.create>[0]["data"]> = {}) =>
   prisma.deadlineRule.create({
-    data: { title: "CGIA notice", anchor: "incident_date", offsetDays: 182, offsetUnit: "days", ...over },
+    data: {
+      title: "CGIA notice",
+      anchor: "incident_date",
+      offsetDays: 182,
+      offsetUnit: "days",
+      ...over,
+    },
   });
 
 const dueKeys = async () =>
@@ -68,7 +68,13 @@ describe("applyDeadlineRules", () => {
   test("creates a deadline with provenance, owner, citation, and an explanation", async () => {
     const rule = await makeRule({ sourceRef: "C.R.S. § 24-10-109", kind: "critical" });
     const res = await prisma.$transaction((tx) =>
-      applyDeadlineRules(tx, { matterId, ruleIds: [rule.id], tz: TZ, onDuplicate: "report", onUnplanned: "report" })
+      applyDeadlineRules(tx, {
+        matterId,
+        ruleIds: [rule.id],
+        tz: TZ,
+        onDuplicate: "report",
+        onUnplanned: "report",
+      }),
     );
     expect(res.created).toHaveLength(1);
     const d = await prisma.deadline.findUniqueOrThrow({ where: { id: res.created[0].deadlineId } });
@@ -88,16 +94,30 @@ describe("applyDeadlineRules", () => {
   test("standard rules generate auto_rule deadlines", async () => {
     const rule = await makeRule({ kind: "standard" });
     await prisma.$transaction((tx) =>
-      applyDeadlineRules(tx, { matterId, ruleIds: [rule.id], tz: TZ, onDuplicate: "report", onUnplanned: "report" })
+      applyDeadlineRules(tx, {
+        matterId,
+        ruleIds: [rule.id],
+        tz: TZ,
+        onDuplicate: "report",
+        onUnplanned: "report",
+      }),
     );
-    expect((await prisma.deadline.findFirstOrThrow({ where: { matterId } })).kind).toBe("auto_rule");
+    expect((await prisma.deadline.findFirstOrThrow({ where: { matterId } })).kind).toBe(
+      "auto_rule",
+    );
   });
 
   test("duplicates: report writes nothing; create re-applies; skip ignores", async () => {
     const rule = await makeRule();
     const run = (onDuplicate: "report" | "create" | "skip") =>
       prisma.$transaction((tx) =>
-        applyDeadlineRules(tx, { matterId, ruleIds: [rule.id], tz: TZ, onDuplicate, onUnplanned: "report" })
+        applyDeadlineRules(tx, {
+          matterId,
+          ruleIds: [rule.id],
+          tz: TZ,
+          onDuplicate,
+          onUnplanned: "report",
+        }),
       );
     await run("report");
     const second = await run("report");
@@ -114,30 +134,68 @@ describe("applyDeadlineRules", () => {
     await prisma.matter.update({ where: { id: matterId }, data: { incidentDate: null } });
     const rule = await makeRule();
     const reported = await prisma.$transaction((tx) =>
-      applyDeadlineRules(tx, { matterId, ruleIds: [rule.id], tz: TZ, onDuplicate: "skip", onUnplanned: "report" })
+      applyDeadlineRules(tx, {
+        matterId,
+        ruleIds: [rule.id],
+        tz: TZ,
+        onDuplicate: "skip",
+        onUnplanned: "report",
+      }),
     );
     expect(reported.unplanned[0].reason).toMatch(/no incident date/);
     expect(await prisma.task.count({ where: { matterId } })).toBe(0);
 
     const tasked = await prisma.$transaction((tx) =>
-      applyDeadlineRules(tx, { matterId, ruleIds: [rule.id], tz: TZ, onDuplicate: "skip", onUnplanned: "task" })
+      applyDeadlineRules(tx, {
+        matterId,
+        ruleIds: [rule.id],
+        tz: TZ,
+        onDuplicate: "skip",
+        onUnplanned: "task",
+      }),
     );
-    const task = await prisma.task.findUniqueOrThrow({ where: { id: tasked.unplanned[0].taskId! } });
-    expect(task).toMatchObject({ title: "Set date: CGIA notice", ownerId: leadId, priority: "urgent" });
+    const task = await prisma.task.findUniqueOrThrow({
+      where: { id: tasked.unplanned[0].taskId! },
+    });
+    expect(task).toMatchObject({
+      title: "Set date: CGIA notice",
+      ownerId: leadId,
+      priority: "urgent",
+    });
     expect(await prisma.deadline.count({ where: { matterId } })).toBe(0);
   });
 
   test("rule anchors chain from deadlines already on the matter", async () => {
-    const trial = await makeRule({ title: "Trial", anchor: "prompt", anchorLabel: "Trial date", offsetDays: 0 });
-    const motions = await makeRule({ title: "Motions in limine", anchor: "rule", anchorRuleId: trial.id, offsetDays: -30 });
+    const trial = await makeRule({
+      title: "Trial",
+      anchor: "prompt",
+      anchorLabel: "Trial date",
+      offsetDays: 0,
+    });
+    const motions = await makeRule({
+      title: "Motions in limine",
+      anchor: "rule",
+      anchorRuleId: trial.id,
+      offsetDays: -30,
+    });
     await prisma.$transaction((tx) =>
       applyDeadlineRules(tx, {
-        matterId, ruleIds: [trial.id], tz: TZ, anchorDates: { [trial.id]: "2027-04-15" },
-        onDuplicate: "report", onUnplanned: "report",
-      })
+        matterId,
+        ruleIds: [trial.id],
+        tz: TZ,
+        anchorDates: { [trial.id]: "2027-04-15" },
+        onDuplicate: "report",
+        onUnplanned: "report",
+      }),
     );
     await prisma.$transaction((tx) =>
-      applyDeadlineRules(tx, { matterId, ruleIds: [motions.id], tz: TZ, onDuplicate: "report", onUnplanned: "report" })
+      applyDeadlineRules(tx, {
+        matterId,
+        ruleIds: [motions.id],
+        tz: TZ,
+        onDuplicate: "report",
+        onUnplanned: "report",
+      }),
     );
     expect(await dueKeys()).toEqual(["Motions in limine@2027-03-16", "Trial@2027-04-15"]);
   });
@@ -146,7 +204,13 @@ describe("applyDeadlineRules", () => {
     const typo = await makeRule({ title: "Typo", offsetDays: 36500 * 365 });
     const sane = await makeRule({ title: "Sane", offsetDays: 10 });
     const res = await prisma.$transaction((tx) =>
-      applyDeadlineRules(tx, { matterId, ruleIds: [typo.id, sane.id], tz: TZ, onDuplicate: "skip", onUnplanned: "task" })
+      applyDeadlineRules(tx, {
+        matterId,
+        ruleIds: [typo.id, sane.id],
+        tz: TZ,
+        onDuplicate: "skip",
+        onUnplanned: "task",
+      }),
     );
     expect(res.created.map((c) => c.title)).toEqual(["Sane"]);
     expect(res.unplanned).toMatchObject([{ title: "Typo", code: "out_of_range" }]);
@@ -160,7 +224,13 @@ describe("applyDeadlineRules", () => {
   test("archived rules are never applied", async () => {
     const rule = await makeRule({ isActive: false });
     const res = await prisma.$transaction((tx) =>
-      applyDeadlineRules(tx, { matterId, ruleIds: [rule.id], tz: TZ, onDuplicate: "report", onUnplanned: "report" })
+      applyDeadlineRules(tx, {
+        matterId,
+        ruleIds: [rule.id],
+        tz: TZ,
+        onDuplicate: "report",
+        onUnplanned: "report",
+      }),
     );
     expect(res.created).toHaveLength(0);
   });
@@ -173,7 +243,13 @@ describe("applyTaskList", () => {
         name: "Intake checklist",
         items: {
           create: [
-            { title: "Send engagement letter", assignTo: "lead", dueOffsetDays: 3, priority: "high", sortOrder: 0 },
+            {
+              title: "Send engagement letter",
+              assignTo: "lead",
+              dueOffsetDays: 3,
+              priority: "high",
+              sortOrder: 0,
+            },
             { title: "Request records", assignTo: "unassigned", dueOffsetDays: null, sortOrder: 1 },
           ],
         },
@@ -184,11 +260,22 @@ describe("applyTaskList", () => {
   test("creates ordered tasks with owners and offsets from today", async () => {
     const list = await makeList();
     const res = await prisma.$transaction((tx) =>
-      applyTaskList(tx, { matterId, taskListId: list.id, tz: TZ, now: new Date("2026-10-16T15:00:00Z"), onDuplicate: "report" })
+      applyTaskList(tx, {
+        matterId,
+        taskListId: list.id,
+        tz: TZ,
+        now: new Date("2026-10-16T15:00:00Z"),
+        onDuplicate: "report",
+      }),
     );
     expect(res.createdTaskIds).toHaveLength(2);
-    const tasks = await prisma.task.findMany({ where: { matterId }, orderBy: { sortOrder: "asc" } });
-    expect(tasks.map((t) => [t.title, t.ownerId, t.dueDate && dateOnlyKey(t.dueDate), t.taskListId])).toEqual([
+    const tasks = await prisma.task.findMany({
+      where: { matterId },
+      orderBy: { sortOrder: "asc" },
+    });
+    expect(
+      tasks.map((t) => [t.title, t.ownerId, t.dueDate && dateOnlyKey(t.dueDate), t.taskListId]),
+    ).toEqual([
       ["Send engagement letter", leadId, "2026-10-19", list.id],
       ["Request records", null, null, list.id],
     ]);
@@ -205,17 +292,29 @@ describe("applyTaskList", () => {
       ],
     });
     await prisma.$transaction((tx) =>
-      applyTaskList(tx, { matterId, taskListId: list.id, tz: TZ, now: new Date("2026-10-16T15:00:00Z"), onDuplicate: "report" })
+      applyTaskList(tx, {
+        matterId,
+        taskListId: list.id,
+        tz: TZ,
+        now: new Date("2026-10-16T15:00:00Z"),
+        onDuplicate: "report",
+      }),
     );
-    const fromList = await prisma.task.findMany({ where: { matterId, taskListId: list.id }, orderBy: { sortOrder: "asc" } });
+    const fromList = await prisma.task.findMany({
+      where: { matterId, taskListId: list.id },
+      orderBy: { sortOrder: "asc" },
+    });
     expect(fromList[0].dueDate?.toISOString()).toBe("2026-10-19T00:00:00.000Z");
     expect(fromList.map((t) => t.sortOrder)).toEqual([1, 2]);
 
     // Applying again appends after the first copy instead of colliding.
     await prisma.$transaction((tx) =>
-      applyTaskList(tx, { matterId, taskListId: list.id, tz: TZ, onDuplicate: "create" })
+      applyTaskList(tx, { matterId, taskListId: list.id, tz: TZ, onDuplicate: "create" }),
     );
-    const both = await prisma.task.findMany({ where: { matterId, taskListId: list.id }, orderBy: { sortOrder: "asc" } });
+    const both = await prisma.task.findMany({
+      where: { matterId, taskListId: list.id },
+      orderBy: { sortOrder: "asc" },
+    });
     expect(both.map((t) => t.sortOrder)).toEqual([1, 2, 3, 4]);
   });
 
@@ -223,16 +322,26 @@ describe("applyTaskList", () => {
     const list = await makeList();
     // 02:00Z Oct 17 is still Oct 16 in Denver (8 PM MDT).
     await prisma.$transaction((tx) =>
-      applyTaskList(tx, { matterId, taskListId: list.id, tz: "America/Denver", now: new Date("2026-10-17T02:00:00Z"), onDuplicate: "report" })
+      applyTaskList(tx, {
+        matterId,
+        taskListId: list.id,
+        tz: "America/Denver",
+        now: new Date("2026-10-17T02:00:00Z"),
+        onDuplicate: "report",
+      }),
     );
-    const t = await prisma.task.findFirstOrThrow({ where: { matterId, title: "Send engagement letter" } });
+    const t = await prisma.task.findFirstOrThrow({
+      where: { matterId, title: "Send engagement letter" },
+    });
     expect(dateOnlyKey(t.dueDate!)).toBe("2026-10-19"); // Oct 16 + 3
   });
 
   test("re-applying reports a duplicate unless forced", async () => {
     const list = await makeList();
     const run = (onDuplicate: "report" | "create") =>
-      prisma.$transaction((tx) => applyTaskList(tx, { matterId, taskListId: list.id, tz: TZ, onDuplicate }));
+      prisma.$transaction((tx) =>
+        applyTaskList(tx, { matterId, taskListId: list.id, tz: TZ, onDuplicate }),
+      );
     await run("report");
     const again = await run("report");
     expect(again).toMatchObject({ duplicate: true, createdTaskIds: [] });
@@ -244,7 +353,11 @@ describe("applyTaskList", () => {
 describe("applyAutoDefaults", () => {
   test("applies area-specific and all-area defaults, idempotently", async () => {
     const cgia = await makeRule();
-    const general = await makeRule({ title: "Initial client meeting", anchor: "matter_opened", offsetDays: 7 });
+    const general = await makeRule({
+      title: "Initial client meeting",
+      anchor: "matter_opened",
+      offsetDays: 7,
+    });
     const otherArea = await prisma.practiceArea.create({ data: { name: "Other area" } });
     const elsewhere = await makeRule({ title: "Not for this area" });
     const list = await prisma.taskList.create({
@@ -261,11 +374,22 @@ describe("applyAutoDefaults", () => {
 
     const run = () =>
       prisma.$transaction((tx) =>
-        applyAutoDefaults(tx, { matterId, practiceAreaId: areaId, trigger: "matter_created", tz: TZ })
+        applyAutoDefaults(tx, {
+          matterId,
+          practiceAreaId: areaId,
+          trigger: "matter_created",
+          tz: TZ,
+        }),
       );
     const first = await run();
-    expect(await dueKeys()).toEqual(["Initial client meeting@2026-10-23", "CGIA notice@2026-09-08"].sort((a, b) => a.split("@")[1].localeCompare(b.split("@")[1])));
-    expect(describeDefaults(first)).toBe("Automatic defaults applied: 2 deadlines, 1 task (Intake)");
+    expect(await dueKeys()).toEqual(
+      ["Initial client meeting@2026-10-23", "CGIA notice@2026-09-08"].sort((a, b) =>
+        a.split("@")[1].localeCompare(b.split("@")[1]),
+      ),
+    );
+    expect(describeDefaults(first)).toBe(
+      "Automatic defaults applied: 2 deadlines, 1 task (Intake)",
+    );
 
     const second = await run();
     expect(describeDefaults(second)).toBeNull();
@@ -275,7 +399,12 @@ describe("applyAutoDefaults", () => {
 
   test("no defaults configured → nothing happens", async () => {
     const res = await prisma.$transaction((tx) =>
-      applyAutoDefaults(tx, { matterId, practiceAreaId: areaId, trigger: "matter_created", tz: TZ })
+      applyAutoDefaults(tx, {
+        matterId,
+        practiceAreaId: areaId,
+        trigger: "matter_created",
+        tz: TZ,
+      }),
     );
     expect(describeDefaults(res)).toBeNull();
   });

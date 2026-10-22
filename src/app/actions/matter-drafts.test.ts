@@ -138,22 +138,21 @@ describe("deleteMatterDraft", () => {
     });
     // Simulate Create winning before the delete's transaction takes its lock.
     const real = prisma.$transaction.bind(prisma);
-    const spy = vi.spyOn(prisma, "$transaction").mockImplementationOnce(((
-      fn: unknown,
-      o: unknown
-    ) =>
-      prisma.matterDraft
-        .delete({ where: { id: a.draftId } })
-        .then(() => (real as (x: unknown, y: unknown) => unknown)(fn, o))) as never);
+    const spy = vi
+      .spyOn(prisma, "$transaction")
+      .mockImplementationOnce(((fn: unknown, o: unknown) =>
+        prisma.matterDraft
+          .delete({ where: { id: a.draftId } })
+          .then(() => (real as (x: unknown, y: unknown) => unknown)(fn, o))) as never);
     expect(await deleteMatterDraft(a.draftId)).toEqual({
       ok: false,
       error: "This draft was already used to open a matter.",
     });
     spy.mockRestore();
     expect(deleteFile).not.toHaveBeenCalled();
-    expect(
-      (await prisma.activityLog.findMany()).map((l) => l.title)
-    ).not.toContain("Matter draft deleted");
+    expect((await prisma.activityLog.findMany()).map((l) => l.title)).not.toContain(
+      "Matter draft deleted",
+    );
   });
 
   test("never deletes bytes a Document references", async () => {
@@ -186,7 +185,13 @@ describe("draft files", () => {
   test("originating toggle keeps exactly one; remove deletes row then bytes", async () => {
     const a = await newDraft();
     const f1 = await prisma.matterDraftFile.create({
-      data: { draftId: a.draftId, name: "a", fileUrl: "k1", uploadedBy: creator, isOriginating: true },
+      data: {
+        draftId: a.draftId,
+        name: "a",
+        fileUrl: "k1",
+        uploadedBy: creator,
+        isOriginating: true,
+      },
     });
     const f2 = await prisma.matterDraftFile.create({
       data: { draftId: a.draftId, name: "b", fileUrl: "k2", uploadedBy: creator },
@@ -209,13 +214,12 @@ describe("setDraftFileOriginating when the file vanishes", () => {
       data: { draftId: a.draftId, name: "a", fileUrl: "k-gone", uploadedBy: creator },
     });
     const real = prisma.$transaction.bind(prisma);
-    const spy = vi.spyOn(prisma, "$transaction").mockImplementationOnce(((
-      fn: unknown,
-      o: unknown
-    ) =>
-      prisma.matterDraftFile
-        .delete({ where: { id: f.id } })
-        .then(() => (real as (x: unknown, y: unknown) => unknown)(fn, o))) as never);
+    const spy = vi
+      .spyOn(prisma, "$transaction")
+      .mockImplementationOnce(((fn: unknown, o: unknown) =>
+        prisma.matterDraftFile
+          .delete({ where: { id: f.id } })
+          .then(() => (real as (x: unknown, y: unknown) => unknown)(fn, o))) as never);
     await expect(setDraftFileOriginating(f.id)).resolves.toEqual({ ok: false });
     spy.mockRestore();
   });
@@ -229,13 +233,12 @@ describe("removeDraftFile vs Create claim", () => {
     });
     // Simulate Create winning between the action's read and its lock.
     const real = prisma.$transaction.bind(prisma);
-    const spy = vi.spyOn(prisma, "$transaction").mockImplementationOnce(((
-      fn: unknown,
-      o: unknown
-    ) =>
-      prisma.matterDraft
-        .delete({ where: { id: a.draftId } })
-        .then(() => (real as (x: unknown, y: unknown) => unknown)(fn, o))) as never);
+    const spy = vi
+      .spyOn(prisma, "$transaction")
+      .mockImplementationOnce(((fn: unknown, o: unknown) =>
+        prisma.matterDraft
+          .delete({ where: { id: a.draftId } })
+          .then(() => (real as (x: unknown, y: unknown) => unknown)(fn, o))) as never);
     expect(await removeDraftFile(f.id)).toEqual({ ok: false });
     spy.mockRestore();
     expect(deleteFile).not.toHaveBeenCalled();

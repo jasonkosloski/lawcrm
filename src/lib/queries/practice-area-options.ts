@@ -8,10 +8,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import {
-  normalizeAreaBillingTypes,
-  type BillingType,
-} from "@/lib/billing-type";
+import { normalizeAreaBillingTypes, type BillingType } from "@/lib/billing-type";
 
 export type PracticeAreaOption = {
   id: string;

@@ -53,9 +53,7 @@ describe("EditPracticeAreaForm after a server validation error", () => {
       container.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
 
     const amount = field("statutePeriodAmount");
-    const unit = container.querySelector<HTMLSelectElement>(
-      'select[name="statutePeriodUnit"]'
-    )!;
+    const unit = container.querySelector<HTMLSelectElement>('select[name="statutePeriodUnit"]')!;
     expect(amount.value).toBe("3");
     expect(unit.value).toBe("YEARS");
 
@@ -65,22 +63,16 @@ describe("EditPracticeAreaForm after a server validation error", () => {
     const citation = field("statuteSourceCitation");
     await user.clear(citation);
     await user.type(citation, "C.R.S. § 13-80-102");
-    await user.click(
-      screen.getByRole("checkbox", { name: /track statute of limitations/i })
-    );
+    await user.click(screen.getByRole("checkbox", { name: /track statute of limitations/i }));
 
     await user.click(screen.getByRole("button", { name: /^save$/i }));
     await waitFor(() =>
-      expect(
-        screen.getByText(/another practice area already uses that name/i)
-      ).toBeTruthy()
+      expect(screen.getByText(/another practice area already uses that name/i)).toBeTruthy(),
     );
 
     expect(field("statutePeriodAmount").value).toBe("300");
     expect(
-      container.querySelector<HTMLSelectElement>(
-        'select[name="statutePeriodUnit"]'
-      )!.value
+      container.querySelector<HTMLSelectElement>('select[name="statutePeriodUnit"]')!.value,
     ).toBe("DAYS");
     expect(field("statuteSourceCitation").value).toBe("C.R.S. § 13-80-102");
     expect(
@@ -88,28 +80,18 @@ describe("EditPracticeAreaForm after a server validation error", () => {
         screen.getByRole("checkbox", {
           name: /track statute of limitations/i,
         }) as HTMLInputElement
-      ).checked
+      ).checked,
     ).toBe(false);
   });
 
   test("the SOL copy says turning it off keeps existing matters' SOL data", () => {
     render(<EditPracticeAreaForm area={area} />);
-    expect(
-      screen.getByText(/existing matters keep their sol dates/i)
-    ).toBeTruthy();
+    expect(screen.getByText(/existing matters keep their sol dates/i)).toBeTruthy();
   });
 
   test("every control has an accessible name", () => {
     render(<EditPracticeAreaForm area={area} />);
-    for (const name of [
-      "Name",
-      "Label",
-      "Color",
-      "Amount",
-      "Unit",
-      "Source citation",
-      "Default",
-    ]) {
+    for (const name of ["Name", "Label", "Color", "Amount", "Unit", "Source citation", "Default"]) {
       expect(screen.getByLabelText(name)).toBeTruthy();
     }
   });
@@ -123,17 +105,13 @@ describe("EditPracticeAreaForm after a server validation error", () => {
     const { container } = render(
       <EditPracticeAreaForm
         area={{ ...area, statutePeriodAmount: null, statutePeriodUnit: null }}
-      />
+      />,
     );
     expect(
-      container.querySelector<HTMLInputElement>(
-        'input[name="statutePeriodAmount"]'
-      )!.value
+      container.querySelector<HTMLInputElement>('input[name="statutePeriodAmount"]')!.value,
     ).toBe("");
     expect(
-      container.querySelector<HTMLSelectElement>(
-        'select[name="statutePeriodUnit"]'
-      )!.value
+      container.querySelector<HTMLSelectElement>('select[name="statutePeriodUnit"]')!.value,
     ).toBe("YEARS");
   });
 });
@@ -150,11 +128,11 @@ describe("EditPracticeAreaForm matter-name template and required fields", () => 
       <EditPracticeAreaForm
         area={{ ...area, matterNameTemplate: null, requiredMatterFields: ["venue"] }}
         firmTemplate="{client_full} - {year}"
-      />
+      />,
     );
-    expect(
-      (screen.getByRole("checkbox", { name: "Venue" }) as HTMLInputElement).checked
-    ).toBe(true);
+    expect((screen.getByRole("checkbox", { name: "Venue" }) as HTMLInputElement).checked).toBe(
+      true,
+    );
     await user.click(screen.getByRole("checkbox", { name: "Case number" }));
     await user.click(screen.getByRole("button", { name: /^save$/i }));
     await waitFor(() => expect(mockedUpdate).toHaveBeenCalled());
@@ -177,12 +155,10 @@ describe("EditPracticeAreaForm originating document", () => {
 
 describe("EditPracticeAreaForm billing types", () => {
   const box = (c: HTMLElement, v: string) =>
-    c.querySelector<HTMLInputElement>(
-      `input[name="allowedBillingTypes"][value="${v}"]`
-    )!;
+    c.querySelector<HTMLInputElement>(`input[name="allowedBillingTypes"][value="${v}"]`)!;
   const options = (c: HTMLElement) =>
     Array.from(
-      c.querySelectorAll<HTMLOptionElement>('select[name="defaultBillingType"] option')
+      c.querySelectorAll<HTMLOptionElement>('select[name="defaultBillingType"] option'),
     ).map((o) => o.value);
 
   test("checkboxes follow the prop; default select lists only checked types", () => {
@@ -193,14 +169,13 @@ describe("EditPracticeAreaForm billing types", () => {
           allowedBillingTypes: ["flat", "pro_bono"],
           defaultBillingType: "pro_bono",
         }}
-      />
+      />,
     );
     expect(box(container, "flat").checked).toBe(true);
     expect(box(container, "hourly").checked).toBe(false);
     expect(options(container)).toEqual(["flat", "pro_bono"]);
     expect(
-      container.querySelector<HTMLSelectElement>('select[name="defaultBillingType"]')!
-        .value
+      container.querySelector<HTMLSelectElement>('select[name="defaultBillingType"]')!.value,
     ).toBe("pro_bono");
   });
 
@@ -210,8 +185,7 @@ describe("EditPracticeAreaForm billing types", () => {
     await user.click(box(container, "contingent"));
     expect(options(container)).not.toContain("contingent");
     expect(
-      container.querySelector<HTMLSelectElement>('select[name="defaultBillingType"]')!
-        .value
+      container.querySelector<HTMLSelectElement>('select[name="defaultBillingType"]')!.value,
     ).toBe("hourly");
   });
 });

@@ -29,13 +29,7 @@ import {
 } from "@/lib/note-constants";
 import { Button } from "@/components/ui/button";
 
-export function EventNoteComposer({
-  matterId,
-  eventId,
-}: {
-  matterId: string;
-  eventId: string;
-}) {
+export function EventNoteComposer({ matterId, eventId }: { matterId: string; eventId: string }) {
   const [expanded, setExpanded] = useState(false);
 
   const [html, setHtml] = useState("");
@@ -67,10 +61,11 @@ export function EventNoteComposer({
   // Wrapped useActionState: masks state left over from a previous
   // expand, so a failed attempt's errors don't reappear when the
   // composer is re-expanded. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    NoteFormState,
-    FormData
-  >(action, noteInitialState, expanded);
+  const [state, formAction, isPending] = useDialogActionState<NoteFormState, FormData>(
+    action,
+    noteInitialState,
+    expanded,
+  );
 
   const errs = state.errors ?? {};
 
@@ -118,9 +113,7 @@ export function EventNoteComposer({
                 onClick={() => setType(t)}
                 className={cn(
                   "text-2xs font-medium px-1.5 py-0.5 rounded transition-colors",
-                  type === t
-                    ? "bg-white text-ink shadow-sm"
-                    : "text-ink-3 hover:text-ink"
+                  type === t ? "bg-white text-ink shadow-sm" : "text-ink-3 hover:text-ink",
                 )}
               >
                 {NOTE_TYPE_LABEL[t]}
@@ -136,13 +129,10 @@ export function EventNoteComposer({
               "inline-flex items-center gap-1 h-6 px-2 rounded-md text-2xs font-medium border transition-colors",
               pin
                 ? "bg-brand-soft text-brand-700 border-brand-200"
-                : "bg-white text-ink-3 border-line hover:text-brand-700 hover:border-brand-300"
+                : "bg-white text-ink-3 border-line hover:text-brand-700 hover:border-brand-300",
             )}
           >
-            <Pin
-              size={11}
-              className={pin ? "fill-brand-500 text-brand-500" : ""}
-            />
+            <Pin size={11} className={pin ? "fill-brand-500 text-brand-500" : ""} />
             Pin
           </button>
         </div>
@@ -158,11 +148,7 @@ export function EventNoteComposer({
           >
             Cancel
           </button>
-          <Button
-            size="xs"
-            type="submit"
-            disabled={isPending || html.trim().length === 0}
-          >
+          <Button size="xs" type="submit" disabled={isPending || html.trim().length === 0}>
             {isPending ? "Saving…" : "Save note"}
           </Button>
         </div>

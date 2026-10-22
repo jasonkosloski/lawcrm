@@ -126,9 +126,7 @@ describe("PrintToolbar", () => {
     vi.useRealTimers();
     const user = userEvent.setup();
     render(<PrintToolbar autoprint={false} />);
-    await user.click(
-      screen.getByRole("button", { name: /print or save as pdf/i })
-    );
+    await user.click(screen.getByRole("button", { name: /print or save as pdf/i }));
     expect(printSpy).toHaveBeenCalledOnce();
   });
 });

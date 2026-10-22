@@ -69,7 +69,7 @@ export function EmbeddedInbox({
       <div
         className={cn(
           selectedThread ? "hidden lg:flex" : "flex w-full",
-          "lg:w-88 lg:shrink-0 flex-col min-h-0 overflow-y-auto"
+          "lg:w-88 lg:shrink-0 flex-col min-h-0 overflow-y-auto",
         )}
       >
         <EmbeddedThreadList
@@ -81,9 +81,7 @@ export function EmbeddedInbox({
           selectedThreadId={selectedThread?.id ?? null}
           tz={tz}
         />
-        {paging && (
-          <Pager {...paging} href={basePath} className="mt-2 shrink-0" />
-        )}
+        {paging && <Pager {...paging} href={basePath} className="mt-2 shrink-0" />}
       </div>
 
       {/* Right pane: reader (below lg only once a thread is selected) */}
@@ -91,7 +89,7 @@ export function EmbeddedInbox({
         <div
           className={cn(
             selectedThread ? "flex" : "hidden lg:flex",
-            "flex-1 min-w-0 flex-col min-h-0 rounded-lg border border-line overflow-hidden bg-paper-email"
+            "flex-1 min-w-0 flex-col min-h-0 rounded-lg border border-line overflow-hidden bg-paper-email",
           )}
         >
           <ThreadReader

@@ -115,9 +115,7 @@ beforeEach(() => {
 describe("note snippet", () => {
   test("an HTML body is quoted as plain text, not markup", async () => {
     await renderReader(
-      thread(
-        '<div dir="ltr">Hi Jason,<br><br>Attached is the <b>signed</b> response.</div>'
-      )
+      thread('<div dir="ltr">Hi Jason,<br><br>Attached is the <b>signed</b> response.</div>'),
     );
     const snippet = screen.getByTestId("inbox-actions").dataset.snippet!;
     expect(snippet).toBe("Hi Jason,\n\nAttached is the signed response.");
@@ -134,19 +132,15 @@ describe("note snippet", () => {
 
   test("a legacy plain-text body is passed through", async () => {
     await renderReader(thread("Plain text body"));
-    expect(screen.getByTestId("inbox-actions").dataset.snippet).toBe(
-      "Plain text body"
-    );
+    expect(screen.getByTestId("inbox-actions").dataset.snippet).toBe("Plain text body");
   });
 });
 
 describe("note snippet (plain text)", () => {
   test("a plain-text body keeps its paragraph break and line breaks", async () => {
-    await renderReader(
-      thread("Hi Jason,\r\n\r\n\r\n\r\nSee   attached.\nThanks")
-    );
+    await renderReader(thread("Hi Jason,\r\n\r\n\r\n\r\nSee   attached.\nThanks"));
     expect(screen.getByTestId("inbox-actions").dataset.snippet).toBe(
-      "Hi Jason,\n\nSee attached.\nThanks"
+      "Hi Jason,\n\nSee attached.\nThanks",
     );
   });
 });
@@ -154,7 +148,7 @@ describe("note snippet (plain text)", () => {
 describe("permission-gated affordances", () => {
   test("a viewer without the keys gets no log-time button, flagged inbox actions and a read-only picker", async () => {
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key: string) => key === "documents.upload"
+      async (key: string) => key === "documents.upload",
     );
     await renderReader(thread("hi"));
 
@@ -163,23 +157,14 @@ describe("permission-gated affordances", () => {
     expect(actions).toHaveAttribute("data-task", "false");
     expect(actions).toHaveAttribute("data-note", "false");
     expect(actions).toHaveAttribute("data-deadline", "false");
-    expect(screen.getByTestId("file-picker")).toHaveAttribute(
-      "data-can-file",
-      "false"
-    );
+    expect(screen.getByTestId("file-picker")).toHaveAttribute("data-can-file", "false");
   });
 
   test("a viewer with the keys sees everything", async () => {
     await renderReader(thread("hi"));
     expect(screen.getByTestId("log-time-btn")).toBeInTheDocument();
-    expect(screen.getByTestId("file-picker")).toHaveAttribute(
-      "data-can-file",
-      "true"
-    );
-    expect(screen.getByTestId("inbox-actions")).toHaveAttribute(
-      "data-task",
-      "true"
-    );
+    expect(screen.getByTestId("file-picker")).toHaveAttribute("data-can-file", "true");
+    expect(screen.getByTestId("inbox-actions")).toHaveAttribute("data-task", "true");
   });
 });
 
@@ -195,9 +180,6 @@ describe("lead-filed threads", () => {
     expect(picker.dataset.label).toBe("Jane Lead");
     // App-sent mail: no Unfile.
     expect(picker).toHaveAttribute("data-can-unfile", "false");
-    expect(screen.getByTestId("inbox-actions")).toHaveAttribute(
-      "data-filed",
-      "false"
-    );
+    expect(screen.getByTestId("inbox-actions")).toHaveAttribute("data-filed", "false");
   });
 });

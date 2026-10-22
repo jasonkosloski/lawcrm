@@ -33,7 +33,7 @@ const modeInput = z.object({
 
 export async function setNotificationEmailMode(
   category: string,
-  mode: string
+  mode: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const userId = await getCurrentUserId();
   const parsed = modeInput.safeParse({ category, mode });
@@ -80,7 +80,7 @@ export async function setNotificationEmailMode(
  *  reminders still arrive for muted matters. */
 export async function setMatterEmailMute(
   matterId: string,
-  muted: boolean
+  muted: boolean,
 ): Promise<{ ok: boolean; muted: boolean; error?: string }> {
   const userId = await getCurrentUserId();
   // Outside the try: notFound() must not be swallowed by the catch.

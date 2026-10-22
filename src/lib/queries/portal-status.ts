@@ -27,7 +27,7 @@ export type ClientStatusCardData = {
  * portal.view (null without it), before any matter-scoped query.
  */
 export async function getClientStatusCardData(
-  matterId: string
+  matterId: string,
 ): Promise<ClientStatusCardData | null> {
   await assertMatterAccess(matterId);
   if (!(await currentUserHasPermission("portal.view"))) return null;
@@ -90,7 +90,7 @@ export type EventPortalShareProp = {
  */
 export async function getEventPortalShareProp(
   eventId: string,
-  matterId: string | null | undefined
+  matterId: string | null | undefined,
 ): Promise<EventPortalShareProp | undefined> {
   if (!matterId) return undefined;
   if (!(await currentUserHasPermission("portal.view"))) return undefined;

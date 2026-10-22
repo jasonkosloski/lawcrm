@@ -40,12 +40,14 @@ export function CascadeConfirm({
   onCancel: () => void;
 }) {
   const [ticked, setTicked] = useState<Set<string>>(
-    () => new Set(changes.filter((c) => !c.manual).map((c) => c.deadlineId))
+    () => new Set(changes.filter((c) => !c.manual).map((c) => c.deadlineId)),
   );
   // A row is usable only if its anchor (another listed row) is ticked.
   const listed = new Set(changes.map((c) => c.deadlineId));
   const anchorTicked = (c: RecalcChange): boolean =>
-    c.anchorDeadlineId === null || !listed.has(c.anchorDeadlineId) || effective.has(c.anchorDeadlineId);
+    c.anchorDeadlineId === null ||
+    !listed.has(c.anchorDeadlineId) ||
+    effective.has(c.anchorDeadlineId);
   // Resolve top-down (the server lists anchors before dependents).
   const effective = new Set<string>();
   for (const c of changes) {
@@ -70,11 +72,12 @@ export function CascadeConfirm({
         <TriangleAlert size={14} className="text-warn mt-0.5 shrink-0" />
         <div className="text-xs text-ink">
           <div id="cascade-confirm-title" className="font-semibold">
-            Changing {changedLabel} will change {changes.length === 1 ? "another deadline" : `${changes.length} other deadlines`}
+            Changing {changedLabel} will change{" "}
+            {changes.length === 1 ? "another deadline" : `${changes.length} other deadlines`}
           </div>
           <div className="text-ink-3 mt-0.5">
-            {changes.length === 1 ? "It counts" : "They count"} from it under the firm&apos;s deadline rules.
-            Choose which to update — nothing changes unless it&apos;s ticked.
+            {changes.length === 1 ? "It counts" : "They count"} from it under the firm&apos;s
+            deadline rules. Choose which to update — nothing changes unless it&apos;s ticked.
           </div>
         </div>
       </div>
@@ -100,7 +103,8 @@ export function CascadeConfirm({
                     <CalendarClock size={12} className="text-ink-4" /> {c.title}
                   </span>
                   <span className="block font-mono text-2xs text-ink-2 mt-0.5">
-                    <span className="line-through text-ink-4">{day(c.fromKey)}</span> → <strong>{day(c.toKey)}</strong>
+                    <span className="line-through text-ink-4">{day(c.fromKey)}</span> →{" "}
+                    <strong>{day(c.toKey)}</strong>
                   </span>
                   <span className="block text-2xs text-ink-4">
                     Counts from {c.anchorText} · rule &ldquo;{c.ruleTitle}&rdquo;
@@ -123,12 +127,7 @@ export function CascadeConfirm({
       </ul>
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          type="button"
-          onClick={onCancel}
-        >
+        <Button variant="ghost" size="sm" type="button" onClick={onCancel}>
           Go back
         </Button>
         <Button

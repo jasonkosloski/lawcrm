@@ -20,7 +20,5 @@ export function formatEmailLabel(raw: string | null | undefined): string {
   const colon = slug.lastIndexOf(":");
   if (colon !== -1) slug = slug.slice(colon + 1);
   const words = slug.split(/[_\-\s]+/).filter(Boolean);
-  return words
-    .map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
+  return words.map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(" ");
 }

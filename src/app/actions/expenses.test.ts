@@ -18,10 +18,7 @@ vi.mock("@/lib/permission-check", () => ({
 }));
 
 import { getCurrentUserId } from "@/lib/current-user";
-import {
-  currentUserHasAnyPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasAnyPermission, requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
   createExpense,
@@ -121,7 +118,7 @@ describe("createExpense", () => {
       expect(res.status).toBe("error");
       expect(res.errors?.date).toBeTruthy();
       expect(await prisma.expense.count({ where: { matterId } })).toBe(0);
-    }
+    },
   );
 
   test("an amount over DECIMAL(14,2) is a field error, not a Prisma throw", async () => {
@@ -169,9 +166,9 @@ describe("createExpense", () => {
 
   test("unknown matter is a clean error", async () => {
     // Unknown == hidden: the matter wall answers with notFound().
-    await expect(
-      createExpense("nope", expenseInitialState, form())
-    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
+    await expect(createExpense("nope", expenseInitialState, form())).rejects.toThrow(
+      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/,
+    );
   });
 
   test("receipt: a document on THIS matter links; another matter's or an unknown id becomes null", async () => {
@@ -182,8 +179,7 @@ describe("createExpense", () => {
     await create({ description: "ghost", receiptDocumentId: "does-not-exist" });
     await create({ description: "none", receiptDocumentId: "" });
     const receipt = async (d: string) =>
-      (await prisma.expense.findFirstOrThrow({ where: { description: d } }))
-        .receiptDocumentId;
+      (await prisma.expense.findFirstOrThrow({ where: { description: d } })).receiptDocumentId;
     expect(await receipt("mine")).toBe(mine.documentId);
     expect(await receipt("theirs")).toBeNull();
     expect(await receipt("ghost")).toBeNull();
@@ -205,7 +201,7 @@ describe("updateExpense", () => {
     const res = await updateExpense(
       expenseId,
       expenseInitialState,
-      form({ amount: "125.25", description: "Corrected" })
+      form({ amount: "125.25", description: "Corrected" }),
     );
     expect(res.status).toBe("ok");
     expect(requirePermission).toHaveBeenCalledWith("matters.expense.edit");
@@ -259,7 +255,7 @@ describe("updateExpense", () => {
     await updateExpense(
       expenseId,
       expenseInitialState,
-      form({ receiptDocumentId: theirs.documentId })
+      form({ receiptDocumentId: theirs.documentId }),
     );
     const row = await prisma.expense.findUniqueOrThrow({ where: { id: expenseId } });
     expect(row.receiptDocumentId).toBeNull();
@@ -276,7 +272,7 @@ describe("updateExpense", () => {
     const huge = await updateExpense(
       expenseId,
       expenseInitialState,
-      form({ amount: "1000000000000" })
+      form({ amount: "1000000000000" }),
     );
     expect(huge.status).toBe("error");
     expect(huge.errors?.amount).toBeTruthy();
@@ -357,8 +353,8 @@ describe("searchReceiptDocuments", () => {
 
   test("a malformed payload returns nothing", async () => {
     await seedDocument({ matterId });
-    expect(
-      await searchReceiptDocuments(matterId, { contains: "" } as unknown as string)
-    ).toEqual([]);
+    expect(await searchReceiptDocuments(matterId, { contains: "" } as unknown as string)).toEqual(
+      [],
+    );
   });
 });

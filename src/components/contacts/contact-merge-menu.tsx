@@ -38,10 +38,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/format-phone";
 import { CONTACT_TYPE_LABEL } from "@/lib/contact-constants";
-import {
-  mergeContacts,
-  searchMergeCandidatesAction,
-} from "@/app/actions/contacts";
+import { mergeContacts, searchMergeCandidatesAction } from "@/app/actions/contacts";
 import type { MergeCandidateOption } from "@/lib/queries/contacts";
 import { inputClass } from "@/components/ui/field";
 
@@ -126,7 +123,7 @@ export function ContactMergeMenu({
       const res = await mergeContacts(
         contactId,
         selected.id,
-        confirmOppositeSides ? { confirmOppositeSides: true } : undefined
+        confirmOppositeSides ? { confirmOppositeSides: true } : undefined,
       );
       if (res.ok) {
         setOpen(false);
@@ -165,19 +162,15 @@ export function ContactMergeMenu({
           <DialogHeader>
             <DialogTitle>Merge contact</DialogTitle>
             <DialogDescription>
-              Pick the record that survives.{" "}
-              <span className="text-ink-2">{contactName}</span> will be
-              merged into it and retired.
+              Pick the record that survives. <span className="text-ink-2">{contactName}</span> will
+              be merged into it and retired.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-3">
             {selected ? (
               <div className="flex items-start gap-2 min-h-8 px-2.5 py-1.5 rounded-md border border-brand-200 bg-brand-soft/40 text-xs text-ink-2">
-                <UserCheck
-                  size={13}
-                  className="text-brand-700 shrink-0 mt-0.5"
-                />
+                <UserCheck size={13} className="text-brand-700 shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium truncate">
                     {selected.name}
@@ -187,9 +180,7 @@ export function ContactMergeMenu({
                       </span>
                     )}
                   </div>
-                  <div className="text-2xs text-ink-3 truncate">
-                    {candidateDetail(selected)}
-                  </div>
+                  <div className="text-2xs text-ink-3 truncate">{candidateDetail(selected)}</div>
                 </div>
                 <button
                   type="button"
@@ -240,15 +231,10 @@ export function ContactMergeMenu({
                         }}
                         className="w-full flex items-start gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-brand-tint"
                       >
-                        <UserCheck
-                          size={12}
-                          className="text-ink-4 shrink-0 mt-0.5"
-                        />
+                        <UserCheck size={12} className="text-ink-4 shrink-0 mt-0.5" />
                         <span className="flex-1 min-w-0">
                           <span className="flex items-center gap-2">
-                            <span className="font-medium text-ink truncate">
-                              {c.name}
-                            </span>
+                            <span className="font-medium text-ink truncate">{c.name}</span>
                             {c.organization && (
                               <span className="text-2xs font-mono text-ink-4 truncate ml-auto">
                                 {c.organization}
@@ -268,16 +254,13 @@ export function ContactMergeMenu({
 
             {selected && (
               <div className="text-xs text-ink-3 rounded-md border border-line bg-paper-2 px-3 py-2 leading-relaxed">
-                <div className="font-medium text-ink mb-1">
-                  What happens:
-                </div>
+                <div className="font-medium text-ink mb-1">What happens:</div>
                 <ul className="list-disc pl-4 flex flex-col gap-0.5">
                   <li>
-                    Matters, party roles, leads, message threads, calendar
-                    invites, and invoices on{" "}
+                    Matters, party roles, leads, message threads, calendar invites, and invoices on{" "}
                     <span className="text-ink-2">{contactName}</span> move to{" "}
-                    <span className="text-ink-2">{selected.name}</span>
-                    {" "}({candidateDetail(selected)}).
+                    <span className="text-ink-2">{selected.name}</span> ({candidateDetail(selected)}
+                    ).
                   </li>
                   <li>
                     Phone numbers move too; duplicates are dropped and{" "}
@@ -286,14 +269,12 @@ export function ContactMergeMenu({
                   </li>
                   <li>
                     Missing email / organization / address on{" "}
-                    <span className="text-ink-2">{selected.name}</span> is
-                    filled in from this contact, and its internal notes and
-                    conflict flag carry over.
+                    <span className="text-ink-2">{selected.name}</span> is filled in from this
+                    contact, and its internal notes and conflict flag carry over.
                   </li>
                   <li>
-                    <span className="text-ink-2">{contactName}</span> is
-                    retired and this page will redirect to the surviving
-                    record. This is hard to undo.
+                    <span className="text-ink-2">{contactName}</span> is retired and this page will
+                    redirect to the surviving record. This is hard to undo.
                   </li>
                 </ul>
               </div>
@@ -307,11 +288,7 @@ export function ContactMergeMenu({
           </div>
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             {needsConfirm ? (
@@ -324,11 +301,7 @@ export function ContactMergeMenu({
                 {pending ? "Merging…" : "Merge anyway"}
               </Button>
             ) : (
-              <Button
-                type="button"
-                onClick={() => merge(false)}
-                disabled={pending || !selected}
-              >
+              <Button type="button" onClick={() => merge(false)} disabled={pending || !selected}>
                 {pending ? "Merging…" : "Merge contacts"}
               </Button>
             )}

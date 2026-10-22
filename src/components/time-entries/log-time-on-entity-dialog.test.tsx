@@ -27,12 +27,7 @@ import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
 // the very bug this suite pins (React bails out on Object.is-equal
 // state).
 const action =
-  vi.fn<
-    (
-      prev: NoteAttachmentFormState,
-      formData: FormData
-    ) => Promise<NoteAttachmentFormState>
-  >();
+  vi.fn<(prev: NoteAttachmentFormState, formData: FormData) => Promise<NoteAttachmentFormState>>();
 
 beforeEach(() => {
   action.mockReset();
@@ -61,9 +56,7 @@ describe("LogTimeOnEntityDialog — close on success", () => {
   test("closes the dialog after a successful log", async () => {
     const user = setupUser();
     const onOpenChange = vi.fn();
-    render(
-      <LogTimeOnEntityDialog {...baseProps} open onOpenChange={onOpenChange} />
-    );
+    render(<LogTimeOnEntityDialog {...baseProps} open onOpenChange={onOpenChange} />);
 
     await logTime(user);
 
@@ -108,9 +101,7 @@ describe("LogTimeOnEntityDialog — close on success", () => {
     await logTime(user);
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: /log time/i })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: /log time/i })).not.toBeInTheDocument(),
     );
 
     // Round two: reopen and log again. With the effect keyed on
@@ -131,15 +122,11 @@ describe("LogTimeOnEntityDialog — close on success", () => {
     }));
     const user = setupUser();
     const onOpenChange = vi.fn();
-    render(
-      <LogTimeOnEntityDialog {...baseProps} open onOpenChange={onOpenChange} />
-    );
+    render(<LogTimeOnEntityDialog {...baseProps} open onOpenChange={onOpenChange} />);
 
     await logTime(user);
 
-    expect(
-      await screen.findByText("Hours must be a positive number.")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Hours must be a positive number.")).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 });
@@ -158,7 +145,7 @@ describe("LogTimeOnEntityDialog — reseed on open and user-zone 'today'", () =>
     render(
       <UserTimeZoneProvider timeZone="Pacific/Auckland">
         <LogTimeOnEntityDialog {...baseProps} open onOpenChange={vi.fn()} />
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
 
     expect(await screen.findByLabelText("Date")).toHaveValue("2026-04-28");
@@ -172,11 +159,7 @@ describe("LogTimeOnEntityDialog — reseed on open and user-zone 'today'", () =>
           <button type="button" onClick={() => setOpen(true)}>
             reopen dialog
           </button>
-          <LogTimeOnEntityDialog
-            {...baseProps}
-            open={open}
-            onOpenChange={setOpen}
-          />
+          <LogTimeOnEntityDialog {...baseProps} open={open} onOpenChange={setOpen} />
         </>
       );
     }
@@ -186,9 +169,7 @@ describe("LogTimeOnEntityDialog — reseed on open and user-zone 'today'", () =>
     await user.type(await screen.findByPlaceholderText("Hrs"), "0.5");
     await user.type(screen.getByPlaceholderText("Activity"), "Abandoned");
     await user.click(screen.getByRole("button", { name: /cancel/i }));
-    await waitFor(() =>
-      expect(screen.queryByPlaceholderText("Hrs")).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByPlaceholderText("Hrs")).not.toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
 
@@ -208,11 +189,7 @@ describe("LogTimeOnEntityDialog — reseed on open and user-zone 'today'", () =>
           <button type="button" onClick={() => setOpen(true)}>
             reopen dialog
           </button>
-          <LogTimeOnEntityDialog
-            {...baseProps}
-            open={open}
-            onOpenChange={setOpen}
-          />
+          <LogTimeOnEntityDialog {...baseProps} open={open} onOpenChange={setOpen} />
         </>
       );
     }
@@ -222,14 +199,10 @@ describe("LogTimeOnEntityDialog — reseed on open and user-zone 'today'", () =>
     await logTime(user);
     await screen.findByText("Hours must be a positive number.");
     await user.click(screen.getByRole("button", { name: /cancel/i }));
-    await waitFor(() =>
-      expect(screen.queryByPlaceholderText("Hrs")).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByPlaceholderText("Hrs")).not.toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
 
     await screen.findByPlaceholderText("Hrs");
-    expect(
-      screen.queryByText("Hours must be a positive number.")
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Hours must be a positive number.")).not.toBeInTheDocument();
   });
 });

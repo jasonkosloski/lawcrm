@@ -35,11 +35,5 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules",
-    ".claude",
-    ".agents",
-    "out",
-    "design_handoff_*"
-  ]
+  "exclude": ["node_modules", ".claude", ".agents", "out", "design_handoff_*"]
 }

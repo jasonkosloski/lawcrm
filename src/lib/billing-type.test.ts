@@ -43,18 +43,14 @@ describe("billingTypeOf", () => {
   });
 
   it("reports legacy hybrid", () => {
-    expect(
-      billingTypeOf({ feeStructure: "hybrid", billingMode: "client" }),
-    ).toBe("hybrid");
+    expect(billingTypeOf({ feeStructure: "hybrid", billingMode: "client" })).toBe("hybrid");
   });
 
   it("ignores fee_petition mode and uses the fee structure", () => {
-    expect(
-      billingTypeOf({ feeStructure: "contingent", billingMode: "fee_petition" }),
-    ).toBe("contingent");
-    expect(
-      billingTypeOf({ feeStructure: "hourly", billingMode: "fee_petition" }),
-    ).toBe("hourly");
+    expect(billingTypeOf({ feeStructure: "contingent", billingMode: "fee_petition" })).toBe(
+      "contingent",
+    );
+    expect(billingTypeOf({ feeStructure: "hourly", billingMode: "fee_petition" })).toBe("hourly");
   });
 });
 
@@ -77,13 +73,7 @@ describe("billingTypeFromLegacyMode", () => {
 
 describe("labels and options", () => {
   it("lists the types in order with labels, hybrid labelled but not offered", () => {
-    expect(BILLING_TYPES).toEqual([
-      "hourly",
-      "flat",
-      "contingent",
-      "court_appointed",
-      "pro_bono",
-    ]);
+    expect(BILLING_TYPES).toEqual(["hourly", "flat", "contingent", "court_appointed", "pro_bono"]);
     expect(BILLING_TYPE_OPTIONS.map((o) => o.label)).toEqual([
       "Hourly",
       "Flat fee",
@@ -92,9 +82,7 @@ describe("labels and options", () => {
       "Pro bono",
     ]);
     expect(BILLING_TYPE_LABEL.hybrid).toBe("Hybrid");
-    expect(BILLING_TYPE_OPTIONS.some((o) => o.value === ("hybrid" as never))).toBe(
-      false,
-    );
+    expect(BILLING_TYPE_OPTIONS.some((o) => o.value === ("hybrid" as never))).toBe(false);
   });
 });
 

@@ -82,7 +82,7 @@ function renderDetail(
   d: RecordsRequestDetail,
   can: Partial<typeof CAN> = {},
   writable = true,
-  daysUntilDue: number | null = null
+  daysUntilDue: number | null = null,
 ) {
   return render(
     <RequestDetail
@@ -97,7 +97,7 @@ function renderDetail(
       can={{ ...CAN, ...can }}
       writable={writable}
       daysUntilDue={daysUntilDue}
-    />
+    />,
   );
 }
 
@@ -163,7 +163,9 @@ describe("RequestDetail", () => {
   test("Generate letter appears only inside Request documents", () => {
     renderDetail(detail());
     const generate = screen.getByTestId("generate");
-    const reqSection = screen.getByRole("heading", { name: "Request documents" }).closest("section");
+    const reqSection = screen
+      .getByRole("heading", { name: "Request documents" })
+      .closest("section");
     const respSection = screen
       .getByRole("heading", { name: "Responsive documents" })
       .closest("section");
@@ -185,9 +187,11 @@ describe("RequestDetail", () => {
           { id: "d1", name: "Letter.md", role: "request_letter", href: "/x" },
           { id: "d2", name: "Chart.pdf", role: "received_records", href: "/y" },
         ],
-      })
+      }),
     );
-    const reqSection = screen.getByRole("heading", { name: "Request documents" }).closest("section");
+    const reqSection = screen
+      .getByRole("heading", { name: "Request documents" })
+      .closest("section");
     const respSection = screen
       .getByRole("heading", { name: "Responsive documents" })
       .closest("section");
@@ -211,9 +215,11 @@ describe("RequestDetail", () => {
         linkableDocuments={[{ id: "x1", name: "Old.pdf" }]}
         can={CAN}
         writable
-      />
+      />,
     );
-    const reqSection = screen.getByRole("heading", { name: "Request documents" }).closest("section")!;
+    const reqSection = screen
+      .getByRole("heading", { name: "Request documents" })
+      .closest("section")!;
     const respSection = screen
       .getByRole("heading", { name: "Responsive documents" })
       .closest("section")!;
@@ -221,14 +227,14 @@ describe("RequestDetail", () => {
     await user.click(within(reqSection).getByRole("checkbox", { name: "Old.pdf" }));
     await user.click(within(reqSection).getByRole("button", { name: "Link selected" }));
     await waitFor(() =>
-      expect(linkRecordsDocuments).toHaveBeenCalledWith("r1", ["x1"], "request_letter")
+      expect(linkRecordsDocuments).toHaveBeenCalledWith("r1", ["x1"], "request_letter"),
     );
     expect(screen.queryByRole("button", { name: "Mark complete" })).toBeNull();
     await user.click(within(respSection).getByText("Link existing documents"));
     await user.click(within(respSection).getByRole("checkbox", { name: "Old.pdf" }));
     await user.click(within(respSection).getByRole("button", { name: "Link selected" }));
     await waitFor(() =>
-      expect(linkRecordsDocuments).toHaveBeenLastCalledWith("r1", ["x1"], "received_records")
+      expect(linkRecordsDocuments).toHaveBeenLastCalledWith("r1", ["x1"], "received_records"),
     );
     expect(await screen.findByRole("button", { name: "Mark complete" })).toBeInTheDocument();
   });
@@ -276,9 +282,9 @@ describe("RequestDetail", () => {
     renderDetail(detail());
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByRole("heading", { level: 1, name: "ER chart" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /records requests/i }).getAttribute("href")
-    ).toBe("/matters/m1/records");
+    expect(screen.getByRole("link", { name: /records requests/i }).getAttribute("href")).toBe(
+      "/matters/m1/records",
+    );
   });
 
   test("shows the due badge from daysUntilDue, hidden once closed", () => {
@@ -286,7 +292,7 @@ describe("RequestDetail", () => {
       detail({ status: "sent", sentAt: new Date("2026-10-10T00:00:00Z") }),
       {},
       true,
-      -2
+      -2,
     );
     expect(screen.getByText("2d overdue")).toBeInTheDocument();
     unmount();
@@ -318,7 +324,7 @@ describe("RequestDetail", () => {
     vi.mocked(unlinkRecordsDocument).mockResolvedValueOnce({ ok: false });
     const user = userEvent.setup();
     renderDetail(
-      detail({ documents: [{ id: "d1", name: "Letter.md", role: "request_letter", href: "/x" }] })
+      detail({ documents: [{ id: "d1", name: "Letter.md", role: "request_letter", href: "/x" }] }),
     );
     await user.click(screen.getByRole("button", { name: "Unlink Letter.md" }));
     expect(await screen.findByText("Couldn't unlink the document.")).toBeInTheDocument();
@@ -327,7 +333,11 @@ describe("RequestDetail", () => {
   describe("key dates", () => {
     function renderDates(
       d: RecordsRequestDetail,
-      extra: { daysUntilDue?: number | null; daysSinceSent?: number | null; deadlineRule?: string | null }
+      extra: {
+        daysUntilDue?: number | null;
+        daysSinceSent?: number | null;
+        deadlineRule?: string | null;
+      },
     ) {
       return render(
         <RequestDetail
@@ -344,7 +354,7 @@ describe("RequestDetail", () => {
           daysUntilDue={extra.daysUntilDue ?? null}
           daysSinceSent={extra.daysSinceSent ?? null}
           deadlineRule={extra.deadlineRule ?? null}
-        />
+        />,
       );
     }
 
@@ -355,7 +365,7 @@ describe("RequestDetail", () => {
           sentAt: new Date("2026-10-16T00:00:00Z"),
           responseDueDate: new Date("2026-10-21T00:00:00Z"),
         }),
-        { daysSinceSent: 2, daysUntilDue: 3, deadlineRule: "3 business days after sending" }
+        { daysSinceSent: 2, daysUntilDue: 3, deadlineRule: "3 business days after sending" },
       );
       const sent = screen.getByTestId("sent-tile");
       expect(sent).toHaveTextContent("Oct 16, 2026");
@@ -373,7 +383,7 @@ describe("RequestDetail", () => {
           sentAt: new Date("2026-10-01T00:00:00Z"),
           responseDueDate: new Date("2026-10-06T00:00:00Z"),
         }),
-        { daysSinceSent: 17, daysUntilDue: -12 }
+        { daysSinceSent: 17, daysUntilDue: -12 },
       );
       const due = screen.getByTestId("due-tile");
       expect(due).toHaveTextContent("12 days overdue");
@@ -394,10 +404,9 @@ describe("RequestDetail", () => {
           responseDueDate: new Date("2026-10-06T00:00:00Z"),
           receivedAt: new Date("2026-10-05T00:00:00Z"),
         }),
-        { daysUntilDue: -12 }
+        { daysUntilDue: -12 },
       );
       expect(screen.getByTestId("due-tile")).not.toHaveTextContent("overdue");
     });
   });
 });
-

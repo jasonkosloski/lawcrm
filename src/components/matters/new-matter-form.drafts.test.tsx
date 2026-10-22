@@ -157,7 +157,7 @@ describe("NewMatterForm - Save draft", () => {
     render(<NewMatterForm options={options} draft={draft()} engagement={engagement()} />);
     await user.click(screen.getByRole("button", { name: "Save draft" }));
     expect(
-      await screen.findByText(/Someone else saved this draft\. Reload to see their changes\./)
+      await screen.findByText(/Someone else saved this draft\. Reload to see their changes\./),
     ).toBeTruthy();
   });
 
@@ -242,12 +242,7 @@ describe("NewMatterForm - auto-save", () => {
 describe("NewMatterForm - Engagement section", () => {
   test("switch on: markers show, and a gate error blocks Create without calling the action", async () => {
     const user = userEvent.setup();
-    render(
-      <NewMatterForm
-        options={options}
-        engagement={engagement({ required: true })}
-      />
-    );
+    render(<NewMatterForm options={options} engagement={engagement({ required: true })} />);
     await user.type(screen.getByPlaceholderText(/client name/i), "Zed Newperson");
     expect(screen.getByText("Files").textContent).toContain("*");
     await user.click(screen.getByRole("button", { name: /create matter/i }));
@@ -264,7 +259,7 @@ describe("NewMatterForm - Engagement section", () => {
         options={options}
         draft={draft()}
         engagement={engagement({ required: true, todayKey: "2026-10-20" })}
-      />
+      />,
     );
     await user.selectOptions(screen.getByLabelText(/^status/i), "signed");
     await user.type(screen.getByLabelText(/date signed/i), "2026-10-21");
@@ -293,12 +288,10 @@ describe("NewMatterForm - Engagement section", () => {
       <NewMatterForm
         options={options}
         engagement={engagement({ required: true, canUpload: false })}
-      />
+      />,
     );
     expect(
-      screen.getByText(
-        "You need permission to upload documents to attach the Fee agreement."
-      )
+      screen.getByText("You need permission to upload documents to attach the Fee agreement."),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Upload files" })).toBeNull();
   });
@@ -327,8 +320,7 @@ describe("NewMatterForm - Engagement section", () => {
 });
 
 describe("NewMatterForm - legacy feeStructure drafts", () => {
-  const billingValue = () =>
-    (document.getElementById("billingType") as HTMLSelectElement).value;
+  const billingValue = () => (document.getElementById("billingType") as HTMLSelectElement).value;
   const resume = (a: ReturnType<typeof area>, feeStructure: string) =>
     render(
       <NewMatterForm
@@ -337,7 +329,7 @@ describe("NewMatterForm - legacy feeStructure drafts", () => {
           values: { newClientName: "Maria Alvarez", practiceAreaId: "a1", name: "x", feeStructure },
         })}
         engagement={engagement()}
-      />
+      />,
     );
 
   test("resumes the legacy feeStructure when the area allows it", () => {
@@ -346,7 +338,10 @@ describe("NewMatterForm - legacy feeStructure drafts", () => {
   });
 
   test("falls back to the area default when the area does not allow it", () => {
-    resume({ ...area("a1", "Personal Injury"), allowedBillingTypes: ["contingent", "hourly"] }, "flat");
+    resume(
+      { ...area("a1", "Personal Injury"), allowedBillingTypes: ["contingent", "hourly"] },
+      "flat",
+    );
     expect(billingValue()).toBe("contingent");
   });
 });

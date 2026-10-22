@@ -18,15 +18,7 @@
  * (due-today is not overdue; overdue is negative, not clamped to 0).
  */
 
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 // matters.ts imports getCurrentUserId (for pin lookups); stub it so the
 // auth chain (@clerk/nextjs → next/server) doesn't have to load. Tests pass
@@ -67,7 +59,7 @@ async function seedMatters(
     stageId: string;
     isArchived: boolean;
     namePrefix: string;
-  }> = {}
+  }> = {},
 ) {
   await prisma.matter.createMany({
     data: Array.from({ length: n }, (_, i) => ({
@@ -99,15 +91,9 @@ describe("countMatters", () => {
       data: { caseNumber: "2026CV-777" },
     });
 
-    expect(
-      await countMatters({ ...EMPTY_FILTER, q: "matches-nothing-zzz" }, userId)
-    ).toBe(0);
-    expect(await countMatters({ ...EMPTY_FILTER, q: "matter 1" }, userId)).toBe(
-      1
-    );
-    expect(
-      await countMatters({ ...EMPTY_FILTER, q: "2026cv-777" }, userId)
-    ).toBe(1);
+    expect(await countMatters({ ...EMPTY_FILTER, q: "matches-nothing-zzz" }, userId)).toBe(0);
+    expect(await countMatters({ ...EMPTY_FILTER, q: "matter 1" }, userId)).toBe(1);
+    expect(await countMatters({ ...EMPTY_FILTER, q: "2026cv-777" }, userId)).toBe(1);
   });
 
   test("honors non-search filters: area + archived default", async () => {
@@ -123,13 +109,9 @@ describe("countMatters", () => {
     // Archived hidden by default → 2 + 3.
     expect(await countMatters(EMPTY_FILTER, userId)).toBe(5);
     // includeArchived opts the archived row back in.
-    expect(
-      await countMatters({ ...EMPTY_FILTER, includeArchived: true }, userId)
-    ).toBe(6);
+    expect(await countMatters({ ...EMPTY_FILTER, includeArchived: true }, userId)).toBe(6);
     // Area filter narrows by practice-area name.
-    expect(
-      await countMatters({ ...EMPTY_FILTER, areas: ["Other Area"] }, userId)
-    ).toBe(3);
+    expect(await countMatters({ ...EMPTY_FILTER, areas: ["Other Area"] }, userId)).toBe(3);
   });
 
   test("terminal-stage matters hidden unless showClosed", async () => {
@@ -146,9 +128,7 @@ describe("countMatters", () => {
     await seedMatters(1, { stageId: closed.id, namePrefix: "Closed" });
 
     expect(await countMatters(EMPTY_FILTER, userId)).toBe(2);
-    expect(
-      await countMatters({ ...EMPTY_FILTER, showClosed: true }, userId)
-    ).toBe(3);
+    expect(await countMatters({ ...EMPTY_FILTER, showClosed: true }, userId)).toBe(3);
   });
 
   test("not paged: reports the true total past LIST_MATTERS_PAGE_SIZE", async () => {
@@ -187,7 +167,7 @@ describe("listMatters search + sort run before the row cap (F289/F305/F322/F344)
       { ...EMPTY_FILTER, q: "alvarez" },
       byCreated,
       userId,
-      "UTC"
+      "UTC",
     );
     expect(byName.map((r) => r.name)).toEqual(["Alvarez v. City"]);
 
@@ -195,7 +175,7 @@ describe("listMatters search + sort run before the row cap (F289/F305/F322/F344)
       { ...EMPTY_FILTER, q: "2019cv" },
       byCreated,
       userId,
-      "UTC"
+      "UTC",
     );
     expect(byCase.map((r) => r.name)).toEqual(["Alvarez v. City"]);
     // …and the denominator agrees with the list.
@@ -214,12 +194,7 @@ describe("listMatters search + sort run before the row cap (F289/F305/F322/F344)
     });
     await seedMatters(205);
 
-    const { rows } = await listMatters(
-      EMPTY_FILTER,
-      { field: "name", dir: "asc" },
-      userId,
-      "UTC"
-    );
+    const { rows } = await listMatters(EMPTY_FILTER, { field: "name", dir: "asc" }, userId, "UTC");
     expect(rows).toHaveLength(200);
     expect(rows[0]!.name).toBe("AAA first alphabetically");
   });
@@ -280,7 +255,7 @@ describe("listMatters search + sort run before the row cap (F289/F305/F322/F344)
       EMPTY_FILTER,
       { field: "name", dir: "asc" },
       userId,
-      "UTC"
+      "UTC",
     );
     expect(asc.map((r) => r.name)).toEqual(["Z", "A", "B"]);
     expect(asc[0]!.isPinned).toBe(true);
@@ -322,7 +297,7 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
       EMPTY_FILTER,
       { field: "deadline", dir: "asc" },
       userId,
-      "America/Denver"
+      "America/Denver",
     );
     const days = Object.fromEntries(all.map((r) => [r.name, r.nextDeadlineDays]));
     expect(days).toEqual({
@@ -345,7 +320,7 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
       { ...EMPTY_FILTER, deadline: "overdue" },
       byCreated,
       userId,
-      "America/Denver"
+      "America/Denver",
     );
     expect(names(overdue)).toEqual(["late 12"]);
 
@@ -353,7 +328,7 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
       { ...EMPTY_FILTER, deadline: "within-7d" },
       byCreated,
       userId,
-      "America/Denver"
+      "America/Denver",
     );
     // Open at the low end: the overdue matter stays in the window.
     expect(names(w7)).toEqual(["due today", "due tomorrow", "late 12"]);
@@ -362,15 +337,9 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
       { ...EMPTY_FILTER, deadline: "within-30d" },
       byCreated,
       userId,
-      "America/Denver"
+      "America/Denver",
     );
-    expect(names(w30)).toEqual([
-      "due today",
-      "due tomorrow",
-      "in 20 days",
-      "in 8 days",
-      "late 12",
-    ]);
+    expect(names(w30)).toEqual(["due today", "due tomorrow", "in 20 days", "in 8 days", "late 12"]);
   });
 
   test("the day rolls over in the viewer's zone, not the server's", async () => {
@@ -382,7 +351,7 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
       { ...EMPTY_FILTER, deadline: "overdue" },
       byCreated,
       userId,
-      "America/Denver"
+      "America/Denver",
     );
     expect(denver).toHaveLength(0);
 
@@ -390,7 +359,7 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
       { ...EMPTY_FILTER, deadline: "overdue" },
       byCreated,
       userId,
-      "UTC"
+      "UTC",
     );
     expect(utc.map((r) => r.name)).toEqual(["apr 27"]);
   });
@@ -406,7 +375,7 @@ describe("listMatters deadline math is calendar-day, in the viewer's zone (F304/
       { ...EMPTY_FILTER, deadline: "none" },
       byCreated,
       userId,
-      "UTC"
+      "UTC",
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]!.nextDeadlineDays).toBeNull();
@@ -427,9 +396,7 @@ describe("listMatters billing-type filter", () => {
     }
   }
   const names = async (billingTypes: string[], q = "") =>
-    (
-      await listMatters({ ...EMPTY_FILTER, billingTypes, q }, byCreated, userId, "UTC")
-    ).rows
+    (await listMatters({ ...EMPTY_FILTER, billingTypes, q }, byCreated, userId, "UTC")).rows
       .map((r) => r.name)
       .sort();
 
@@ -483,8 +450,7 @@ describe("getMattersFilterOptions (F762/F788/F849)", () => {
       isActive: false,
     });
     const former = await seedUser({ firmId, name: "Former Lead", initials: "FL" });
-    const mk = (leadUserId: string) =>
-      seedMatter({ practiceAreaId: areaId, stageId, leadUserId });
+    const mk = (leadUserId: string) => seedMatter({ practiceAreaId: areaId, stageId, leadUserId });
     await mk(active.userId);
     await mk(gone.userId);
     const { matterId } = await mk(former.userId);
@@ -518,12 +484,10 @@ describe("getMatterById (F307/F745/F763)", () => {
     });
 
     const matter = await getMatterById(matterId);
-    expect(matter!.teamMembers.map((t) => [t.role, t.removedAt === null])).toEqual(
-      [
-        ["lead", true],
-        ["paralegal", false],
-      ]
-    );
+    expect(matter!.teamMembers.map((t) => [t.role, t.removedAt === null])).toEqual([
+      ["lead", true],
+      ["paralegal", false],
+    ]);
   });
 
   test("WIP is computed live from unbilled billable time, not the stale column", async () => {

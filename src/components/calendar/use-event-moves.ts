@@ -24,11 +24,7 @@ import { unstable_rethrow } from "next/navigation";
 import { moveCalendarEvent } from "@/app/actions/calendar-events";
 import { notifyError } from "@/lib/feedback";
 import type { CalendarItem } from "@/lib/queries/calendar";
-import {
-  applyPending,
-  reconcilePending,
-  type PendingMove,
-} from "./optimistic-moves";
+import { applyPending, reconcilePending, type PendingMove } from "./optimistic-moves";
 
 /** Posted by the day cells when a chip lands somewhere new — drop
  *  on a time slot, drop on the all-day row, or chip-edge resize.
@@ -36,7 +32,7 @@ import {
  *  (carried alongside). */
 export type MoveEventFn = (
   eventId: string,
-  schedule: { isAllDay: boolean; start: Date; end: Date }
+  schedule: { isAllDay: boolean; start: Date; end: Date },
 ) => void;
 
 export function useEventMoves(
@@ -45,7 +41,7 @@ export function useEventMoves(
    *  enforces). Omitted = every event is movable. A move for an event
    *  the viewer can't edit is refused here instead of round-tripping
    *  to a server rejection. */
-  canMove?: (eventId: string) => boolean
+  canMove?: (eventId: string) => boolean,
 ): {
   /** Server items with the optimistic overlay applied — feed this
    *  to the bucketing, not the raw `items` prop, so a moved chip
@@ -54,9 +50,7 @@ export function useEventMoves(
   moveEvent: MoveEventFn;
 } {
   const [, startTransition] = useTransition();
-  const [pending, setPending] = useState<Map<string, PendingMove>>(
-    () => new Map()
-  );
+  const [pending, setPending] = useState<Map<string, PendingMove>>(() => new Map());
 
   // When fresh server data arrives, drop any pending entries the
   // server now agrees with. Entries that DON'T match stay until

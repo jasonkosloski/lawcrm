@@ -14,10 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { assertLeadAccess } from "@/lib/lead-access";
 import { logActivity } from "@/lib/activity-log";
-import {
-  MATTER_TEAM_ROLES,
-  matterTeamRoleLabel,
-} from "@/lib/matter-team-constants";
+import { MATTER_TEAM_ROLES, matterTeamRoleLabel } from "@/lib/matter-team-constants";
 
 type Result = { ok: boolean; error?: string };
 
@@ -32,17 +29,11 @@ function revalidateLeadAccess(leadId: string) {
 
 /** Row lock so concurrent restrict / remove calls can't both pass the
  *  "at least one member" check. */
-async function lockLead(
-  tx: Pick<typeof prisma, "$queryRaw">,
-  leadId: string
-): Promise<void> {
+async function lockLead(tx: Pick<typeof prisma, "$queryRaw">, leadId: string): Promise<void> {
   await tx.$queryRaw`SELECT id FROM "leads" WHERE id = ${leadId} FOR UPDATE`;
 }
 
-export async function setLeadRestricted(
-  leadId: string,
-  restricted: boolean
-): Promise<Result> {
+export async function setLeadRestricted(leadId: string, restricted: boolean): Promise<Result> {
   const actorId = await requirePermission("intake.restrict");
   await assertLeadAccess(leadId);
 
@@ -83,10 +74,7 @@ const addSchema = z.object({
   role: z.enum(MATTER_TEAM_ROLES),
 });
 
-export async function addLeadTeamMember(
-  leadId: string,
-  formData: FormData
-): Promise<Result> {
+export async function addLeadTeamMember(leadId: string, formData: FormData): Promise<Result> {
   const actorId = await requirePermission("intake.restrict");
   await assertLeadAccess(leadId);
 
@@ -120,10 +108,7 @@ export async function addLeadTeamMember(
   return { ok: true };
 }
 
-export async function removeLeadTeamMember(
-  leadId: string,
-  userId: string
-): Promise<Result> {
+export async function removeLeadTeamMember(leadId: string, userId: string): Promise<Result> {
   const actorId = await requirePermission("intake.restrict");
   await assertLeadAccess(leadId);
 

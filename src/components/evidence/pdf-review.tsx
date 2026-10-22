@@ -66,7 +66,7 @@ function quoteRange(layers: HTMLElement | HTMLElement[], quote: string): Range |
   const nodes = textNodes(layers);
   const loc = locateQuote(
     nodes.map((n) => n.data),
-    quote
+    quote,
   );
   if (!loc) return null;
   try {
@@ -249,7 +249,7 @@ export function PdfReview({
         viewer.goToPage(page);
         const where = last > page ? `pages ${page}–${last}` : `page ${page}`;
         showNotice(
-          `Passage not found on ${where} — it's shown at the page instead. The flagged text may not be selectable text (e.g. a scan).`
+          `Passage not found on ${where} — it's shown at the page instead. The flagged text may not be selectable text (e.g. a scan).`,
         );
         return;
       }
@@ -268,7 +268,7 @@ export function PdfReview({
         }, 400);
       }
     },
-    [showNotice]
+    [showNotice],
   );
 
   const navigate = (m: RailMoment) => {
@@ -293,9 +293,13 @@ export function PdfReview({
     for (const m of momentsRef.current) {
       if (m.pageNumber === null || !m.quote) continue;
       // Every page of the flag's span must be rendered to find it.
-      const last = m.endPageNumber != null && m.endPageNumber > m.pageNumber ? m.endPageNumber : m.pageNumber;
+      const last =
+        m.endPageNumber != null && m.endPageNumber > m.pageNumber ? m.endPageNumber : m.pageNumber;
       const layers = allLayers(
-        Array.from({ length: last - m.pageNumber + 1 }, (_, i) => layersRef.current.get(m.pageNumber! + i) ?? null)
+        Array.from(
+          { length: last - m.pageNumber + 1 },
+          (_, i) => layersRef.current.get(m.pageNumber! + i) ?? null,
+        ),
       );
       const r = layers ? quoteRange(layers, m.quote) : null;
       if (r) ranges.push(r);
@@ -313,7 +317,7 @@ export function PdfReview({
       else layersRef.current.delete(page);
       paintFlagged();
     },
-    [paintFlagged]
+    [paintFlagged],
   );
 
   useEffect(
@@ -325,7 +329,7 @@ export function PdfReview({
         CSS.highlights.delete(FLAGGED_HIGHLIGHT);
       }
     },
-    []
+    [],
   );
 
   return (

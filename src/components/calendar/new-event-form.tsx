@@ -30,14 +30,7 @@
 "use client";
 
 import { EventPrivateToggle } from "@/components/calendar/event-private-toggle";
-import {
-  useActionState,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-} from "react";
+import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Briefcase, Pin, Search, X } from "lucide-react";
@@ -64,11 +57,7 @@ import {
 } from "@/lib/calendar-event-form";
 import type { FilingMatterOption } from "@/lib/queries/communication";
 import { DateOnlyField } from "./date-only-field";
-import {
-  AttendeePicker,
-  serializeAttendees,
-  type EditableAttendee,
-} from "./attendee-picker";
+import { AttendeePicker, serializeAttendees, type EditableAttendee } from "./attendee-picker";
 import { inputClass } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
@@ -81,10 +70,10 @@ export function NewEventForm({
 }) {
   const router = useRouter();
   const tz = useUserTimeZone();
-  const [state, formAction, isPending] = useActionState<
-    CreateCalendarEventState,
-    FormData
-  >(createCalendarEvent, createCalendarEventInitialState);
+  const [state, formAction, isPending] = useActionState<CreateCalendarEventState, FormData>(
+    createCalendarEvent,
+    createCalendarEventInitialState,
+  );
   const [, startTransition] = useTransition();
 
   const [title, setTitle] = useState("");
@@ -239,18 +228,10 @@ export function NewEventForm({
             (visibility resolver treats them as the creator's);
             picking a matter scopes the event to the matter team. */}
         <div className="flex flex-col gap-1.5">
-          <div className="text-2xs font-medium text-ink-3">
-            Matter
-          </div>
-          <MatterSelect
-            options={matters}
-            value={matterId}
-            onChange={setMatterId}
-          />
+          <div className="text-2xs font-medium text-ink-3">Matter</div>
+          <MatterSelect options={matters} value={matterId} onChange={setMatterId} />
           <input type="hidden" name="matterId" value={matterId ?? ""} />
-          {errs.matterId?.[0] && (
-            <span className="text-2xs text-warn">{errs.matterId[0]}</span>
-          )}
+          {errs.matterId?.[0] && <span className="text-2xs text-warn">{errs.matterId[0]}</span>}
         </div>
 
         {/* Attendees — same picker as the detail modal (firm users
@@ -258,22 +239,13 @@ export function NewEventForm({
             YOU as an attendee if the list doesn't include you, so
             leaving this empty is fine. */}
         <div className="flex flex-col gap-1.5">
-          <div className="text-2xs font-medium text-ink-3">
-            Attendees
-          </div>
+          <div className="text-2xs font-medium text-ink-3">Attendees</div>
           <AttendeePicker value={attendees} onCommit={setAttendees} />
-          <input
-            type="hidden"
-            name="attendees"
-            value={serializeAttendees(attendees)}
-          />
+          <input type="hidden" name="attendees" value={serializeAttendees(attendees)} />
           <span className="text-2xs text-ink-4">
-            You&apos;ll be added automatically if you don&apos;t include
-            yourself.
+            You&apos;ll be added automatically if you don&apos;t include yourself.
           </span>
-          {errs.attendees?.[0] && (
-            <span className="text-2xs text-warn">{errs.attendees[0]}</span>
-          )}
+          {errs.attendees?.[0] && <span className="text-2xs text-warn">{errs.attendees[0]}</span>}
         </div>
 
         <TextareaField
@@ -303,13 +275,10 @@ export function NewEventForm({
             className="mt-0.5 h-3.5 w-3.5 rounded border-line"
           />
           <span>
-            <span className="text-ink">
-              Show details to everyone in the firm
-            </span>
+            <span className="text-ink">Show details to everyone in the firm</span>
             <span className="block text-2xs text-ink-4 leading-relaxed mt-0.5">
-              Off: invited attendees and the matter team always see
-              details; others follow your profile default (usually
-              &ldquo;Busy&rdquo;).
+              Off: invited attendees and the matter team always see details; others follow your
+              profile default (usually &ldquo;Busy&rdquo;).
             </span>
           </span>
         </label>
@@ -322,21 +291,14 @@ export function NewEventForm({
         />
 
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
-          <Link
-            href="/calendar"
-            className="text-xs text-ink-3 hover:text-ink px-3 py-1.5"
-          >
+          <Link href="/calendar" className="text-xs text-ink-3 hover:text-ink px-3 py-1.5">
             Cancel
           </Link>
           {/* Stay disabled after success: the redirect to the new
               event is still in flight, and a second click would
               create a duplicate (and a second Google push). */}
           <Button type="submit" disabled={isPending || state.status === "ok"}>
-            {isPending
-              ? "Creating…"
-              : state.status === "ok"
-                ? "Opening…"
-                : "Create event"}
+            {isPending ? "Creating…" : state.status === "ok" ? "Opening…" : "Create event"}
           </Button>
         </div>
       </form>
@@ -364,14 +326,13 @@ function MatterSelect({
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const selected = value ? options.find((m) => m.id === value) ?? null : null;
+  const selected = value ? (options.find((m) => m.id === value) ?? null) : null;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return options;
     return options.filter(
-      (m) =>
-        m.name.toLowerCase().includes(q) || m.area.toLowerCase().includes(q)
+      (m) => m.name.toLowerCase().includes(q) || m.area.toLowerCase().includes(q),
     );
   }, [query, options]);
 
@@ -394,9 +355,7 @@ function MatterSelect({
           style={{ background: selected.color }}
         />
         <span className="text-ink truncate">{selected.name}</span>
-        <span className="text-2xs font-mono text-ink-4 shrink-0">
-          · {selected.area}
-        </span>
+        <span className="text-2xs font-mono text-ink-4 shrink-0">· {selected.area}</span>
         <button
           type="button"
           onClick={() => onChange(null)}
@@ -412,10 +371,7 @@ function MatterSelect({
   return (
     <div ref={containerRef} className="relative">
       <div className="relative">
-        <Search
-          size={12}
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4"
-        />
+        <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4" />
         <input
           type="text"
           value={query}
@@ -442,9 +398,7 @@ function MatterSelect({
           className="absolute left-0 right-0 mt-1 z-50 max-h-64 overflow-y-auto rounded-md border border-line bg-white shadow-md"
         >
           {filtered.length === 0 ? (
-            <li className="text-2xs text-ink-4 italic px-2.5 py-2">
-              No matters match.
-            </li>
+            <li className="text-2xs text-ink-4 italic px-2.5 py-2">No matters match.</li>
           ) : (
             filtered.map((m) => (
               <li key={m.id}>
@@ -463,15 +417,9 @@ function MatterSelect({
                     style={{ background: m.color }}
                   />
                   <span className="flex-1 truncate">{m.name}</span>
-                  <span className="text-2xs font-mono text-ink-4 shrink-0">
-                    {m.area}
-                  </span>
+                  <span className="text-2xs font-mono text-ink-4 shrink-0">{m.area}</span>
                   {m.isPinned && (
-                    <Pin
-                      size={10}
-                      className="text-ink-4 shrink-0"
-                      aria-label="Pinned"
-                    />
+                    <Pin size={10} className="text-ink-4 shrink-0" aria-label="Pinned" />
                   )}
                 </button>
               </li>

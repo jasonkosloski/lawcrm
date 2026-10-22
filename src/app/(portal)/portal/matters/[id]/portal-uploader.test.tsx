@@ -1,12 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const upload = vi.fn();
 vi.mock("@vercel/blob/client", () => ({
@@ -43,14 +36,10 @@ function pick(container: HTMLElement, name: string) {
 describe("PortalUploader", () => {
   test("rejects a .zip with the exact copy before any network call", () => {
     const xhr = vi.spyOn(globalThis, "XMLHttpRequest");
-    const { container } = render(
-      <PortalUploader matterId="m1" storageDriver="vercel-blob" />,
-    );
+    const { container } = render(<PortalUploader matterId="m1" storageDriver="vercel-blob" />);
     pick(container, "stuff.zip");
     expect(
-      screen.getByText(
-        "We can't accept .zip files. Please send PDFs, photos or Office documents.",
-      ),
+      screen.getByText("We can't accept .zip files. Please send PDFs, photos or Office documents."),
     ).toBeTruthy();
     expect(upload).not.toHaveBeenCalled();
     expect(xhr).not.toHaveBeenCalled();
@@ -59,28 +48,18 @@ describe("PortalUploader", () => {
 
   test("shows per-file progress and pins contentType + payload on the blob driver", async () => {
     upload.mockImplementation(
-      (
-        _k: string,
-        _f: File,
-        opts: { onUploadProgress: (e: { loaded: number }) => void },
-      ) => {
+      (_k: string, _f: File, opts: { onUploadProgress: (e: { loaded: number }) => void }) => {
         opts.onUploadProgress({ loaded: 1 });
         return new Promise(() => {});
       },
     );
     const { container } = render(
-      <PortalUploader
-        matterId="m1"
-        requestId="r1"
-        storageDriver="vercel-blob"
-      />,
+      <PortalUploader matterId="m1" requestId="r1" storageDriver="vercel-blob" />,
     );
     pick(container, "report.pdf");
     await waitFor(() => expect(upload).toHaveBeenCalled());
     expect(screen.getByText("report.pdf")).toBeTruthy();
-    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
-      "100",
-    );
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("100");
     const opts = upload.mock.calls[0][2];
     expect(opts.contentType).toBe("application/pdf");
     expect(opts.handleUploadUrl).toBe("/api/documents/upload/blob");
@@ -97,16 +76,10 @@ describe("PortalUploader", () => {
     upload.mockResolvedValue({});
     getStatus.mockResolvedValue({ status: "complete" });
     const { container } = render(
-      <PortalUploader
-        matterId="m1"
-        requestId="r1"
-        storageDriver="vercel-blob"
-      />,
+      <PortalUploader matterId="m1" requestId="r1" storageDriver="vercel-blob" />,
     );
     pick(container, "report.pdf");
-    await screen.findByText(
-      "This request was closed by the firm. Your file was still sent.",
-    );
+    await screen.findByText("This request was closed by the firm. Your file was still sent.");
     expect(reload).not.toHaveBeenCalled();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Done" }));

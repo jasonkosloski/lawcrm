@@ -48,10 +48,7 @@ const savedEnv: Partial<Record<string, string | undefined>> = {};
 let userId: string;
 
 /** URL-dispatching Google mock. Override per-test via `handlers`. */
-function stubGoogle(handlers?: {
-  token?: () => Response;
-  userinfo?: () => Response;
-}) {
+function stubGoogle(handlers?: { token?: () => Response; userinfo?: () => Response }) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url === GOOGLE_TOKEN_ENDPOINT) {
@@ -64,15 +61,12 @@ function stubGoogle(handlers?: {
             refresh_token: "1//refresh-token",
             scope: GRANTED_SCOPE_STRING,
           }),
-          { status: 200 }
+          { status: 200 },
         )
       );
     }
     if (url === GOOGLE_USERINFO_ENDPOINT) {
-      return (
-        handlers?.userinfo?.() ??
-        new Response(JSON.stringify({ email: "Jason.K@gmail.com" }))
-      );
+      return handlers?.userinfo?.() ?? new Response(JSON.stringify({ email: "Jason.K@gmail.com" }));
     }
     throw new Error(`Unexpected fetch in callback test: ${url}`);
   });
@@ -86,10 +80,7 @@ function makeCallbackRequest(opts: {
   nonce?: string;
   error?: string;
 }) {
-  const url = new URL(
-    "/api/integrations/google/callback",
-    "https://app.example.com"
-  );
+  const url = new URL("/api/integrations/google/callback", "https://app.example.com");
   if (opts.code) url.searchParams.set("code", opts.code);
   if (opts.state) url.searchParams.set("state", opts.state);
   if (opts.error) url.searchParams.set("error", opts.error);
@@ -190,7 +181,7 @@ describe("GET /api/integrations/google/callback", () => {
             expires_in: 3599,
             scope: GRANTED_SCOPE_STRING,
           }),
-          { status: 200 }
+          { status: 200 },
         ),
     });
     const { state, nonce } = createOAuthState();
@@ -206,9 +197,7 @@ describe("GET /api/integrations/google/callback", () => {
     // Reconnect refreshes the grant record — the "Reconnect to
     // enable calendar sync" path depends on this write.
     expect(rows[0].grantedScopes).toBe(GRANTED_SCOPE_STRING);
-    expect(parseAccessTokenEnvelope(rows[0].accessToken)?.token).toBe(
-      "ya29.re"
-    );
+    expect(parseAccessTokenEnvelope(rows[0].accessToken)?.token).toBe("ya29.re");
   });
 
   it("reconnect with NO scope in the response keeps the previously recorded grant", async () => {
@@ -223,10 +212,9 @@ describe("GET /api/integrations/google/callback", () => {
     });
     stubGoogle({
       token: () =>
-        new Response(
-          JSON.stringify({ access_token: "ya29.re2", expires_in: 3599 }),
-          { status: 200 }
-        ),
+        new Response(JSON.stringify({ access_token: "ya29.re2", expires_in: 3599 }), {
+          status: 200,
+        }),
     });
     const { state, nonce } = createOAuthState();
     await GET(makeCallbackRequest({ code: "c", state, nonce }));
@@ -242,9 +230,7 @@ describe("GET /api/integrations/google/callback", () => {
     const fetchMock = stubGoogle();
     const { state } = createOAuthState();
     const { nonce: foreignNonce } = createOAuthState();
-    const res = await GET(
-      makeCallbackRequest({ code: "c", state, nonce: foreignNonce })
-    );
+    const res = await GET(makeCallbackRequest({ code: "c", state, nonce: foreignNonce }));
     expect(settingsRedirect(res).get("error")).toBe("state");
     expect(fetchMock).not.toHaveBeenCalled();
     expect(await prisma.emailAccount.count()).toBe(0);
@@ -257,9 +243,7 @@ describe("GET /api/integrations/google/callback", () => {
     let res = await GET(makeCallbackRequest({ code: "c", state }));
     expect(settingsRedirect(res).get("error")).toBe("state");
     // Tampered signature.
-    res = await GET(
-      makeCallbackRequest({ code: "c", state: `${state}x`, nonce })
-    );
+    res = await GET(makeCallbackRequest({ code: "c", state: `${state}x`, nonce }));
     expect(settingsRedirect(res).get("error")).toBe("state");
     expect(await prisma.emailAccount.count()).toBe(0);
   });
@@ -299,10 +283,9 @@ describe("GET /api/integrations/google/callback", () => {
   it("refuses a FIRST connect that yields no refresh token (account would die at first expiry)", async () => {
     stubGoogle({
       token: () =>
-        new Response(
-          JSON.stringify({ access_token: "ya29.norefresh", expires_in: 3599 }),
-          { status: 200 }
-        ),
+        new Response(JSON.stringify({ access_token: "ya29.norefresh", expires_in: 3599 }), {
+          status: 200,
+        }),
     });
     const { state, nonce } = createOAuthState();
     const res = await GET(makeCallbackRequest({ code: "c", state, nonce }));
@@ -331,7 +314,7 @@ describe("GET /api/integrations/google/callback", () => {
             scope:
               "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/calendar.events",
           }),
-          { status: 200 }
+          { status: 200 },
         ),
     });
     const { state, nonce } = createOAuthState();
@@ -357,7 +340,7 @@ describe("GET /api/integrations/google/callback", () => {
             refresh_token: "1//rt",
             scope: "openid email https://www.googleapis.com/auth/gmail.modify",
           }),
-          { status: 200 }
+          { status: 200 },
         ),
     });
     const { state, nonce } = createOAuthState();

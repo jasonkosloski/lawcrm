@@ -36,19 +36,13 @@ vi.mock("next/link", () => ({
 
 import { UserTimeZoneProvider } from "@/components/user-time-zone";
 import { parseDateOnly } from "@/lib/format-date";
-import type {
-  CalendarDeadlineRow,
-  CalendarEventRow,
-} from "@/lib/queries/calendar";
+import type { CalendarDeadlineRow, CalendarEventRow } from "@/lib/queries/calendar";
 import { CALENDAR_EVENT_KIND, type CalendarEventDragData } from "./event-drag";
 import { WeekView } from "./week-view";
 
 const TZ = "America/Denver";
 // Sun Jul 12 .. Sat Jul 18 2026 as noon-UTC day dates.
-const DAYS = Array.from(
-  { length: 7 },
-  (_, i) => new Date(Date.UTC(2026, 6, 12 + i, 12))
-);
+const DAYS = Array.from({ length: 7 }, (_, i) => new Date(Date.UTC(2026, 6, 12 + i, 12)));
 
 const allDay = (over: Partial<CalendarEventRow> = {}): CalendarEventRow => ({
   id: "e1",
@@ -83,7 +77,7 @@ function renderWeek(items: Parameters<typeof WeekView>[0]["items"]) {
   return render(
     <UserTimeZoneProvider timeZone={TZ}>
       <WeekView days={DAYS} items={items} canEditEvents userTz={TZ} />
-    </UserTimeZoneProvider>
+    </UserTimeZoneProvider>,
   );
 }
 
@@ -139,7 +133,7 @@ describe("WeekView date-only bucketing (Denver)", () => {
       expect.objectContaining({
         isAllDay: true,
         startTime: "2026-07-15T00:00:00.000Z",
-      })
+      }),
     );
     expect(allDayColumnOf(container, "Trial week")).toBe(3);
   });

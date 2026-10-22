@@ -20,10 +20,10 @@ Folders the system creates for records requests are visibly marked, link back to
 
 `DocumentFolder` gains:
 
-| Field | Type | Notes |
-|---|---|---|
-| `systemKind` | String? | null = an ordinary user folder. Otherwise one of `records_root` (Records Requests), `records_request` (a request's folder), `records_request_docs` (Request documents), `records_responsive_docs` (Responsive documents). A non-null value means protected. |
-| `recordsRequestId` | String? | FK → RecordsRequest, `onDelete: SetNull`. Set on `records_request` and its two subfolders. |
+| Field              | Type    | Notes                                                                                                                                                                                                                                                       |
+| ------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `systemKind`       | String? | null = an ordinary user folder. Otherwise one of `records_root` (Records Requests), `records_request` (a request's folder), `records_request_docs` (Request documents), `records_responsive_docs` (Responsive documents). A non-null value means protected. |
+| `recordsRequestId` | String? | FK → RecordsRequest, `onDelete: SetNull`. Set on `records_request` and its two subfolders.                                                                                                                                                                  |
 
 Index on `recordsRequestId`. Kinds are listed once in `src/lib/records-requests/folder-kinds.ts`, which holds the labels and the link target for each kind.
 

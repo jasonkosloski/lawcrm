@@ -22,17 +22,10 @@ export const DRAFT_PERMISSION = "matters.create";
 
 /** List filter: Admin sees every draft, everyone else only their own
  *  (created, led, or seated). Callers still gate on `matters.create`. */
-export function draftAccessWhere(
-  userId: string,
-  isAdmin: boolean
-): Prisma.MatterDraftWhereInput {
+export function draftAccessWhere(userId: string, isAdmin: boolean): Prisma.MatterDraftWhereInput {
   if (isAdmin) return {};
   return {
-    OR: [
-      { createdById: userId },
-      { leadUserId: userId },
-      { teamUserIds: { has: userId } },
-    ],
+    OR: [{ createdById: userId }, { leadUserId: userId }, { teamUserIds: { has: userId } }],
   };
 }
 
@@ -52,15 +45,12 @@ async function isAdminUser(userId: string): Promise<boolean> {
  *  that answer a miss themselves. */
 export async function loadAccessibleDraft(
   userId: string,
-  draftId: string
+  draftId: string,
 ): Promise<MatterDraft | null> {
   return loadAccessible(userId, draftId);
 }
 
-async function loadAccessible(
-  userId: string,
-  draftId: string
-): Promise<MatterDraft | null> {
+async function loadAccessible(userId: string, draftId: string): Promise<MatterDraft | null> {
   const isAdmin = await isAdminUser(userId);
   if (!isAdmin && !(await userHasPermission(userId, DRAFT_PERMISSION))) {
     return null;
@@ -71,10 +61,7 @@ async function loadAccessible(
 }
 
 /** Boolean twin for route handlers that hold a verified user id. */
-export async function canAccessDraft(
-  userId: string,
-  draftId: string
-): Promise<boolean> {
+export async function canAccessDraft(userId: string, draftId: string): Promise<boolean> {
   return (await loadAccessible(userId, draftId)) !== null;
 }
 

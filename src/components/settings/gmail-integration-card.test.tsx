@@ -32,10 +32,7 @@ vi.mock("next/navigation", () => ({
 
 import { disconnectEmailAccount } from "@/app/actions/email-accounts";
 import { backfillMyEmailAccount } from "@/app/actions/email-sync";
-import {
-  GmailIntegrationCard,
-  type GmailAccountView,
-} from "./gmail-integration-card";
+import { GmailIntegrationCard, type GmailAccountView } from "./gmail-integration-card";
 
 const mockedDisconnect = vi.mocked(disconnectEmailAccount);
 const mockedBackfill = vi.mocked(backfillMyEmailAccount);
@@ -70,7 +67,7 @@ function renderCard(overrides?: Partial<Parameters<typeof GmailIntegrationCard>[
       justConnected={false}
       errorCode={null}
       {...overrides}
-    />
+    />,
   );
 }
 
@@ -92,9 +89,7 @@ describe("GmailIntegrationCard", () => {
     renderCard({ accounts: [CONNECTED_ACCOUNT] });
     expect(screen.getByText("jason@kosloskilaw.com")).toBeInTheDocument();
     expect(screen.getByText("Connected")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Last sync Jul 7, 2026, 9:14 AM/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Last sync Jul 7, 2026, 9:14 AM/)).toBeInTheDocument();
     expect(screen.getByText(/42 threads/)).toBeInTheDocument();
     expect(screen.getByText("Connect another mailbox")).toBeInTheDocument();
   });
@@ -116,12 +111,10 @@ describe("GmailIntegrationCard", () => {
       ],
     });
     expect(screen.getByText("Needs attention")).toBeInTheDocument();
-    expect(
-      screen.getByText("Google authorization was revoked — reconnect.")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Google authorization was revoked — reconnect.")).toBeInTheDocument();
     expect(screen.getByText("Reconnect").closest("a")).toHaveAttribute(
       "href",
-      "/api/integrations/google/connect"
+      "/api/integrations/google/connect",
     );
   });
 
@@ -135,18 +128,14 @@ describe("GmailIntegrationCard", () => {
     unmount2();
 
     renderCard({ errorCode: "some_future_code" });
-    expect(
-      screen.getByText(/Something went wrong connecting Gmail/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Something went wrong connecting Gmail/)).toBeInTheDocument();
     expect(screen.queryByText(/some_future_code/)).not.toBeInTheDocument();
   });
 
   test("prototype-key error codes render the generic line instead of crashing", () => {
     for (const code of ["__proto__", "constructor", "toString"]) {
       const { unmount } = renderCard({ errorCode: code });
-      expect(
-        screen.getByText(/Something went wrong connecting Gmail/)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Something went wrong connecting Gmail/)).toBeInTheDocument();
       unmount();
     }
   });
@@ -169,7 +158,7 @@ describe("GmailIntegrationCard", () => {
         accounts={[CONNECTED_ACCOUNT]}
         justConnected={false}
         errorCode={null}
-      />
+      />,
     );
     expect(screen.getByText(/Gmail connected/)).toBeInTheDocument();
 
@@ -189,9 +178,7 @@ describe("GmailIntegrationCard", () => {
     expect(screen.getByText(/Gmail connected/)).toBeInTheDocument();
     await user.click(screen.getByText("Disconnect"));
     await user.click(screen.getByText("Confirm"));
-    await waitFor(() =>
-      expect(screen.queryByText(/Gmail connected/)).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByText(/Gmail connected/)).not.toBeInTheDocument());
     cleanup();
 
     renderCard({
@@ -200,9 +187,7 @@ describe("GmailIntegrationCard", () => {
     });
     expect(screen.getByText(/Gmail connected/)).toBeInTheDocument();
     await user.click(screen.getByText("Load older emails"));
-    await waitFor(() =>
-      expect(screen.queryByText(/Gmail connected/)).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByText(/Gmail connected/)).not.toBeInTheDocument());
   });
 
   test("no params: nothing to strip", () => {
@@ -236,9 +221,7 @@ describe("calendar sync status line", () => {
   test("scoped account shows Calendar sync on (no reconnect link)", () => {
     renderCard({ accounts: [CONNECTED_ACCOUNT] });
     expect(screen.getByText("Calendar sync on")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Reconnect to enable calendar sync")
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Reconnect to enable calendar sync")).not.toBeInTheDocument();
   });
 
   test("pre-calendar grant shows the reconnect link pointing at the connect route", () => {
@@ -246,9 +229,7 @@ describe("calendar sync status line", () => {
       accounts: [{ ...CONNECTED_ACCOUNT, calendarSyncEnabled: false }],
     });
     expect(screen.queryByText("Calendar sync on")).not.toBeInTheDocument();
-    const link = screen
-      .getByText("Reconnect to enable calendar sync")
-      .closest("a");
+    const link = screen.getByText("Reconnect to enable calendar sync").closest("a");
     expect(link).toHaveAttribute("href", "/api/integrations/google/connect");
   });
 
@@ -262,9 +243,7 @@ describe("calendar sync status line", () => {
         },
       ],
     });
-    expect(
-      screen.queryByText("Reconnect to enable calendar sync")
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Reconnect to enable calendar sync")).not.toBeInTheDocument();
     expect(screen.queryByText("Calendar sync on")).not.toBeInTheDocument();
   });
 });
@@ -299,9 +278,7 @@ describe("Load older emails (backfill)", () => {
 
     expect(mockedBackfill).toHaveBeenCalledExactlyOnceWith("acct-1");
     await waitFor(() => {
-      expect(
-        screen.getByText("Imported 37 older threads.")
-      ).toBeInTheDocument();
+      expect(screen.getByText("Imported 37 older threads.")).toBeInTheDocument();
     });
   });
 

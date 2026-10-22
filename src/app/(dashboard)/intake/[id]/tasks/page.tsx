@@ -17,10 +17,7 @@ import Link from "next/link";
 import { Briefcase, CheckSquare } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { TaskComposer } from "@/components/matters/captures/task-composer";
-import {
-  TaskListByStatus,
-  type TaskRowPerms,
-} from "@/components/tasks/task-list-by-status";
+import { TaskListByStatus, type TaskRowPerms } from "@/components/tasks/task-list-by-status";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { getLeadTasks } from "@/lib/queries/matter-detail";
 import { listAssigneeOptions } from "@/lib/queries/team";
@@ -29,50 +26,37 @@ import { assertLeadAccess } from "@/lib/lead-access";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
 
-export default async function LeadTasksPage({
-  params,
-}: PageProps<"/intake/[id]/tasks">) {
+export default async function LeadTasksPage({ params }: PageProps<"/intake/[id]/tasks">) {
   await requireUser();
   const { id } = await params;
   await assertLeadAccess(id);
-  const [
-    lead,
-    tasks,
-    versions,
-    assignees,
-    currentUserId,
-    tz,
-    canCreate,
-    canEdit,
-    canDelete,
-  ] = await Promise.all([
-    // Stage decides whether the composer renders: a converted lead's
-    // tasks already moved to the matter (createLeadTask refuses it).
-    prisma.lead.findUnique({
-      where: { id },
-      select: { stage: true, convertedMatterId: true },
-    }),
-    getLeadTasks(id),
-    // Row versions for the edit dialog's stale-form guard.
-    prisma.task.findMany({
-      where: { leadId: id },
-      select: { id: true, updatedAt: true },
-    }),
-    listAssigneeOptions(),
-    getCurrentUserId(),
-    getCurrentUserTimeZone(),
-    currentUserHasPermission("tasks.create"),
-    currentUserHasPermission("tasks.edit"),
-    currentUserHasPermission("tasks.delete"),
-  ]);
+  const [lead, tasks, versions, assignees, currentUserId, tz, canCreate, canEdit, canDelete] =
+    await Promise.all([
+      // Stage decides whether the composer renders: a converted lead's
+      // tasks already moved to the matter (createLeadTask refuses it).
+      prisma.lead.findUnique({
+        where: { id },
+        select: { stage: true, convertedMatterId: true },
+      }),
+      getLeadTasks(id),
+      // Row versions for the edit dialog's stale-form guard.
+      prisma.task.findMany({
+        where: { leadId: id },
+        select: { id: true, updatedAt: true },
+      }),
+      listAssigneeOptions(),
+      getCurrentUserId(),
+      getCurrentUserTimeZone(),
+      currentUserHasPermission("tasks.create"),
+      currentUserHasPermission("tasks.edit"),
+      currentUserHasPermission("tasks.delete"),
+    ]);
   // The layout notFound()s missing leads; render nothing if the row
   // vanished between the layout's fetch and ours.
   if (!lead) return null;
 
   const isConverted = lead.stage === "converted";
-  const updatedAtById = new Map(
-    versions.map((v) => [v.id, v.updatedAt.toISOString()])
-  );
+  const updatedAtById = new Map(versions.map((v) => [v.id, v.updatedAt.toISOString()]));
   // Log time / add note / convert to deadline all need a matter (their
   // actions refuse a task without one), so they're never offered here.
   const perms: TaskRowPerms = {
@@ -88,8 +72,8 @@ export default async function LeadTasksPage({
       {isConverted ? (
         <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-paper-2 px-3 py-2.5">
           <p className="text-xs text-ink-3">
-            This lead converted — its intake tasks were carried forward to
-            the matter. Add new tasks there.
+            This lead converted — its intake tasks were carried forward to the matter. Add new tasks
+            there.
           </p>
           {lead.convertedMatterId && (
             <Link
@@ -116,9 +100,7 @@ export default async function LeadTasksPage({
         <EmptyState
           icon={CheckSquare}
           title="No intake tasks yet"
-          description={
-            canCreate && !isConverted ? "Add the first one above." : undefined
-          }
+          description={canCreate && !isConverted ? "Add the first one above." : undefined}
           className="py-6"
         />
       ) : null}

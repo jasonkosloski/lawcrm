@@ -18,9 +18,7 @@ export const PORTAL_SWITCH_OFF_REASON =
 export const PORTAL_NO_ACCESS_REASON =
   "The billed client doesn't have portal access to this matter.";
 
-type Target =
-  | { available: true; email: string }
-  | { available: false; reason: string };
+type Target = { available: true; email: string } | { available: false; reason: string };
 
 /**
  * Who a portal-posted invoice would notify: the live portal identity of the
@@ -28,9 +26,7 @@ type Target =
  * access on the invoice's matter. Unavailable when the firm portal or the
  * matter's billing switch is off.
  */
-export async function resolvePortalSendTarget(
-  invoiceId: string
-): Promise<Target> {
+export async function resolvePortalSendTarget(invoiceId: string): Promise<Target> {
   const [firm, invoice] = await Promise.all([
     prisma.firm.findFirst({ select: { portalEnabled: true } }),
     prisma.invoice.findUnique({
@@ -65,11 +61,7 @@ export async function resolvePortalSendTarget(
   return { available: true, email: identity.email };
 }
 
-export async function portalSendAvailability(
-  invoiceId: string
-): Promise<PortalSendAvailability> {
+export async function portalSendAvailability(invoiceId: string): Promise<PortalSendAvailability> {
   const t = await resolvePortalSendTarget(invoiceId);
-  return t.available
-    ? { available: true, reason: null }
-    : { available: false, reason: t.reason };
+  return t.available ? { available: true, reason: null } : { available: false, reason: t.reason };
 }

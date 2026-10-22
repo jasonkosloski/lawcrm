@@ -8,11 +8,7 @@ vi.mock("@/components/create-stack/create-stack-provider", () => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -26,7 +22,7 @@ describe("NewEventButton", () => {
     render(<NewEventButton />);
     expect(screen.getByRole("link", { name: /new event/i })).toHaveAttribute(
       "href",
-      "/calendar/events/new"
+      "/calendar/events/new",
     );
     fireEvent.click(screen.getByRole("button", { name: "Quick event" }));
     expect(openMock).toHaveBeenCalledWith("event");

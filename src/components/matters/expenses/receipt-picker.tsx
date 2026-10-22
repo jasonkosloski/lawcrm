@@ -13,16 +13,9 @@
 
 import { useEffect, useState } from "react";
 import { ChevronDown, Paperclip, Search, X } from "lucide-react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import {
-  searchReceiptDocuments,
-  type ReceiptCandidate,
-} from "@/app/actions/expenses";
+import { searchReceiptDocuments, type ReceiptCandidate } from "@/app/actions/expenses";
 import { inputClass } from "@/components/ui/field";
 
 export function ReceiptPicker({
@@ -88,7 +81,10 @@ export function ReceiptPicker({
             <button
               type="button"
               id={id}
-              className={cn(inputClass(), "flex-1 min-w-0 inline-flex items-center gap-1.5 text-left")}
+              className={cn(
+                inputClass(),
+                "flex-1 min-w-0 inline-flex items-center gap-1.5 text-left",
+              )}
             >
               {documentId ? (
                 <>
@@ -107,10 +103,7 @@ export function ReceiptPicker({
         <PopoverContent align="start" className="w-80">
           <div className="flex flex-col gap-2">
             <div className="relative">
-              <Search
-                size={12}
-                className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4"
-              />
+              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4" />
               <input
                 type="text"
                 autoFocus
@@ -141,13 +134,11 @@ export function ReceiptPicker({
                       onClick={() => pick(d)}
                       className={cn(
                         "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-left transition-colors hover:bg-paper-2",
-                        selected ? "text-brand-700 font-medium" : "text-ink"
+                        selected ? "text-brand-700 font-medium" : "text-ink",
                       )}
                     >
                       <span className="flex-1 truncate">{d.name}</span>
-                      {selected && (
-                        <span className="text-2xs text-ink-4 shrink-0">Selected</span>
-                      )}
+                      {selected && <span className="text-2xs text-ink-4 shrink-0">Selected</span>}
                     </button>
                   </li>
                 );

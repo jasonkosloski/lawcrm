@@ -38,9 +38,7 @@ export default async function PortalLoginPage() {
     );
   }
 
-  const devUsers = (await requestAllowsDevPortalSignIn())
-    ? await devPortalUsers()
-    : null;
+  const devUsers = (await requestAllowsDevPortalSignIn()) ? await devPortalUsers() : null;
 
   return (
     <AuthPanel

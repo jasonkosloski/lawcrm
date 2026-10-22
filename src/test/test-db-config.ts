@@ -46,7 +46,7 @@ export function maintenanceDbUrl(baseUrl: string): string {
  */
 export function resolveMaxWorkers(
   env: Record<string, string | undefined> = process.env,
-  cores: number = os.availableParallelism()
+  cores: number = os.availableParallelism(),
 ): number {
   const n = Number(env.TEST_MAX_WORKERS);
   if (env.TEST_MAX_WORKERS !== undefined && Number.isInteger(n) && n >= 1) {

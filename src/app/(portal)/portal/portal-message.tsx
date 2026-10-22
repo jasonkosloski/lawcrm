@@ -19,16 +19,10 @@ export function PortalMessage({
         <Icon className="size-6" aria-hidden="true" />
       </span>
       <div className="flex flex-col gap-2">
-        <h1 className="font-display text-2xl font-medium tracking-tight text-brand-900">
-          {title}
-        </h1>
+        <h1 className="font-display text-2xl font-medium tracking-tight text-brand-900">{title}</h1>
         <p className="text-sm leading-relaxed text-ink-3">{description}</p>
       </div>
-      {children ? (
-        <div className="mt-2 flex flex-wrap justify-center gap-2">
-          {children}
-        </div>
-      ) : null}
+      {children ? <div className="mt-2 flex flex-wrap justify-center gap-2">{children}</div> : null}
     </div>
   );
 }

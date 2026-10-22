@@ -7,19 +7,9 @@
  * are more complex aggregations and live elsewhere.
  */
 
-export {
-  eventLabelForViewer,
-} from "./shared";
-export {
-  type ContactPhoneRow,
-  type PartyRow,
-  getMatterParties,
-} from "./parties";
-export {
-  type DeadlineRow,
-  type MatterListOptions,
-  getMatterDeadlines,
-} from "./deadlines";
+export { eventLabelForViewer } from "./shared";
+export { type ContactPhoneRow, type PartyRow, getMatterParties } from "./parties";
+export { type DeadlineRow, type MatterListOptions, getMatterDeadlines } from "./deadlines";
 export {
   type EntitySource,
   type TaskRow,
@@ -43,22 +33,14 @@ export {
   getMatterTimeEntries,
   getMatterTimeSummary,
 } from "./time";
-export {
-  type MatterEventRow,
-  getMatterEvents,
-  getLeadEvents,
-} from "./events";
+export { type MatterEventRow, getMatterEvents, getLeadEvents } from "./events";
 export {
   type DocumentRow,
   shapeDocumentRows,
   getDocumentFolders,
   getFolderDocumentCounts,
 } from "./documents";
-export {
-  type ExpenseRow,
-  type ExpenseSummary,
-  getMatterExpenses,
-} from "./expenses";
+export { type ExpenseRow, type ExpenseSummary, getMatterExpenses } from "./expenses";
 export {
   type ActivityRow,
   MATTER_ACTIVITY_LIMIT,

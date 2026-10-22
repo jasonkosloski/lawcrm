@@ -75,9 +75,7 @@ describe("statute countdown (pure helpers)", () => {
   });
 
   test("a future createdAt never ages below zero", () => {
-    expect(
-      leadAgeDays(new Date("2026-05-01T00:00:00Z"), "America/Denver", now)
-    ).toBe(0);
+    expect(leadAgeDays(new Date("2026-05-01T00:00:00Z"), "America/Denver", now)).toBe(0);
   });
 });
 
@@ -96,9 +94,7 @@ describe("listLeads", () => {
       })),
     });
 
-    const { rows, closed, activeTruncated } = await listLeads(
-      new Date("2026-04-28T02:00:00Z")
-    );
+    const { rows, closed, activeTruncated } = await listLeads(new Date("2026-04-28T02:00:00Z"));
     const found = rows.find((r) => r.id === old.id);
     expect(found).toBeDefined();
     expect(found!.isActive).toBe(true);
@@ -115,9 +111,7 @@ describe("listLeads", () => {
     expect(closed2.some((r) => seen.has(r.id))).toBe(false);
     expect(p2.rows.some((r) => r.id === old.id)).toBe(true);
     // Agrees with the header's uncapped count.
-    expect(rows.filter((r) => r.isActive).length).toBe(
-      (await getLeadSummary()).activeCount
-    );
+    expect(rows.filter((r) => r.isActive).length).toBe((await getLeadSummary()).activeCount);
   });
 
   test("statuteDaysRemaining counts down from the intake-day snapshot", async () => {

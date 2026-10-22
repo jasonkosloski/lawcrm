@@ -1,8 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  checkDestructiveDbAllowed,
-  isDestructivePrismaInvocation,
-} from "./seed-guard";
+import { checkDestructiveDbAllowed, isDestructivePrismaInvocation } from "./seed-guard";
 
 const REMOTE = "postgresql://u:p@db.prisma.io:5432/postgres";
 const LOCAL = "postgresql://u:p@localhost:5433/lawcrm_test";
@@ -13,7 +10,7 @@ describe("checkDestructiveDbAllowed", () => {
       expect(
         checkDestructiveDbAllowed({
           DATABASE_URL: `postgresql://u:p@${host}:5432/x`,
-        }).ok
+        }).ok,
       ).toBe(true);
     }
   });
@@ -36,9 +33,7 @@ describe("checkDestructiveDbAllowed", () => {
   });
 
   test("ALLOW_SEED=1 opts a remote dev database in", () => {
-    expect(
-      checkDestructiveDbAllowed({ DATABASE_URL: REMOTE, ALLOW_SEED: "1" }).ok
-    ).toBe(true);
+    expect(checkDestructiveDbAllowed({ DATABASE_URL: REMOTE, ALLOW_SEED: "1" }).ok).toBe(true);
   });
 
   test("production environments are refused even with ALLOW_SEED=1", () => {
@@ -47,34 +42,28 @@ describe("checkDestructiveDbAllowed", () => {
         DATABASE_URL: LOCAL,
         ALLOW_SEED: "1",
         VERCEL_ENV: "production",
-      }).ok
+      }).ok,
     ).toBe(false);
     expect(
       checkDestructiveDbAllowed({
         DATABASE_URL: LOCAL,
         NODE_ENV: "production",
-      }).ok
+      }).ok,
     ).toBe(false);
   });
 
   test("refuses when no URL is configured or the URL is unparseable", () => {
     expect(checkDestructiveDbAllowed({}).ok).toBe(false);
-    expect(checkDestructiveDbAllowed({ DATABASE_URL: "not a url" }).ok).toBe(
-      false
-    );
+    expect(checkDestructiveDbAllowed({ DATABASE_URL: "not a url" }).ok).toBe(false);
   });
 });
 
 describe("isDestructivePrismaInvocation", () => {
   const argv = (...a: string[]) => ["node", "prisma", ...a];
   test("flags migrate reset, db seed and --force-reset only", () => {
-    expect(isDestructivePrismaInvocation(argv("migrate", "reset", "--force"))).toBe(
-      true
-    );
+    expect(isDestructivePrismaInvocation(argv("migrate", "reset", "--force"))).toBe(true);
     expect(isDestructivePrismaInvocation(argv("db", "seed"))).toBe(true);
-    expect(isDestructivePrismaInvocation(argv("db", "push", "--force-reset"))).toBe(
-      true
-    );
+    expect(isDestructivePrismaInvocation(argv("db", "push", "--force-reset"))).toBe(true);
     expect(isDestructivePrismaInvocation(argv("migrate", "deploy"))).toBe(false);
     expect(isDestructivePrismaInvocation(argv("migrate", "status"))).toBe(false);
     expect(isDestructivePrismaInvocation(argv("generate"))).toBe(false);

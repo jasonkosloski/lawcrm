@@ -48,7 +48,7 @@ function ModePicker({
     onChange(modes[(i + step + n) % n]);
     const group = e.currentTarget.parentElement;
     requestAnimationFrame(() =>
-      group?.querySelectorAll<HTMLElement>('[role="radio"]')[(i + step + n) % n]?.focus()
+      group?.querySelectorAll<HTMLElement>('[role="radio"]')[(i + step + n) % n]?.focus(),
     );
   };
 
@@ -71,7 +71,7 @@ function ModePicker({
             onKeyDown={(e) => onKeyDown(e, i)}
             className={cn(
               "px-2.5 py-1 text-xs font-medium rounded transition-colors",
-              checked ? "bg-brand-soft text-brand-700" : "text-ink-3 hover:text-ink"
+              checked ? "bg-brand-soft text-brand-700" : "text-ink-3 hover:text-ink",
             )}
           >
             {MODE_LABEL[mode]}
@@ -124,9 +124,7 @@ export function NotificationEmailSettings({
         error = "Couldn't unmute the matter. Please try again.";
       }
       if (error) {
-        setMuted((list) =>
-          [...list, matter].sort((a, b) => a.name.localeCompare(b.name))
-        );
+        setMuted((list) => [...list, matter].sort((a, b) => a.name.localeCompare(b.name)));
         notifyError(error);
       }
     });

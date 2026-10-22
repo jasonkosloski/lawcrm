@@ -16,15 +16,8 @@ import { EmptyState } from "@/components/shared/empty-state";
 // day (the action stores end-of-day of the picked date), so it is
 // read as a date-only value and compared by day against the viewer's
 // today - never as an instant against Date.now().
-import {
-  daysUntilDateOnly,
-  formatDateOnly,
-  formatRelative,
-} from "@/lib/format-date";
-import type {
-  CommunicationFilter,
-  ThreadListRow,
-} from "@/lib/queries/communication";
+import { daysUntilDateOnly, formatDateOnly, formatRelative } from "@/lib/format-date";
+import type { CommunicationFilter, ThreadListRow } from "@/lib/queries/communication";
 import { DEFAULT_COMMUNICATION_FILTER } from "@/lib/communication-filter-default";
 import { MailboxDrawerTrigger } from "./mailbox-drawer";
 import { ComposeEmailLauncher } from "./compose-email-launcher";
@@ -40,10 +33,7 @@ const DEFAULT_FILTER: CommunicationFilter = DEFAULT_COMMUNICATION_FILTER;
 
 /** The list URL for a filter / matter drilldown, without a thread
  *  or page — the pager's base href. */
-export function listHref(
-  filter: CommunicationFilter,
-  matterId: string | null
-): string {
+export function listHref(filter: CommunicationFilter, matterId: string | null): string {
   const params = new URLSearchParams();
   if (filter !== DEFAULT_FILTER) params.set("filter", filter);
   if (matterId) params.set("matter", matterId);
@@ -57,7 +47,7 @@ export function rowHref(
   threadId: string,
   filter: CommunicationFilter,
   matterId: string | null,
-  page = 1
+  page = 1,
 ): string {
   const params = new URLSearchParams();
   if (filter !== DEFAULT_FILTER) params.set("filter", filter);
@@ -80,20 +70,14 @@ const FILTER_LABEL: Record<CommunicationFilter, string> = {
 
 /** Follow-up chip: warn once the due day has passed, "Late" once it
  *  is more than a day behind (day arithmetic in the viewer's zone). */
-function FollowUpChip({
-  followUpAt,
-  tz,
-}: {
-  followUpAt: Date;
-  tz: string | null;
-}) {
+function FollowUpChip({ followUpAt, tz }: { followUpAt: Date; tz: string | null }) {
   const daysLeft = daysUntilDateOnly(followUpAt, tz ?? "UTC");
   return (
     <span
       title={`Follow up by ${formatDateOnly(followUpAt, "short")}`}
       className={cn(
         "inline-flex items-center gap-0.5 text-3xs font-mono px-1 rounded",
-        daysLeft < 0 ? "text-warn" : "text-brand-700"
+        daysLeft < 0 ? "text-warn" : "text-brand-700",
       )}
     >
       <BellRing size={9} />
@@ -142,9 +126,7 @@ export function ThreadList({
         {/* Mobile: hamburger that opens the mailbox drawer (folders /
             filters / pinned matters). Hidden at lg+ where the rail
             is always visible. */}
-        <MailboxDrawerTrigger
-          label={matterLabel ?? FILTER_LABEL[filter]}
-        />
+        <MailboxDrawerTrigger label={matterLabel ?? FILTER_LABEL[filter]} />
         <div className="min-w-0 flex-1">
           <div className="text-2xs font-medium text-ink-3 truncate">
             {matterLabel ?? FILTER_LABEL[filter]}
@@ -181,22 +163,20 @@ export function ThreadList({
                   "block px-4 py-3 border-b border-line transition-colors",
                   t.id === selectedThreadId
                     ? "bg-paper-2 border-l-2 border-l-ink"
-                    : "hover:bg-paper-2/60 border-l-2 border-l-transparent"
+                    : "hover:bg-paper-2/60 border-l-2 border-l-transparent",
                 )}
               >
                 <div className="flex items-center gap-2 mb-1">
                   <span
                     className={cn(
                       "text-sm truncate flex-1 min-w-0",
-                      t.isRead ? "font-normal text-ink-2" : "font-semibold text-ink"
+                      t.isRead ? "font-normal text-ink-2" : "font-semibold text-ink",
                     )}
                   >
                     {t.fromDisplay}
                   </span>
                   {t.messageCount > 1 && (
-                    <span className="text-2xs font-mono text-ink-4 shrink-0">
-                      {t.messageCount}
-                    </span>
+                    <span className="text-2xs font-mono text-ink-4 shrink-0">{t.messageCount}</span>
                   )}
                   <span className="text-2xs font-mono text-ink-4 shrink-0">
                     {formatRelative(t.lastMessageAt, tz)}
@@ -205,16 +185,12 @@ export function ThreadList({
                 <div
                   className={cn(
                     "text-xs leading-tight truncate mb-0.5",
-                    t.isRead ? "text-ink" : "text-ink font-medium"
+                    t.isRead ? "text-ink" : "text-ink font-medium",
                   )}
                 >
                   {t.subject}
                 </div>
-                {t.snippet && (
-                  <div className="text-2xs text-ink-4 truncate">
-                    {t.snippet}
-                  </div>
-                )}
+                {t.snippet && <div className="text-2xs text-ink-4 truncate">{t.snippet}</div>}
                 <div className="flex items-center gap-2 mt-1.5">
                   {t.matter && (
                     <span className="inline-flex items-center gap-1 text-2xs text-ink-3">
@@ -227,43 +203,23 @@ export function ThreadList({
                   )}
                   {t.lead && !t.matter && (
                     <span className="inline-flex items-center gap-1 text-2xs text-ink-3">
-                      <span className="px-1 rounded border border-line text-ink-4">
-                        Lead
-                      </span>
+                      <span className="px-1 rounded border border-line text-ink-4">Lead</span>
                       {t.lead.name}
                     </span>
                   )}
                   {!t.matter && !t.lead && (
-                    <span className="text-2xs font-medium text-warn">
-                      Unfiled
-                    </span>
+                    <span className="text-2xs font-medium text-warn">Unfiled</span>
                   )}
                   <span className="ml-auto flex items-center gap-1.5">
-                    {t.followUpAt && (
-                      <FollowUpChip followUpAt={t.followUpAt} tz={tz} />
-                    )}
-                    {t.hasAttachments && (
-                      <Paperclip
-                        size={11}
-                        className="text-ink-4 shrink-0"
-                      />
-                    )}
+                    {t.followUpAt && <FollowUpChip followUpAt={t.followUpAt} tz={tz} />}
+                    {t.hasAttachments && <Paperclip size={11} className="text-ink-4 shrink-0" />}
                     {/* Static starred indicator (display only — the
                         toggle lives in the hover cluster). */}
-                    {t.isStarred && (
-                      <Star
-                        size={11}
-                        className="text-warn fill-warn shrink-0"
-                      />
-                    )}
+                    {t.isStarred && <Star size={11} className="text-warn fill-warn shrink-0" />}
                   </span>
                 </div>
               </Link>
-              <ThreadRowActions
-                threadId={t.id}
-                isStarred={t.isStarred}
-                isArchived={t.isArchived}
-              />
+              <ThreadRowActions threadId={t.id} isStarred={t.isStarred} isArchived={t.isArchived} />
             </li>
           ))
         )}

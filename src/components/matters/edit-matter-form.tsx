@@ -20,25 +20,14 @@ import { cn } from "@/lib/utils";
 import { updateMatter } from "@/app/actions/matters";
 import { CascadeConfirm } from "@/components/automations/cascade-confirm";
 import { ConflictReview } from "./conflict-review";
-import {
-  computeSolDate,
-  formatStatutePeriod,
-  type SolPeriod,
-} from "@/lib/sol";
-import {
-  dateOnlyKey,
-  formatDateOnly,
-  parseDateOnly,
-} from "@/lib/format-date";
+import { computeSolDate, formatStatutePeriod, type SolPeriod } from "@/lib/sol";
+import { dateOnlyKey, formatDateOnly, parseDateOnly } from "@/lib/format-date";
 import {
   BILLING_TYPE_LABEL,
   BILLING_TYPE_OPTIONS,
   type BillingTypeOrLegacy,
 } from "@/lib/billing-type";
-import {
-  updateMatterInitialState,
-  type UpdateMatterState,
-} from "@/lib/new-matter-constants";
+import { updateMatterInitialState, type UpdateMatterState } from "@/lib/new-matter-constants";
 import {
   clearedRequired,
   requiredFieldError,
@@ -48,15 +37,8 @@ import {
 } from "@/lib/matter-required-fields";
 import type { VenueOption } from "@/lib/queries/venues";
 import { VenueCombobox } from "./venue-combobox";
-import {
-  focusFirstInvalid,
-  useRequiredHints,
-  VenueField,
-} from "./required-field-ui";
-import {
-  Row,
-  Section,
-} from "./form-primitives";
+import { focusFirstInvalid, useRequiredHints, VenueField } from "./required-field-ui";
+import { Row, Section } from "./form-primitives";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Field, inputClass } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -146,10 +128,10 @@ export function EditMatterForm({
   // Bind matterId into the server action so the form's action prop
   // can stay `(prev, formData) => state`.
   const boundAction = updateMatter.bind(null, matter.id);
-  const [state, formAction, isPending] = useActionState<
-    UpdateMatterState,
-    FormData
-  >(boundAction, updateMatterInitialState);
+  const [state, formAction, isPending] = useActionState<UpdateMatterState, FormData>(
+    boundAction,
+    updateMatterInitialState,
+  );
   // Submit through onSubmit + startTransition instead of
   // `<form action={formAction}>`: React 19 resets the form after any
   // function action, which would revert every <select> to its mount
@@ -170,9 +152,7 @@ export function EditMatterForm({
       return;
     }
     setClientErrs({});
-    const submitter = (e.nativeEvent as SubmitEvent).submitter as
-      | HTMLElement
-      | null;
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLElement | null;
     const fd = new FormData(e.currentTarget, submitter);
     setSubmittedIncident(incidentDateInput);
     startTransition(() => formAction(fd));
@@ -190,8 +170,7 @@ export function EditMatterForm({
   const [clientErrs, setClientErrs] = useState<Record<string, string[]>>({});
   const formRef = useRef<HTMLFormElement>(null);
   const errs = { ...(state.errors ?? {}), ...clientErrs };
-  const dateInputValue = (d: Date | null): string =>
-    d ? dateOnlyKey(d) : "";
+  const dateInputValue = (d: Date | null): string => (d ? dateOnlyKey(d) : "");
   // The stored SOL date is either auto-derived (it equals incident +
   // the stored area's period) or a manual override. Only a real
   // override is pre-filled into the "Deadline date" input; an
@@ -199,17 +178,11 @@ export function EditMatterForm({
   // the incident date or area recomputes it on save. (Mirrors the
   // server's rule in resolveEditedSolDate.)
   const storedArea = options.areas.find((a) => a.id === matter.practiceAreaId);
-  const storedAuto = computeSolDate(
-    matter.incidentDate,
-    storedArea?.statutePeriod
-  );
+  const storedAuto = computeSolDate(matter.incidentDate, storedArea?.statutePeriod);
   const storedIsAuto =
     !matter.statuteOfLimitationsDate ||
-    (!!storedAuto &&
-      dateOnlyKey(storedAuto) === dateOnlyKey(matter.statuteOfLimitationsDate));
-  const storedOverrideValue = storedIsAuto
-    ? ""
-    : dateInputValue(matter.statuteOfLimitationsDate);
+    (!!storedAuto && dateOnlyKey(storedAuto) === dateOnlyKey(matter.statuteOfLimitationsDate));
+  const storedOverrideValue = storedIsAuto ? "" : dateInputValue(matter.statuteOfLimitationsDate);
   const init = {
     name: vals.name ?? matter.name,
     billingType: vals.billingType ?? matter.billingType,
@@ -225,14 +198,10 @@ export function EditMatterForm({
     description: vals.description ?? matter.description ?? "",
     filedDate: vals.filedDate ?? dateInputValue(matter.filedDate ?? null),
     trialDate: vals.trialDate ?? dateInputValue(matter.trialDate ?? null),
-    incidentDate:
-      vals.incidentDate ?? dateInputValue(matter.incidentDate),
-    statuteOfLimitationsDate:
-      vals.statuteOfLimitationsDate ?? storedOverrideValue,
+    incidentDate: vals.incidentDate ?? dateInputValue(matter.incidentDate),
+    statuteOfLimitationsDate: vals.statuteOfLimitationsDate ?? storedOverrideValue,
     statuteOfLimitationsNotes:
-      vals.statuteOfLimitationsNotes ??
-      matter.statuteOfLimitationsNotes ??
-      "",
+      vals.statuteOfLimitationsNotes ?? matter.statuteOfLimitationsNotes ?? "",
   };
 
   // ── Practice area + stage (cascading) ────────────────────────────────
@@ -242,7 +211,7 @@ export function EditMatterForm({
     vals.stageId ??
     (initialArea?.stages.some((s) => s.id === matter.stageId)
       ? matter.stageId
-      : initialArea?.stages[0]?.id ?? "");
+      : (initialArea?.stages[0]?.id ?? ""));
 
   const [practiceAreaId, setPracticeAreaId] = useState<string>(initialAreaId);
   const [stageId, setStageId] = useState<string>(initialStageId);
@@ -266,19 +235,13 @@ export function EditMatterForm({
     setClientId(matter.clientId ?? "");
   }
 
-  const [incidentDateInput, setIncidentDateInput] = useState<string>(
-    init.incidentDate
-  );
-  const [solOverride, setSolOverride] = useState<string>(
-    init.statuteOfLimitationsDate
-  );
+  const [incidentDateInput, setIncidentDateInput] = useState<string>(init.incidentDate);
+  const [solOverride, setSolOverride] = useState<string>(init.statuteOfLimitationsDate);
 
   const selectedArea = options.areas.find((a) => a.id === practiceAreaId);
 
   const venues = options.venues ?? [];
-  const [venueId, setVenueId] = useState<string | null>(
-    vals.venueId ?? matter.venueId ?? null
-  );
+  const [venueId, setVenueId] = useState<string | null>(vals.venueId ?? matter.venueId ?? null);
 
   const requiredKeys = requiredKeysFor(
     selectedArea
@@ -286,12 +249,9 @@ export function EditMatterForm({
           requiredMatterFields: selectedArea.requiredMatterFields ?? [],
           hasStatuteOfLimitations: selectedArea.hasStatuteOfLimitations,
         }
-      : null
+      : null,
   );
-  const { isRequired, requiredHint, reqHint } = useRequiredHints(
-    selectedArea?.name,
-    requiredKeys
-  );
+  const { isRequired, requiredHint, reqHint } = useRequiredHints(selectedArea?.name, requiredKeys);
 
   // Edit rule: only a field that HAD a value may not be cleared; one that
   // was already empty may stay empty (the server enforces the same).
@@ -305,9 +265,7 @@ export function EditMatterForm({
         court: matter.court,
         filedDate: matter.filedDate ? dateOnlyKey(matter.filedDate) : null,
         trialDate: matter.trialDate ? dateOnlyKey(matter.trialDate) : null,
-        incidentDate: matter.incidentDate
-          ? dateOnlyKey(matter.incidentDate)
-          : null,
+        incidentDate: matter.incidentDate ? dateOnlyKey(matter.incidentDate) : null,
         opposingParty: matter.opposingParty,
         opposingFirm: matter.opposingFirm,
         description: matter.description,
@@ -324,18 +282,13 @@ export function EditMatterForm({
         opposingFirm: get("opposingFirm"),
         description: get("description"),
         client: get("clientId"),
-      }
+      },
     );
   }
   // Live "what auto-compute will produce" from the incident input and
   // the currently selected area.
-  const parsedIncident = incidentDateInput
-    ? parseDateOnly(incidentDateInput)
-    : null;
-  const autoPreview = computeSolDate(
-    parsedIncident,
-    selectedArea?.statutePeriod
-  );
+  const parsedIncident = incidentDateInput ? parseDateOnly(incidentDateInput) : null;
+  const autoPreview = computeSolDate(parsedIncident, selectedArea?.statutePeriod);
   const previewLabel = autoPreview ? formatDateOnly(autoPreview) : null;
   const stageOptions = selectedArea?.stages ?? [];
 
@@ -425,11 +378,7 @@ export function EditMatterForm({
             />
           </Field>
 
-          <Field
-            label="Billing type"
-            htmlFor="billingType"
-            error={errs.billingType}
-          >
+          <Field label="Billing type" htmlFor="billingType" error={errs.billingType}>
             {canEditBillingType ? (
               <NativeSelect
                 className="w-full"
@@ -465,10 +414,7 @@ export function EditMatterForm({
             htmlFor="clientId"
             required={isRequired("client")}
             error={errs.clientId}
-            hint={reqHint(
-              "client",
-              "Swap to a different existing contact, or clear to detach."
-            )}
+            hint={reqHint("client", "Swap to a different existing contact, or clear to detach.")}
           >
             <NativeSelect
               className="w-full"
@@ -523,11 +469,7 @@ export function EditMatterForm({
             {/* A disabled select isn't submitted — post the current
                 lead back so the save leaves it unchanged. */}
             {!canChangeLead && (
-              <input
-                type="hidden"
-                name="leadUserId"
-                value={matter.leadUserId ?? ""}
-              />
+              <input type="hidden" name="leadUserId" value={matter.leadUserId ?? ""} />
             )}
           </Field>
         </Row>
@@ -647,10 +589,7 @@ export function EditMatterForm({
             name="description"
             defaultValue={init.description}
             rows={5}
-            className={cn(
-              inputClass(!!errs.description),
-              "py-2 resize-y min-h-24 font-sans"
-            )}
+            className={cn(inputClass(!!errs.description), "py-2 resize-y min-h-24 font-sans")}
           />
         </Field>
       </Section>
@@ -675,7 +614,7 @@ export function EditMatterForm({
                 "incidentDate",
                 selectedArea.statutePeriod
                   ? `Period: ${formatStatutePeriod(selectedArea.statutePeriod)}${selectedArea.statuteSourceCitation ? ` · ${selectedArea.statuteSourceCitation}` : ""}. Leave Deadline date blank to auto-compute.`
-                  : "When known, drives the SOL deadline once the firm configures a statute period for this area."
+                  : "When known, drives the SOL deadline once the firm configures a statute period for this area.",
               )}
             >
               <input
@@ -743,9 +682,8 @@ export function EditMatterForm({
       {!selectedArea?.hasStatuteOfLimitations &&
         (matter.statuteOfLimitationsDate || matter.incidentDate) && (
           <p className="text-2xs text-ink-3">
-            This practice area doesn&apos;t track statute of limitations. The
-            matter&apos;s incident date, SOL date, notes and SOL deadline are
-            kept as they are.
+            This practice area doesn&apos;t track statute of limitations. The matter&apos;s incident
+            date, SOL date, notes and SOL deadline are kept as they are.
           </p>
         )}
 
@@ -778,21 +716,17 @@ export function EditMatterForm({
           onCancel={() => setDismissedConfirm(state)}
         />
       ) : (
-      <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
-        <Link
-          href={`/matters/${matter.id}`}
-          className="inline-flex items-center h-8 px-3 rounded-md text-xs font-medium text-ink-2 border border-line bg-white hover:border-brand-300 hover:text-brand-700 transition-colors"
-        >
-          Cancel
-        </Link>
-        <Button
-          size="sm"
-          type="submit"
-          disabled={isPending}
-        >
-          {isPending ? "Saving…" : "Save changes"}
-        </Button>
-      </div>
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
+          <Link
+            href={`/matters/${matter.id}`}
+            className="inline-flex items-center h-8 px-3 rounded-md text-xs font-medium text-ink-2 border border-line bg-white hover:border-brand-300 hover:text-brand-700 transition-colors"
+          >
+            Cancel
+          </Link>
+          <Button size="sm" type="submit" disabled={isPending}>
+            {isPending ? "Saving…" : "Save changes"}
+          </Button>
+        </div>
       )}
     </form>
   );

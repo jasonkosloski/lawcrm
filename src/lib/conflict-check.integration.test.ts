@@ -98,9 +98,7 @@ describe("runConflictMatcher — email matches", () => {
       organization: null,
     });
     expect(result.severity).toBe("conflict");
-    const conflictMatch = result.matches.find(
-      (m) => m.kind === "contact_email"
-    );
+    const conflictMatch = result.matches.find((m) => m.kind === "contact_email");
     expect(conflictMatch).toBeDefined();
     expect(conflictMatch!.severity).toBe("conflict");
     expect(conflictMatch!.contactId).toBe(opposing.contactId);
@@ -165,9 +163,7 @@ describe("runConflictMatcher — name matches", () => {
       organization: null,
     });
     expect(result.severity).toBe("conflict");
-    const m = result.matches.find(
-      (x) => x.kind === "matter_opposing_party"
-    );
+    const m = result.matches.find((x) => x.kind === "matter_opposing_party");
     expect(m).toBeDefined();
   });
 
@@ -187,9 +183,7 @@ describe("runConflictMatcher — name matches", () => {
       organization: null,
     });
     expect(result.severity).toBe("conflict");
-    const m = result.matches.find(
-      (x) => x.kind === "matter_opposing_firm"
-    );
+    const m = result.matches.find((x) => x.kind === "matter_opposing_firm");
     expect(m).toBeDefined();
   });
 
@@ -225,9 +219,7 @@ describe("runConflictMatcher — name matches", () => {
     });
     expect(result.severity).toBe("conflict");
     const m = result.matches.find(
-      (x) =>
-        x.kind === "matter_opposing_party" &&
-        x.contactId === opposing.contactId
+      (x) => x.kind === "matter_opposing_party" && x.contactId === opposing.contactId,
     );
     expect(m).toBeDefined();
   });
@@ -275,9 +267,7 @@ describe("runConflictMatcher — severity rollup", () => {
       organization: null,
     });
     expect(result.severity).toBe("conflict");
-    expect(
-      result.matches.every((m) => m.severity === "conflict")
-    ).toBe(true);
+    expect(result.matches.every((m) => m.severity === "conflict")).toBe(true);
   });
 
   test("only-warn matches roll up to 'warn'", async () => {
@@ -292,9 +282,7 @@ describe("runConflictMatcher — severity rollup", () => {
       organization: "Some Org",
     });
     expect(result.severity).toBe("warn");
-    expect(
-      result.matches.every((m) => m.severity === "warn")
-    ).toBe(true);
+    expect(result.matches.every((m) => m.severity === "warn")).toBe(true);
   });
 
   test("archived matters don't trigger matches", async () => {
@@ -371,9 +359,7 @@ describe("runConflictMatcher — the lead's own Contact (ownContactId)", () => {
       ownContactId: own.contactId,
     });
     expect(result.severity).toBe("conflict");
-    expect(result.matches.some((m) => m.contactId === own.contactId)).toBe(
-      true,
-    );
+    expect(result.matches.some((m) => m.contactId === own.contactId)).toBe(true);
   });
 
   test("a DIFFERENT contact with the same email/name still warns", async () => {
@@ -395,9 +381,7 @@ describe("runConflictMatcher — the lead's own Contact (ownContactId)", () => {
     });
     expect(result.severity).toBe("warn");
     expect(result.matches.length).toBeGreaterThan(0);
-    expect(result.matches.every((m) => m.contactId === other.contactId)).toBe(
-      true,
-    );
+    expect(result.matches.every((m) => m.contactId === other.contactId)).toBe(true);
   });
 });
 
@@ -497,7 +481,7 @@ describe("runConflictMatcher — opposing counsel (representation)", () => {
       representationName?: string | null;
       representationEmail?: string | null;
     },
-    onMatterId: string = matterId
+    onMatterId: string = matterId,
   ) {
     const { prisma } = await import("@/lib/prisma");
     const party = await seedContact({ name: "Defendant Dan", type: "opposing" });
@@ -531,9 +515,7 @@ describe("runConflictMatcher — opposing counsel (representation)", () => {
       severity: "conflict",
       contactId: atty.contactId,
     });
-    expect(result.matches[0]!.description).toContain(
-      "appears on opposing side of 1 active matter"
-    );
+    expect(result.matches[0]!.description).toContain("appears on opposing side of 1 active matter");
   });
 
   test("counsel matched by BOTH email and name is reported once, not twice", async () => {
@@ -550,9 +532,7 @@ describe("runConflictMatcher — opposing counsel (representation)", () => {
       organization: null,
     });
     expect(result.severity).toBe("conflict");
-    expect(
-      result.matches.filter((m) => m.contactId === atty.contactId)
-    ).toHaveLength(1);
+    expect(result.matches.filter((m) => m.contactId === atty.contactId)).toHaveLength(1);
   });
 
   test("attorney linked via representationContactId, matched by name → conflict", async () => {
@@ -736,7 +716,7 @@ describe("runAdverseConflictMatcher — adverse party vs the firm's clients", ()
 
   const clientMatter = async (
     clientName: string,
-    opts: { archived?: boolean; via?: "matter" | "party"; organization?: string } = {}
+    opts: { archived?: boolean; via?: "matter" | "party"; organization?: string } = {},
   ) => {
     const c = await seedContact({
       name: clientName,
@@ -805,7 +785,11 @@ describe("runAdverseConflictMatcher — adverse party vs the firm's clients", ()
   });
 
   test("a flagged contact matched only by organization is a warn", async () => {
-    const c = await seedContact({ name: "Flagged Employee", organization: "Big City", type: "other" });
+    const c = await seedContact({
+      name: "Flagged Employee",
+      organization: "Big City",
+      type: "other",
+    });
     await prisma.contact.update({
       where: { id: c.contactId },
       data: { conflictStatus: "flagged" },
@@ -852,7 +836,12 @@ describe("runAdverseConflictMatcher — adverse party vs the firm's clients", ()
 
   test("adverseNameKeys keeps the whole value and each multi-word part", () => {
     expect(
-      adverseNameKeys(["Doe, John", null, "Acme, Inc.;  Beta Co", "City of Aurora, Officer J. Doe"])
+      adverseNameKeys([
+        "Doe, John",
+        null,
+        "Acme, Inc.;  Beta Co",
+        "City of Aurora, Officer J. Doe",
+      ]),
     ).toEqual([
       "doe, john",
       "acme, inc.; beta co",

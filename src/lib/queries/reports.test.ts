@@ -23,15 +23,7 @@
  *     bucketing by landed date, zero-division guards
  */
 
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 // getUtilizationReport resolves the viewer (for firm goals) via
 // getCurrentUserId; stub the auth chain so @clerk/nextjs doesn't load.
@@ -46,10 +38,7 @@ import {
   getRealizationReport,
   getUtilizationReport,
 } from "@/lib/queries/reports";
-import {
-  addDaysToKey,
-  todayKey,
-} from "@/lib/format-date";
+import { addDaysToKey, todayKey } from "@/lib/format-date";
 import {
   resetDb,
   seedFirm,
@@ -140,8 +129,7 @@ async function seedEntryOn(opts: {
       activity: "Test work",
       billable: opts.billable ?? true,
       invoiceId: opts.invoiceId ?? null,
-      amount:
-        opts.amount != null ? new Prisma.Decimal(opts.amount) : null,
+      amount: opts.amount != null ? new Prisma.Decimal(opts.amount) : null,
     },
   });
 }
@@ -316,9 +304,7 @@ describe("getArAgingReport", () => {
   // issueDate is an instant; noon UTC keeps the same calendar day in
   // both Denver and Tokyo.
   const issuedDaysAgo = (days: number): Date =>
-    new Date(
-      `${addDaysToKey(todayKey(DENVER, NOW), -days)}T12:00:00Z`
-    );
+    new Date(`${addDaysToKey(todayKey(DENVER, NOW), -days)}T12:00:00Z`);
 
   test("buckets by age with Decimal-safe outstanding; filters status + kind", async () => {
     await seedInvoice({ matterId, issueDate: issuedDaysAgo(10), total: 500 });
@@ -424,9 +410,7 @@ describe("getArAgingReport", () => {
     const report = await getArAgingReport(DENVER);
 
     expect(report.worstOffenders).toHaveLength(5);
-    expect(report.worstOffenders.map((o) => o.daysOutstanding)).toEqual([
-      120, 100, 80, 60, 40,
-    ]);
+    expect(report.worstOffenders.map((o) => o.daysOutstanding)).toEqual([120, 100, 80, 60, 40]);
     expect(report.worstOffenders[0].matterId).toBe(matterId);
     expect(report.worstOffenders[0].matterName).toBe("Test Matter");
     expect(report.worstOffenders[0].outstanding).toBe(220);
@@ -478,11 +462,7 @@ describe("getRealizationReport", () => {
 
     const months = await getRealizationReport(DENVER);
 
-    expect(months.map((m) => m.key)).toEqual([
-      "2026-04",
-      "2026-05",
-      "2026-06",
-    ]);
+    expect(months.map((m) => m.key)).toEqual(["2026-04", "2026-05", "2026-06"]);
     expect(months[0].label).toMatch(/Apr 2026/);
 
     const april = months[0];
@@ -579,10 +559,7 @@ describe("getUtilizationReport — date-only month bounds (ADR-012)", () => {
 describe("getRealizationReport — what counts as billed", () => {
   test("only entries on sent / partial / paid CLIENT invoices count as billed", async () => {
     const day = new Date(Date.UTC(2026, 5, 3));
-    const mk = async (
-      opts: { status: string; kind?: string },
-      amount: number
-    ) => {
+    const mk = async (opts: { status: string; kind?: string }, amount: number) => {
       const { invoiceId } = await seedInvoice({
         matterId,
         issueDate: day,

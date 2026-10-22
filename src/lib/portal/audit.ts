@@ -22,9 +22,7 @@ export async function logPortalEvent(input: {
         icon: "shield",
         source: "Security",
         title: input.title,
-        detail:
-          `portal identity ${input.identityId}` +
-          (input.detail ? ` ${input.detail}` : ""),
+        detail: `portal identity ${input.identityId}` + (input.detail ? ` ${input.detail}` : ""),
       },
     });
   } catch (err) {

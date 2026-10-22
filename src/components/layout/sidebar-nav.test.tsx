@@ -26,11 +26,7 @@ vi.mock("next/navigation", () => ({
 
 // Pure anchor stand-in — the sidebar only needs href-based links.
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -64,7 +60,7 @@ function mockViewport(desktop: boolean) {
         removeListener: vi.fn(),
         dispatchEvent: vi.fn(),
         onchange: null,
-      }) as unknown as MediaQueryList
+      }) as unknown as MediaQueryList,
   );
 }
 
@@ -99,7 +95,7 @@ function renderSidebar() {
     <MobileNavProvider>
       <OpenNavButton />
       <SidebarNav data={emptyData} />
-    </MobileNavProvider>
+    </MobileNavProvider>,
   );
   // Query the DOM directly — role-based queries exclude inert
   // subtrees, which is the very state under test.
@@ -122,7 +118,7 @@ describe("SidebarNav — Time nav item", () => {
     const { container } = render(
       <MobileNavProvider>
         <SidebarNav data={{ ...emptyData, hoursToday: 2.5 }} />
-      </MobileNavProvider>
+      </MobileNavProvider>,
     );
 
     const timeLink = container.querySelector('a[href="/time"]');
@@ -136,7 +132,7 @@ describe("SidebarNav — Reports nav item gates on reports.view", () => {
     const { container } = render(
       <MobileNavProvider>
         <SidebarNav data={emptyData} />
-      </MobileNavProvider>
+      </MobileNavProvider>,
     );
 
     expect(container.querySelector('a[href="/reports"]')).toBeNull();
@@ -150,7 +146,7 @@ describe("SidebarNav — Reports nav item gates on reports.view", () => {
     const { container } = render(
       <MobileNavProvider>
         <SidebarNav data={{ ...emptyData, canViewReports: true }} />
-      </MobileNavProvider>
+      </MobileNavProvider>,
     );
 
     const link = container.querySelector('a[href="/reports"]');
@@ -191,7 +187,7 @@ describe("SidebarNav — no dead links", () => {
     const { container } = render(
       <MobileNavProvider>
         <SidebarNav data={emptyData} canViewAutomations />
-      </MobileNavProvider>
+      </MobileNavProvider>,
     );
     expect(container.querySelector('a[href="/billing"]')).toBeNull();
     expect(container.querySelector('a[href="/automations"]')).toBeNull();
@@ -202,16 +198,14 @@ describe("SidebarNav — no dead links", () => {
     const { container, rerender } = render(
       <MobileNavProvider>
         <SidebarNav data={emptyData} />
-      </MobileNavProvider>
+      </MobileNavProvider>,
     );
-    expect(
-      container.querySelector('a[href="/settings/automations"]')
-    ).toBeNull();
+    expect(container.querySelector('a[href="/settings/automations"]')).toBeNull();
 
     rerender(
       <MobileNavProvider>
         <SidebarNav data={emptyData} canViewAutomations />
-      </MobileNavProvider>
+      </MobileNavProvider>,
     );
     const link = container.querySelector('a[href="/settings/automations"]');
     expect(link).not.toBeNull();
@@ -230,7 +224,7 @@ describe("SidebarNav — user strip", () => {
     render(
       <MobileNavProvider>
         <SidebarNav data={withUser("Paralegal")} />
-      </MobileNavProvider>
+      </MobileNavProvider>,
     );
     expect(screen.getByText("Paralegal")).toBeInTheDocument();
     expect(screen.queryByText(/partner/i)).toBeNull();
@@ -241,7 +235,7 @@ describe("SidebarNav — user strip", () => {
     render(
       <MobileNavProvider>
         <SidebarNav data={withUser("")} />
-      </MobileNavProvider>
+      </MobileNavProvider>,
     );
     expect(screen.getByText("—")).toBeInTheDocument();
   });
@@ -257,12 +251,10 @@ describe("SidebarNav — drawer closes on a nav tap", () => {
         <SidebarNav
           data={{
             ...emptyData,
-            areaCounts: [
-              { area: "1983", count: 3, label: "§1983", color: "#2563a8" },
-            ],
+            areaCounts: [{ area: "1983", count: 3, label: "§1983", color: "#2563a8" }],
           }}
         />
-      </MobileNavProvider>
+      </MobileNavProvider>,
     );
     const aside = container.querySelector("aside")!;
 

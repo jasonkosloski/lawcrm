@@ -1,7 +1,4 @@
-import {
-  isEffectivelyShared,
-  sharedFolderIds,
-} from "@/lib/portal/document-visibility";
+import { isEffectivelyShared, sharedFolderIds } from "@/lib/portal/document-visibility";
 
 /**
  * Client-safe (no server imports): what a move does to client visibility,
@@ -11,7 +8,7 @@ import {
 export function visibilityChangeForMove(
   docs: { clientShare: string | null; folderId: string | null; status?: string }[],
   targetFolderId: string | null,
-  folders: { id: string; parentId: string | null; clientShared: boolean }[]
+  folders: { id: string; parentId: string | null; clientShared: boolean }[],
 ): { becomesVisible: number; becomesHidden: number } {
   const shared = sharedFolderIds(folders);
   let becomesVisible = 0;

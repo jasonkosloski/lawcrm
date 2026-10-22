@@ -26,11 +26,7 @@
  *     route does its own session + permission check and answers JSON 401
  */
 
-import {
-  NextResponse,
-  type NextFetchEvent,
-  type NextRequest,
-} from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { CSP_HEADER, createNonce, pageCsp } from "@/lib/csp";
 import { isDevSignInAllowed } from "@/lib/dev-sign-in";
@@ -41,12 +37,7 @@ export { isPortalHost };
 
 const STATIC_EXT = /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$/;
 
-const PUBLIC_PATH_PREFIXES = [
-  "/login",
-  "/sso-callback",
-  "/no-access",
-  "/api/csp-report",
-];
+const PUBLIC_PATH_PREFIXES = ["/login", "/sso-callback", "/no-access", "/api/csp-report"];
 
 /**
  * Endpoints called by machines that never carry a session cookie —
@@ -78,15 +69,12 @@ function isPublicPath(pathname: string): boolean {
   // Dev-only sign-in-as page: public ONLY when dev-allowed (never in
   // production, with a live Clerk key, or on Vercel).
   if (
-    (pathname === "/dev/sign-in-as" ||
-      pathname.startsWith("/dev/sign-in-as/")) &&
+    (pathname === "/dev/sign-in-as" || pathname.startsWith("/dev/sign-in-as/")) &&
     isDevSignInAllowed()
   ) {
     return true;
   }
-  return PUBLIC_PATH_PREFIXES.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`)
-  );
+  return PUBLIC_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 /** Page CSP for this request, or null for API routes (JSON/files; the
@@ -147,22 +135,17 @@ const staffProxy = clerkMiddleware(
     return res;
   },
   // Same origins `authenticateRequest` gets in staff-auth.ts.
-  () => ({ authorizedParties: staffAuthorizedParties() })
+  () => ({ authorizedParties: staffAuthorizedParties() }),
 );
 
 export function proxy(request: NextRequest, event: NextFetchEvent) {
   const { pathname } = request.nextUrl;
-  const onPortalHost = isPortalHost(
-    request.headers.get("host") ?? request.nextUrl.host
-  );
+  const onPortalHost = isPortalHost(request.headers.get("host") ?? request.nextUrl.host);
 
   // Portal pages live under /portal internally and are served at /* on
   // the portal host only; on any other host they 404.
   // Checked BEFORE the static-extension skip so /portal/x.js 404s too.
-  if (
-    !onPortalHost &&
-    (pathname === "/portal" || pathname.startsWith("/portal/"))
-  ) {
+  if (!onPortalHost && (pathname === "/portal" || pathname.startsWith("/portal/"))) {
     return new NextResponse(null, { status: 404 });
   }
 
@@ -188,7 +171,7 @@ export function proxy(request: NextRequest, event: NextFetchEvent) {
     }
     const target = new URL(
       "/portal" + (pathname === "/" ? "" : pathname) + request.nextUrl.search,
-      request.url
+      request.url,
     );
     const res = NextResponse.rewrite(target, {
       request: { headers: requestHeaders },
@@ -213,7 +196,5 @@ export const config = {
   // busboy and would silently store corrupt files. It authenticates
   // itself (session 401 + `documents.upload` 403), so the Clerk gate
   // adds nothing; it does not read `x-pathname`.
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/documents/upload$).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/documents/upload$).*)"],
 };

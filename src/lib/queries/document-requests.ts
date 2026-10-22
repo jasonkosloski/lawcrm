@@ -17,9 +17,7 @@ export type DocumentRequestRow = {
 };
 
 /** True when at least one portal user can currently open the matter. */
-export async function matterHasLivePortalAccess(
-  matterId: string
-): Promise<boolean> {
+export async function matterHasLivePortalAccess(matterId: string): Promise<boolean> {
   await assertMatterAccess(matterId);
   const n = await prisma.portalMatterAccess.count({
     where: { matterId, revokedAt: null },
@@ -33,9 +31,7 @@ export type ClientRequestsData = {
 };
 
 /** Staff list of a matter's document requests. Needs portal.view plus matter access. */
-export async function getDocumentRequestsForMatter(
-  matterId: string
-): Promise<ClientRequestsData> {
+export async function getDocumentRequestsForMatter(matterId: string): Promise<ClientRequestsData> {
   await assertMatterAccess(matterId);
   if (!(await currentUserHasPermission("portal.view"))) {
     return { requests: [], hasLiveAccess: false };

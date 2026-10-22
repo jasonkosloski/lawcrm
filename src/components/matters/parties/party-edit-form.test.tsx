@@ -75,17 +75,11 @@ describe("PartyEditForm — representation picker undo", () => {
         category="opposing"
         contacts={contacts}
         onDone={() => {}}
-      />
+      />,
     );
-    expect(hiddenValue(container, "representationContactMode")).toBe(
-      "__new__"
-    );
-    expect(hiddenValue(container, "newRepresentationName")).toBe(
-      "Original Atty"
-    );
-    expect(hiddenValue(container, "newRepresentationFirm")).toBe(
-      "Legacy Firm LLP"
-    );
+    expect(hiddenValue(container, "representationContactMode")).toBe("__new__");
+    expect(hiddenValue(container, "newRepresentationName")).toBe("Original Atty");
+    expect(hiddenValue(container, "newRepresentationFirm")).toBe("Legacy Firm LLP");
   });
 
   test("picking a contact switches to existing mode with that contact's details", async () => {
@@ -96,16 +90,14 @@ describe("PartyEditForm — representation picker undo", () => {
         category="opposing"
         contacts={contacts}
         onDone={() => {}}
-      />
+      />,
     );
     const repInput = screen.getByPlaceholderText(/attorney name/i);
     await user.clear(repInput);
     await user.type(repInput, "Steele");
     await user.click(screen.getByRole("option", { name: /sonia steele/i }));
 
-    expect(hiddenValue(container, "representationContactMode")).toBe(
-      "__existing__"
-    );
+    expect(hiddenValue(container, "representationContactMode")).toBe("__existing__");
     expect(hiddenValue(container, "representationContactId")).toBe("atty1");
     // Create-new hidden fields are gone while a contact is linked.
     expect(hiddenValue(container, "newRepresentationName")).toBeUndefined();
@@ -119,37 +111,23 @@ describe("PartyEditForm — representation picker undo", () => {
         category="opposing"
         contacts={contacts}
         onDone={() => {}}
-      />
+      />,
     );
     const repInput = screen.getByPlaceholderText(/attorney name/i);
     await user.clear(repInput);
     await user.type(repInput, "Steele");
     await user.click(screen.getByRole("option", { name: /sonia steele/i }));
-    await user.click(
-      screen.getByRole("button", { name: /unlink representing contact/i })
-    );
+    await user.click(screen.getByRole("button", { name: /unlink representing contact/i }));
 
     // Back to create-new mode with the party's saved values — a
     // save now must round-trip the legacy data unchanged.
-    expect(hiddenValue(container, "representationContactMode")).toBe(
-      "__new__"
-    );
-    expect(hiddenValue(container, "newRepresentationName")).toBe(
-      "Original Atty"
-    );
-    expect(hiddenValue(container, "newRepresentationFirm")).toBe(
-      "Legacy Firm LLP"
-    );
-    expect(hiddenValue(container, "newRepresentationEmail")).toBe(
-      "orig@legacyfirm.example"
-    );
-    expect(hiddenValue(container, "newRepresentationPhone")).toBe(
-      "(303) 555-0100"
-    );
+    expect(hiddenValue(container, "representationContactMode")).toBe("__new__");
+    expect(hiddenValue(container, "newRepresentationName")).toBe("Original Atty");
+    expect(hiddenValue(container, "newRepresentationFirm")).toBe("Legacy Firm LLP");
+    expect(hiddenValue(container, "newRepresentationEmail")).toBe("orig@legacyfirm.example");
+    expect(hiddenValue(container, "newRepresentationPhone")).toBe("(303) 555-0100");
     // The visible typeahead shows the original name again too.
-    expect(screen.getByPlaceholderText(/attorney name/i)).toHaveValue(
-      "Original Atty"
-    );
+    expect(screen.getByPlaceholderText(/attorney name/i)).toHaveValue("Original Atty");
   });
 });
 
@@ -172,22 +150,16 @@ describe("PartyEditForm — FK-linked representation", () => {
         category="opposing"
         contacts={contacts}
         onDone={() => {}}
-      />
+      />,
     );
-    expect(hiddenValue(container, "representationContactMode")).toBe(
-      "__existing__"
-    );
+    expect(hiddenValue(container, "representationContactMode")).toBe("__existing__");
     expect(hiddenValue(container, "representationContactId")).toBe("atty1");
 
-    await user.click(
-      screen.getByRole("button", { name: /unlink representing contact/i })
-    );
+    await user.click(screen.getByRole("button", { name: /unlink representing contact/i }));
 
     // Saving now would otherwise post create-new carrying Sonia's own
     // details and mint a duplicate attorney Contact.
-    expect(hiddenValue(container, "representationContactMode")).toBe(
-      "__new__"
-    );
+    expect(hiddenValue(container, "representationContactMode")).toBe("__new__");
     expect(hiddenValue(container, "newRepresentationName")).toBe("");
     expect(hiddenValue(container, "newRepresentationFirm")).toBe("");
     expect(hiddenValue(container, "newRepresentationEmail")).toBe("");
@@ -196,17 +168,10 @@ describe("PartyEditForm — FK-linked representation", () => {
 
   test("a linked rep that is missing from the active contact list stays linked", () => {
     const { container } = render(
-      <PartyEditForm
-        party={linkedRepParty}
-        category="opposing"
-        contacts={[]}
-        onDone={() => {}}
-      />
+      <PartyEditForm party={linkedRepParty} category="opposing" contacts={[]} onDone={() => {}} />,
     );
     // No duplicate-creating create-new post on a notes-only save.
-    expect(hiddenValue(container, "representationContactMode")).toBe(
-      "__existing__"
-    );
+    expect(hiddenValue(container, "representationContactMode")).toBe("__existing__");
     expect(hiddenValue(container, "representationContactId")).toBe("atty1");
     expect(hiddenValue(container, "newRepresentationName")).toBeUndefined();
   });
@@ -226,7 +191,7 @@ describe("PartyEditForm — legacy Contact.phone", () => {
         category="opposing"
         contacts={contacts}
         onDone={() => {}}
-      />
+      />,
     );
     expect(phonesJson(container)).toEqual([
       { label: "", number: "(303) 555-0182", isPrimary: true },
@@ -240,7 +205,7 @@ describe("PartyEditForm — legacy Contact.phone", () => {
         category="opposing"
         contacts={contacts}
         onDone={() => {}}
-      />
+      />,
     );
     expect(phonesJson(container)).toEqual([]);
   });
@@ -259,28 +224,20 @@ describe("PartyEditForm - canEditContact", () => {
         contacts={contacts}
         onDone={() => {}}
         canEditContact={false}
-      />
+      />,
     );
     for (const name of ["contactName", "contactEmail", "contactOrganization"]) {
-      const el = container.querySelector<HTMLInputElement>(
-        `input[name="${name}"]`
-      )!;
+      const el = container.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
       expect(el.readOnly).toBe(true);
       // readOnly (not disabled) so the value is still submitted.
       expect(el.disabled).toBe(false);
     }
-    expect(
-      (screen.getByRole("button", { name: /add phone/i }) as HTMLButtonElement)
-        .disabled
-    ).toBe(true);
-    expect(
-      container.querySelector<HTMLInputElement>('input[type="tel"]')!.readOnly
-    ).toBe(true);
+    expect((screen.getByRole("button", { name: /add phone/i }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(container.querySelector<HTMLInputElement>('input[type="tel"]')!.readOnly).toBe(true);
     // Role / notes stay editable with parties.edit alone.
-    expect(
-      container.querySelector<HTMLInputElement>('input[name="notes"]')!
-        .readOnly
-    ).toBe(false);
+    expect(container.querySelector<HTMLInputElement>('input[name="notes"]')!.readOnly).toBe(false);
   });
 
   test("with contacts.edit (default) the fields are editable", () => {
@@ -290,11 +247,10 @@ describe("PartyEditForm - canEditContact", () => {
         category="opposing"
         contacts={contacts}
         onDone={() => {}}
-      />
+      />,
     );
-    expect(
-      container.querySelector<HTMLInputElement>('input[name="contactName"]')!
-        .readOnly
-    ).toBe(false);
+    expect(container.querySelector<HTMLInputElement>('input[name="contactName"]')!.readOnly).toBe(
+      false,
+    );
   });
 });

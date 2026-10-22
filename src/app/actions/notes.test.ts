@@ -57,10 +57,7 @@ vi.mock("@/lib/current-user-tz", () => ({
 
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { pushEventToGoogle } from "@/lib/google/google-calendar-push";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
@@ -128,9 +125,7 @@ afterEach(() => {
 /** Deny these keys for the viewer: the friendly pre-check sees them as
  *  missing AND the enforcing gate throws (as the real redirect does). */
 function denyPermissions(...keys: string[]) {
-  vi.mocked(currentUserHasPermission).mockImplementation(
-    async (key) => !keys.includes(key)
-  );
+  vi.mocked(currentUserHasPermission).mockImplementation(async (key) => !keys.includes(key));
   vi.mocked(requirePermission).mockImplementation(async (key) => {
     if (keys.includes(key)) throw new Error(`NEXT_REDIRECT (denied ${key})`);
     return "test-user";
@@ -171,11 +166,7 @@ const seedTaskOn = async (onMatterId: string) => {
 
 describe("createNote — association FK guards", () => {
   test("nonexistent taskId returns a form error, not a thrown FK violation", async () => {
-    const res = await createNote(
-      matterId,
-      noteInitialState,
-      noteForm({ taskId: "no-such-task" })
-    );
+    const res = await createNote(matterId, noteInitialState, noteForm({ taskId: "no-such-task" }));
     expect(res.status).toBe("error");
     expect(res.errors?.content?.[0]).toMatch(/linked task not found/i);
     expect(await prisma.note.count()).toBe(0);
@@ -183,11 +174,7 @@ describe("createNote — association FK guards", () => {
 
   test("taskId from a DIFFERENT matter is rejected (no cross-matter link)", async () => {
     const foreignTaskId = await seedTaskOn(otherMatterId);
-    const res = await createNote(
-      matterId,
-      noteInitialState,
-      noteForm({ taskId: foreignTaskId })
-    );
+    const res = await createNote(matterId, noteInitialState, noteForm({ taskId: foreignTaskId }));
     expect(res.status).toBe("error");
     expect(res.errors?.content?.[0]).toMatch(/linked task not found/i);
     expect(await prisma.note.count()).toBe(0);
@@ -198,7 +185,7 @@ describe("createNote — association FK guards", () => {
     const res = await createNote(
       matterId,
       noteInitialState,
-      noteForm({ parentNoteId: foreignNoteId })
+      noteForm({ parentNoteId: foreignNoteId }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.content?.[0]).toMatch(/parent note not found/i);
@@ -208,11 +195,7 @@ describe("createNote — association FK guards", () => {
 
   test("same-matter taskId is accepted and persisted on the note", async () => {
     const taskId = await seedTaskOn(matterId);
-    const res = await createNote(
-      matterId,
-      noteInitialState,
-      noteForm({ taskId })
-    );
+    const res = await createNote(matterId, noteInitialState, noteForm({ taskId }));
     expect(res.status).toBe("ok");
     const note = await prisma.note.findFirst({ where: { matterId } });
     expect(note?.taskId).toBe(taskId);
@@ -225,7 +208,7 @@ describe("updateNote — pinning is out of scope for edits", () => {
     const res = await updateNote(
       noteId,
       noteInitialState,
-      noteForm({ content: "<p>Edited body</p>" })
+      noteForm({ content: "<p>Edited body</p>" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.note.findUnique({ where: { id: noteId } });
@@ -235,11 +218,7 @@ describe("updateNote — pinning is out of scope for edits", () => {
 
   test("submitting isPinned=on does NOT pin (pinning requires toggleNotePin)", async () => {
     const noteId = await seedNote({ isPinned: false });
-    const res = await updateNote(
-      noteId,
-      noteInitialState,
-      noteForm({ isPinned: "on" })
-    );
+    const res = await updateNote(noteId, noteInitialState, noteForm({ isPinned: "on" }));
     expect(res.status).toBe("ok");
     const row = await prisma.note.findUnique({ where: { id: noteId } });
     expect(row?.isPinned).toBe(false);
@@ -367,8 +346,7 @@ describe("deleteNote — hard delete cascades reads + reactions", () => {
 
 // ── createNote with captures ────────────────────────────────────────────
 
-const attachments = (items: unknown[]) =>
-  noteForm({ attachments: JSON.stringify(items) });
+const attachments = (items: unknown[]) => noteForm({ attachments: JSON.stringify(items) });
 
 describe("createNote — captures", () => {
   test("task / deadline / time captures are created, linked to the note, with UTC-midnight dates", async () => {
@@ -390,7 +368,7 @@ describe("createNote — captures", () => {
           hours: "1.5",
           activity: "Memo",
         },
-      ])
+      ]),
     );
     expect(res.status).toBe("ok");
     const note = await prisma.note.findFirstOrThrow({ where: { matterId } });
@@ -401,11 +379,7 @@ describe("createNote — captures", () => {
     const time = await prisma.timeEntry.findFirstOrThrow({
       where: { matterId },
     });
-    expect([task.noteId, deadline.noteId, time.noteId]).toEqual([
-      note.id,
-      note.id,
-      note.id,
-    ]);
+    expect([task.noteId, deadline.noteId, time.noteId]).toEqual([note.id, note.id, note.id]);
     // Date-only values are calendar dates at UTC midnight (ADR-012).
     expect(task.dueDate?.toISOString()).toBe("2026-04-15T00:00:00.000Z");
     expect(deadline.dueDate.toISOString()).toBe("2026-04-16T00:00:00.000Z");
@@ -429,7 +403,7 @@ describe("createNote — captures", () => {
           startTime: "2026-08-01T09:00",
           endTime: "2026-08-01T10:00",
         },
-      ])
+      ]),
     );
     expect(res.status).toBe("ok");
     const ev = await prisma.calendarEvent.findFirstOrThrow({
@@ -450,9 +424,7 @@ describe("createNote — captures", () => {
     const res = await createNote(
       matterId,
       noteInitialState,
-      attachments([
-        { kind: "note_sibling", tempId: "n", content: "<p>Sibling</p>" },
-      ])
+      attachments([{ kind: "note_sibling", tempId: "n", content: "<p>Sibling</p>" }]),
     );
     expect(res.status).toBe("ok");
     const notes = await prisma.note.findMany({ where: { matterId } });
@@ -467,7 +439,7 @@ describe("createNote — captures", () => {
       attachments([
         { kind: "task", tempId: "good", title: "OK" },
         { kind: "deadline", tempId: "bad", title: "No date", dueDate: "" },
-      ])
+      ]),
     );
     expect(res.status).toBe("error");
     expect(res.attachmentErrors?.bad).toBeTruthy();
@@ -476,11 +448,7 @@ describe("createNote — captures", () => {
   });
 
   test("malformed attachments JSON is a form error, not a throw", async () => {
-    const res = await createNote(
-      matterId,
-      noteInitialState,
-      noteForm({ attachments: "{nope" })
-    );
+    const res = await createNote(matterId, noteInitialState, noteForm({ attachments: "{nope" }));
     expect(res.status).toBe("error");
     expect(res.errors?.content?.[0]).toMatch(/malformed/i);
     expect(await prisma.note.count()).toBe(0);
@@ -490,7 +458,7 @@ describe("createNote — captures", () => {
     await createNote(
       matterId,
       noteInitialState,
-      noteForm({ content: "<p>Call Smith &amp; Jones</p>" })
+      noteForm({ content: "<p>Call Smith &amp; Jones</p>" }),
     );
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { matterId, title: "Note added" },
@@ -513,11 +481,11 @@ describe("createNote — permission gates", () => {
           hours: "1",
           activity: "A",
         },
-      ])
+      ]),
     );
     const asked = vi.mocked(requirePermission).mock.calls.map((c) => c[0]);
     expect(asked).toEqual(
-      expect.arrayContaining(["notes.create", "tasks.create", "time_entries.create"])
+      expect.arrayContaining(["notes.create", "tasks.create", "time_entries.create"]),
     );
     expect(asked).not.toContain("deadlines.create");
     expect(asked).not.toContain("events.create");
@@ -537,7 +505,7 @@ describe("createNote — permission gates", () => {
           hours: "1",
           activity: "Billable?",
         },
-      ])
+      ]),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.content?.[0]).toMatch(/permission to log time/i);
@@ -547,12 +515,7 @@ describe("createNote — permission gates", () => {
   });
 
   test("notes.create alone cannot mint tasks, deadlines, events or time", async () => {
-    denyPermissions(
-      "tasks.create",
-      "deadlines.create",
-      "events.create",
-      "time_entries.create"
-    );
+    denyPermissions("tasks.create", "deadlines.create", "events.create", "time_entries.create");
     const res = await createNote(
       matterId,
       noteInitialState,
@@ -565,7 +528,7 @@ describe("createNote — permission gates", () => {
           startTime: "2026-08-01T09:00",
           endTime: "2026-08-01T10:00",
         },
-      ])
+      ]),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.content?.[0]).toMatch(/create tasks and create events/i);
@@ -575,22 +538,14 @@ describe("createNote — permission gates", () => {
 
   test("pinning needs notes.pin: denied -> error, nothing saved", async () => {
     denyPermissions("notes.pin");
-    const res = await createNote(
-      matterId,
-      noteInitialState,
-      noteForm({ isPinned: "on" })
-    );
+    const res = await createNote(matterId, noteInitialState, noteForm({ isPinned: "on" }));
     expect(res.status).toBe("error");
     expect(res.errors?.content?.[0]).toMatch(/pin notes/i);
     expect(await prisma.note.count()).toBe(0);
   });
 
   test("pinning with notes.pin saves a pinned note", async () => {
-    const res = await createNote(
-      matterId,
-      noteInitialState,
-      noteForm({ isPinned: "on" })
-    );
+    const res = await createNote(matterId, noteInitialState, noteForm({ isPinned: "on" }));
     expect(res.status).toBe("ok");
     expect(vi.mocked(requirePermission)).toHaveBeenCalledWith("notes.pin");
     expect((await prisma.note.findFirstOrThrow()).isPinned).toBe(true);
@@ -608,7 +563,7 @@ describe("createNote — permission gates", () => {
           content: "Pin me",
           isPinned: true,
         },
-      ])
+      ]),
     );
     expect(res.status).toBe("error");
     expect(await prisma.note.count()).toBe(0);
@@ -625,8 +580,8 @@ describe("createNote — permission gates", () => {
       createNote(
         matterId,
         noteInitialState,
-        attachments([{ kind: "task", tempId: "t", title: "T" }])
-      )
+        attachments([{ kind: "task", tempId: "t", title: "T" }]),
+      ),
     ).rejects.toThrow("NEXT_REDIRECT");
     expect(await prisma.note.count()).toBe(0);
     expect(await prisma.task.count()).toBe(0);
@@ -645,9 +600,7 @@ describe("deleteNote — author vs notes.delete_any", () => {
     const noteId = await seedNote();
     const res = await deleteNote(noteId);
     expect(res.ok).toBe(true);
-    expect(vi.mocked(requirePermission)).not.toHaveBeenCalledWith(
-      "notes.delete_any"
-    );
+    expect(vi.mocked(requirePermission)).not.toHaveBeenCalledWith("notes.delete_any");
   });
 
   test("a non-author must clear notes.delete_any; when denied the note survives", async () => {
@@ -655,9 +608,7 @@ describe("deleteNote — author vs notes.delete_any", () => {
     mockedGetUser.mockResolvedValue(otherId);
     denyPermissions("notes.delete_any");
     await expect(deleteNote(noteId)).rejects.toThrow("NEXT_REDIRECT");
-    expect(vi.mocked(requirePermission)).toHaveBeenCalledWith(
-      "notes.delete_any"
-    );
+    expect(vi.mocked(requirePermission)).toHaveBeenCalledWith("notes.delete_any");
     expect(await prisma.note.count()).toBe(1);
   });
 
@@ -741,19 +692,17 @@ describe("toggleNotePin / updateNote gates", () => {
   test("updateNote: the author never asks for notes.edit_any; a non-author must", async () => {
     const noteId = await seedNote();
     await updateNote(noteId, noteInitialState, noteForm({}));
-    expect(vi.mocked(requirePermission)).not.toHaveBeenCalledWith(
-      "notes.edit_any"
-    );
+    expect(vi.mocked(requirePermission)).not.toHaveBeenCalledWith("notes.edit_any");
 
     const other = await seedUser({ firmId });
     mockedGetUser.mockResolvedValue(other.userId);
     denyPermissions("notes.edit_any");
     await expect(
-      updateNote(noteId, noteInitialState, noteForm({ content: "<p>Hijack</p>" }))
+      updateNote(noteId, noteInitialState, noteForm({ content: "<p>Hijack</p>" })),
     ).rejects.toThrow("NEXT_REDIRECT");
-    expect(
-      (await prisma.note.findUniqueOrThrow({ where: { id: noteId } })).content
-    ).toBe("<p>Hello world</p>");
+    expect((await prisma.note.findUniqueOrThrow({ where: { id: noteId } })).content).toBe(
+      "<p>Hello world</p>",
+    );
   });
 });
 
@@ -784,9 +733,7 @@ describe("toggleNoteReaction", () => {
     ]);
     expect(results.every((r) => r.ok)).toBe(true);
     // Whatever the interleaving, there is at most one row for the key.
-    expect(
-      await prisma.noteReaction.count({ where: { noteId, userId } })
-    ).toBeLessThanOrEqual(1);
+    expect(await prisma.noteReaction.count({ where: { noteId, userId } })).toBeLessThanOrEqual(1);
   });
 });
 
@@ -795,11 +742,7 @@ describe("toggleNoteReaction", () => {
 describe("createLeadNote", () => {
   test("writes a lead-scoped note the author has read, and revalidates intake", async () => {
     const { leadId } = await seedLead();
-    const res = await createLeadNote(
-      leadId,
-      noteInitialState,
-      noteForm({ type: "strategy" })
-    );
+    const res = await createLeadNote(leadId, noteInitialState, noteForm({ type: "strategy" }));
     expect(res.status).toBe("ok");
     expect(vi.mocked(requirePermission)).toHaveBeenCalledWith("notes.create");
     const note = await prisma.note.findFirstOrThrow({
@@ -809,9 +752,7 @@ describe("createLeadNote", () => {
     expect(note.matterId).toBeNull();
     expect(note.type).toBe("strategy");
     expect(note.reads.map((r) => r.userId)).toEqual([userId]);
-    expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(
-      `/intake/${leadId}/notes`
-    );
+    expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(`/intake/${leadId}/notes`);
     // Firm-wide activity row with no note text (no matter team to
     // scope the feed to).
     const log = await prisma.activityLog.findFirstOrThrow({
@@ -836,11 +777,7 @@ describe("createLeadNote", () => {
     const matterNote = await seedNote();
 
     for (const bad of [elsewhere.id, matterNote, "ghost"]) {
-      const res = await createLeadNote(
-        leadId,
-        noteInitialState,
-        noteForm({ parentNoteId: bad })
-      );
+      const res = await createLeadNote(leadId, noteInitialState, noteForm({ parentNoteId: bad }));
       expect(res.status).toBe("error");
       expect(res.errors?.content?.[0]).toMatch(/parent note not found/i);
     }
@@ -848,12 +785,10 @@ describe("createLeadNote", () => {
     const ok = await createLeadNote(
       leadId,
       noteInitialState,
-      noteForm({ parentNoteId: parent.id })
+      noteForm({ parentNoteId: parent.id }),
     );
     expect(ok.status).toBe("ok");
-    expect(
-      await prisma.note.count({ where: { parentNoteId: parent.id, leadId } })
-    ).toBe(1);
+    expect(await prisma.note.count({ where: { parentNoteId: parent.id, leadId } })).toBe(1);
   });
 
   test("a matter note can't reply to a lead note", async () => {
@@ -865,7 +800,7 @@ describe("createLeadNote", () => {
     const res = await createNote(
       matterId,
       noteInitialState,
-      noteForm({ parentNoteId: leadNote.id })
+      noteForm({ parentNoteId: leadNote.id }),
     );
     expect(res.status).toBe("error");
   });
@@ -876,16 +811,14 @@ describe("createLeadNote", () => {
       leadId,
       noteInitialState,
       noteForm({
-        attachments: JSON.stringify([
-          { tempId: "t1", kind: "task", title: "Call back" },
-        ]),
-      })
+        attachments: JSON.stringify([{ tempId: "t1", kind: "task", title: "Call back" }]),
+      }),
     );
     expect(withCapture.status).toBe("error");
     const withLink = await createLeadNote(
       leadId,
       noteInitialState,
-      noteForm({ taskId: await seedTaskOn(matterId) })
+      noteForm({ taskId: await seedTaskOn(matterId) }),
     );
     expect(withLink.status).toBe("error");
     expect(await prisma.note.count()).toBe(0);
@@ -895,39 +828,27 @@ describe("createLeadNote", () => {
   test("pinning needs notes.pin", async () => {
     const { leadId } = await seedLead();
     denyPermissions("notes.pin");
-    const denied = await createLeadNote(
-      leadId,
-      noteInitialState,
-      noteForm({ isPinned: "on" })
-    );
+    const denied = await createLeadNote(leadId, noteInitialState, noteForm({ isPinned: "on" }));
     expect(denied.status).toBe("error");
     expect(denied.errors?.content?.[0]).toMatch(/pin notes/i);
     expect(await prisma.note.count()).toBe(0);
 
     vi.mocked(requirePermission).mockReset().mockResolvedValue("test-user");
     vi.mocked(currentUserHasPermission).mockReset().mockResolvedValue(true);
-    const ok = await createLeadNote(
-      leadId,
-      noteInitialState,
-      noteForm({ isPinned: "on" })
-    );
+    const ok = await createLeadNote(leadId, noteInitialState, noteForm({ isPinned: "on" }));
     expect(ok.status).toBe("ok");
     expect((await prisma.note.findFirstOrThrow()).isPinned).toBe(true);
   });
 
   test("empty content and a converted lead are form errors; a missing lead 404s", async () => {
     const { leadId } = await seedLead();
-    const empty = await createLeadNote(
-      leadId,
-      noteInitialState,
-      noteForm({ content: "<p></p>" })
-    );
+    const empty = await createLeadNote(leadId, noteInitialState, noteForm({ content: "<p></p>" }));
     expect(empty.errors?.content?.[0]).toMatch(/can't be empty/i);
 
     // Unknown == hidden: the lead wall answers with notFound() (ADR-049).
-    await expect(
-      createLeadNote("ghost", noteInitialState, noteForm({}))
-    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
+    await expect(createLeadNote("ghost", noteInitialState, noteForm({}))).rejects.toThrow(
+      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/,
+    );
 
     await prisma.lead.update({
       where: { id: leadId },
@@ -949,17 +870,14 @@ describe("lead notes — pin / edit / react / read / delete", () => {
     const intakePath = `/intake/${leadId}/notes`;
 
     expect((await toggleNotePin(noteId)).ok).toBe(true);
-    expect(
-      (await prisma.note.findUniqueOrThrow({ where: { id: noteId } })).isPinned
-    ).toBe(true);
+    expect((await prisma.note.findUniqueOrThrow({ where: { id: noteId } })).isPinned).toBe(true);
 
     expect(
-      (await updateNote(noteId, noteInitialState, noteForm({ content: "<p>Edited</p>" })))
-        .status
+      (await updateNote(noteId, noteInitialState, noteForm({ content: "<p>Edited</p>" }))).status,
     ).toBe("ok");
-    expect(
-      (await prisma.note.findUniqueOrThrow({ where: { id: noteId } })).content
-    ).toBe("<p>Edited</p>");
+    expect((await prisma.note.findUniqueOrThrow({ where: { id: noteId } })).content).toBe(
+      "<p>Edited</p>",
+    );
 
     expect((await toggleNoteReaction(noteId, "👍")).ok).toBe(true);
     expect((await markMatterNotesRead([noteId])).ok).toBe(true);

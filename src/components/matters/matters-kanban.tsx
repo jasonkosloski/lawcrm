@@ -69,9 +69,7 @@ export function MattersKanban({
           >
             <header className="flex items-center justify-between px-3 py-2 border-b border-line">
               <h2 className="text-xs font-semibold text-ink">{stage}</h2>
-              <span className="text-2xs font-mono text-ink-4">
-                {rows.length}
-              </span>
+              <span className="text-2xs font-mono text-ink-4">{rows.length}</span>
             </header>
             <div className="flex flex-col gap-2 p-2 min-h-20">
               {rows.map((m) => (
@@ -85,13 +83,7 @@ export function MattersKanban({
   );
 }
 
-function KanbanCard({
-  matter,
-  showTrust,
-}: {
-  matter: MatterListRow;
-  showTrust: boolean;
-}) {
+function KanbanCard({ matter, showTrust }: { matter: MatterListRow; showTrust: boolean }) {
   return (
     <Link
       href={`/matters/${matter.id}`}
@@ -103,13 +95,9 @@ function KanbanCard({
           style={{ background: matter.color }}
         />
         <div className="flex-1 min-w-0">
-          <div className="text-xs font-medium text-ink leading-snug">
-            {matter.name}
-          </div>
+          <div className="text-xs font-medium text-ink leading-snug">{matter.name}</div>
           {matter.caseNumber && (
-            <div className="text-2xs font-mono text-ink-4 mt-0.5">
-              {matter.caseNumber}
-            </div>
+            <div className="text-2xs font-mono text-ink-4 mt-0.5">{matter.caseNumber}</div>
           )}
         </div>
       </div>
@@ -150,7 +138,7 @@ function KanbanCard({
         ) : (
           <DueLabel dueDate={matter.nextDeadlineDate} days={matter.nextDeadlineDays} />
         )}
-              </div>
+      </div>
     </Link>
   );
 }

@@ -158,8 +158,8 @@ export async function resetDb(): Promise<void> {
   // (checked per row), so break the chain before deleting.
   await prisma.$executeRawUnsafe(
     `DO $$ BEGIN UPDATE deadline_rules SET "anchorRuleId" = NULL; ${TABLES_IN_DELETE_ORDER.map(
-      (table) => `DELETE FROM ${table};`
-    ).join(" ")} END $$`
+      (table) => `DELETE FROM ${table};`,
+    ).join(" ")} END $$`,
   );
 }
 
@@ -483,8 +483,7 @@ export async function seedCalendarEvent(opts: {
   }>;
 }): Promise<{ eventId: string }> {
   const startTime = opts.startTime ?? new Date("2026-08-01T15:00:00.000Z");
-  const endTime =
-    opts.endTime ?? new Date(startTime.getTime() + 60 * 60 * 1000);
+  const endTime = opts.endTime ?? new Date(startTime.getTime() + 60 * 60 * 1000);
   const event = await prisma.calendarEvent.create({
     data: {
       createdById: opts.createdById ?? null,

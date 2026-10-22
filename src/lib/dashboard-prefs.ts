@@ -35,9 +35,7 @@ export const DASHBOARD_CARD_KEYS = [
 export type DashboardCardKey = (typeof DASHBOARD_CARD_KEYS)[number];
 
 /** Where a card lands when a stored layout doesn't mention it. */
-export type CardPlacement =
-  | { zone: "band" }
-  | { zone: "column"; index: number };
+export type CardPlacement = { zone: "band" } | { zone: "column"; index: number };
 
 /**
  * Card registry: label (shown in the customizer) + default placement
@@ -86,18 +84,17 @@ export const DASHBOARD_CARDS: Record<
  */
 export type DashboardColumn = "main" | "rail";
 
-export const DASHBOARD_CARD_COLUMNS: Record<DashboardCardKey, DashboardColumn> =
-  {
-    kpis: "main",
-    triage: "main",
-    agenda: "main",
-    tasks: "main",
-    followUps: "main",
-    activity: "main",
-    deadlines: "rail",
-    pulse: "rail",
-    records: "rail",
-  };
+export const DASHBOARD_CARD_COLUMNS: Record<DashboardCardKey, DashboardColumn> = {
+  kpis: "main",
+  triage: "main",
+  agenda: "main",
+  tasks: "main",
+  followUps: "main",
+  activity: "main",
+  deadlines: "rail",
+  pulse: "rail",
+  records: "rail",
+};
 
 export type DashboardVisibility = Record<DashboardCardKey, boolean>;
 
@@ -169,13 +166,7 @@ export function mergeOrder(stored: unknown): DashboardCardKey[] {
 /** Column split of the grid below the band, as 12-grid spans. */
 export type DashboardSplit = "8/4" | "4/8" | "6/6" | "4/4/4" | "12";
 
-export const DASHBOARD_SPLITS: readonly DashboardSplit[] = [
-  "8/4",
-  "4/8",
-  "6/6",
-  "4/4/4",
-  "12",
-];
+export const DASHBOARD_SPLITS: readonly DashboardSplit[] = ["8/4", "4/8", "6/6", "4/4/4", "12"];
 
 /** Each column's span out of 12, per split. Length = column count. */
 export type SplitSpan = 4 | 6 | 8 | 12;
@@ -213,9 +204,7 @@ export const DEFAULT_LAYOUT: DashboardLayout = {
 
 /** Where a card can be moved to. */
 export type LayoutTarget =
-  | { zone: "band" }
-  | { zone: "column"; index: number }
-  | { zone: "hidden" };
+  { zone: "band" } | { zone: "column"; index: number } | { zone: "hidden" };
 
 function freshDefault(): DashboardLayout {
   return {
@@ -238,14 +227,10 @@ function layoutFromV2(stored: unknown): DashboardLayout {
   // A band-default card the stored blob never mentioned is left out so
   // `mergeLayout` places it in the band (the triage card lands there,
   // not at the foot of a column).
-  const mentioned = (k: DashboardCardKey) =>
-    Array.isArray(rawOrder) && rawOrder.includes(k);
+  const mentioned = (k: DashboardCardKey) => Array.isArray(rawOrder) && rawOrder.includes(k);
   const visible = mergeVisibility(stored);
   const order = mergeOrder(stored).filter(
-    (k) =>
-      mentioned(k) ||
-      !visible[k] ||
-      DASHBOARD_CARDS[k].defaultPlacement.zone !== "band"
+    (k) => mentioned(k) || !visible[k] || DASHBOARD_CARDS[k].defaultPlacement.zone !== "band",
   );
   const main = order.filter((k) => DASHBOARD_CARD_COLUMNS[k] === "main");
   const rail = order.filter((k) => DASHBOARD_CARD_COLUMNS[k] === "rail");
@@ -255,10 +240,7 @@ function layoutFromV2(stored: unknown): DashboardLayout {
     v: 3,
     split: "8/4",
     band: kpisFirst && shown("kpis") ? ["kpis"] : [],
-    columns: [
-      main.filter((k) => !(kpisFirst && k === "kpis") && shown(k)),
-      rail.filter(shown),
-    ],
+    columns: [main.filter((k) => !(kpisFirst && k === "kpis") && shown(k)), rail.filter(shown)],
     hidden: order.filter((k) => !shown(k)),
   };
 }
@@ -276,9 +258,7 @@ export function mergeLayout(stored: unknown): DashboardLayout {
   if (!isPlainObject(stored)) return freshDefault();
   if (stored.v !== 3) return mergeLayout(layoutFromV2(stored));
 
-  const split: DashboardSplit = DASHBOARD_SPLITS.includes(
-    stored.split as DashboardSplit
-  )
+  const split: DashboardSplit = DASHBOARD_SPLITS.includes(stored.split as DashboardSplit)
     ? (stored.split as DashboardSplit)
     : "8/4";
   const colCount = SPLIT_SPANS[split].length;
@@ -328,7 +308,7 @@ export function moveCard(
   layout: DashboardLayout,
   key: DashboardCardKey,
   to: LayoutTarget,
-  position?: number
+  position?: number,
 ): DashboardLayout {
   const without = (list: DashboardCardKey[]) => list.filter((k) => k !== key);
   const next: DashboardLayout = {
@@ -342,22 +322,15 @@ export function moveCard(
       ? next.band
       : to.zone === "hidden"
         ? next.hidden
-        : next.columns[
-            Math.max(0, Math.min(to.index, next.columns.length - 1))
-          ];
+        : next.columns[Math.max(0, Math.min(to.index, next.columns.length - 1))];
   const at =
-    position === undefined
-      ? target.length
-      : Math.max(0, Math.min(position, target.length));
+    position === undefined ? target.length : Math.max(0, Math.min(position, target.length));
   target.splice(at, 0, key);
   return next;
 }
 
 /** Change the column split, re-folding/padding columns via `mergeLayout`. */
-export function setSplit(
-  layout: DashboardLayout,
-  split: DashboardSplit
-): DashboardLayout {
+export function setSplit(layout: DashboardLayout, split: DashboardSplit): DashboardLayout {
   return mergeLayout({ ...layout, split });
 }
 

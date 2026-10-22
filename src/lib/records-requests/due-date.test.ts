@@ -24,7 +24,9 @@ describe("computeResponseDue", () => {
   });
 
   it("counts calendar days straight through weekends", () => {
-    expect(dateOnlyKey(computeResponseDue(d("2026-10-16"), 30, "CALENDAR_DAYS"))).toBe("2026-11-15");
+    expect(dateOnlyKey(computeResponseDue(d("2026-10-16"), 30, "CALENDAR_DAYS"))).toBe(
+      "2026-11-15",
+    );
   });
 
   it("returns UTC-midnight date-only values", () => {

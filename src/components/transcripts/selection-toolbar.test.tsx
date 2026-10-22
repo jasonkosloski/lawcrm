@@ -23,14 +23,28 @@ function Doc() {
     <div data-testid="root">
       <div data-seg="a">
         <p>
-          <span data-s="3" data-e="4">the</span> <span data-s="4" data-e="5">officer</span>{" "}
-          <span data-s="5" data-e="6">arrived</span>
+          <span data-s="3" data-e="4">
+            the
+          </span>{" "}
+          <span data-s="4" data-e="5">
+            officer
+          </span>{" "}
+          <span data-s="5" data-e="6">
+            arrived
+          </span>
         </p>
       </div>
       <div data-seg="b">
         <p>
-          <span data-s="20" data-e="21">which</span> <span data-s="21" data-e="22">officer</span>{" "}
-          <span data-s="22" data-e="23">was</span>
+          <span data-s="20" data-e="21">
+            which
+          </span>{" "}
+          <span data-s="21" data-e="22">
+            officer
+          </span>{" "}
+          <span data-s="22" data-e="23">
+            was
+          </span>
         </p>
       </div>
     </div>
@@ -145,9 +159,7 @@ describe("SelectionToolbar", () => {
     choose();
     fireEvent.click(screen.getByRole("button", { name: "Copy with timecode" }));
     await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith(
-        '"officer arrived which" (Bodycam.mp4 at 0:04)',
-      ),
+      expect(writeText).toHaveBeenCalledWith('"officer arrived which" (Bodycam.mp4 at 0:04)'),
     );
   });
 });
@@ -185,10 +197,20 @@ describe("Change speaker", () => {
     return (
       <div>
         <div data-seg="s1">
-          <span data-i="0" data-s="0" data-e="1">hello</span> <span data-i="1" data-s="1" data-e="2">there</span>
+          <span data-i="0" data-s="0" data-e="1">
+            hello
+          </span>{" "}
+          <span data-i="1" data-s="1" data-e="2">
+            there
+          </span>
         </div>
         <div data-seg="s2">
-          <span data-i="0" data-s="5" data-e="6">general</span> <span data-i="1" data-s="6" data-e="7">kenobi</span>
+          <span data-i="0" data-s="5" data-e="6">
+            general
+          </span>{" "}
+          <span data-i="1" data-s="6" data-e="7">
+            kenobi
+          </span>
         </div>
       </div>
     );
@@ -228,7 +250,7 @@ describe("Change speaker", () => {
     render(
       <div data-testid="r">
         <IndexedDoc />
-      </div>
+      </div>,
     );
     const span = selectionToSpan(select("there", "general"), screen.getByTestId("r"));
     expect(span).toMatchObject({
@@ -242,8 +264,11 @@ describe("Change speaker", () => {
     await userEvent.click(screen.getByRole("button", { name: /Change speaker/ }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Driver" }));
     expect(onChangeSpeaker).toHaveBeenCalledWith(
-      expect.objectContaining({ start: { segmentId: "s1", word: 1 }, end: { segmentId: "s2", word: 0 } }),
-      "B"
+      expect.objectContaining({
+        start: { segmentId: "s1", word: 1 },
+        end: { segmentId: "s2", word: 0 },
+      }),
+      "B",
     );
   });
 

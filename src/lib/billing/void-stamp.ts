@@ -5,10 +5,7 @@
 import "server-only";
 import { PDFDocument, StandardFonts, degrees, rgb } from "pdf-lib";
 
-export async function stampVoid(
-  bytes: Buffer,
-  voidedOn: string
-): Promise<Buffer> {
+export async function stampVoid(bytes: Buffer, voidedOn: string): Promise<Buffer> {
   const doc = await PDFDocument.load(bytes);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const regular = await doc.embedFont(StandardFonts.Helvetica);

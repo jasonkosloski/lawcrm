@@ -73,13 +73,10 @@ export async function fetchJob(jobId: string): Promise<{
   error?: string;
   raw?: AssemblyAITranscript;
 }> {
-  const res = await fetch(
-    `${BASE_URL}/v2/transcript/${encodeURIComponent(jobId)}`,
-    {
-      headers: { authorization: apiKey() },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    },
-  );
+  const res = await fetch(`${BASE_URL}/v2/transcript/${encodeURIComponent(jobId)}`, {
+    headers: { authorization: apiKey() },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
   await failIfNotOk(res, "fetch");
   const json = (await res.json()) as AssemblyAITranscript & { error?: string };
   if (json.status === "error") {
@@ -96,18 +93,13 @@ export async function fetchJob(jobId: string): Promise<{
  */
 export async function deleteJob(jobId: string): Promise<boolean> {
   try {
-    const res = await fetch(
-      `${BASE_URL}/v2/transcript/${encodeURIComponent(jobId)}`,
-      {
-        method: "DELETE",
-        headers: { authorization: apiKey() },
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      },
-    );
+    const res = await fetch(`${BASE_URL}/v2/transcript/${encodeURIComponent(jobId)}`, {
+      method: "DELETE",
+      headers: { authorization: apiKey() },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
     if (res.ok || res.status === 404) return true;
-    console.warn(
-      `[assemblyai] deleteJob ${jobId} failed: ${await providerError(res)}`,
-    );
+    console.warn(`[assemblyai] deleteJob ${jobId} failed: ${await providerError(res)}`);
     return false;
   } catch (err) {
     console.warn(`[assemblyai] deleteJob ${jobId} failed`, err);

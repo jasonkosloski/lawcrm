@@ -20,10 +20,7 @@ import { NOTE_TYPE_LABEL, type NoteType } from "@/lib/note-constants";
 import { formatDate } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import type { EventNote } from "@/lib/queries/calendar";
-import {
-  canDeleteRecord,
-  useEventAttachmentsViewer,
-} from "./event-attachments-context";
+import { canDeleteRecord, useEventAttachmentsViewer } from "./event-attachments-context";
 import { EventNoteComposer } from "./event-note-composer";
 
 export function EventNotesSection({
@@ -69,16 +66,14 @@ export function EventNotesSection({
         <EventNoteComposer matterId={matterId} eventId={eventId} />
       ) : (
         <p className="text-2xs text-ink-4">
-          Firm-wide events can&apos;t have notes — link this event to a
-          matter first.
+          Firm-wide events can&apos;t have notes — link this event to a matter first.
         </p>
       )}
 
       {matterName && matterId && (
         <p className="text-2xs text-ink-4">
-          Notes attach to{" "}
-          <span className="text-ink-3 font-medium">{matterName}</span> and
-          surface on the matter&apos;s Notes tab with the event link chip.
+          Notes attach to <span className="text-ink-3 font-medium">{matterName}</span> and surface
+          on the matter&apos;s Notes tab with the event link chip.
         </p>
       )}
     </div>
@@ -93,8 +88,7 @@ function EventNoteItem({ note }: { note: EventNote }) {
   // Hide the controls the server would refuse (it redirects to "/"
   // with no message): pinning needs notes.pin, deleting someone
   // else's note needs notes.delete_any.
-  const { viewerId, canPinNotes, canDeleteAnyNote } =
-    useEventAttachmentsViewer();
+  const { viewerId, canPinNotes, canDeleteAnyNote } = useEventAttachmentsViewer();
   const canDelete = canDeleteRecord(note.authorId, viewerId, canDeleteAnyNote);
 
   const onTogglePin = () => {
@@ -127,7 +121,7 @@ function EventNoteItem({ note }: { note: EventNote }) {
       className={cn(
         "rounded-md border border-line bg-paper-2/40 p-3 flex flex-col gap-2",
         note.isPinned && "border-brand-200 bg-brand-soft/30",
-        pending && "opacity-60"
+        pending && "opacity-60",
       )}
     >
       <div className="flex items-center gap-2">
@@ -138,9 +132,7 @@ function EventNoteItem({ note }: { note: EventNote }) {
           {note.authorInitials}
         </span>
         <div className="flex-1 min-w-0 flex flex-col leading-tight">
-          <span className="text-2xs font-medium text-ink-2 truncate">
-            {note.authorName}
-          </span>
+          <span className="text-2xs font-medium text-ink-2 truncate">{note.authorName}</span>
           <span className="text-3xs text-ink-4 font-mono">
             {formatDate(note.createdAt, "datetime", tz)}
           </span>
@@ -159,13 +151,10 @@ function EventNoteItem({ note }: { note: EventNote }) {
               "inline-flex items-center justify-center w-6 h-6 rounded-md transition-colors",
               note.isPinned
                 ? "text-brand-700 hover:bg-brand-soft"
-                : "text-ink-3 hover:text-brand-700 hover:bg-brand-soft"
+                : "text-ink-3 hover:text-brand-700 hover:bg-brand-soft",
             )}
           >
-            <Pin
-              size={11}
-              className={cn(note.isPinned && "fill-brand-500 text-brand-500")}
-            />
+            <Pin size={11} className={cn(note.isPinned && "fill-brand-500 text-brand-500")} />
           </button>
         )}
         {canDelete && (
@@ -191,7 +180,7 @@ function EventNoteItem({ note }: { note: EventNote }) {
           "[&_ul]:my-1 [&_ol]:my-1 [&_li]:text-xs [&_ul]:pl-5 [&_ol]:pl-5 [&_ul]:list-disc [&_ol]:list-decimal",
           "[&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-2 [&_blockquote]:text-ink-3 [&_blockquote]:italic",
           "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-3xs [&_code]:font-mono",
-          "[&_pre]:bg-paper-2 [&_pre]:p-1.5 [&_pre]:rounded [&_pre]:text-3xs"
+          "[&_pre]:bg-paper-2 [&_pre]:p-1.5 [&_pre]:rounded [&_pre]:text-3xs",
         )}
         dangerouslySetInnerHTML={{ __html: note.content }}
       />

@@ -9,8 +9,12 @@ describe("FolderSourceBadge", () => {
     render(
       <FolderSourceBadge
         scope={scope}
-        folder={{ systemKind: "records_request", recordsRequestId: "r1", sourceTitle: "Dr. Smith — Medical" }}
-      />
+        folder={{
+          systemKind: "records_request",
+          recordsRequestId: "r1",
+          sourceTitle: "Dr. Smith — Medical",
+        }}
+      />,
     );
     const link = screen.getByRole("link", { name: /Records request/ });
     expect(link).toHaveAttribute("href", "/matters/m1/records/r1");
@@ -22,17 +26,17 @@ describe("FolderSourceBadge", () => {
       <FolderSourceBadge
         scope={scope}
         folder={{ systemKind: "records_root", recordsRequestId: null }}
-      />
+      />,
     );
     expect(screen.getByRole("link", { name: /Records requests/ })).toHaveAttribute(
       "href",
-      "/matters/m1/records"
+      "/matters/m1/records",
     );
   });
 
   test("an ordinary folder renders nothing", () => {
     const { container } = render(
-      <FolderSourceBadge scope={scope} folder={{ systemKind: null, recordsRequestId: null }} />
+      <FolderSourceBadge scope={scope} folder={{ systemKind: null, recordsRequestId: null }} />,
     );
     expect(container).toBeEmptyDOMElement();
   });

@@ -47,12 +47,12 @@ export function checkEnv(env: Env): EnvCheckResult {
     }
     if (!set(env, "STAFF_ORIGINS")) {
       degraded.push(
-        "STAFF_ORIGINS (staff sign-in origin is guessed from Vercel env; set e.g. https://crm.example.com)"
+        "STAFF_ORIGINS (staff sign-in origin is guessed from Vercel env; set e.g. https://crm.example.com)",
       );
     }
     if (!set(env, "CLERK_WEBHOOK_SIGNING_SECRET")) {
       degraded.push(
-        "CLERK_WEBHOOK_SIGNING_SECRET (Clerk session webhooks are rejected; no sign-in/out audit rows)"
+        "CLERK_WEBHOOK_SIGNING_SECRET (Clerk session webhooks are rejected; no sign-in/out audit rows)",
       );
     }
     if (!set(env, "RESEND_API_KEY")) {
@@ -72,8 +72,6 @@ export function enforceEnv(env: Env = process.env): void {
     console.error(`[env-check] missing ${d}`);
   }
   if (fatal.length > 0) {
-    throw new Error(
-      `[env-check] missing required environment variables: ${fatal.join(", ")}`
-    );
+    throw new Error(`[env-check] missing required environment variables: ${fatal.join(", ")}`);
   }
 }

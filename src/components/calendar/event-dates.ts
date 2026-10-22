@@ -4,12 +4,7 @@
  * and client components.
  */
 
-import {
-  dateKeyInTz,
-  dateOnlyKey,
-  todayKey,
-  type DayKey,
-} from "@/lib/format-date";
+import { dateKeyInTz, dateOnlyKey, todayKey, type DayKey } from "@/lib/format-date";
 
 /**
  * The date a "log time for this event" entry should default to: the
@@ -22,11 +17,9 @@ import {
 export function eventTimeEntryDate(
   event: { startTime: Date; isAllDay: boolean },
   tz: string,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): DayKey {
-  const eventKey = event.isAllDay
-    ? dateOnlyKey(event.startTime)
-    : dateKeyInTz(event.startTime, tz);
+  const eventKey = event.isAllDay ? dateOnlyKey(event.startTime) : dateKeyInTz(event.startTime, tz);
   const today = todayKey(tz, now);
   return eventKey > today ? today : eventKey;
 }

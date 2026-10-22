@@ -39,10 +39,7 @@ vi.mock("@/lib/current-user-tz", () => ({
 }));
 
 import { getCurrentUserId } from "@/lib/current-user";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { pushEventToGoogle } from "@/lib/google/google-calendar-push";
 import { prisma } from "@/lib/prisma";
 import {
@@ -51,10 +48,7 @@ import {
   addTaskToNote,
   addTimeEntryToNote,
 } from "@/app/actions/note-attachments";
-import {
-  bulkAttachInitialState,
-  noteAttachmentInitialState,
-} from "@/lib/note-attachment-form";
+import { bulkAttachInitialState, noteAttachmentInitialState } from "@/lib/note-attachment-form";
 import {
   resetDb,
   seedFirm,
@@ -133,11 +127,7 @@ const buildBulkForm = (captures: unknown[]) => {
 
 describe("note-attachment action gates", () => {
   test("addTaskToNote gates on tasks.create and creates the row", async () => {
-    const result = await addTaskToNote(
-      noteId,
-      noteAttachmentInitialState,
-      buildTaskForm()
-    );
+    const result = await addTaskToNote(noteId, noteAttachmentInitialState, buildTaskForm());
     expect(mockedRequirePermission).toHaveBeenCalledWith("tasks.create");
     expect(result.status).toBe("ok");
     const task = await prisma.task.findFirst({ where: { noteId } });
@@ -145,11 +135,7 @@ describe("note-attachment action gates", () => {
   });
 
   test("addDeadlineToNote gates on deadlines.create and creates the row", async () => {
-    const result = await addDeadlineToNote(
-      noteId,
-      noteAttachmentInitialState,
-      buildDeadlineForm()
-    );
+    const result = await addDeadlineToNote(noteId, noteAttachmentInitialState, buildDeadlineForm());
     expect(mockedRequirePermission).toHaveBeenCalledWith("deadlines.create");
     expect(result.status).toBe("ok");
     const deadline = await prisma.deadline.findFirst({ where: { noteId } });
@@ -157,14 +143,8 @@ describe("note-attachment action gates", () => {
   });
 
   test("addTimeEntryToNote gates on time_entries.create and creates the row", async () => {
-    const result = await addTimeEntryToNote(
-      noteId,
-      noteAttachmentInitialState,
-      buildTimeForm()
-    );
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "time_entries.create"
-    );
+    const result = await addTimeEntryToNote(noteId, noteAttachmentInitialState, buildTimeForm());
+    expect(mockedRequirePermission).toHaveBeenCalledWith("time_entries.create");
     expect(result.status).toBe("ok");
     const entry = await prisma.timeEntry.findFirst({ where: { noteId } });
     expect(entry?.activity).toBe("Call re: note");
@@ -187,17 +167,13 @@ describe("addCapturesToNoteBulk gates", () => {
           hours: "0.5",
           activity: "Bulk time",
         },
-      ])
+      ]),
     );
     expect(mockedRequirePermission).toHaveBeenCalledWith("tasks.create");
-    expect(mockedRequirePermission).toHaveBeenCalledWith(
-      "time_entries.create"
-    );
+    expect(mockedRequirePermission).toHaveBeenCalledWith("time_entries.create");
     // No deadline/event captures in the payload — those capabilities
     // must not be demanded of the user.
-    expect(mockedRequirePermission).not.toHaveBeenCalledWith(
-      "deadlines.create"
-    );
+    expect(mockedRequirePermission).not.toHaveBeenCalledWith("deadlines.create");
     expect(mockedRequirePermission).not.toHaveBeenCalledWith("events.create");
     expect(result.status).toBe("ok");
     expect(await prisma.task.count({ where: { noteId } })).toBe(1);
@@ -217,7 +193,7 @@ describe("addCapturesToNoteBulk gates", () => {
           endTime: "2026-08-01T10:00",
           type: "hearing",
         },
-      ])
+      ]),
     );
     expect(mockedRequirePermission).toHaveBeenCalledWith("events.create");
     expect(result.status).toBe("ok");
@@ -231,9 +207,7 @@ describe("addCapturesToNoteBulk gates", () => {
     const result = await addCapturesToNoteBulk(
       noteId,
       bulkAttachInitialState,
-      buildBulkForm([
-        { kind: "note_sibling", tempId: "n1", content: "A sibling note" },
-      ])
+      buildBulkForm([{ kind: "note_sibling", tempId: "n1", content: "A sibling note" }]),
     );
     expect(result.status).toBe("error");
     expect(result.errors?.attachments?.[0]).toBe("Nothing to save");
@@ -249,7 +223,7 @@ describe("addCapturesToNoteBulk gates", () => {
       buildBulkForm([
         { kind: "task", tempId: "t1", title: "Real task" },
         { kind: "note_sibling", tempId: "n1", content: "ignored" },
-      ])
+      ]),
     );
     expect(result.status).toBe("ok");
     expect(await prisma.note.count()).toBe(1);
@@ -270,7 +244,7 @@ describe("addCapturesToNoteBulk gates", () => {
         { kind: "task", tempId: "c", title: "T" },
         { kind: "deadline", tempId: "d", title: "D1", dueDate: "2026-08-01" },
         { kind: "deadline", tempId: "e", title: "D2", dueDate: "2026-08-02" },
-      ])
+      ]),
     );
     const log = await prisma.activityLog.findFirstOrThrow({
       where: { matterId },
@@ -281,7 +255,7 @@ describe("addCapturesToNoteBulk gates", () => {
 
   test("a denied kind returns a form error and nothing is created", async () => {
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key) => key !== "deadlines.create"
+      async (key) => key !== "deadlines.create",
     );
     const result = await addCapturesToNoteBulk(
       noteId,
@@ -294,12 +268,10 @@ describe("addCapturesToNoteBulk gates", () => {
           title: "Denied",
           dueDate: "2026-08-01",
         },
-      ])
+      ]),
     );
     expect(result.status).toBe("error");
-    expect(result.errors?.attachments?.[0]).toMatch(
-      /permission to create deadlines/i
-    );
+    expect(result.errors?.attachments?.[0]).toMatch(/permission to create deadlines/i);
     // All-or-nothing: the permitted task was not created either.
     expect(await prisma.task.count({ where: { noteId } })).toBe(0);
     expect(await prisma.deadline.count({ where: { noteId } })).toBe(0);
@@ -314,8 +286,8 @@ describe("addCapturesToNoteBulk gates", () => {
       addCapturesToNoteBulk(
         noteId,
         bulkAttachInitialState,
-        buildBulkForm([{ kind: "task", tempId: "t1", title: "T" }])
-      )
+        buildBulkForm([{ kind: "task", tempId: "t1", title: "T" }]),
+      ),
     ).rejects.toThrow("NEXT_REDIRECT");
     expect(await prisma.task.count({ where: { noteId } })).toBe(0);
   });
@@ -333,7 +305,7 @@ describe("addCapturesToNoteBulk gates", () => {
           endTime: "2026-08-01T10:00",
           type: "hearing",
         },
-      ])
+      ]),
     );
     const ev = await prisma.calendarEvent.findFirstOrThrow({
       where: { matterId },
@@ -360,17 +332,13 @@ describe("addCapturesToNoteBulk gates", () => {
           hours: "1",
           activity: "A",
         },
-      ])
+      ]),
     );
     expect(
-      (
-        await prisma.deadline.findFirstOrThrow({ where: { noteId } })
-      ).dueDate.toISOString()
+      (await prisma.deadline.findFirstOrThrow({ where: { noteId } })).dueDate.toISOString(),
     ).toBe("2026-04-16T00:00:00.000Z");
     expect(
-      (
-        await prisma.timeEntry.findFirstOrThrow({ where: { noteId } })
-      ).date.toISOString()
+      (await prisma.timeEntry.findFirstOrThrow({ where: { noteId } })).date.toISOString(),
     ).toBe("2026-04-17T00:00:00.000Z");
   });
 
@@ -387,7 +355,7 @@ describe("addCapturesToNoteBulk gates", () => {
           hours: "99",
           activity: "A",
         },
-      ])
+      ]),
     );
     expect(result.status).toBe("error");
     expect(result.attachmentErrors?.bad).toBeTruthy();
@@ -397,37 +365,21 @@ describe("addCapturesToNoteBulk gates", () => {
 
 describe("single-attach date handling", () => {
   test("addDeadlineToNote stores the due date at UTC midnight", async () => {
-    await addDeadlineToNote(
-      noteId,
-      noteAttachmentInitialState,
-      buildDeadlineForm()
-    );
+    await addDeadlineToNote(noteId, noteAttachmentInitialState, buildDeadlineForm());
     expect(
-      (
-        await prisma.deadline.findFirstOrThrow({ where: { noteId } })
-      ).dueDate.toISOString()
+      (await prisma.deadline.findFirstOrThrow({ where: { noteId } })).dueDate.toISOString(),
     ).toBe("2026-08-01T00:00:00.000Z");
   });
 
   test("addTimeEntryToNote stores the date at UTC midnight and rejects a bad date", async () => {
-    await addTimeEntryToNote(
-      noteId,
-      noteAttachmentInitialState,
-      buildTimeForm()
-    );
+    await addTimeEntryToNote(noteId, noteAttachmentInitialState, buildTimeForm());
     expect(
-      (
-        await prisma.timeEntry.findFirstOrThrow({ where: { noteId } })
-      ).date.toISOString()
+      (await prisma.timeEntry.findFirstOrThrow({ where: { noteId } })).date.toISOString(),
     ).toBe("2026-07-01T00:00:00.000Z");
 
     const bad = buildTimeForm();
     bad.set("date", "2026-02-31");
-    const res = await addTimeEntryToNote(
-      noteId,
-      noteAttachmentInitialState,
-      bad
-    );
+    const res = await addTimeEntryToNote(noteId, noteAttachmentInitialState, bad);
     expect(res.status).toBe("error");
     expect(res.errors?.date?.[0]).toBe("Invalid date");
   });

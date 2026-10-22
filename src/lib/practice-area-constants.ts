@@ -44,15 +44,14 @@ export type OrderUpdate = { id: string; order: number };
 export function planReorder(
   items: ReadonlyArray<{ id: string; order: number }>,
   idx: number,
-  targetIdx: number
+  targetIdx: number,
 ): OrderUpdate[] {
   const a = items[idx];
   const b = items[targetIdx];
   // Any duplicate `order` in the list (not just between the swapped pair)
   // can make a plain value-trade leave the visible order wrong once the
   // (order, id) tiebreak is applied, so renumber densely in that case.
-  const hasDuplicates =
-    new Set(items.map((i) => i.order)).size !== items.length;
+  const hasDuplicates = new Set(items.map((i) => i.order)).size !== items.length;
   if (!hasDuplicates) {
     return [
       { id: a.id, order: b.order },

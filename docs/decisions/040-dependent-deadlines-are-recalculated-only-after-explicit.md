@@ -6,6 +6,7 @@
 **Context:** Deadline rules can count from another rule's deadline or from the incident date (ADR-019), but dates were snapshotted at apply time. Moving a trial date left "motions 30 days before trial" where it was — wrong, with no warning. Moving deadlines automatically would fix that but is itself dangerous: a court date entered by mistake could silently shift a dozen statutory dates, and some dependent dates are deliberately different from what the rule says.
 
 **Decision:**
+
 - **Two-step, always.** The two places a rule's anchor date can change — `updateDeadline` (a deadline's date) and `updateMatter` (the incident date) — first compute what would move (`previewRecalc`). If anything would, they return `status: "confirm"` with the list and **write nothing**. The form shows `CascadeConfirm`; the user resubmits with `cascadeDecision=apply` + the ticked `cascadeId`s, or `skip`.
 - **Only ticked deadlines move.** On the confirmed submit the server re-plans from current rows inside the same transaction as the primary save (`applyRecalc`) and moves only deadlines in the selection — never one the user didn't see and tick, even if the plan changed in between. Unticking a deadline also keeps everything counting from it.
 - **Planning rules** (`src/lib/automations/recalc-plan.ts`, pure): chains are followed in dependency order; a rule's anchor for its dependents is its newest deadline on the matter (the same one `applyDeadlineRules` counts from); only open/overdue deadlines move, and nothing propagates through a completed/waived one; offsets use `applyOffsetToKey`, so a recalculated date equals a freshly applied one.
@@ -14,6 +15,7 @@
 - Every moved deadline gets its own activity-log row: old → new, what it counts from, and what triggered it.
 
 **Trade-offs:**
+
 - (+) No deadline ever moves without the user seeing old → new and choosing it
 - (+) Deliberate exceptions survive (hand-set marker + unticked default)
 - (-) One extra round-trip on saves that affect dependents

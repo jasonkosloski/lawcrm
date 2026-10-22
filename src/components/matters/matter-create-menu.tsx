@@ -61,10 +61,7 @@ const ICON_MAP: Record<MatterCreateEntry["icon"], LucideIcon> = {
 const DOCK_TYPES: ReadonlySet<MatterCreateType> = new Set(["note"]);
 
 /** Matter tab (route segment) whose composer handles each other type. */
-export const MATTER_CREATE_TAB: Record<
-  Exclude<MatterCreateType, "note">,
-  string
-> = {
+export const MATTER_CREATE_TAB: Record<Exclude<MatterCreateType, "note">, string> = {
   time: "time",
   task: "tasks",
   deadline: "deadlines",
@@ -81,12 +78,7 @@ const GROUP_LABEL: Record<MatterCreateGroup, string> = {
   bill: "Bill",
 };
 
-const GROUP_ORDER: MatterCreateGroup[] = [
-  "track",
-  "capture",
-  "connect",
-  "bill",
-];
+const GROUP_ORDER: MatterCreateGroup[] = ["track", "capture", "connect", "bill"];
 
 export function MatterCreateMenu({
   allowedTypes,
@@ -105,7 +97,7 @@ export function MatterCreateMenu({
       return;
     }
     router.push(
-      `/matters/${matterId}/${MATTER_CREATE_TAB[type as keyof typeof MATTER_CREATE_TAB]}`
+      `/matters/${matterId}/${MATTER_CREATE_TAB[type as keyof typeof MATTER_CREATE_TAB]}`,
     );
   };
 
@@ -130,8 +122,7 @@ export function MatterCreateMenu({
         }
       />
       <DropdownMenuContent align="end" className="w-56">
-        {GROUP_ORDER.filter((g) => (byGroup.get(g)?.length ?? 0) > 0).map(
-          (group, idx) => {
+        {GROUP_ORDER.filter((g) => (byGroup.get(g)?.length ?? 0) > 0).map((group, idx) => {
           const entries = byGroup.get(group)!;
           return (
             <DropdownMenuGroup key={group}>
@@ -140,10 +131,7 @@ export function MatterCreateMenu({
               {entries.map((e) => {
                 const Icon = ICON_MAP[e.icon];
                 return (
-                  <DropdownMenuItem
-                    key={e.type}
-                    onClick={() => choose(e.type)}
-                  >
+                  <DropdownMenuItem key={e.type} onClick={() => choose(e.type)}>
                     <Icon />
                     {e.label}
                   </DropdownMenuItem>
@@ -151,8 +139,7 @@ export function MatterCreateMenu({
               })}
             </DropdownMenuGroup>
           );
-          }
-        )}
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );

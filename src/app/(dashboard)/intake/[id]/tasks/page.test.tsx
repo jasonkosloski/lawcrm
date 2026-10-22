@@ -36,13 +36,7 @@ vi.mock("@/lib/queries/team", () => ({
   listAssigneeOptions: vi.fn(async () => []),
 }));
 vi.mock("@/components/matters/captures/task-composer", () => ({
-  TaskComposer: ({
-    scope,
-    siblingKinds,
-  }: {
-    scope: RecordScope;
-    siblingKinds: string[];
-  }) => (
+  TaskComposer: ({ scope, siblingKinds }: { scope: RecordScope; siblingKinds: string[] }) => (
     <div
       data-testid="task-composer"
       data-scope={JSON.stringify(scope)}
@@ -51,13 +45,7 @@ vi.mock("@/components/matters/captures/task-composer", () => ({
   ),
 }));
 vi.mock("@/components/tasks/task-list-by-status", () => ({
-  TaskListByStatus: ({
-    matterId,
-    perms,
-  }: {
-    matterId: string | null;
-    perms: TaskRowPerms;
-  }) => (
+  TaskListByStatus: ({ matterId, perms }: { matterId: string | null; perms: TaskRowPerms }) => (
     <div
       data-testid="task-list"
       data-matter={String(matterId)}
@@ -72,14 +60,10 @@ import { getLeadTasks } from "@/lib/queries/matter-detail";
 import LeadTasksPage from "./page";
 
 const lead = (stage: string, convertedMatterId: string | null = null) =>
-  vi
-    .mocked(prisma.lead.findUnique)
-    .mockResolvedValue({ stage, convertedMatterId } as never);
+  vi.mocked(prisma.lead.findUnique).mockResolvedValue({ stage, convertedMatterId } as never);
 
 const grant = (...keys: string[]) =>
-  vi
-    .mocked(currentUserHasPermission)
-    .mockImplementation(async (key: string) => keys.includes(key));
+  vi.mocked(currentUserHasPermission).mockImplementation(async (key: string) => keys.includes(key));
 
 const renderPage = async () => {
   const ui = await LeadTasksPage({
@@ -125,8 +109,8 @@ describe("LeadTasksPage", () => {
     grant("tasks.create");
     await renderPage();
     expect(screen.queryByTestId("task-composer")).toBeNull();
-    expect(
-      screen.getByRole("link", { name: /open matter tasks/i }).getAttribute("href")
-    ).toBe("/matters/m_9/tasks");
+    expect(screen.getByRole("link", { name: /open matter tasks/i }).getAttribute("href")).toBe(
+      "/matters/m_9/tasks",
+    );
   });
 });

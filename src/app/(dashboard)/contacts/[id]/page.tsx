@@ -42,9 +42,7 @@ const CONFLICT_LABEL: Record<string, string> = {
   override: "Override",
 };
 
-export default async function ContactDetailPage({
-  params,
-}: PageProps<"/contacts/[id]">) {
+export default async function ContactDetailPage({ params }: PageProps<"/contacts/[id]">) {
   await requireUser();
   const { id } = await params;
   const c = await getContactById(id);
@@ -70,11 +68,8 @@ export default async function ContactDetailPage({
   // needs no contact picker list; only the matter options are loaded.
   const callMatters = showLogCall ? await getFilingMatterOptions() : [];
 
-  const typeLabel =
-    CONTACT_TYPE_LABEL[c.type as keyof typeof CONTACT_TYPE_LABEL] ?? c.type;
-  const fullAddress = [c.address, c.city, c.state, c.zip]
-    .filter(Boolean)
-    .join(", ");
+  const typeLabel = CONTACT_TYPE_LABEL[c.type as keyof typeof CONTACT_TYPE_LABEL] ?? c.type;
+  const fullAddress = [c.address, c.city, c.state, c.zip].filter(Boolean).join(", ");
 
   return (
     <>
@@ -83,19 +78,11 @@ export default async function ContactDetailPage({
         crumbs={`Contacts / ${typeLabel}`}
         subtitle={
           <>
-            {!c.isActive && (
-              <Badge variant="neutral">
-                Inactive
-              </Badge>
-            )}
+            {!c.isActive && <Badge variant="neutral">Inactive</Badge>}
             {c.conflictStatus === "flagged" ? (
-              <Badge variant="warn">
-                Conflict
-              </Badge>
+              <Badge variant="warn">Conflict</Badge>
             ) : c.conflictStatus === "override" ? (
-              <Badge>
-                Override
-              </Badge>
+              <Badge>Override</Badge>
             ) : null}
           </>
         }
@@ -120,23 +107,15 @@ export default async function ContactDetailPage({
               (c.isActive ? (
                 <ContactDeleteButton contactId={c.id} contactName={c.name} />
               ) : (
-                <ContactReactivateButton
-                  contactId={c.id}
-                  contactName={c.name}
-                />
+                <ContactReactivateButton contactId={c.id} contactName={c.name} />
               ))}
             {canEdit && (
-              <Button
-                size="sm"
-                render={<Link href={`/contacts/${c.id}/edit`} />}
-              >
+              <Button size="sm" render={<Link href={`/contacts/${c.id}/edit`} />}>
                 <Pencil />
                 Edit
               </Button>
             )}
-            {showMerge && (
-              <ContactMergeMenu contactId={c.id} contactName={c.name} />
-            )}
+            {showMerge && <ContactMergeMenu contactId={c.id} contactName={c.name} />}
           </>
         }
       />
@@ -153,9 +132,7 @@ export default async function ContactDetailPage({
                 <Field label="Organization" value={c.organization ?? "—"} />
                 <Field
                   label="Email"
-                  value={
-                    c.email ? <EmailLink email={c.email} /> : <span>—</span>
-                  }
+                  value={c.email ? <EmailLink email={c.email} /> : <span>—</span>}
                 />
                 <Field label="Phone" value={c.phone ?? "—"} />
                 <Field
@@ -174,10 +151,7 @@ export default async function ContactDetailPage({
                         {CONFLICT_LABEL[c.conflictStatus] ?? c.conflictStatus}
                       </span>
                       {canEdit && (
-                        <ConflictStatusControl
-                          contactId={c.id}
-                          currentStatus={c.conflictStatus}
-                        />
+                        <ConflictStatusControl contactId={c.id} currentStatus={c.conflictStatus} />
                       )}
                     </span>
                   }
@@ -191,9 +165,7 @@ export default async function ContactDetailPage({
                 {c.notes && (
                   <div className="col-span-2 pt-2 border-t border-line">
                     <dt className="text-ink-4 mb-0.5">Notes</dt>
-                    <dd className="text-ink leading-relaxed whitespace-pre-wrap">
-                      {c.notes}
-                    </dd>
+                    <dd className="text-ink leading-relaxed whitespace-pre-wrap">{c.notes}</dd>
                   </div>
                 )}
               </dl>
@@ -211,16 +183,12 @@ export default async function ContactDetailPage({
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 Matters
-                <span className="text-2xs font-mono font-normal text-ink-4">
-                  {c.matterCount}
-                </span>
+                <span className="text-2xs font-mono font-normal text-ink-4">{c.matterCount}</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
               {c.matterCount === 0 ? (
-                <div className="py-3 text-xs text-ink-4">
-                  Not linked to any matter yet.
-                </div>
+                <div className="py-3 text-xs text-ink-4">Not linked to any matter yet.</div>
               ) : (
                 <div className="flex flex-col gap-1">
                   {c.asClientMatters.map((m) => (
@@ -237,9 +205,7 @@ export default async function ContactDetailPage({
                         {m.name}
                         {m.isArchived && <ArchivedTag />}
                       </span>
-                      <span className="text-2xs text-ink-4 font-mono shrink-0">
-                        client
-                      </span>
+                      <span className="text-2xs text-ink-4 font-mono shrink-0">client</span>
                       <span className="text-2xs text-ink-4 font-mono shrink-0">
                         {m.area} · {m.stage}
                       </span>
@@ -295,18 +261,10 @@ export default async function ContactDetailPage({
 }
 
 function ArchivedTag() {
-  return (
-    <span className="ml-2 text-2xs font-mono text-ink-4">archived</span>
-  );
+  return <span className="ml-2 text-2xs font-mono text-ink-4">archived</span>;
 }
 
-function Field({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <dt className="text-ink-4 mb-0.5">{label}</dt>

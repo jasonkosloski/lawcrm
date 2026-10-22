@@ -32,7 +32,7 @@ const allCards = (): Partial<Record<DashboardCardKey, ReactNode>> =>
       <div key={k} data-testid={`body-${k}`}>
         {DASHBOARD_CARDS[k].label} body
       </div>,
-    ])
+    ]),
   );
 
 const fresh = (): DashboardLayout => mergeLayout(DEFAULT_LAYOUT);
@@ -43,7 +43,7 @@ function setup(
     layout?: DashboardLayout;
     cards?: Partial<Record<DashboardCardKey, ReactNode>>;
     unavailable?: DashboardCardKey[];
-  } = {}
+  } = {},
 ) {
   return render(
     <DashboardCustomizer
@@ -51,7 +51,7 @@ function setup(
       cards={opts.cards ?? allCards()}
       unavailable={opts.unavailable}
       greeting={<p>Hello</p>}
-    />
+    />,
   );
 }
 
@@ -62,8 +62,7 @@ const zoneKeys = (name: string) =>
     .map((li) => li.getAttribute("data-card"));
 const customize = (user: ReturnType<typeof userEvent.setup>) =>
   user.click(screen.getByRole("button", { name: /customize/i }));
-const toolbar = () =>
-  screen.queryByRole("toolbar", { name: "Customize dashboard" });
+const toolbar = () => screen.queryByRole("toolbar", { name: "Customize dashboard" });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -127,9 +126,7 @@ describe("edit mode", () => {
     const user = userEvent.setup();
     setup();
     await customize(user);
-    await user.click(
-      within(arrange()).getByRole("button", { name: "Hide Firm pulse" })
-    );
+    await user.click(within(arrange()).getByRole("button", { name: "Hide Firm pulse" }));
     expect(screen.getByText("Hidden (1)")).toBeTruthy();
     expect(zoneKeys("Column 2")).toEqual(["deadlines", "records"]);
     await user.click(screen.getByRole("button", { name: "Restore Firm pulse" }));
@@ -156,9 +153,7 @@ describe("edit mode", () => {
     const user = userEvent.setup();
     setup();
     await customize(user);
-    await user.click(
-      within(arrange()).getByRole("button", { name: `Move ${label("tasks")} up` })
-    );
+    await user.click(within(arrange()).getByRole("button", { name: `Move ${label("tasks")} up` }));
     expect(zoneKeys("Column 1")[0]).toBe("tasks");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(toolbar()).toBeNull();
@@ -181,7 +176,7 @@ describe("edit mode", () => {
     await customize(user);
     await user.selectOptions(
       within(arrange()).getByLabelText(`Zone for ${label("tasks")}`),
-      "Band"
+      "Band",
     );
     expect(zoneKeys("Band")).toEqual(["kpis", "triage", "tasks"]);
   });
@@ -199,14 +194,12 @@ describe("edit mode", () => {
     const user = userEvent.setup();
     setup();
     await customize(user);
-    await user.click(
-      within(arrange()).getByRole("button", { name: `Move ${label("tasks")} up` })
-    );
+    await user.click(within(arrange()).getByRole("button", { name: `Move ${label("tasks")} up` }));
     await user.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(toolbar()).toBeNull());
     expect(mockedSave).toHaveBeenCalledTimes(1);
     expect(mockedSave).toHaveBeenCalledWith(
-      moveCard(fresh(), "tasks", { zone: "column", index: 0 }, 0)
+      moveCard(fresh(), "tasks", { zone: "column", index: 0 }, 0),
     );
     expect(refresh).toHaveBeenCalledTimes(1);
   });
@@ -216,11 +209,11 @@ describe("edit mode", () => {
     mockedSave.mockRejectedValue(new Error("boom"));
     setup();
     await customize(user);
-    await user.click(
-      within(arrange()).getByRole("button", { name: `Move ${label("tasks")} up` })
-    );
+    await user.click(within(arrange()).getByRole("button", { name: `Move ${label("tasks")} up` }));
     await user.click(screen.getByRole("button", { name: "Done" }));
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't save your dashboard layout"));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Couldn't save your dashboard layout"),
+    );
     expect(toolbar()).toBeTruthy();
     expect(zoneKeys("Column 1")[0]).toBe("tasks");
     expect(refresh).not.toHaveBeenCalled();
@@ -257,9 +250,7 @@ describe("edit mode", () => {
     mockedSave.mockImplementation(async () => fresh());
     setup();
     await customize(user);
-    await user.click(
-      within(arrange()).getByRole("button", { name: `Move ${label("tasks")} up` })
-    );
+    await user.click(within(arrange()).getByRole("button", { name: `Move ${label("tasks")} up` }));
     await user.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(toolbar()).toBeNull());
     await customize(user);
@@ -315,12 +306,7 @@ describe("zoneCollision", () => {
     ["b", rect(130, 10, 280, 100)],
     ["zone:1", rect(0, 320, 300, 400)],
   ] as never);
-  const containers = [
-    cont("zone:0"),
-    cont("a", "zone:0"),
-    cont("b", "zone:0"),
-    cont("zone:1"),
-  ];
+  const containers = [cont("zone:0"), cont("a", "zone:0"), cont("b", "zone:0"), cont("zone:1")];
   const run = (x: number, y: number) =>
     zoneCollision({
       active: { id: "z" } as never,

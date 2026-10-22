@@ -72,7 +72,7 @@ export function planRecalc(
   deadlines: readonly RecalcDeadline[],
   rules: readonly RecalcRule[],
   trigger: RecalcTrigger,
-  opts: { selected?: ReadonlySet<string> } = {}
+  opts: { selected?: ReadonlySet<string> } = {},
 ): RecalcChange[] {
   const ruleById = new Map(rules.map((r) => [r.id, r]));
   const byRule = new Map<string, RecalcDeadline[]>();
@@ -85,18 +85,28 @@ export function planRecalc(
   const newestOf = (ruleId: string): RecalcDeadline | undefined =>
     (byRule.get(ruleId) ?? []).reduce<RecalcDeadline | undefined>(
       (best, d) => (!best || d.createdAtMs > best.createdAtMs ? d : best),
-      undefined
+      undefined,
     );
 
   const changes: RecalcChange[] = [];
   // ruleId → its anchor deadline's NEW key, for rules whose anchor moved.
-  type Moved = { ruleId: string; newKey: string; anchorDeadlineId: string | null; anchorText: string };
+  type Moved = {
+    ruleId: string;
+    newKey: string;
+    anchorDeadlineId: string | null;
+    anchorText: string;
+  };
   const queue: Moved[] = [];
   const visited = new Set<string>();
 
   // Move every open deadline of `rule` given its anchor's new key;
   // enqueue the rule when its anchor deadline (newest) actually moved.
-  const moveRule = (rule: RecalcRule, anchorKey: string, anchorDeadlineId: string | null, anchorText: string) => {
+  const moveRule = (
+    rule: RecalcRule,
+    anchorKey: string,
+    anchorDeadlineId: string | null,
+    anchorText: string,
+  ) => {
     if (visited.has(rule.id)) return; // defensive: loops are refused on save
     visited.add(rule.id);
     const toKey = applyOffsetToKey(anchorKey, rule.offsetDays, rule.offsetUnit);
@@ -123,7 +133,12 @@ export function planRecalc(
       newest.dueKey !== toKey &&
       (!opts.selected || opts.selected.has(newest.id));
     if (anchorMoves) {
-      queue.push({ ruleId: rule.id, newKey: toKey, anchorDeadlineId: newest.id, anchorText: newest.title });
+      queue.push({
+        ruleId: rule.id,
+        newKey: toKey,
+        anchorDeadlineId: newest.id,
+        anchorText: newest.title,
+      });
     }
   };
 

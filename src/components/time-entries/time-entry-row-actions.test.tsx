@@ -27,10 +27,7 @@ vi.mock("@/app/actions/time-entries", () => ({
   updateTimeEntry: vi.fn(),
 }));
 
-import {
-  deleteTimeEntry,
-  setTimeEntryStatus,
-} from "@/app/actions/time-entries";
+import { deleteTimeEntry, setTimeEntryStatus } from "@/app/actions/time-entries";
 import { confirmAction, notifyError } from "@/lib/feedback";
 import { parseDateOnly } from "@/lib/format-date";
 import { TimeEntryRowMenu } from "./time-entry-row-actions";
@@ -72,9 +69,7 @@ describe("TimeEntryRowMenu - server refusals are surfaced", () => {
     await user.click(await screen.findByText("Submitted"));
 
     await waitFor(() =>
-      expect(notifyError).toHaveBeenCalledWith(
-        "This entry changed while you were editing it."
-      )
+      expect(notifyError).toHaveBeenCalledWith("This entry changed while you were editing it."),
     );
   });
 
@@ -88,9 +83,7 @@ describe("TimeEntryRowMenu - server refusals are surfaced", () => {
     await openMenu(user);
     await user.click(await screen.findByText("Delete"));
 
-    await waitFor(() =>
-      expect(notifyError).toHaveBeenCalledWith("Entry is already billed.")
-    );
+    await waitFor(() => expect(notifyError).toHaveBeenCalledWith("Entry is already billed."));
   });
 
   test("the delete confirmation shows quarter hours exactly (0.25, not 0.3)", async () => {
@@ -102,8 +95,8 @@ describe("TimeEntryRowMenu - server refusals are surfaced", () => {
 
     await waitFor(() =>
       expect(confirmAction).toHaveBeenCalledWith(
-        expect.objectContaining({ description: expect.stringContaining("0.25h") })
-      )
+        expect.objectContaining({ description: expect.stringContaining("0.25h") }),
+      ),
     );
   });
 });
@@ -127,9 +120,7 @@ describe("TimeEntryRowMenu - Billed is not hand-selectable", () => {
     await openMenu(user);
     await user.click(await screen.findByText("Written off"));
 
-    await waitFor(() =>
-      expect(setTimeEntryStatus).toHaveBeenCalledWith("te1", "written_off")
-    );
+    await waitFor(() => expect(setTimeEntryStatus).toHaveBeenCalledWith("te1", "written_off"));
   });
 
   test("a billed entry is locked: edit, delete and every status are disabled", async () => {
@@ -150,9 +141,7 @@ describe("TimeEntryRowMenu - Billed is not hand-selectable", () => {
 describe("TimeEntryRowMenu - capability props", () => {
   test("renders no menu when the viewer can neither edit nor delete", () => {
     render(<TimeEntryRowMenu entry={entry} canEdit={false} canDelete={false} />);
-    expect(
-      screen.queryByRole("button", { name: /time entry actions/i })
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /time entry actions/i })).toBeNull();
   });
 
   test("canDelete only: Delete is offered, Edit and Set status are not", async () => {

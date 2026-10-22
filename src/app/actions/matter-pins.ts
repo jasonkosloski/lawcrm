@@ -26,7 +26,7 @@ import { getCurrentUserId } from "@/lib/current-user";
  *  exist returns an error instead of an FK-violation 500. */
 export async function setMatterPin(
   matterId: string,
-  pinned: boolean
+  pinned: boolean,
 ): Promise<{ ok: boolean; pinned: boolean; error?: string }> {
   const userId = await getCurrentUserId();
   // Outside the try: notFound() must not be swallowed by the catch.
@@ -70,9 +70,7 @@ export async function setMatterPin(
 
 /** Flip the pin from whatever the server currently has. Prefer
  *  `setMatterPin` from UI that knows the state it wants. */
-export async function toggleMatterPin(
-  matterId: string
-): Promise<{ pinned: boolean }> {
+export async function toggleMatterPin(matterId: string): Promise<{ pinned: boolean }> {
   const userId = await getCurrentUserId();
   await assertMatterAccess(matterId);
   const existing = await prisma.userMatterPin.findUnique({

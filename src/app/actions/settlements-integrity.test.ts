@@ -124,7 +124,7 @@ describe("fee rounding (F367)", () => {
     expect(
       await prisma.settlementApproval.count({
         where: { settlementId: s.id, status: "approved" },
-      })
+      }),
     ).toBe(4);
   });
 });
@@ -279,7 +279,7 @@ describe("deleteSettlementLien", () => {
       expect(res.ok).toBe(false);
       expect(res.error).toMatch(/disbursement|closed/i);
       expect(await prisma.settlementLien.count({ where: { id: lienId } })).toBe(1);
-    }
+    },
   );
 
   test("an unknown lien id is a clean error", async () => {
@@ -332,22 +332,22 @@ describe("lien changes are locked once the settlement is approved", () => {
 
   test("update and add are refused when disbursed", async () => {
     const { settlementId, lienId } = await seed("disbursed");
-    expect(
-      (await updateSettlementLien(lienId, settlementInitialState, updateForm())).status
-    ).toBe("error");
-    expect(
-      (await addSettlementLien(settlementId, settlementInitialState, addForm())).status
-    ).toBe("error");
+    expect((await updateSettlementLien(lienId, settlementInitialState, updateForm())).status).toBe(
+      "error",
+    );
+    expect((await addSettlementLien(settlementId, settlementInitialState, addForm())).status).toBe(
+      "error",
+    );
   });
 
   test("pending: all three succeed", async () => {
     const { settlementId, lienId } = await seed("pending");
-    expect(
-      (await updateSettlementLien(lienId, settlementInitialState, updateForm())).status
-    ).toBe("ok");
-    expect(
-      (await addSettlementLien(settlementId, settlementInitialState, addForm())).status
-    ).toBe("ok");
+    expect((await updateSettlementLien(lienId, settlementInitialState, updateForm())).status).toBe(
+      "ok",
+    );
+    expect((await addSettlementLien(settlementId, settlementInitialState, addForm())).status).toBe(
+      "ok",
+    );
     expect((await deleteSettlementLien(lienId)).ok).toBe(true);
   });
 });
@@ -382,8 +382,7 @@ describe("lien audit + validation", () => {
   test("a blank negotiated amount clears it to the original; 0 records a write-off", async () => {
     const { lienId } = await seedLien();
     const negotiated = async () =>
-      (await prisma.settlementLien.findUniqueOrThrow({ where: { id: lienId } }))
-        .negotiatedAmount;
+      (await prisma.settlementLien.findUniqueOrThrow({ where: { id: lienId } })).negotiatedAmount;
     await updateSettlementLien(lienId, settlementInitialState, lienForm("0.00"));
     expect((await negotiated())!.toNumber()).toBe(0);
     await updateSettlementLien(lienId, settlementInitialState, lienForm(""));
@@ -418,7 +417,7 @@ describe("getMatterSettlement - one settlement per matter (ADR-036)", () => {
     await expect(
       prisma.settlement.create({
         data: { matterId, grossAmount: "9999", status: "pending" },
-      })
+      }),
     ).rejects.toMatchObject({ code: "P2002" });
     const dto = await getMatterSettlement(matterId);
     expect(dto!.id).toBe(only.id);

@@ -71,27 +71,13 @@ import {
   canEditEvent,
   viewerMayTouchLoadedEvent,
 } from "@/lib/calendar-visibility";
-import {
-  assertChildMatterAccess,
-  assertOptionalMatterAccess,
-} from "@/lib/matter-access";
+import { assertChildMatterAccess, assertOptionalMatterAccess } from "@/lib/matter-access";
 import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
 import { logActivity } from "@/lib/activity-log";
-import {
-  formatDate,
-  formatDateOnly,
-  parseDateOnly,
-  parseWallClock,
-} from "@/lib/format-date";
-import {
-  deleteEventFromGoogle,
-  pushEventToGoogle,
-} from "@/lib/google/google-calendar-push";
+import { formatDate, formatDateOnly, parseDateOnly, parseWallClock } from "@/lib/format-date";
+import { deleteEventFromGoogle, pushEventToGoogle } from "@/lib/google/google-calendar-push";
 import { EVENT_TYPES } from "@/lib/constants/calendar-event-type";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import {
   normalizeVideoUrl,
   type CreateCalendarEventState,
@@ -108,7 +94,7 @@ import {
  */
 function viewerMayTouchEvent(
   viewerId: string,
-  event: Parameters<typeof viewerMayTouchLoadedEvent>[1]
+  event: Parameters<typeof viewerMayTouchLoadedEvent>[1],
 ): boolean {
   // Matter access was asserted before the event was loaded.
   return viewerMayTouchLoadedEvent(viewerId, event, true);
@@ -116,10 +102,7 @@ function viewerMayTouchEvent(
 
 /** Calendar + dashboard, plus the event's matter or intake lead
  *  Events tab + overview (personal events have neither). */
-function revalidateForEvent(event: {
-  matterId: string | null;
-  leadId: string | null;
-}): void {
+function revalidateForEvent(event: { matterId: string | null; leadId: string | null }): void {
   revalidatePath("/calendar");
   revalidatePath("/"); // dashboard "Today's agenda"
   for (const path of scopePaths(optionalScopeOf(event), "events")) {
@@ -145,10 +128,7 @@ const MAX_ATTENDEES = 100;
  *  during the rollout. */
 const attendeeEntrySchema = z
   .object({
-    kind: z
-      .enum(["user", "contact", "new"])
-      .optional()
-      .default("new"),
+    kind: z.enum(["user", "contact", "new"]).optional().default("new"),
     /** Set when `kind === "user"`. Server validates against User. */
     userId: z.string().optional().or(z.literal("")),
     /** Set when `kind === "contact"`. Server validates against Contact. */
@@ -199,11 +179,7 @@ type AttendeeEntry = z.infer<typeof attendeeEntrySchema>;
  *
  *  Returns null when the value can't be parsed (caller surfaces
  *  the field error). */
-function parseEventBoundary(
-  value: string,
-  allDay: boolean,
-  tz: string
-): Date | null {
+function parseEventBoundary(value: string, allDay: boolean, tz: string): Date | null {
   if (allDay) return parseDateOnly(value);
   return parseWallClock(value, tz);
 }
@@ -213,7 +189,7 @@ function parseEventBoundary(
 function scheduleRefinement(tz: string) {
   return (
     data: { isAllDay?: "on"; startTime: string; endTime: string },
-    ctx: z.RefinementCtx
+    ctx: z.RefinementCtx,
   ): void => {
     const allDay = data.isAllDay === "on";
     const start = parseEventBoundary(data.startTime, allDay, tz);
@@ -236,9 +212,7 @@ function scheduleRefinement(tz: string) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["endTime"],
-        message: allDay
-          ? "End date must be on or after start date"
-          : "End must be after start",
+        message: allDay ? "End date must be on or after start date" : "End must be after start",
       });
     }
   };
@@ -253,7 +227,7 @@ const videoUrlField = z
   .or(z.literal(""))
   .refine(
     (v) => !v || normalizeVideoUrl(v) !== null,
-    "Video link must be a web address (https://…)"
+    "Video link must be a web address (https://…)",
   );
 
 const visibilityEnum = z.enum(EVENT_VISIBILITIES);
@@ -325,8 +299,7 @@ type ResolvedAttendee = {
 };
 
 type AttendeeResolution =
-  | { ok: true; resolved: ResolvedAttendee[]; firmId: string | null }
-  | { ok: false; error: string };
+  { ok: true; resolved: ResolvedAttendee[]; firmId: string | null } | { ok: false; error: string };
 
 /** Parse + resolve an attendees JSON payload BEFORE any write, so a bad
  *  payload never half-updates an event and a stale id fails the save
@@ -349,7 +322,7 @@ async function resolveAttendees(
   existing: {
     userIds: ReadonlySet<string>;
     contactIds: ReadonlySet<string>;
-  } = { userIds: new Set(), contactIds: new Set() }
+  } = { userIds: new Set(), contactIds: new Set() },
 ): Promise<AttendeeResolution> {
   const attendeeList: AttendeeEntry[] = [];
   try {
@@ -376,17 +349,11 @@ async function resolveAttendees(
   }
 
   const userIds = [
-    ...new Set(
-      attendeeList.flatMap((a) =>
-        a.kind === "user" && a.userId ? [a.userId] : []
-      )
-    ),
+    ...new Set(attendeeList.flatMap((a) => (a.kind === "user" && a.userId ? [a.userId] : []))),
   ];
   const contactIds = [
     ...new Set(
-      attendeeList.flatMap((a) =>
-        a.kind === "contact" && a.contactId ? [a.contactId] : []
-      )
+      attendeeList.flatMap((a) => (a.kind === "contact" && a.contactId ? [a.contactId] : [])),
     ),
   ];
   const [users, contacts] = await Promise.all([
@@ -492,9 +459,7 @@ async function resolveAttendees(
       select: { email: true, name: true },
     });
     const existingByEmail = new Map<string, string>(
-      existingContacts
-        .filter((c) => c.email)
-        .map((c) => [c.email!.toLowerCase(), c.name])
+      existingContacts.filter((c) => c.email).map((c) => [c.email!.toLowerCase(), c.name]),
     );
     const collision = newEmails.find((e) => existingByEmail.has(e));
     if (collision) {
@@ -517,7 +482,7 @@ async function writeAttendee(
   tx: Tx,
   eventId: string,
   r: ResolvedAttendee,
-  firmId: string | null
+  firmId: string | null,
 ): Promise<void> {
   let contactId = r.contactId;
   if (r.kind === "new") {
@@ -544,9 +509,7 @@ async function writeAttendee(
 /** "Jun 10, 2026, 9:00 AM" for a timed bound, "Jun 10, 2026" for an
  *  all-day one — the old → new text in schedule-change audit rows. */
 function describeBoundary(d: Date, allDay: boolean, tz: string): string {
-  return allDay
-    ? formatDateOnly(d, "medium")
-    : formatDate(d, "datetime_medium", tz);
+  return allDay ? formatDateOnly(d, "medium") : formatDate(d, "datetime_medium", tz);
 }
 
 /** Audit detail for an edit that moved the event. */
@@ -554,7 +517,7 @@ function describeReschedule(
   title: string,
   from: { start: Date; isAllDay: boolean },
   to: { start: Date; isAllDay: boolean },
-  tz: string
+  tz: string,
 ): string {
   return `${title} · ${describeBoundary(from.start, from.isAllDay, tz)} → ${describeBoundary(to.start, to.isAllDay, tz)}`;
 }
@@ -564,7 +527,7 @@ function describeReschedule(
 export async function updateCalendarEvent(
   eventId: string,
   _prev: UpdateCalendarEventFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<UpdateCalendarEventFormState> {
   // Session + zone first: nothing is read from the database before
   // the caller is known, and the schema needs the zone to read the
@@ -627,8 +590,7 @@ export async function updateCalendarEvent(
     viewerId,
     createdById: event.createdById,
     matterId: event.matterId,
-    matterTeamUserIds:
-      event.matter?.teamMembers.map((m) => m.userId) ?? [],
+    matterTeamUserIds: event.matter?.teamMembers.map((m) => m.userId) ?? [],
     perms: { hasEventsEdit, hasEventsEditNonMatter },
   });
   if (!allowed || !viewerMayTouchEvent(viewerId, event)) {
@@ -645,12 +607,8 @@ export async function updateCalendarEvent(
   // event's core fields. People already on this event may remain
   // even if deactivated since.
   const resolution = await resolveAttendees(parsed.data.attendees, {
-    userIds: new Set(
-      event.attendees.flatMap((a) => (a.userId ? [a.userId] : []))
-    ),
-    contactIds: new Set(
-      event.attendees.flatMap((a) => (a.contactId ? [a.contactId] : []))
-    ),
+    userIds: new Set(event.attendees.flatMap((a) => (a.userId ? [a.userId] : []))),
+    contactIds: new Set(event.attendees.flatMap((a) => (a.contactId ? [a.contactId] : []))),
   });
   if (!resolution.ok) {
     return { status: "error", errors: { attendees: [resolution.error] } };
@@ -669,9 +627,7 @@ export async function updateCalendarEvent(
   // every edit until the user manually added themselves — adopt the
   // editor as its first attendee instead. An event that HAD
   // attendees and had them all removed still errors.
-  const firmAttendeeCount = resolvedAttendees.filter(
-    (r) => r.userId !== null && r.active
-  ).length;
+  const firmAttendeeCount = resolvedAttendees.filter((r) => r.userId !== null && r.active).length;
   if (firmAttendeeCount === 0) {
     const viewer =
       event.attendees.length === 0
@@ -721,9 +677,7 @@ export async function updateCalendarEvent(
         location: parsed.data.location || null,
         zoomUrl: normalizeVideoUrl(parsed.data.zoomUrl ?? "") || null,
         description: parsed.data.description || null,
-        ...(parsed.data.visibility !== undefined
-          ? { visibility: parsed.data.visibility }
-          : {}),
+        ...(parsed.data.visibility !== undefined ? { visibility: parsed.data.visibility } : {}),
       },
     });
     // Replace-all attendees — simpler than a diff at this scale,
@@ -758,7 +712,7 @@ export async function updateCalendarEvent(
             auditEventTitle(newVisibility, parsed.data.title),
             { start: event.startTime, isAllDay: event.isAllDay },
             { start: startDate, isAllDay: allDay },
-            tz
+            tz,
           )
         : auditEventTitle(newVisibility, parsed.data.title),
     });
@@ -771,7 +725,7 @@ export async function updateCalendarEvent(
 // ── Delete ──────────────────────────────────────────────────────────────
 
 export async function deleteCalendarEvent(
-  eventId: string
+  eventId: string,
 ): Promise<{ ok: boolean; error?: string; matterId: string | null }> {
   // Session before the first read (see the header).
   const viewerId = await getCurrentUserId();
@@ -813,8 +767,7 @@ export async function deleteCalendarEvent(
     viewerId,
     createdById: event.createdById,
     matterId: event.matterId,
-    matterTeamUserIds:
-      event.matter?.teamMembers.map((m) => m.userId) ?? [],
+    matterTeamUserIds: event.matter?.teamMembers.map((m) => m.userId) ?? [],
     perms: {
       hasEventsEdit: hasEventsDelete,
       hasEventsEditNonMatter: hasEventsDelete && hasEventsEditNonMatter,
@@ -880,7 +833,7 @@ export async function deleteCalendarEvent(
  */
 export async function createCalendarEvent(
   _prev: CreateCalendarEventState,
-  formData: FormData
+  formData: FormData,
 ): Promise<CreateCalendarEventState> {
   await requirePermission("events.create");
   const createdById = await getCurrentUserId();
@@ -897,9 +850,7 @@ export async function createCalendarEvent(
   const startDate = parseEventBoundary(parsed.data.startTime, allDay, tz)!;
   const endDate = parseEventBoundary(parsed.data.endTime, allDay, tz)!;
   const matterId =
-    parsed.data.matterId && parsed.data.matterId.length > 0
-      ? parsed.data.matterId
-      : null;
+    parsed.data.matterId && parsed.data.matterId.length > 0 ? parsed.data.matterId : null;
 
   // A matter must exist and not be archived — a stale or forged id
   // would otherwise hit the FK inside the transaction and surface as
@@ -959,9 +910,7 @@ export async function createCalendarEvent(
 
     // Firm users already attending, so neither the team add nor the
     // creator fallback double-rows anyone the picker already posted.
-    const attending = new Set(
-      resolvedAttendees.flatMap((r) => (r.userId ? [r.userId] : []))
-    );
+    const attending = new Set(resolvedAttendees.flatMap((r) => (r.userId ? [r.userId] : [])));
 
     // Matter team (active members of active accounts) when the
     // effective setting is on — accepted, snapshotted like every
@@ -1064,24 +1013,14 @@ export async function createCalendarEvent(
 const NAIVE_DATE_PREFIX_RE = /^(\d{4}-\d{2}-\d{2})(?:T[\d:.]*)?$/;
 
 /** Parse one drag boundary. Null when unparseable. */
-function parseMoveBoundary(
-  value: string,
-  allDay: boolean,
-  tz: string
-): Date | null {
+function parseMoveBoundary(value: string, allDay: boolean, tz: string): Date | null {
   if (!allDay) return parseWallClock(value, tz);
   const naive = NAIVE_DATE_PREFIX_RE.exec(value);
   if (naive) return parseDateOnly(naive[1]!);
   // Explicit-zone instant (…Z / ±hh:mm): its UTC calendar date is the day.
   const instant = parseWallClock(value, tz);
   if (!instant) return null;
-  return new Date(
-    Date.UTC(
-      instant.getUTCFullYear(),
-      instant.getUTCMonth(),
-      instant.getUTCDate()
-    )
-  );
+  return new Date(Date.UTC(instant.getUTCFullYear(), instant.getUTCMonth(), instant.getUTCDate()));
 }
 
 function makeMoveSchema(tz: string) {
@@ -1122,7 +1061,7 @@ function makeMoveSchema(tz: string) {
 
 export async function moveCalendarEvent(
   eventId: string,
-  input: { isAllDay: boolean; startTime: string; endTime: string }
+  input: { isAllDay: boolean; startTime: string; endTime: string },
 ): Promise<{ ok: boolean; error?: string }> {
   const viewerId = await getCurrentUserId();
   await assertChildMatterAccess("calendarEvent", eventId);
@@ -1171,8 +1110,7 @@ export async function moveCalendarEvent(
     viewerId,
     createdById: event.createdById,
     matterId: event.matterId,
-    matterTeamUserIds:
-      event.matter?.teamMembers.map((m) => m.userId) ?? [],
+    matterTeamUserIds: event.matter?.teamMembers.map((m) => m.userId) ?? [],
     perms: { hasEventsEdit, hasEventsEditNonMatter },
   });
   if (!allowed || !viewerMayTouchEvent(viewerId, event)) {
@@ -1195,9 +1133,7 @@ export async function moveCalendarEvent(
     newEnd.getTime() === newStart.getTime() &&
     event.endTime.getTime() > event.startTime.getTime()
   ) {
-    newEnd = new Date(
-      newStart.getTime() + (event.endTime.getTime() - event.startTime.getTime())
-    );
+    newEnd = new Date(newStart.getTime() + (event.endTime.getTime() - event.startTime.getTime()));
   }
 
   await prisma.calendarEvent.update({
@@ -1220,7 +1156,7 @@ export async function moveCalendarEvent(
         auditEventTitle(event.visibility, event.title),
         { start: event.startTime, isAllDay: event.isAllDay },
         { start: newStart, isAllDay },
-        tz
+        tz,
       ),
     });
   }

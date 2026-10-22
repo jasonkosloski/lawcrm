@@ -29,18 +29,10 @@
  */
 
 import { Prisma } from "@/generated/prisma/client";
-import {
-  decryptToken,
-  encryptToken,
-  isEncryptedToken,
-} from "@/lib/email-token-crypto";
+import { decryptToken, encryptToken, isEncryptedToken } from "@/lib/email-token-crypto";
 
 const TOKEN_FIELDS = ["accessToken", "refreshToken"] as const;
-const MESSENGER_FIELDS = [
-  "accessToken",
-  "refreshToken",
-  "webhookSecret",
-] as const;
+const MESSENGER_FIELDS = ["accessToken", "refreshToken", "webhookSecret"] as const;
 
 type FieldList = readonly string[];
 

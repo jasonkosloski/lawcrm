@@ -38,15 +38,9 @@ import { getCurrentUserId } from "@/lib/current-user";
 // (UTC in production) and store a 9:00 AM hearing as 3:00 AM.
 import { parseDateOnly, parseWallClock } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
-import {
-  requirePermission,
-  requirePermissions,
-} from "@/lib/permission-check";
+import { requirePermission, requirePermissions } from "@/lib/permission-check";
 import { requiredCapturePermissions } from "@/lib/capture-permissions";
-import {
-  addDefaultEventAttendees,
-  resolveAutoAddTeam,
-} from "@/lib/calendar-default-attendees";
+import { addDefaultEventAttendees, resolveAutoAddTeam } from "@/lib/calendar-default-attendees";
 import { pushEventToGoogle } from "@/lib/google/google-calendar-push";
 import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
 import { EVENT_TYPES } from "@/lib/constants/calendar-event-type";
@@ -68,7 +62,6 @@ import type { LeadStage } from "@/lib/constants/lead-stage";
 import { assertLeadAccess } from "@/lib/lead-access";
 
 // ── Shared helpers ──────────────────────────────────────────────────────
-
 
 /** Identifies the just-created primary record so sibling notes can
  *  link directly to it (e.g. a "court note" sibling on the Events
@@ -94,15 +87,10 @@ type CaptureCtx = {
   createdEventIds: string[];
 };
 
-async function buildCaptureCtx(
-  matterId: string,
-  captures: ValidCapture[]
-): Promise<CaptureCtx> {
+async function buildCaptureCtx(matterId: string, captures: ValidCapture[]): Promise<CaptureCtx> {
   return {
     autoAddTeam: await resolveAutoAddTeam(matterId, captures),
-    tz: captures.some((c) => c.kind === "event")
-      ? await getCurrentUserTimeZone()
-      : "UTC",
+    tz: captures.some((c) => c.kind === "event") ? await getCurrentUserTimeZone() : "UTC",
     createdEventIds: [],
   };
 }
@@ -135,7 +123,7 @@ async function createCaptureRecord(
   matterId: string,
   userId: string,
   ctx: CaptureCtx,
-  linkToPrimary: PrimaryRef = null
+  linkToPrimary: PrimaryRef = null,
 ): Promise<void> {
   if (cap.kind === "task") {
     await tx.task.create({
@@ -155,10 +143,8 @@ async function createCaptureRecord(
         // alongside a primary event or deadline, point the FK back
         // so the spawned task surfaces under the primary AND the
         // task itself shows a "From event" / "From deadline" chip.
-        eventId:
-          linkToPrimary?.kind === "event" ? linkToPrimary.id : null,
-        deadlineId:
-          linkToPrimary?.kind === "deadline" ? linkToPrimary.id : null,
+        eventId: linkToPrimary?.kind === "event" ? linkToPrimary.id : null,
+        deadlineId: linkToPrimary?.kind === "deadline" ? linkToPrimary.id : null,
       },
     });
   } else if (cap.kind === "event") {
@@ -195,8 +181,7 @@ async function createCaptureRecord(
         description: cap.description || null,
         ownerId: userId,
         // Sibling-capture link-back from a primary event.
-        eventId:
-          linkToPrimary?.kind === "event" ? linkToPrimary.id : null,
+        eventId: linkToPrimary?.kind === "event" ? linkToPrimary.id : null,
       },
     });
   } else if (cap.kind === "time") {
@@ -210,14 +195,12 @@ async function createCaptureRecord(
         narrative: cap.narrative || null,
         // When this time entry is a sibling of a freshly-created event,
         // link it so the event can surface the entry later.
-        calendarEventId:
-          linkToPrimary?.kind === "event" ? linkToPrimary.id : null,
+        calendarEventId: linkToPrimary?.kind === "event" ? linkToPrimary.id : null,
         // Same link-backs as "Log time on this task/deadline"
         // (time-on-entity.ts), so the entry carries its "From task" /
         // "From deadline" chip and counts as time on that record.
         taskId: linkToPrimary?.kind === "task" ? linkToPrimary.id : null,
-        deadlineId:
-          linkToPrimary?.kind === "deadline" ? linkToPrimary.id : null,
+        deadlineId: linkToPrimary?.kind === "deadline" ? linkToPrimary.id : null,
         source:
           linkToPrimary?.kind === "event"
             ? "calendar"
@@ -237,10 +220,8 @@ async function createCaptureRecord(
         type: cap.type,
         isPinned: cap.isPinned,
         taskId: linkToPrimary?.kind === "task" ? linkToPrimary.id : null,
-        calendarEventId:
-          linkToPrimary?.kind === "event" ? linkToPrimary.id : null,
-        deadlineId:
-          linkToPrimary?.kind === "deadline" ? linkToPrimary.id : null,
+        calendarEventId: linkToPrimary?.kind === "event" ? linkToPrimary.id : null,
+        deadlineId: linkToPrimary?.kind === "deadline" ? linkToPrimary.id : null,
         timeEntryId: linkToPrimary?.kind === "time" ? linkToPrimary.id : null,
       },
       select: { id: true },
@@ -258,7 +239,7 @@ async function createCaptureRecord(
 function revalidateTouched(
   matterId: string,
   captures: ValidCapture[],
-  primaryKind: "task" | "event" | "deadline" | "time"
+  primaryKind: "task" | "event" | "deadline" | "time",
 ): void {
   const kinds = new Set<string>([primaryKind, ...captures.map((c) => c.kind)]);
   revalidatePath(`/matters/${matterId}`);
@@ -269,14 +250,13 @@ function revalidateTouched(
   }
   if (kinds.has("deadline")) revalidateDeadlineSurfaces(matterId);
   if (kinds.has("time")) revalidatePath(`/matters/${matterId}/time`);
-  if (kinds.has("note_sibling"))
-    revalidatePath(`/matters/${matterId}/notes`);
+  if (kinds.has("note_sibling")) revalidatePath(`/matters/${matterId}/notes`);
 }
 
 /** Parses + validates the JSON-encoded sibling array. Returns either
  *  a flat error map (for the form state) or the validated array. */
 function parseAttachments(
-  raw: string | undefined
+  raw: string | undefined,
 ):
   | { ok: true; captures: ValidCapture[] }
   | { ok: false; attachmentErrors: Record<string, Record<string, string[]>> } {
@@ -294,8 +274,7 @@ function parseAttachments(
     const result = captureSchema.safeParse(a);
     if (!result.success) {
       const tempId =
-        (a as { tempId?: unknown })?.tempId &&
-        typeof (a as { tempId: unknown }).tempId === "string"
+        (a as { tempId?: unknown })?.tempId && typeof (a as { tempId: unknown }).tempId === "string"
           ? ((a as { tempId: string }).tempId as string)
           : "unknown";
       attachmentErrors[tempId] = result.error.flatten().fieldErrors;
@@ -303,8 +282,7 @@ function parseAttachments(
     }
     validCaptures.push(result.data);
   }
-  if (Object.keys(attachmentErrors).length > 0)
-    return { ok: false, attachmentErrors };
+  if (Object.keys(attachmentErrors).length > 0) return { ok: false, attachmentErrors };
   return { ok: true, captures: validCaptures };
 }
 
@@ -326,7 +304,7 @@ const taskSchema = z.object({
 export async function createTaskWithCaptures(
   matterId: string,
   _prev: CaptureFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<CaptureFormState> {
   await requirePermission("tasks.create");
   await assertMatterAccess(matterId);
@@ -350,9 +328,7 @@ export async function createTaskWithCaptures(
     };
   }
 
-  const dueDate = parsed.data.dueDate
-    ? parseDateOnly(parsed.data.dueDate)
-    : null;
+  const dueDate = parsed.data.dueDate ? parseDateOnly(parsed.data.dueDate) : null;
   if (parsed.data.dueDate && !dueDate) {
     return {
       status: "error",
@@ -446,17 +422,14 @@ const eventSchema = z
      *  createCalendarEvent. "default" defers to the resolver
      *  (matter team sees by definition); "show_details" exposes
      *  the event firm-wide. */
-    visibility: z
-      .enum(["default", "show_details", "private"])
-      .optional()
-      .default("default"),
+    visibility: z.enum(["default", "show_details", "private"]).optional().default("default"),
   })
   .superRefine(checkEventTimes);
 
 export async function createEventWithCaptures(
   matterId: string,
   _prev: CaptureFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<CaptureFormState> {
   await requirePermission("events.create");
   await assertMatterAccess(matterId);
@@ -560,7 +533,7 @@ const deadlineSchema = z.object({
 export async function createDeadlineWithCaptures(
   matterId: string,
   _prev: CaptureFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<CaptureFormState> {
   await requirePermission("deadlines.create");
   await assertMatterAccess(matterId);
@@ -662,7 +635,7 @@ const timeEntrySchema = z.object({
 export async function createTimeEntryWithCaptures(
   matterId: string,
   _prev: CaptureFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<CaptureFormState> {
   await requirePermission("time_entries.create");
   await assertMatterAccess(matterId);
@@ -751,9 +724,7 @@ export async function createTimeEntryWithCaptures(
 const LEAD_CONVERTED = "converted" satisfies LeadStage;
 
 /** Form-level error for a lead that can't take new records, or null. */
-async function leadWriteError(
-  leadId: string
-): Promise<Record<string, string[]> | null> {
+async function leadWriteError(leadId: string): Promise<Record<string, string[]> | null> {
   const lead = await prisma.lead.findUnique({
     where: { id: leadId },
     select: { stage: true },
@@ -761,9 +732,7 @@ async function leadWriteError(
   if (!lead) return { _form: ["This lead no longer exists. Reload the page."] };
   if (lead.stage === LEAD_CONVERTED) {
     return {
-      _form: [
-        "This lead is already converted — add this on the matter instead.",
-      ],
+      _form: ["This lead is already converted — add this on the matter instead."],
     };
   }
   return null;
@@ -771,9 +740,7 @@ async function leadWriteError(
 
 /** The lead composers never send siblings; refuse rather than drop. */
 const NO_LEAD_CAPTURES: Record<string, string[]> = {
-  _form: [
-    "Intake tasks and events can't carry other items — add those once the lead is a matter.",
-  ],
+  _form: ["Intake tasks and events can't carry other items — add those once the lead is a matter."],
 };
 
 function revalidateLead(leadId: string, tab: "tasks" | "events"): void {
@@ -787,7 +754,7 @@ function revalidateLead(leadId: string, tab: "tasks" | "events"): void {
 export async function createLeadTask(
   leadId: string,
   _prev: CaptureFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<CaptureFormState> {
   await requirePermission("tasks.create");
   // Restricted intake: 404 unless the viewer may see this lead (ADR-049).
@@ -805,9 +772,7 @@ export async function createLeadTask(
     return { status: "error", errors: NO_LEAD_CAPTURES, values: raw };
   }
 
-  const dueDate = parsed.data.dueDate
-    ? parseDateOnly(parsed.data.dueDate)
-    : null;
+  const dueDate = parsed.data.dueDate ? parseDateOnly(parsed.data.dueDate) : null;
   if (parsed.data.dueDate && !dueDate) {
     return {
       status: "error",
@@ -869,7 +834,7 @@ export async function createLeadTask(
 export async function createLeadEvent(
   leadId: string,
   _prev: CaptureFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<CaptureFormState> {
   await requirePermission("events.create");
   // Restricted intake: 404 unless the viewer may see this lead (ADR-049).

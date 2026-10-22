@@ -47,8 +47,7 @@ const RECENT_CAP = 20;
  *  longer see (walled off after it was sent). Title/body were
  *  rendered at write time and can carry the matter name, amounts or
  *  task titles, so all of it goes — not just `matterName`. */
-export const HIDDEN_MATTER_NOTIFICATION_TITLE =
-  "Update on a matter you no longer have access to";
+export const HIDDEN_MATTER_NOTIFICATION_TITLE = "Update on a matter you no longer have access to";
 
 type NotificationDbRow = {
   id: string;
@@ -61,11 +60,7 @@ type NotificationDbRow = {
   createdAt: Date;
 };
 
-function toRow(
-  r: NotificationDbRow,
-  visible: Set<string>,
-  isRead: boolean
-): NotificationRow {
+function toRow(r: NotificationDbRow, visible: Set<string>, isRead: boolean): NotificationRow {
   const hidden = r.matterId !== null && !visible.has(r.matterId);
   return {
     id: r.id,
@@ -117,7 +112,7 @@ export async function getNotificationsBell(): Promise<NotificationsBell> {
 
   const visible = await filterAccessibleMatterIds(
     userId,
-    [...unread, ...recentRead].flatMap((r) => (r.matterId ? [r.matterId] : []))
+    [...unread, ...recentRead].flatMap((r) => (r.matterId ? [r.matterId] : [])),
   );
   // Hidden matter: the notification exists, its contents do not leak.
   const map = (rows: typeof unread, isRead: boolean): NotificationRow[] =>
@@ -129,10 +124,7 @@ export async function getNotificationsBell(): Promise<NotificationsBell> {
     // Unread first (visually distinct in the dropdown), then a tail
     // of read rows so the dropdown doesn't go empty for a brand-new
     // catch-up but also doesn't bury fresh items.
-    recent: [...map(unread, false), ...map(recentRead, true)].slice(
-      0,
-      RECENT_CAP
-    ),
+    recent: [...map(unread, false), ...map(recentRead, true)].slice(0, RECENT_CAP),
   };
 }
 
@@ -154,9 +146,7 @@ export type NotificationsFeed = {
 /** One page of the current user's full notification history, newest
  *  first. Simple offset pagination — a notifications feed is short-
  *  tailed enough that cursor stability isn't worth the ceremony. */
-export async function getNotificationsFeed(
-  page: number
-): Promise<NotificationsFeed> {
+export async function getNotificationsFeed(page: number): Promise<NotificationsFeed> {
   const userId = await getCurrentUserId();
   const asOf = await newestNotificationAt(userId);
 
@@ -166,11 +156,7 @@ export async function getNotificationsFeed(
   ]);
 
   // Clamps junk / out-of-range ?page= values instead of 404ing.
-  const { page: safePage, pageCount, skip } = pageWindow(
-    total,
-    page,
-    NOTIFICATIONS_PAGE_SIZE
-  );
+  const { page: safePage, pageCount, skip } = pageWindow(total, page, NOTIFICATIONS_PAGE_SIZE);
 
   const rows = await prisma.notification.findMany({
     where: { userId },
@@ -183,7 +169,7 @@ export async function getNotificationsFeed(
   });
   const visible = await filterAccessibleMatterIds(
     userId,
-    rows.flatMap((r) => (r.matterId ? [r.matterId] : []))
+    rows.flatMap((r) => (r.matterId ? [r.matterId] : [])),
   );
 
   return {

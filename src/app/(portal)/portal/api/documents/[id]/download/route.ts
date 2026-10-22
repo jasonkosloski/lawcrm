@@ -15,12 +15,7 @@
 import { Readable } from "node:stream";
 import { getPortalIdentity } from "@/lib/portal-access";
 import { canPortalDownload } from "@/lib/portal/document-visibility.server";
-import {
-  isBlobKey,
-  openReadStream,
-  signedBlobUrl,
-  statFile,
-} from "@/lib/file-storage";
+import { isBlobKey, openReadStream, signedBlobUrl, statFile } from "@/lib/file-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +30,7 @@ function notFound(): Response {
 
 export async function GET(
   _req: Request,
-  ctx: { params: Promise<{ id: string }> }
+  ctx: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const identity = await getPortalIdentity();
   if (!identity) return notFound();

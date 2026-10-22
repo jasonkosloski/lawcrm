@@ -92,9 +92,7 @@ describe("getPaletteData", () => {
 
     const data = await getPaletteData();
 
-    expect(
-      data.items.find((i) => i.kind === "matter" && i.id === matterId)
-    ).toEqual({
+    expect(data.items.find((i) => i.kind === "matter" && i.id === matterId)).toEqual({
       kind: "matter",
       id: matterId,
       name: "Client v. Acme",
@@ -105,9 +103,7 @@ describe("getPaletteData", () => {
       clientName: "Cora Client",
       isPinned: true,
     });
-    expect(
-      data.items.find((i) => i.kind === "contact" && i.id === contactId)
-    ).toEqual({
+    expect(data.items.find((i) => i.kind === "contact" && i.id === contactId)).toEqual({
       kind: "contact",
       id: contactId,
       name: "Cora Client",
@@ -115,18 +111,14 @@ describe("getPaletteData", () => {
       organization: "Acme Co",
       contactType: "client",
     });
-    expect(
-      data.items.find((i) => i.kind === "lead" && i.id === leadId)
-    ).toEqual({
+    expect(data.items.find((i) => i.kind === "lead" && i.id === leadId)).toEqual({
       kind: "lead",
       id: leadId,
       name: "Larry Lead",
       email: "larry@example.com",
       stage: "new",
     });
-    expect(
-      data.items.find((i) => i.kind === "user" && i.id === userId)
-    ).toEqual({
+    expect(data.items.find((i) => i.kind === "user" && i.id === userId)).toEqual({
       kind: "user",
       id: userId,
       name: "Paula Palette",
@@ -171,9 +163,7 @@ describe("getPaletteData", () => {
 
     const data = await getPaletteData();
 
-    const matter = data.items.find(
-      (i) => i.kind === "matter" && i.id === matterId
-    );
+    const matter = data.items.find((i) => i.kind === "matter" && i.id === matterId);
     expect(matter).toMatchObject({ isPinned: false });
   });
 
@@ -222,8 +212,7 @@ describe("getPaletteData", () => {
     // stalest and must fall off; index 501 is the freshest and must
     // survive. (Prisma lets an explicit `updatedAt` override the
     // @updatedAt default on create.)
-    const stamp = (i: number) =>
-      new Date(Date.UTC(2026, 0, 1) + i * 60_000);
+    const stamp = (i: number) => new Date(Date.UTC(2026, 0, 1) + i * 60_000);
     const idx = Array.from({ length: 502 }, (_, i) => i);
     await prisma.contact.createMany({
       data: idx.map((i) => ({
@@ -257,8 +246,7 @@ describe("getPaletteData", () => {
 
     const data = await getPaletteData();
 
-    const byKind = (kind: string) =>
-      data.items.filter((i) => i.kind === kind);
+    const byKind = (kind: string) => data.items.filter((i) => i.kind === kind);
     expect(byKind("contact")).toHaveLength(500);
     expect(byKind("lead")).toHaveLength(500);
     expect(byKind("matter")).toHaveLength(500);

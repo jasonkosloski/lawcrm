@@ -29,10 +29,7 @@ import {
 } from "@/app/actions/portal-status";
 import { formatDate } from "@/lib/format-date";
 import { confirmAction, notifyError } from "@/lib/feedback";
-import type {
-  ClientStatusCardData,
-  ClientStatusUpdateRow,
-} from "@/lib/queries/portal-status";
+import type { ClientStatusCardData, ClientStatusUpdateRow } from "@/lib/queries/portal-status";
 
 type Editing = { mode: "new" } | { mode: "edit"; update: ClientStatusUpdateRow };
 
@@ -86,9 +83,7 @@ export function ClientStatusCard({
     <div className="flex items-start gap-2">
       <div className="min-w-0 flex-1">
         <div className="text-xs font-medium text-ink">{u.stageLabel}</div>
-        <div className="mt-0.5 whitespace-pre-line break-words text-xs text-ink-2">
-          {u.body}
-        </div>
+        <div className="mt-0.5 whitespace-pre-line break-words text-xs text-ink-2">{u.body}</div>
         <div className="mt-0.5 text-2xs text-ink-4">
           {formatDate(u.postedAt, "medium", tz)} · {u.postedByName}
           {u.editedAt && " · edited"}
@@ -107,12 +102,7 @@ export function ClientStatusCard({
             </Button>
           )}
           {canDelete && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={pending}
-              onClick={() => remove(u)}
-            >
+            <Button size="sm" variant="outline" disabled={pending} onClick={() => remove(u)}>
               Delete
             </Button>
           )}
@@ -273,10 +263,7 @@ function StatusDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               Close
             </Button>
-            <Button
-              type="submit"
-              disabled={pending || !stageLabel.trim() || !body.trim()}
-            >
+            <Button type="submit" disabled={pending || !stageLabel.trim() || !body.trim()}>
               {pending ? "Saving…" : existing ? "Save" : "Post update"}
             </Button>
           </DialogFooter>

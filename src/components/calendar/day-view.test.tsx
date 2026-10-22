@@ -20,10 +20,7 @@
 
 import { describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import type {
-  CalendarEventRow,
-  CalendarDeadlineRow,
-} from "@/lib/queries/calendar";
+import type { CalendarEventRow, CalendarDeadlineRow } from "@/lib/queries/calendar";
 
 const { searchParams } = vi.hoisted(() => ({
   searchParams: new URLSearchParams("view=day&d=2026-07-07"),
@@ -98,13 +95,9 @@ const deadline = (over: Partial<CalendarDeadlineRow>): CalendarDeadlineRow => ({
 describe("bucketDayItems", () => {
   test("splits a day's items into all-day / timed / deadlines", () => {
     const result = bucketDayItems(
-      [
-        event({ id: "timed" }),
-        event({ id: "allday", isAllDay: true }),
-        deadline({ id: "dl" }),
-      ],
+      [event({ id: "timed" }), event({ id: "allday", isAllDay: true }), deadline({ id: "dl" })],
       DAY_KEY,
-      TZ
+      TZ,
     );
     expect(result.timedEvents.map((e) => e.id)).toEqual(["timed"]);
     expect(result.allDayEvents.map((e) => e.id)).toEqual(["allday"]);
@@ -122,9 +115,7 @@ describe("bucketDayItems", () => {
     const result = bucketDayItems([lateNight], DAY_KEY, TZ);
     expect(result.timedEvents.map((e) => e.id)).toEqual(["late"]);
     // Same instants viewed from Tokyo are July 8 — excluded.
-    expect(
-      bucketDayItems([lateNight], DAY_KEY, "Asia/Tokyo").timedEvents
-    ).toEqual([]);
+    expect(bucketDayItems([lateNight], DAY_KEY, "Asia/Tokyo").timedEvents).toEqual([]);
   });
 
   test("excludes items on neighboring days (e.g. after an optimistic move)", () => {
@@ -141,13 +132,17 @@ describe("bucketDayItems", () => {
   test("orders timed events by start and deadlines critical-first", () => {
     const result = bucketDayItems(
       [
-        event({ id: "later", startTime: new Date("2026-07-07T20:00:00.000Z"), endTime: new Date("2026-07-07T21:00:00.000Z") }),
+        event({
+          id: "later",
+          startTime: new Date("2026-07-07T20:00:00.000Z"),
+          endTime: new Date("2026-07-07T21:00:00.000Z"),
+        }),
         event({ id: "earlier" }),
         deadline({ id: "manual", deadlineKind: "manual" }),
         deadline({ id: "crit", deadlineKind: "critical" }),
       ],
       DAY_KEY,
-      TZ
+      TZ,
     );
     expect(result.timedEvents.map((e) => e.id)).toEqual(["earlier", "later"]);
     expect(result.deadlines.map((d) => d.id)).toEqual(["crit", "manual"]);
@@ -179,9 +174,7 @@ describe("bucketDayItems — date-only items (ADR-012)", () => {
       startTime: parseDateOnly("2026-07-07")!,
       endTime: parseDateOnly("2026-07-07")!,
     });
-    expect(
-      bucketDayItems([trial], DAY_KEY, TZ).allDayEvents.map((e) => e.id)
-    ).toEqual(["trial"]);
+    expect(bucketDayItems([trial], DAY_KEY, TZ).allDayEvents.map((e) => e.id)).toEqual(["trial"]);
     expect(bucketDayItems([trial], "2026-07-06", TZ).allDayEvents).toEqual([]);
   });
 
@@ -192,9 +185,7 @@ describe("bucketDayItems — date-only items (ADR-012)", () => {
       startTime: parseDateOnly("2026-07-06")!,
       endTime: parseDateOnly("2026-07-10")!,
     });
-    expect(
-      bucketDayItems([trial], DAY_KEY, TZ).allDayEvents.map((e) => e.id)
-    ).toEqual(["trial"]);
+    expect(bucketDayItems([trial], DAY_KEY, TZ).allDayEvents.map((e) => e.id)).toEqual(["trial"]);
     expect(bucketDayItems([trial], "2026-07-11", TZ).allDayEvents).toEqual([]);
   });
 });
@@ -213,7 +204,7 @@ describe("DayView render", () => {
         ]}
         canEditEvents={false}
         userTz={TZ}
-      />
+      />,
     );
     expect(screen.getByText("Opposition due")).toBeTruthy();
   });
@@ -233,7 +224,7 @@ describe("DayView render", () => {
         ]}
         canEditEvents={false}
         userTz={TZ}
-      />
+      />,
     );
 
     // Timed chip — full-width day column has room for the
@@ -257,9 +248,7 @@ describe("DayView render", () => {
   });
 
   test("omits the deadlines section when the day has none", () => {
-    render(
-      <DayView day={DAY} items={[event({})]} canEditEvents={false} userTz={TZ} />
-    );
+    render(<DayView day={DAY} items={[event({})]} canEditEvents={false} userTz={TZ} />);
     expect(screen.queryByText("due")).toBeNull();
   });
 

@@ -16,9 +16,7 @@ export type PortalAccessRow = {
 };
 
 /** Portal access list for a matter. Needs portal.view plus matter access. */
-export async function getPortalAccessForMatter(
-  matterId: string
-): Promise<PortalAccessRow[]> {
+export async function getPortalAccessForMatter(matterId: string): Promise<PortalAccessRow[]> {
   await assertMatterAccess(matterId);
   if (!(await currentUserHasPermission("portal.view"))) return [];
 
@@ -76,7 +74,7 @@ export type PortalCardData = {
 async function getBilledPortalContacts(
   matterId: string,
   clientId: string | null,
-  firmPortalEnabled: boolean
+  firmPortalEnabled: boolean,
 ): Promise<string[]> {
   if (!firmPortalEnabled) return [];
   const invoices = await prisma.invoice.findMany({
@@ -113,9 +111,7 @@ async function getBilledPortalContacts(
 }
 
 /** Everything the matter Portal card needs. Call only for portal.view holders. */
-export async function getPortalCardData(
-  matterId: string
-): Promise<PortalCardData> {
+export async function getPortalCardData(matterId: string): Promise<PortalCardData> {
   // Same gate order as getPortalAccessForMatter: wall first (throws
   // notFound), then the permission, before any matter-scoped query.
   await assertMatterAccess(matterId);
@@ -140,7 +136,7 @@ export async function getPortalCardData(
       prisma.firm.findUnique({
         where: { id: f.id },
         select: { portalEnabled: true },
-      })
+      }),
     ),
     canViewBilling
       ? prisma.matter.findUnique({
@@ -158,11 +154,7 @@ export async function getPortalCardData(
   const portalEnabled = firm?.portalEnabled ?? false;
   if (!billingMatter) return { rows, contacts, portalEnabled };
   const billedPortalContacts = billingMatter.portalBillingEnabled
-    ? await getBilledPortalContacts(
-        matterId,
-        billingMatter.clientId,
-        portalEnabled
-      )
+    ? await getBilledPortalContacts(matterId, billingMatter.clientId, portalEnabled)
     : [];
   return {
     rows,

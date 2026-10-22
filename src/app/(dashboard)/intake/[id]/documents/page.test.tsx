@@ -19,11 +19,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { lead: { findUnique: vi.fn() } },
 }));
 vi.mock("@/components/documents/documents-browser", () => ({
-  DocumentsBrowser: (props: {
-    scope: unknown;
-    folderParam: string | null;
-    writable?: boolean;
-  }) => (
+  DocumentsBrowser: (props: { scope: unknown; folderParam: string | null; writable?: boolean }) => (
     <div
       data-testid="browser"
       data-scope={JSON.stringify(props.scope)}
@@ -37,9 +33,7 @@ import { prisma } from "@/lib/prisma";
 import LeadDocumentsPage from "./page";
 
 const lead = (stage: string, convertedMatterId: string | null = null) =>
-  vi
-    .mocked(prisma.lead.findUnique)
-    .mockResolvedValue({ stage, convertedMatterId } as never);
+  vi.mocked(prisma.lead.findUnique).mockResolvedValue({ stage, convertedMatterId } as never);
 
 const renderPage = async (sp: Record<string, string> = {}) => {
   const ui = await LeadDocumentsPage({
@@ -68,11 +62,10 @@ describe("LeadDocumentsPage", () => {
   test("converted lead: read-only browser + banner linking to the matter's documents", async () => {
     lead("converted", "m_9");
     await renderPage();
-    expect(screen.getByTestId("browser").getAttribute("data-writable")).toBe(
-      "false"
+    expect(screen.getByTestId("browser").getAttribute("data-writable")).toBe("false");
+    expect(screen.getByRole("link", { name: /open matter documents/i })).toHaveAttribute(
+      "href",
+      "/matters/m_9/documents",
     );
-    expect(
-      screen.getByRole("link", { name: /open matter documents/i })
-    ).toHaveAttribute("href", "/matters/m_9/documents");
   });
 });

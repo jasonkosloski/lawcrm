@@ -27,7 +27,13 @@ const TREE: FolderNode[] = [
   { id: "med", name: "Medical", parentId: null, children: [] },
 ];
 
-const doc = (id: string, name: string, folderId: string | null, contentType: string, over: Partial<FileTreeDocument> = {}): FileTreeDocument => ({
+const doc = (
+  id: string,
+  name: string,
+  folderId: string | null,
+  contentType: string,
+  over: Partial<FileTreeDocument> = {},
+): FileTreeDocument => ({
   id,
   name,
   folderId,
@@ -54,7 +60,7 @@ function renderTree(over: Partial<React.ComponentProps<typeof DocumentFileTree>>
       currentId="d3"
       currentFolderId="body"
       {...over}
-    />
+    />,
   );
 }
 
@@ -70,10 +76,19 @@ describe("DocumentFileTree", () => {
     const current = screen.getByRole("link", { name: /cam-01\.mp4/ });
     expect(current).toHaveAttribute("aria-current", "page");
     expect(current).toHaveAttribute("href", "/matters/m1/documents/d3");
-    expect(screen.getByRole("button", { name: /Discovery/ })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("button", { name: /Bodycam/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /Discovery/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /Bodycam/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
     // Unrelated folders start closed; root files are listed.
-    expect(screen.getByRole("button", { name: /Medical/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Medical/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
     expect(screen.queryByText("ER records.pdf")).toBeNull();
     expect(screen.getByRole("link", { name: /Retainer\.pdf/ })).toBeInTheDocument();
   });
@@ -81,7 +96,10 @@ describe("DocumentFileTree", () => {
   test("folders open and close", () => {
     renderTree();
     fireEvent.click(screen.getByRole("button", { name: /Medical/ }));
-    expect(screen.getByRole("link", { name: /ER records\.pdf/ })).toHaveAttribute("href", "/matters/m1/documents/d4");
+    expect(screen.getByRole("link", { name: /ER records\.pdf/ })).toHaveAttribute(
+      "href",
+      "/matters/m1/documents/d4",
+    );
     fireEvent.click(screen.getByRole("button", { name: /Medical/ }));
     expect(screen.queryByText("ER records.pdf")).toBeNull();
   });
@@ -111,7 +129,7 @@ describe("DocumentFileTree", () => {
     renderTree({ scope: { kind: "lead", leadId: "l1" } });
     expect(screen.getByRole("link", { name: /cam-01\.mp4/ })).toHaveAttribute(
       "href",
-      "/intake/l1/documents/d3"
+      "/intake/l1/documents/d3",
     );
   });
 
@@ -123,7 +141,7 @@ describe("DocumentFileTree", () => {
     const medical = screen.getByRole("button", { name: /Medical/ }).closest("li")!;
     expect(within(medical).getByRole("link", { name: /Open folder in Documents/ })).toHaveAttribute(
       "href",
-      "/matters/m1/documents?folder=med"
+      "/matters/m1/documents?folder=med",
     );
     expect(screen.getByText(/too many files to list here/)).toBeInTheDocument();
   });
@@ -132,13 +150,24 @@ describe("DocumentFileTree", () => {
     const docs = [
       ...DOCS,
       doc("e1", "Incident email.eml", "disc", "message/rfc822"),
-      doc("a1", "report.pdf", "disc", "application/pdf", { parentDocumentId: "e1", attachmentIndex: 0 }),
+      doc("a1", "report.pdf", "disc", "application/pdf", {
+        parentDocumentId: "e1",
+        attachmentIndex: 0,
+      }),
       doc("a2", "timeline.csv", "disc", "text/csv", { parentDocumentId: "e1", attachmentIndex: 1 }),
     ];
-    renderTree({ documents: docs, currentId: "a2", currentFolderId: "disc", currentParentId: "e1" });
+    renderTree({
+      documents: docs,
+      currentId: "a2",
+      currentFolderId: "disc",
+      currentParentId: "e1",
+    });
     const toggle = screen.getByRole("button", { name: "Hide attachments of Incident email.eml" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("link", { name: /timeline\.csv/ })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /timeline\.csv/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
     // Attachments aren't listed loose in the folder.
     expect(screen.getAllByRole("link", { name: "report.pdf" })).toHaveLength(1);
     fireEvent.click(toggle);
@@ -149,7 +178,10 @@ describe("DocumentFileTree", () => {
     const docs = [
       ...DOCS,
       doc("e1", "Incident email.eml", null, "message/rfc822"),
-      doc("a1", "dispatch-log.pdf", null, "application/pdf", { parentDocumentId: "e1", attachmentIndex: 0 }),
+      doc("a1", "dispatch-log.pdf", null, "application/pdf", {
+        parentDocumentId: "e1",
+        attachmentIndex: 0,
+      }),
     ];
     renderTree({ documents: docs });
     fireEvent.change(screen.getByLabelText("Filter files"), { target: { value: "dispatch" } });
@@ -163,7 +195,14 @@ describe("DocumentFileTree generated folders", () => {
   test("a system-generated folder is marked", () => {
     renderTree({
       tree: [
-        { id: "g", name: "Dr. Smith", parentId: null, children: [], systemKind: "records_request", recordsRequestId: "r1" },
+        {
+          id: "g",
+          name: "Dr. Smith",
+          parentId: null,
+          children: [],
+          systemKind: "records_request",
+          recordsRequestId: "r1",
+        },
       ],
       documents: [],
       currentId: "",

@@ -12,9 +12,7 @@ export function LeadStageChip({ stage }: { stage: string }) {
         ? "bg-ok-soft text-ok"
         : "bg-paper-2 text-ink-3";
   return (
-    <span
-      className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full ${cls}`}
-    >
+    <span className={`inline-block text-2xs font-medium px-2 py-0.5 rounded-full ${cls}`}>
       {label}
     </span>
   );

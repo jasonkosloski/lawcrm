@@ -24,11 +24,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -58,7 +54,7 @@ function renderForm() {
   return render(
     <UserTimeZoneProvider timeZone="America/Denver">
       <NewEventForm matters={MATTERS} />
-    </UserTimeZoneProvider>
+    </UserTimeZoneProvider>,
   );
 }
 
@@ -163,9 +159,7 @@ describe("error handling", () => {
     });
     await submit();
     await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
-    expect(createMock.mock.calls[0]![1].get("zoomUrl")).toBe(
-      "https://zoom.us/j/8123"
-    );
+    expect(createMock.mock.calls[0]![1].get("zoomUrl")).toBe("https://zoom.us/j/8123");
   });
 
   test("an unusable video link blocks the submit with a message", async () => {
@@ -191,9 +185,7 @@ describe("after success", () => {
     });
     await submit();
 
-    await waitFor(() =>
-      expect(pushMock).toHaveBeenCalledWith("/calendar?event=ev1")
-    );
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/calendar?event=ev1"));
     const button = screen.getByRole("button", { name: /opening/i });
     expect(button).toBeDisabled();
   });

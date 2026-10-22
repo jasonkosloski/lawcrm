@@ -48,9 +48,7 @@ export function NewRequestComposer({
   canCreateContact: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [custodian, setCustodian] = useState<{ id: string; name: string } | null>(
-    null
-  );
+  const [custodian, setCustodian] = useState<{ id: string; name: string } | null>(null);
   const [typeChoice, setTypeChoice] = useState(types[0]?.id ?? ADHOC);
   const [formKey, setFormKey] = useState(0);
   const [, startSubmit] = useTransition();
@@ -65,10 +63,11 @@ export function NewRequestComposer({
     }
     return result;
   };
-  const [state, formAction, isPending] = useDialogActionState<
-    RecordsRequestFormState,
-    FormData
-  >(action, recordsRequestInitialState, expanded);
+  const [state, formAction, isPending] = useDialogActionState<RecordsRequestFormState, FormData>(
+    action,
+    recordsRequestInitialState,
+    expanded,
+  );
   const errs = state.errors ?? {};
   const adHoc = typeChoice === ADHOC;
 
@@ -125,9 +124,7 @@ export function NewRequestComposer({
             ))}
             <NativeSelectOption value={ADHOC}>Ad hoc (other)</NativeSelectOption>
           </NativeSelect>
-          {errs.typeId && (
-            <span className="text-2xs text-warn">{errs.typeId[0]}</span>
-          )}
+          {errs.typeId && <span className="text-2xs text-warn">{errs.typeId[0]}</span>}
         </div>
 
         <div className="flex flex-col gap-1">
@@ -193,9 +190,7 @@ export function NewRequestComposer({
           placeholder="What are you asking for?"
           className={field}
         />
-        {errs.subject && (
-          <span className="text-2xs text-warn">{errs.subject[0]}</span>
-        )}
+        {errs.subject && <span className="text-2xs text-warn">{errs.subject[0]}</span>}
       </div>
 
       <div className="flex flex-col gap-1">
@@ -223,15 +218,11 @@ export function NewRequestComposer({
             Records through
           </label>
           <input id="rr-to" name="dateRangeEnd" type="date" className={field} />
-          {errs.dateRangeEnd && (
-            <span className="text-2xs text-warn">{errs.dateRangeEnd[0]}</span>
-          )}
+          {errs.dateRangeEnd && <span className="text-2xs text-warn">{errs.dateRangeEnd[0]}</span>}
         </div>
       </div>
 
-      {errs._form && (
-        <div className="text-2xs text-warn">{errs._form[0]}</div>
-      )}
+      {errs._form && <div className="text-2xs text-warn">{errs._form[0]}</div>}
 
       <div className="flex items-center justify-end gap-2">
         <button
@@ -241,11 +232,7 @@ export function NewRequestComposer({
         >
           Cancel
         </button>
-        <Button
-          size="sm"
-          type="submit"
-          disabled={isPending}
-        >
+        <Button size="sm" type="submit" disabled={isPending}>
           {isPending ? "Creating…" : "Create request"}
         </Button>
       </div>

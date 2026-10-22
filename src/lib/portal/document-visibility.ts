@@ -37,10 +37,7 @@ export function sharedFolderIds(folders: FolderNode[]): Set<string> {
 }
 
 /** "hidden" always loses; "shared" always wins; null follows the folder. */
-export function isEffectivelyShared(
-  doc: DocShare,
-  shared: Set<string>
-): boolean {
+export function isEffectivelyShared(doc: DocShare, shared: Set<string>): boolean {
   if (doc.clientShare === "hidden") return false;
   if (doc.clientShare === "shared") return true;
   return doc.folderId !== null && shared.has(doc.folderId);
@@ -49,7 +46,7 @@ export function isEffectivelyShared(
 /** Why a document is visible to the client (staff tooltip), or null. */
 export function shareReason(
   doc: DocShare,
-  folders: NamedFolderNode[]
+  folders: NamedFolderNode[],
 ): { kind: "file" } | { kind: "folder"; folderName: string } | null {
   if (doc.clientShare === "hidden") return null;
   if (doc.clientShare === "shared") return { kind: "file" };

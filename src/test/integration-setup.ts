@@ -71,10 +71,7 @@ let lockClient: Client | null = null;
  * wait out the timeout and fail, so they skip it (as before this
  * lock existed). One-shot runs queue.
  */
-export function shouldHoldRunLock(config: {
-  watch?: boolean;
-  ui?: boolean;
-}): boolean {
+export function shouldHoldRunLock(config: { watch?: boolean; ui?: boolean }): boolean {
   return !config.watch && !config.ui;
 }
 
@@ -105,7 +102,7 @@ async function waitForDatabase(): Promise<void> {
       " within 30s. " +
       "Did you start it with `docker compose -f docker-compose.test.yml up -d`?\n" +
       "Last error: " +
-      String(lastError)
+      String(lastError),
   );
 }
 
@@ -129,7 +126,7 @@ async function acquireRunLock(): Promise<void> {
     // different base databases on one server don't block each other.
     const res = await client.query<{ locked: boolean }>(
       "SELECT pg_try_advisory_lock($1, hashtext($2)) AS locked",
-      [RUN_LOCK_KEY, dbNameOf(TEST_DB_URL)]
+      [RUN_LOCK_KEY, dbNameOf(TEST_DB_URL)],
     );
     if (res.rows[0]?.locked) {
       lockClient = client;
@@ -140,7 +137,7 @@ async function acquireRunLock(): Promise<void> {
       console.warn(
         "[integration-setup] Another test run is using this database (likely another `vitest` run " +
           "or a one-shot `npm test` from a commit hook or agent session); waiting for it to finish. " +
-          "To run in parallel, point TEST_DATABASE_URL at its own database."
+          "To run in parallel, point TEST_DATABASE_URL at its own database.",
       );
     }
     if (Date.now() >= deadline) {
@@ -148,7 +145,7 @@ async function acquireRunLock(): Promise<void> {
       throw new Error(
         `Another test run held the lock on ${TEST_DB_URL} for ${LOCK_TIMEOUT_MS} ms ` +
           "(likely another `vitest` run or session on this database). " +
-          "Wait for it, or give this run its own database via TEST_DATABASE_URL."
+          "Wait for it, or give this run its own database via TEST_DATABASE_URL.",
       );
     }
     await new Promise((r) => setTimeout(r, LOCK_POLL_MS));
@@ -171,7 +168,7 @@ async function refreshWorkerDatabases(count: number): Promise<void> {
     // from db push are closed by now; this is belt and braces).
     await admin.query(
       "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
-      [base]
+      [base],
     );
     for (let n = 1; n <= count; n++) {
       const url = workerDbUrl(TEST_DB_URL, n);
@@ -227,20 +224,15 @@ export async function setup(project: TestProject): Promise<void> {
 
   await applyMigrationTriggers();
 
-  await refreshWorkerDatabases(
-    project.vitest.config.maxWorkers || resolveMaxWorkers()
-  );
+  await refreshWorkerDatabases(project.vitest.config.maxWorkers || resolveMaxWorkers());
 }
 
 /** `db push` creates tables only; raw-SQL triggers live in migrations.
  *  Install the transcript purge trigger so tests see prod behaviour. */
 async function applyMigrationTriggers(): Promise<void> {
   const sql = readFileSync(
-    join(
-      process.cwd(),
-      "prisma/migrations/20261021220000_transcript_purges/migration.sql"
-    ),
-    "utf8"
+    join(process.cwd(), "prisma/migrations/20261021220000_transcript_purges/migration.sql"),
+    "utf8",
   );
   const trigger = sql.slice(sql.indexOf("-- transcript purge trigger"));
   const client = new Client({ connectionString: TEST_DB_URL });

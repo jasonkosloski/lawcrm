@@ -22,9 +22,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 
-export async function markNotificationRead(
-  notificationId: string
-): Promise<{ ok: boolean }> {
+export async function markNotificationRead(notificationId: string): Promise<{ ok: boolean }> {
   const userId = await getCurrentUserId();
   // Scoped update — `userId` in the where clause means another
   // user's row can't be flipped via a guessed id.
@@ -46,7 +44,7 @@ export async function markNotificationRead(
  * cutoff is refused rather than widened to "everything".
  */
 export async function markAllNotificationsRead(
-  upTo?: Date | string | null
+  upTo?: Date | string | null,
 ): Promise<{ ok: boolean }> {
   const userId = await getCurrentUserId();
   let cutoff: Date | undefined;

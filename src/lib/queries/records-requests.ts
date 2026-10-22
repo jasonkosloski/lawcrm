@@ -7,12 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { optionalRecordAccessClause } from "@/lib/matter-access";
 import { scopeBasePath, scopeOf, scopeWhere, type RecordScope } from "@/lib/record-scope";
-import {
-  addDaysToKey,
-  daysUntilDateOnly,
-  parseDateOnly,
-  todayKey,
-} from "@/lib/format-date";
+import { addDaysToKey, daysUntilDateOnly, parseDateOnly, todayKey } from "@/lib/format-date";
 import {
   RECORDS_REQUEST_STATUSES,
   RECORDS_TERMINAL_STATUSES,
@@ -84,7 +79,7 @@ export async function getRecordsRequests(
   scope: RecordScope,
   tz: string,
   /** Fee values leave the server only when the viewer may see them. */
-  opts: { includeFees?: boolean } = {}
+  opts: { includeFees?: boolean } = {},
 ): Promise<RecordsRequestRow[]> {
   const rows = await prisma.recordsRequest.findMany({
     where: scopeWhere(scope),
@@ -162,7 +157,7 @@ export async function getRecordsRequestDetail(
   scope: RecordScope,
   id: string,
   /** Fee values leave the server only when the viewer may see them. */
-  opts: { includeFees?: boolean } = {}
+  opts: { includeFees?: boolean } = {},
 ): Promise<RecordsRequestDetail | null> {
   const fees = opts.includeFees === true;
   const r = await prisma.recordsRequest.findFirst({
@@ -216,8 +211,7 @@ export async function getRecordsRequestDetail(
       id: d.id,
       name: d.name,
       role:
-        d.recordsRequestRole === "request_letter" ||
-        d.recordsRequestRole === "received_records"
+        d.recordsRequestRole === "request_letter" || d.recordsRequestRole === "received_records"
           ? d.recordsRequestRole
           : null,
       href: `${base}/documents/${d.id}`,
@@ -254,10 +248,7 @@ export async function getMyRecordsToChase(tz: string): Promise<RecordsChaseItem[
         {
           ownerId: viewerId,
           status: { notIn: [...RECORDS_TERMINAL_STATUSES] },
-          OR: [
-            { responseDueDate: { lt: todayStart } },
-            { nextFollowUpDate: { lt: windowEnd } },
-          ],
+          OR: [{ responseDueDate: { lt: todayStart } }, { nextFollowUpDate: { lt: windowEnd } }],
         },
       ],
     },
@@ -310,7 +301,7 @@ export async function getMyRecordsToChase(tz: string): Promise<RecordsChaseItem[
     (a, b) =>
       Number(b.overdue) - Number(a.overdue) ||
       a.sortKey.localeCompare(b.sortKey) ||
-      a.id.localeCompare(b.id)
+      a.id.localeCompare(b.id),
   );
   return items.map((i) => ({
     id: i.id,

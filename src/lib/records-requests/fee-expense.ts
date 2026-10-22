@@ -15,10 +15,7 @@ export function recordsFeeDescription(r: {
 }
 
 /** Only a positive fee with a paid date is booked (a $0 fee never is). */
-export function feeMakesExpense(
-  feeAmount: Prisma.Decimal | null,
-  feePaidAt: Date | null
-): boolean {
+export function feeMakesExpense(feeAmount: Prisma.Decimal | null, feePaidAt: Date | null): boolean {
   return !!feeAmount && feeAmount.gt(0) && !!feePaidAt;
 }
 

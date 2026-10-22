@@ -14,11 +14,7 @@ import { render } from "@testing-library/react";
 
 // Pure anchor stand-in — the list only needs href-based navigation.
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -58,13 +54,7 @@ function makeThread(overrides: Partial<MessengerThreadRow>): MessengerThreadRow 
 }
 
 function renderList(thread: MessengerThreadRow) {
-  return render(
-    <MessengerThreadList
-      threads={[thread]}
-      filter="all"
-      selectedThreadId={null}
-    />
-  );
+  return render(<MessengerThreadList threads={[thread]} filter="all" selectedThreadId={null} />);
 }
 
 describe("MessengerThreadList — preview icon per item kind", () => {
@@ -147,7 +137,7 @@ describe("MessengerThreadList — preview icon per item kind", () => {
         lastDirection: "inbound",
         lastBody: "Missed call",
         lastCallStatus: "missed",
-      })
+      }),
     );
     expect(getByText("Missed call").className).toContain("text-warn");
   });
@@ -159,12 +149,10 @@ describe("MessengerThreadList — preview icon per item kind", () => {
         lastDirection: "inbound",
         lastBody: "Tried to reach the office",
         lastCallStatus: "no_answer",
-      })
+      }),
     );
     expect(container.querySelector(".lucide-phone-missed")).not.toBeNull();
-    expect(getByText("Tried to reach the office").className).toContain(
-      "text-warn"
-    );
+    expect(getByText("Tried to reach the office").className).toContain("text-warn");
   });
 
   test("answered call with a summary body does not get the missed treatment", () => {
@@ -174,13 +162,11 @@ describe("MessengerThreadList — preview icon per item kind", () => {
         lastDirection: "inbound",
         lastBody: "Discussed settlement terms",
         lastCallStatus: "answered",
-      })
+      }),
     );
     expect(container.querySelector(".lucide-phone-missed")).toBeNull();
     expect(container.querySelector(".lucide-phone-incoming")).not.toBeNull();
-    expect(getByText("Discussed settlement terms").className).not.toContain(
-      "text-warn"
-    );
+    expect(getByText("Discussed settlement terms").className).not.toContain("text-warn");
   });
 
   test("busy inbound call renders neutrally (matches reader / phone log)", () => {
@@ -190,7 +176,7 @@ describe("MessengerThreadList — preview icon per item kind", () => {
         lastDirection: "inbound",
         lastBody: "Inbound call",
         lastCallStatus: "busy",
-      })
+      }),
     );
     expect(container.querySelector(".lucide-phone-missed")).toBeNull();
     expect(container.querySelector(".lucide-phone-incoming")).not.toBeNull();

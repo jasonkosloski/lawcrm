@@ -126,7 +126,7 @@ export function DocumentFileTree({
   const [query, setQuery] = useState("");
   const filtered = useMemo(
     () => filterTree(tree, byFolder, query, attachments),
-    [tree, byFolder, query, attachments]
+    [tree, byFolder, query, attachments],
   );
   // Folder ids, plus `doc:<emailId>` for emails opened to show attachments.
   const [expanded, setExpanded] = useState<Set<string>>(
@@ -135,7 +135,7 @@ export function DocumentFileTree({
         ...ancestorChain(tree, currentFolderId),
         ...(currentParentId ? [`doc:${currentParentId}`] : []),
         `doc:${currentId}`,
-      ])
+      ]),
   );
   const [showAll, setShowAll] = useState<Set<string>>(new Set());
   const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
@@ -151,7 +151,7 @@ export function DocumentFileTree({
           ...ancestorChain(tree, currentFolderId),
           ...(currentParentId ? [`doc:${currentParentId}`] : []),
           `doc:${currentId}`,
-        ])
+        ]),
     );
   }
 
@@ -203,7 +203,11 @@ export function DocumentFileTree({
               aria-label={`${open ? "Hide" : "Show"} attachments of ${doc.name}`}
               className="inline-flex h-5 w-4 shrink-0 items-center justify-center text-ink-4 hover:text-ink"
             >
-              {open ? <ChevronDown className="h-3 w-3" aria-hidden /> : <ChevronRight className="h-3 w-3" aria-hidden />}
+              {open ? (
+                <ChevronDown className="h-3 w-3" aria-hidden />
+              ) : (
+                <ChevronRight className="h-3 w-3" aria-hidden />
+              )}
             </button>
           ) : (
             <span className="w-4 shrink-0" aria-hidden />
@@ -215,7 +219,9 @@ export function DocumentFileTree({
             title={doc.name}
             className={cn(
               "flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1 pl-1 pr-2 text-xs",
-              isCurrent ? "bg-brand-soft font-medium text-brand-700" : "text-ink-2 hover:bg-paper-2 hover:text-ink"
+              isCurrent
+                ? "bg-brand-soft font-medium text-brand-700"
+                : "text-ink-2 hover:bg-paper-2 hover:text-ink",
             )}
           >
             <Icon className="h-3.5 w-3.5 shrink-0 text-ink-4" aria-hidden />
@@ -312,14 +318,16 @@ export function DocumentFileTree({
   };
 
   const rootListsFiles = complete || currentFolderId === null;
-  const nothing =
-    filtered !== null && filtered.files.size === 0 && filtered.folders.size === 0;
+  const nothing = filtered !== null && filtered.files.size === 0 && filtered.folders.size === 0;
 
   return (
     <aside aria-label="Matter files" className="hidden w-64 shrink-0 flex-col gap-2 lg:flex">
       <div className="flex items-center gap-1.5">
         <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-4" aria-hidden />
+          <Search
+            className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-4"
+            aria-hidden
+          />
           <input
             type="search"
             value={query}
@@ -344,7 +352,9 @@ export function DocumentFileTree({
           {tree.map((n) => folderRow(n, 0))}
           {rootListsFiles && filesIn(ROOT_KEY, 0)}
         </ul>
-        {nothing && <div className="px-2 py-3 text-2xs text-ink-4">No files match “{query.trim()}”.</div>}
+        {nothing && (
+          <div className="px-2 py-3 text-2xs text-ink-4">No files match “{query.trim()}”.</div>
+        )}
         {!complete && (
           <div className="mt-1 border-t border-line px-2 pt-2 text-2xs text-ink-4">
             There are too many files to list here; open other folders in Documents.

@@ -4,9 +4,11 @@ Cross-cutting tech debt, consistency sweeps and hardening that are not tied to o
 Related: [ADR-011](../decisions/011-oauth-tokens-encrypt-at-rest-via-a.md), [ADR-012](../decisions/012-date-only-values-are-utc-midnight-calendar.md), [ADR-016](../decisions/016-postgres-migration-baseline-prisma-migrate-replaces-db.md), [ADR-022](../decisions/022-security-header-baseline-no-csp-yet-and.md), [ADR-035](../decisions/035-statute-periods-are-calendar-amount-unit-computed.md), [ADR-036](../decisions/036-money-is-decimal-14-2-one-settlement.md), [UI_PATTERNS.md](../UI_PATTERNS.md)
 
 ## Open work
+
 - [ ] **Opportunistic sweeps still ongoing** (P2) — hand-rolled empty states (calendar day/week, time views, reports cards, settings) -> `<EmptyState>`; remaining ternary plurals -> `plural()`; remaining component-level status literals -> central label maps. Migrate as files are touched.
 
 ## Shipped
+
 - [x] **De-duplication sweep** (2026-10-22) — one `formatMoney` (negatives read `-$50.25`), one form-field module (`components/ui/field.tsx`: `inputClass` / `textareaClass` / `labelClass` / `Field` / `FieldError`), hand-styled button lookalikes moved to `<Button>` with a per-context size convention (UI_PATTERNS "Button hierarchy"), and shared homes for escaping, `DAY_MS`, activity icons, lead-stage chip and invoice status colours.
 - [x] **Server-side email validation** (F987) — every typed-in email (contacts, parties, new attendees, the new-matter inline client, portal invites) is checked on the server by the one lenient helper `isLenientEmail` (`src/lib/email-shape.ts`); edits never re-reject an unchanged stored value.
 - [x] **Date format sweep** (2026-07-07, P2) — every display callsite funnels through `formatDate` / `formatRelative` variants; dashboard queries take the viewer's TZ; date-only inputs parse via `parseDateOnly` (UTC-midnight calendar date) and `parseWallClock` (a wall-clock instant in the user's zone), ADR-012. The old `parseLocalDate` / `parseLocalDateOrDateTime` helpers no longer exist.
@@ -24,6 +26,7 @@ Related: [ADR-011](../decisions/011-oauth-tokens-encrypt-at-rest-via-a.md), [ADR
 - [x] **Quality sweep Batch 4** (ADR-035 to ADR-038, non-money parts) — calendar-correct SOL periods (amount + unit; also the automations deadline-rule month/year offsets); nine hot-path indexes; `Firm.matterVisibility` column (enforcement later built as ADR-039); `billing.view` read permission (ADR-038); per-event Private calendar events (ADR-037). Money columns `DECIMAL(14,2)` and one-settlement-per-matter are covered in [time-and-billing.md](time-and-billing.md). One migration, `20261017120000_quality_sweep`; run steps in `docs/DEPLOY_BACKFILLS.md`.
 
 ## Notes
+
 - Phases are ordered by dependency and value, adjusted by priority. Build each feature end-to-end (schema -> action -> UI) before moving on.
 - Schema decisions per feature live in `SCHEMA_NOTES.md`; preserved architectural/security/product decisions in `docs/decisions/`.
 - Remaining big buckets elsewhere: external integrations (SMS via Twilio/Quo, voicemail), reports and polish. Gmail sync/send, Google Calendar sync and the mobile/responsive sweep (2026-06) are done.

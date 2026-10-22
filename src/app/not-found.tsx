@@ -24,12 +24,9 @@ export default function RootNotFound() {
                 <FileQuestion size={20} />
               </div>
               <div className="flex-1 min-w-0">
-                <h1 className="text-lg font-display font-medium text-ink mb-1">
-                  Page not found.
-                </h1>
+                <h1 className="text-lg font-display font-medium text-ink mb-1">Page not found.</h1>
                 <p className="text-sm text-ink-3 leading-relaxed mb-4">
-                  There is nothing at this address. It may have been moved or
-                  mistyped.
+                  There is nothing at this address. It may have been moved or mistyped.
                 </p>
                 <Button size="sm" render={<Link href="/" />}>
                   <Home />

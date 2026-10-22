@@ -19,10 +19,7 @@ import { formatDate } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   FIRM_ACTIVITY_LIMIT,
@@ -41,9 +38,7 @@ import { firstParam } from "@/lib/search-params";
 
 // Date rendering routes through the centralized formatter.
 
-export default async function FirmActivityPage({
-  searchParams,
-}: PageProps<"/settings/activity">) {
+export default async function FirmActivityPage({ searchParams }: PageProps<"/settings/activity">) {
   await requireUser();
   // Page-level gate. Settings sidebar hides this link for users
   // without the permission, but a deep-link still bounces here.
@@ -54,16 +49,14 @@ export default async function FirmActivityPage({
 
   const rawType = firstParam(sp.type);
   const filterKey =
-    typeof rawType === "string" && Object.hasOwn(FILTER_BUCKETS, rawType)
-      ? rawType
-      : "all";
+    typeof rawType === "string" && Object.hasOwn(FILTER_BUCKETS, rawType) ? rawType : "all";
 
   const rawUser = firstParam(sp.user);
-  const userId =
-    typeof rawUser === "string" && rawUser.length > 0 ? rawUser : undefined;
+  const userId = typeof rawUser === "string" && rawUser.length > 0 ? rawUser : undefined;
 
   const rawFrom = firstParam(sp.from);
-  const from = typeof rawFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawFrom) ? rawFrom : undefined;
+  const from =
+    typeof rawFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawFrom) ? rawFrom : undefined;
 
   const rawTo = firstParam(sp.to);
   const to = typeof rawTo === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawTo) ? rawTo : undefined;
@@ -105,10 +98,9 @@ export default async function FirmActivityPage({
       <div>
         <h1 className="text-base font-semibold text-ink">Firm activity</h1>
         <p className="text-xs text-ink-3 mt-1">
-          Cross-matter audit log. Every action that creates a Note /
-          Task / Deadline / TimeEntry / Event / Document /
-          Invoice transition / Stage change / Team change /
-          Permission grant writes a row here.
+          Cross-matter audit log. Every action that creates a Note / Task / Deadline / TimeEntry /
+          Event / Document / Invoice transition / Stage change / Team change / Permission grant
+          writes a row here.
         </p>
       </div>
 
@@ -125,7 +117,7 @@ export default async function FirmActivityPage({
                 "inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-2xs font-medium border transition-colors",
                 active
                   ? "bg-paper-2 text-ink border-line-strong font-medium"
-                  : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700"
+                  : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700",
               )}
             >
               {FILTER_BUCKETS[key].label}
@@ -140,14 +132,9 @@ export default async function FirmActivityPage({
         method="GET"
         className="flex flex-wrap items-end gap-3 px-3 py-2 rounded-md border border-line bg-paper"
       >
-        {filterKey !== "all" && (
-          <input type="hidden" name="type" value={filterKey} />
-        )}
+        {filterKey !== "all" && <input type="hidden" name="type" value={filterKey} />}
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor="activity-user"
-            className="text-xs font-medium text-ink-2"
-          >
+          <label htmlFor="activity-user" className="text-xs font-medium text-ink-2">
             User
           </label>
           <NativeSelect
@@ -165,10 +152,7 @@ export default async function FirmActivityPage({
           </NativeSelect>
         </div>
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor="activity-from"
-            className="text-xs font-medium text-ink-2"
-          >
+          <label htmlFor="activity-from" className="text-xs font-medium text-ink-2">
             From
           </label>
           <input
@@ -180,10 +164,7 @@ export default async function FirmActivityPage({
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor="activity-to"
-            className="text-xs font-medium text-ink-2"
-          >
+          <label htmlFor="activity-to" className="text-xs font-medium text-ink-2">
             To
           </label>
           <input
@@ -195,10 +176,7 @@ export default async function FirmActivityPage({
           />
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            type="submit"
-          >
+          <Button size="sm" type="submit">
             Apply
           </Button>
           {(userId || from || to) && (
@@ -234,9 +212,7 @@ export default async function FirmActivityPage({
                       <Icon size={12} />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs text-ink leading-snug">
-                        {row.title}
-                      </div>
+                      <div className="text-xs text-ink leading-snug">{row.title}</div>
                       {row.detail && (
                         <div className="text-2xs text-ink-4 mt-0.5 leading-relaxed truncate">
                           {row.detail}
@@ -270,8 +246,8 @@ export default async function FirmActivityPage({
 
       {rows.length === FIRM_ACTIVITY_LIMIT && (
         <div className="text-2xs text-ink-4 text-center">
-          Showing the most recent {FIRM_ACTIVITY_LIMIT} events. Narrow the filters to
-          surface older entries.
+          Showing the most recent {FIRM_ACTIVITY_LIMIT} events. Narrow the filters to surface older
+          entries.
         </div>
       )}
     </div>

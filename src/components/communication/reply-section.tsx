@@ -61,8 +61,8 @@ export async function ReplySection({
       <div className="bg-white rounded-lg border border-dashed border-line px-3 sm:px-4 py-3 flex items-center gap-2 text-xs text-ink-3">
         <TriangleAlert size={13} className="text-warn shrink-0" />
         <span>
-          <span className="font-mono">{row.account.emailAddress}</span> isn&apos;t
-          connected — reconnect it to reply.
+          <span className="font-mono">{row.account.emailAddress}</span> isn&apos;t connected —
+          reconnect it to reply.
         </span>
         <Link
           href="/settings/integrations"

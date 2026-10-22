@@ -113,8 +113,7 @@ export function parseAddressList(raw: string): {
 
 // ── Base64 (client-safe, no Buffer) ──────────────────────────────────────
 
-const B64 =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function bytesToBase64(bytes: Uint8Array): string {
   let out = "";
@@ -143,10 +142,7 @@ function wrap76(b64: string): string {
  *  message — the Gmail API's `raw` field. See module header for why
  *  this is not 76-col wrapped. */
 export function encodeMimeForGmail(message: string): string {
-  return utf8Base64(message)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  return utf8Base64(message).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 // ── Header encoding (RFC 2047) ───────────────────────────────────────────
@@ -227,8 +223,18 @@ function formatAddressListHeader(list: MimeAddress[]): string {
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
 /** RFC 2822 date-time, always rendered in UTC (+0000). */
@@ -276,9 +282,7 @@ export function buildMimeMessage(input: MimeMessageInput): string {
     headers.push(`In-Reply-To: ${ensureAngleBrackets(input.inReplyTo)}`);
   }
   if (input.references && input.references.length > 0) {
-    headers.push(
-      `References: ${input.references.map(ensureAngleBrackets).join("\r\n ")}`
-    );
+    headers.push(`References: ${input.references.map(ensureAngleBrackets).join("\r\n ")}`);
   }
   headers.push("MIME-Version: 1.0");
   const attachments = input.attachments ?? [];
@@ -288,7 +292,7 @@ export function buildMimeMessage(input: MimeMessageInput): string {
   headers.push(
     attachments.length > 0
       ? `Content-Type: multipart/mixed; boundary="${mixed}"`
-      : `Content-Type: multipart/alternative; boundary="${boundary}"`
+      : `Content-Type: multipart/alternative; boundary="${boundary}"`,
   );
 
   const part = (contentType: string, content: string): string =>
@@ -438,11 +442,10 @@ export function buildReplySubject(subject: string): string {
 export function deriveReplyRecipients(
   messages: ReplySourceMessage[],
   ownEmail: string,
-  replyAll: boolean
+  replyAll: boolean,
 ): { to: MimeAddress[]; cc: MimeAddress[] } {
   const own = ownEmail.trim().toLowerCase();
-  const isOwn = (email: string): boolean =>
-    email.trim().toLowerCase() === own;
+  const isOwn = (email: string): boolean => email.trim().toLowerCase() === own;
 
   const inbound = [...messages].reverse().find((m) => !isOwn(m.fromEmail));
   const base = inbound ?? messages[messages.length - 1];

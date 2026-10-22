@@ -46,29 +46,19 @@ describe("searchAttendeesAction", () => {
 
   test("a signed-out caller is rejected before anything runs", async () => {
     mockedUser.mockRejectedValue(new Error("NEXT_REDIRECT"));
-    await expect(searchAttendeesAction("ann", [], [])).rejects.toThrow(
-      "NEXT_REDIRECT"
-    );
+    await expect(searchAttendeesAction("ann", [], [])).rejects.toThrow("NEXT_REDIRECT");
     expect(mockedSearch).not.toHaveBeenCalled();
   });
 
   test("a non-string query returns [] instead of throwing", async () => {
-    const out = await searchAttendeesAction(
-      { evil: true } as unknown as string,
-      [],
-      []
-    );
+    const out = await searchAttendeesAction({ evil: true } as unknown as string, [], []);
     expect(out).toEqual([]);
     expect(mockedSearch).not.toHaveBeenCalled();
   });
 
   test("non-array exclusion lists return []", async () => {
-    expect(
-      await searchAttendeesAction("a", "u1" as unknown as string[], [])
-    ).toEqual([]);
-    expect(
-      await searchAttendeesAction("a", [], null as unknown as string[])
-    ).toEqual([]);
+    expect(await searchAttendeesAction("a", "u1" as unknown as string[], [])).toEqual([]);
+    expect(await searchAttendeesAction("a", [], null as unknown as string[])).toEqual([]);
     expect(mockedSearch).not.toHaveBeenCalled();
   });
 

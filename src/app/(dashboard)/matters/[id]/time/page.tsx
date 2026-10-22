@@ -37,16 +37,9 @@ import { ExpenseComposer } from "@/components/matters/expenses/expense-composer"
 import { ExpenseRowActions } from "@/components/matters/expenses/expense-row-actions";
 import { prisma } from "@/lib/prisma";
 import { RowAttachedNotes } from "@/components/matters/row-attached-notes";
-import {
-  EXPENSE_CATEGORY_LABEL,
-  type ExpenseCategory,
-} from "@/lib/expense-constants";
+import { EXPENSE_CATEGORY_LABEL, type ExpenseCategory } from "@/lib/expense-constants";
 import { type TimeEntryStatus } from "@/lib/constants/time-entry-status";
-import {
-  formatHours,
-  timeEntryStatusBadge,
-  utbmsCodeLabel,
-} from "@/lib/time-entry-constants";
+import { formatHours, timeEntryStatusBadge, utbmsCodeLabel } from "@/lib/time-entry-constants";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import {
   getMatterExpenses,
@@ -60,9 +53,7 @@ import { assertMatterAccess } from "@/lib/matter-access";
 import { formatMoney } from "@/lib/format-money";
 import { Badge } from "@/components/ui/badge";
 
-export default async function MatterTimePage({
-  params,
-}: PageProps<"/matters/[id]/time">) {
+export default async function MatterTimePage({ params }: PageProps<"/matters/[id]/time">) {
   const currentUserId = await requireUser();
   const { id } = await params;
   await assertMatterAccess(id);
@@ -104,9 +95,7 @@ export default async function MatterTimePage({
       <div className="p-5 flex flex-col gap-5">
         {canCreateTime && <TimeComposer matterId={id} />}
         <div className="text-xs text-ink-4 text-center py-6">
-          {canCreateTime
-            ? "No time logged yet — add an entry above."
-            : "No time logged yet."}
+          {canCreateTime ? "No time logged yet — add an entry above." : "No time logged yet."}
         </div>
         {expenses && (
           <ExpensesSection
@@ -152,9 +141,7 @@ export default async function MatterTimePage({
       {/* Time entries table */}
       <section>
         <div className="flex items-center gap-2 mb-2">
-          <h2 className="text-2xs font-medium text-ink-3">
-            Time entries
-          </h2>
+          <h2 className="text-2xs font-medium text-ink-3">Time entries</h2>
           <span className="text-2xs font-mono text-ink-4">
             {entries.length < totalEntries
               ? `latest ${entries.length} of ${totalEntries}`
@@ -203,23 +190,11 @@ export default async function MatterTimePage({
   );
 }
 
-function SummaryCard({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-}) {
+function SummaryCard({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
     <Card className="p-3">
-      <div className="text-2xs font-medium text-ink-3 mb-1">
-        {label}
-      </div>
-      <div className="text-xl font-display font-medium tracking-tight text-ink">
-        {value}
-      </div>
+      <div className="text-2xs font-medium text-ink-3 mb-1">{label}</div>
+      <div className="text-xl font-display font-medium tracking-tight text-ink">{value}</div>
       <div className="text-2xs text-ink-4 mt-0.5">{sub}</div>
     </Card>
   );
@@ -254,43 +229,24 @@ function EntryRow({
       </TableCell>
       <TableCell>
         <div className="flex flex-col leading-tight max-w-xl">
-          <span className="text-xs font-medium text-ink truncate">
-            {entry.activity}
-          </span>
+          <span className="text-xs font-medium text-ink truncate">{entry.activity}</span>
           {entry.narrative && (
-            <span className="text-2xs text-ink-3 truncate">
-              {entry.narrative}
-            </span>
+            <span className="text-2xs text-ink-3 truncate">{entry.narrative}</span>
           )}
           <div className="flex items-center gap-2 mt-0.5">
-            {!entry.billable && (
-              <span className="text-2xs text-ink-4">Non-billable</span>
-            )}
-            {entry.noCharge && (
-              <span className="text-2xs text-warn">No-charge</span>
-            )}
-            {entry.privileged && (
-              <span className="text-2xs text-brand-700">Privileged</span>
-            )}
+            {!entry.billable && <span className="text-2xs text-ink-4">Non-billable</span>}
+            {entry.noCharge && <span className="text-2xs text-warn">No-charge</span>}
+            {entry.privileged && <span className="text-2xs text-brand-700">Privileged</span>}
             {/* Timer-captured entries get a provenance marker — the
                 other sources render a spawnedFrom chip below, but a
                 timer has no parent entity to chip. */}
-            {entry.source === "timer" && (
-              <span className="text-2xs text-ink-4">Timer</span>
-            )}
+            {entry.source === "timer" && <span className="text-2xs text-ink-4">Timer</span>}
           </div>
           <div className="flex items-center gap-1.5 flex-wrap mt-1">
             {entry.spawnedFrom && (
-              <EntitySourceChip
-                source={entry.spawnedFrom}
-                matterId={matterId}
-              />
+              <EntitySourceChip source={entry.spawnedFrom} matterId={matterId} />
             )}
-            <RowAttachedNotes
-              notes={entry.attachedNotes}
-              matterId={matterId}
-              compact
-            />
+            <RowAttachedNotes notes={entry.attachedNotes} matterId={matterId} compact />
           </div>
         </div>
       </TableCell>
@@ -364,9 +320,7 @@ function ExpensesSection({
     <section className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between">
         <div className="flex items-center gap-2">
-          <h2 className="text-2xs font-medium text-ink-3">
-            Expenses
-          </h2>
+          <h2 className="text-2xs font-medium text-ink-3">Expenses</h2>
           <span className="text-2xs font-mono text-ink-4">{rows.length}</span>
         </div>
         <div className="text-2xs text-ink-4 font-mono">
@@ -376,14 +330,12 @@ function ExpensesSection({
         </div>
       </div>
 
-      {canCreate && (
-        <ExpenseComposer matterId={matterId} />
-      )}
+      {canCreate && <ExpenseComposer matterId={matterId} />}
 
       {rows.length === 0 ? (
         <div className="text-xs text-ink-4 text-center py-6 border border-dashed border-line rounded-md">
           No expenses logged on this matter yet.
-          {canCreate && " Use \"Log expense\" above to add one."}
+          {canCreate && ' Use "Log expense" above to add one.'}
         </div>
       ) : (
         <Card className="p-0 overflow-hidden">
@@ -436,17 +388,12 @@ function ExpenseTableRow({
       </TableCell>
       <TableCell className="text-xs text-ink">
         {expense.description}
-        {expense.notes && (
-          <div className="text-2xs text-ink-4 mt-0.5">{expense.notes}</div>
-        )}
+        {expense.notes && <div className="text-2xs text-ink-4 mt-0.5">{expense.notes}</div>}
       </TableCell>
       <TableCell className="text-2xs text-ink-3 whitespace-nowrap">
-        {EXPENSE_CATEGORY_LABEL[expense.category as ExpenseCategory] ??
-          expense.category}
+        {EXPENSE_CATEGORY_LABEL[expense.category as ExpenseCategory] ?? expense.category}
       </TableCell>
-      <TableCell className="text-2xs font-mono text-ink-4">
-        {expense.utbmsCode ?? "—"}
-      </TableCell>
+      <TableCell className="text-2xs font-mono text-ink-4">{expense.utbmsCode ?? "—"}</TableCell>
       <TableCell className="text-xs font-mono text-ink text-right whitespace-nowrap">
         {formatMoney(expense.amount)}
       </TableCell>
@@ -461,25 +408,17 @@ function ExpenseTableRow({
                 Billed · {expense.invoiceNumber}
               </Link>
             ) : (
-              <Badge>
-                Billable
-              </Badge>
+              <Badge>Billable</Badge>
             )
           ) : (
-            <Badge variant="neutral">
-              Non-billable
-            </Badge>
+            <Badge variant="neutral">Non-billable</Badge>
           )}
-          {expense.clientAdvanced && (
-            <Badge variant="neutral">
-              Client-advanced
-            </Badge>
-          )}
-          {expense.receiptDocumentId && (
+          {expense.clientAdvanced && <Badge variant="neutral">Client-advanced</Badge>}
+          {expense.receiptDocumentId &&
             // The chip links to the file when a blob exists, else
             // falls back to a non-link annotation. Either way it
             // tells the user a receipt is attached.
-            expense.receiptHasFile ? (
+            (expense.receiptHasFile ? (
               <a
                 href={`/api/documents/${expense.receiptDocumentId}/download`}
                 target="_blank"
@@ -496,14 +435,11 @@ function ExpenseTableRow({
             ) : (
               <Badge
                 variant="neutral"
-                title={
-                  expense.receiptDocumentName ?? "Receipt attached (no file)"
-                }
+                title={expense.receiptDocumentName ?? "Receipt attached (no file)"}
               >
                 <Paperclip size={11} /> Receipt (no file)
               </Badge>
-            )
-          )}
+            ))}
         </div>
       </TableCell>
       <TableCell className="text-2xs font-mono text-ink-4">

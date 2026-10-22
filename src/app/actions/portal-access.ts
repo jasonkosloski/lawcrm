@@ -30,7 +30,7 @@ const SEND_FAILED = "Couldn't send the invite email; try again.";
 export async function invitePortalUser(
   matterId: string,
   contactId: string,
-  email: string
+  email: string,
 ): Promise<Result> {
   const gate = await requirePermissionResult("portal.invite");
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -125,10 +125,7 @@ export async function invitePortalUser(
       return identity.id;
     });
   } catch (err) {
-    if (
-      (err instanceof Error && err.message === "EMAIL_TAKEN") ||
-      isUniqueViolation(err)
-    ) {
+    if ((err instanceof Error && err.message === "EMAIL_TAKEN") || isUniqueViolation(err)) {
       return { ok: false, error: EMAIL_TAKEN };
     }
     throw err;
@@ -147,7 +144,7 @@ export async function invitePortalUser(
 }
 
 export async function revokePortalAccess(
-  accessId: string
+  accessId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const gate = await requirePermissionResult("portal.revoke");
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -188,7 +185,7 @@ export async function revokePortalAccess(
 }
 
 export async function disablePortalIdentity(
-  identityId: string
+  identityId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const gate = await requirePermissionResult("portal.revoke");
   if (!gate.ok) return { ok: false, error: gate.error };

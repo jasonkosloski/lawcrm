@@ -33,14 +33,13 @@ export type FlagAnchorText = {
 };
 
 export type BuildAnchorResult =
-  | { ok: true; anchor: Partial<FlagInput> }
-  | { ok: false; error: string };
+  { ok: true; anchor: Partial<FlagInput> } | { ok: false; error: string };
 
 export function buildFlagAnchor(
   kind: FlagAnchorKind,
   text: FlagAnchorText,
   /** True when editing an existing flag (page kind cannot go blank). */
-  editing: boolean
+  editing: boolean,
 ): BuildAnchorResult {
   switch (kind) {
     case "time": {

@@ -95,21 +95,16 @@ beforeEach(async () => {
   otherMatterId = other.matterId;
 });
 
-const activityRows = () =>
-  prisma.activityLog.findMany({ where: { matterId, type: "document" } });
+const activityRows = () => prisma.activityLog.findMany({ where: { matterId, type: "document" } });
 
 describe("permission gates", () => {
   test("each action asks for its own key", async () => {
     await createFolder(M, null, "Discovery");
-    expect(requirePermission).toHaveBeenLastCalledWith(
-      "documents.folder.create"
-    );
+    expect(requirePermission).toHaveBeenLastCalledWith("documents.folder.create");
 
     const { folderId } = await seedDocumentFolder({ matterId, name: "F" });
     await renameFolder(folderId, "G");
-    expect(requirePermission).toHaveBeenLastCalledWith(
-      "documents.folder.edit"
-    );
+    expect(requirePermission).toHaveBeenLastCalledWith("documents.folder.edit");
 
     await moveFolder(folderId, null);
     expect(requirePermission).toHaveBeenLastCalledWith("documents.organize");
@@ -119,9 +114,7 @@ describe("permission gates", () => {
     expect(requirePermission).toHaveBeenLastCalledWith("documents.organize");
 
     await deleteFolder(folderId);
-    expect(requirePermission).toHaveBeenLastCalledWith(
-      "documents.folder.delete"
-    );
+    expect(requirePermission).toHaveBeenLastCalledWith("documents.folder.delete");
   });
 });
 
@@ -167,13 +160,9 @@ describe("createFolder", () => {
 
   test("validates the name: empty and >120 chars refused", async () => {
     expect((await createFolder(M, null, "   ")).ok).toBe(false);
-    expect((await createFolder(M, null, "x".repeat(121))).ok).toBe(
-      false
-    );
+    expect((await createFolder(M, null, "x".repeat(121))).ok).toBe(false);
     // Boundary: exactly 120 is fine (and trimmed).
-    expect((await createFolder(M, null, ` ${"x".repeat(120)} `)).ok).toBe(
-      true
-    );
+    expect((await createFolder(M, null, ` ${"x".repeat(120)} `)).ok).toBe(true);
   });
 
   test("refuses an unknown matter and a parent from another matter", async () => {
@@ -265,9 +254,7 @@ describe("deleteFolder", () => {
     expect(res.ok).toBe(true);
 
     // The folder is gone; its child folder + document climbed to "Discovery".
-    expect(
-      await prisma.documentFolder.findUnique({ where: { id: mid.folderId } })
-    ).toBeNull();
+    expect(await prisma.documentFolder.findUnique({ where: { id: mid.folderId } })).toBeNull();
     const leafRow = await prisma.documentFolder.findUniqueOrThrow({
       where: { id: leaf.folderId },
     });
@@ -295,14 +282,14 @@ describe("deleteFolder", () => {
         await prisma.documentFolder.findUniqueOrThrow({
           where: { id: child.folderId },
         })
-      ).parentId
+      ).parentId,
     ).toBeNull();
     expect(
       (
         await prisma.document.findUniqueOrThrow({
           where: { id: doc.documentId },
         })
-      ).folderId
+      ).folderId,
     ).toBeNull();
   });
 
@@ -372,7 +359,9 @@ describe("deleteFolder (lead scope)", () => {
     expect(movedChild.leadId).toBe(a.id);
     // Collides only with lead A's own root "Same", so it is renamed.
     expect(movedChild.name).not.toBe("Same");
-    expect((await prisma.documentFolder.findUnique({ where: { id: aSame.id } }))?.name).toBe("Same");
+    expect((await prisma.documentFolder.findUnique({ where: { id: aSame.id } }))?.name).toBe(
+      "Same",
+    );
 
     const bAfter = await prisma.documentFolder.findMany({
       where: { leadId: b.id },
@@ -420,15 +409,12 @@ describe("moveDocuments", () => {
         await prisma.document.findUniqueOrThrow({
           where: { id: a.documentId },
         })
-      ).folderId
+      ).folderId,
     ).toBeNull();
 
     const rows = await activityRows();
     expect(rows).toHaveLength(2);
-    expect(rows.map((r) => r.title).sort()).toEqual([
-      "2 documents moved",
-      "Document moved",
-    ]);
+    expect(rows.map((r) => r.title).sort()).toEqual(["2 documents moved", "Document moved"]);
   });
 
   test("refuses a target folder from another matter", async () => {
@@ -442,20 +428,15 @@ describe("moveDocuments", () => {
       error: "Folder not found in this matter.",
     });
     expect(
-      (await prisma.document.findUniqueOrThrow({ where: { id: documentId } }))
-        .folderId
+      (await prisma.document.findUniqueOrThrow({ where: { id: documentId } })).folderId,
     ).toBeNull();
   });
 
   test("refuses documents spanning two matters, unknown ids, and empty input", async () => {
     const mine = await seedDocument({ matterId });
     const theirs = await seedDocument({ matterId: otherMatterId });
-    expect(
-      (await moveDocuments([mine.documentId, theirs.documentId], null)).ok
-    ).toBe(false);
-    expect((await moveDocuments([mine.documentId, "nope"], null)).ok).toBe(
-      false
-    );
+    expect((await moveDocuments([mine.documentId, theirs.documentId], null)).ok).toBe(false);
+    expect((await moveDocuments([mine.documentId, "nope"], null)).ok).toBe(false);
     expect((await moveDocuments([], null)).ok).toBe(false);
   });
 
@@ -469,10 +450,7 @@ describe("moveDocuments", () => {
 
     // Duplicated ids collapse below the cap instead of tripping it.
     const { documentId } = await seedDocument({ matterId });
-    const dupes = Array.from(
-      { length: MOVE_DOCUMENTS_BATCH_CAP + 1 },
-      () => documentId
-    );
+    const dupes = Array.from({ length: MOVE_DOCUMENTS_BATCH_CAP + 1 }, () => documentId);
     expect((await moveDocuments(dupes, null)).ok).toBe(true);
   });
 });
@@ -488,7 +466,7 @@ describe("moveFolder", () => {
         await prisma.documentFolder.findUniqueOrThrow({
           where: { id: b.folderId },
         })
-      ).parentId
+      ).parentId,
     ).toBe(a.folderId);
 
     expect((await moveFolder(b.folderId, null)).ok).toBe(true);
@@ -497,7 +475,7 @@ describe("moveFolder", () => {
         await prisma.documentFolder.findUniqueOrThrow({
           where: { id: b.folderId },
         })
-      ).parentId
+      ).parentId,
     ).toBeNull();
 
     const rows = await activityRows();
@@ -589,7 +567,7 @@ describe("concurrency", () => {
       await other.query(
         `INSERT INTO document_folders (id, "matterId", "parentId", name, "order", "updatedAt")
          VALUES ('late-child', $1, $2, 'Exhibits', 0, now())`,
-        [matterId, folderId]
+        [matterId, folderId],
       );
 
       // The delete must wait on the folder row rather than reading a
@@ -638,9 +616,7 @@ describe("lead-scoped folders", () => {
     });
     expect(row.leadId).toBe(leadId);
     expect(row.matterId).toBeNull();
-    expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(
-      `/intake/${leadId}/documents`
-    );
+    expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(`/intake/${leadId}/documents`);
   });
 
   test("createFolder on a converted lead is refused", async () => {
@@ -672,7 +648,7 @@ describe("lead-scoped folders", () => {
       error: "Documents and folders can only move within the same matter or intake.",
     });
     expect(
-      (await prisma.document.findUniqueOrThrow({ where: { id: doc.id } })).folderId
+      (await prisma.document.findUniqueOrThrow({ where: { id: doc.id } })).folderId,
     ).toBeNull();
   });
 
@@ -707,7 +683,7 @@ describe("lead-scoped folders", () => {
     const res = await moveFolder(lf.id, mf.folderId);
     expect(res.ok).toBe(false);
     expect(
-      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: lf.id } })).parentId
+      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: lf.id } })).parentId,
     ).toBeNull();
   });
 
@@ -717,9 +693,9 @@ describe("lead-scoped folders", () => {
     const b = await prisma.documentFolder.create({ data: { leadId, name: "B" } });
     const res = await moveFolder(a.id, b.id);
     expect(res.ok).toBe(true);
-    expect(
-      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: a.id } })).parentId
-    ).toBe(b.id);
+    expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: a.id } })).parentId).toBe(
+      b.id,
+    );
     expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(`/intake/${leadId}/documents`);
   });
 
@@ -727,7 +703,9 @@ describe("lead-scoped folders", () => {
     const { leadId } = await seedLead();
     const f = await prisma.documentFolder.create({ data: { leadId, name: "Old" } });
     expect((await renameFolder(f.id, "New")).ok).toBe(true);
-    expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: f.id } })).name).toBe("New");
+    expect((await prisma.documentFolder.findUniqueOrThrow({ where: { id: f.id } })).name).toBe(
+      "New",
+    );
     expect((await deleteFolder(f.id)).ok).toBe(true);
     expect(await prisma.documentFolder.count({ where: { leadId } })).toBe(0);
     expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith(`/intake/${leadId}/documents`);
@@ -764,7 +742,11 @@ describe("protected generated folders", () => {
 
   test("deleting an ancestor of a protected folder is refused; an ordinary tree still deletes", async () => {
     const inv = await seedDocumentFolder({ matterId, name: "Investigation" });
-    const root = await seedDocumentFolder({ matterId, name: "Records Requests", parentId: inv.folderId });
+    const root = await seedDocumentFolder({
+      matterId,
+      name: "Records Requests",
+      parentId: inv.folderId,
+    });
     const req = await seedDocumentFolder({ matterId, name: "Req", parentId: root.folderId });
     await prisma.documentFolder.updateMany({
       where: { id: { in: [root.folderId, req.folderId] } },
@@ -796,7 +778,7 @@ describe("protected generated folders", () => {
     const { folderId } = await seedDocumentFolder({ matterId, name: "Mine" });
     expect((await moveFolder(folderId, gen)).ok).toBe(true);
     expect(
-      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: folderId } })).parentId
+      (await prisma.documentFolder.findUniqueOrThrow({ where: { id: folderId } })).parentId,
     ).toBe(gen);
   });
 });

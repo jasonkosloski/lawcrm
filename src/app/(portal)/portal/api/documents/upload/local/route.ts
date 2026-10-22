@@ -43,10 +43,7 @@ import {
   checkPortalUploadTarget,
   recordPortalUpload,
 } from "@/lib/portal/record-upload";
-import {
-  MAX_FILES_PER_BATCH,
-  capDocumentName,
-} from "@/app/api/documents/upload/upload-config";
+import { MAX_FILES_PER_BATCH, capDocumentName } from "@/app/api/documents/upload/upload-config";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +70,7 @@ export async function POST(req: Request): Promise<Response> {
   const parsed = await parseAndStore(
     req.body as unknown as WebReadableStream<Uint8Array>,
     contentType,
-    identity.identityId
+    identity.identityId,
   );
   const removeAll = () => Promise.all(parsed.stored.map((f) => deleteFile(f.key).catch(() => {})));
   if ("error" in parsed.result) {
@@ -136,16 +133,17 @@ export async function POST(req: Request): Promise<Response> {
 type ParseOutcome = {
   stored: Stored[];
   result:
-    | Failure
-    | { matterId: string; batchId: string; requestId: string | null; note: string | null };
+    Failure | { matterId: string; batchId: string; requestId: string | null; note: string | null };
 };
 
-function readFields(fields: Fields): Failure | {
-  matterId: string;
-  batchId: string;
-  requestId: string | null;
-  note: string | null;
-} {
+function readFields(fields: Fields):
+  | Failure
+  | {
+      matterId: string;
+      batchId: string;
+      requestId: string | null;
+      note: string | null;
+    } {
   const matterId = fields.matterId?.trim();
   const batchId = fields.batchId?.trim();
   if (!matterId || !batchId || !UUID.test(batchId)) {
@@ -164,7 +162,7 @@ function readFields(fields: Fields): Failure | {
 async function parseAndStore(
   body: WebReadableStream<Uint8Array>,
   contentTypeHeader: string,
-  identityId: string
+  identityId: string,
 ): Promise<ParseOutcome> {
   const stored: Stored[] = [];
   let bb: busboy.Busboy;
@@ -244,12 +242,17 @@ async function parseAndStore(
               fail({ status: 400, error: `"${filename}" is empty.` });
               return;
             }
-            stored.push({ key: s.key, size: s.size, name: filename, contentType: policy.contentType });
+            stored.push({
+              key: s.key,
+              size: s.size,
+              name: filename,
+              contentType: policy.contentType,
+            });
           } catch (err) {
             fail(
               err instanceof FileTooLargeError
                 ? { status: 413, error: `"${filename}" is too large.` }
-                : { status: 500, error: "Upload failed." }
+                : { status: 500, error: "Upload failed." },
             );
           }
         })
@@ -271,7 +274,7 @@ async function parseAndStore(
     });
 
     bb.on("filesLimit", () =>
-      fail({ status: 400, error: `Too many files (max ${MAX_FILES_PER_BATCH} per upload).` })
+      fail({ status: 400, error: `Too many files (max ${MAX_FILES_PER_BATCH} per upload).` }),
     );
     bb.on("error", () => {
       fail({ status: 400, error: "Malformed multipart body." });

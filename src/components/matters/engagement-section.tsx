@@ -14,10 +14,7 @@
 import { useState } from "react";
 import { Paperclip, X } from "lucide-react";
 import { MultiFileUpload } from "@/components/matters/documents/multi-file-upload";
-import {
-  removeDraftFile,
-  setDraftFileOriginating,
-} from "@/app/actions/matter-drafts";
+import { removeDraftFile, setDraftFileOriginating } from "@/app/actions/matter-drafts";
 import type { StorageDriver } from "@/lib/storage/storage-key";
 import { AgreementFields } from "./agreement-fields";
 import { Section } from "./form-primitives";

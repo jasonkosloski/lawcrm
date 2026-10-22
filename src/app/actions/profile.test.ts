@@ -26,10 +26,7 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import {
-  updateEmailSignatureAction,
-  updateProfileAction,
-} from "@/app/actions/profile";
+import { updateEmailSignatureAction, updateProfileAction } from "@/app/actions/profile";
 import { profileInitialState } from "@/lib/profile-form";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
@@ -63,10 +60,7 @@ const buildForm = (overrides: Partial<Record<string, string>> = {}) => {
   fd.set("barNumber", overrides.barNumber ?? "");
   fd.set("avatarUrl", overrides.avatarUrl ?? "");
   fd.set("timeZone", overrides.timeZone ?? "America/Chicago");
-  fd.set(
-    "defaultEventVisibility",
-    overrides.defaultEventVisibility ?? "default"
-  );
+  fd.set("defaultEventVisibility", overrides.defaultEventVisibility ?? "default");
   return fd;
 };
 
@@ -74,7 +68,7 @@ describe("updateProfileAction — defaultEventVisibility", () => {
   test("flips to show_details and persists", async () => {
     const res = await updateProfileAction(
       profileInitialState,
-      buildForm({ defaultEventVisibility: "show_details" })
+      buildForm({ defaultEventVisibility: "show_details" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
@@ -89,7 +83,7 @@ describe("updateProfileAction — defaultEventVisibility", () => {
     });
     const res = await updateProfileAction(
       profileInitialState,
-      buildForm({ defaultEventVisibility: "default" })
+      buildForm({ defaultEventVisibility: "default" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
@@ -103,7 +97,7 @@ describe("updateProfileAction — defaultEventVisibility", () => {
     // tampered form set garbage that future-us has to clean up.
     const res = await updateProfileAction(
       profileInitialState,
-      buildForm({ defaultEventVisibility: "private" })
+      buildForm({ defaultEventVisibility: "private" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.defaultEventVisibility?.length).toBeGreaterThan(0);
@@ -150,9 +144,9 @@ describe("updateEmailSignatureAction", () => {
 
   test("saves sanitized HTML: scripts, handlers and javascript: links are stripped", async () => {
     const res = await updateEmailSignatureAction(
-      '<p><strong>Jane Doe</strong><script>alert(1)</script></p>' +
+      "<p><strong>Jane Doe</strong><script>alert(1)</script></p>" +
         '<p><a href="javascript:alert(1)" onclick="x()">bad</a> ' +
-        '<a href="https://firm.example">Firm</a></p>'
+        '<a href="https://firm.example">Firm</a></p>',
     );
     expect(res).toEqual({ ok: true });
     const sig = await stored();
@@ -170,9 +164,7 @@ describe("updateEmailSignatureAction", () => {
 
   test("refuses an over-long signature and leaves the old one", async () => {
     await updateEmailSignatureAction("<p>Jane</p>");
-    const res = await updateEmailSignatureAction(
-      `<p>${"x".repeat(10_001)}</p>`
-    );
+    const res = await updateEmailSignatureAction(`<p>${"x".repeat(10_001)}</p>`);
     expect(res.ok).toBe(false);
     expect(await stored()).toBe("<p>Jane</p>");
   });

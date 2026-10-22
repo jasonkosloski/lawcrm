@@ -20,10 +20,7 @@ import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { cn } from "@/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
-import {
-  deleteSettlementLien,
-  updateSettlementLien,
-} from "@/app/actions/settlements";
+import { deleteSettlementLien, updateSettlementLien } from "@/app/actions/settlements";
 import {
   LIENHOLDER_TYPE_LABEL,
   settlementInitialState,
@@ -69,9 +66,7 @@ export function SettlementLienList({
   if (liens.length === 0) return null;
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="text-2xs font-medium text-ink-3">
-        Liens
-      </div>
+      <div className="text-2xs font-medium text-ink-3">Liens</div>
       <ul className="border border-line rounded-md overflow-hidden divide-y divide-line">
         {liens.map((l) => (
           <LienRow key={l.id} lien={l} canManage={canManage && !locked} />
@@ -81,13 +76,7 @@ export function SettlementLienList({
   );
 }
 
-function LienRow({
-  lien,
-  canManage,
-}: {
-  lien: SettlementLienListRow;
-  canManage: boolean;
-}) {
+function LienRow({ lien, canManage }: { lien: SettlementLienListRow; canManage: boolean }) {
   const uid = useId();
   const [editing, setEditing] = useState(false);
   const [negotiated, setNegotiated] = useState("");
@@ -96,10 +85,11 @@ function LienRow({
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const action = updateSettlementLien.bind(null, lien.id);
-  const [state, formAction, isPending] = useDialogActionState<
-    SettlementFormState,
-    FormData
-  >(action, settlementInitialState, editing);
+  const [state, formAction, isPending] = useDialogActionState<SettlementFormState, FormData>(
+    action,
+    settlementInitialState,
+    editing,
+  );
 
   // Close the editor once a save lands. Adjusts state during render,
   // keyed on the state OBJECT (see SettlementLienForm for why).
@@ -112,9 +102,7 @@ function LienRow({
   const openEditor = () => {
     // Always start from the latest server values, never a draft left
     // over from a cancelled edit. Blank negotiated = "use original".
-    setNegotiated(
-      lien.negotiatedAmount !== null ? lien.negotiatedAmount.toFixed(2) : ""
-    );
+    setNegotiated(lien.negotiatedAmount !== null ? lien.negotiatedAmount.toFixed(2) : "");
     setStatus(lien.status);
     setDeleteError(null);
     setEditing(true);
@@ -150,12 +138,11 @@ function LienRow({
         </div>
         <div className="text-right font-mono">
           <div className="text-ink">{formatMoney(lien.effectiveAmount)}</div>
-          {lien.negotiatedAmount !== null &&
-            lien.negotiatedAmount < lien.originalAmount && (
-              <div className="text-2xs text-ink-4 line-through">
-                {formatMoney(lien.originalAmount)}
-              </div>
-            )}
+          {lien.negotiatedAmount !== null && lien.negotiatedAmount < lien.originalAmount && (
+            <div className="text-2xs text-ink-4 line-through">
+              {formatMoney(lien.originalAmount)}
+            </div>
+          )}
         </div>
         {canManage && !editing && (
           <div className="flex items-center gap-1 shrink-0">
@@ -189,10 +176,7 @@ function LienRow({
         >
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1">
-              <label
-                htmlFor={`${uid}-negotiated`}
-                className="text-2xs font-medium text-ink-3"
-              >
+              <label htmlFor={`${uid}-negotiated`} className="text-2xs font-medium text-ink-3">
                 Negotiated amount
               </label>
               <input
@@ -206,19 +190,14 @@ function LienRow({
                 className={cn(inputClass(), "font-mono", errs.negotiatedAmount && "border-warn")}
               />
               {errs.negotiatedAmount && (
-                <span className="text-2xs text-warn">
-                  {errs.negotiatedAmount[0]}
-                </span>
+                <span className="text-2xs text-warn">{errs.negotiatedAmount[0]}</span>
               )}
               <span className="text-2xs text-ink-4">
                 Leave blank to use the original amount; 0 records a write-off.
               </span>
             </div>
             <div className="flex flex-col gap-1">
-              <label
-                htmlFor={`${uid}-status`}
-                className="text-2xs font-medium text-ink-3"
-              >
+              <label htmlFor={`${uid}-status`} className="text-2xs font-medium text-ink-3">
                 Status
               </label>
               <NativeSelect
@@ -240,11 +219,7 @@ function LienRow({
           {state.error && <div className="text-2xs text-warn">{state.error}</div>}
 
           <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setEditing(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
@@ -256,4 +231,3 @@ function LienRow({
     </li>
   );
 }
-

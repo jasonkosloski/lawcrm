@@ -75,12 +75,10 @@ describe("zone-aware defaults", () => {
     const { container } = render(
       <UserTimeZoneProvider timeZone="America/Denver">
         <TimeComposer matterId="m1" />
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
     await user.click(screen.getByRole("button", { name: /log time/i }));
-    const date = container.querySelector(
-      'input[name="date"]'
-    ) as HTMLInputElement;
+    const date = container.querySelector('input[name="date"]') as HTMLInputElement;
     expect(date.value).toBe("2026-10-15");
   });
 
@@ -94,15 +92,11 @@ describe("zone-aware defaults", () => {
     render(
       <UserTimeZoneProvider timeZone="America/Denver">
         <EventComposer scope={{ kind: "matter", matterId: "m1" }} />
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
     await user.click(screen.getByRole("button", { name: /schedule an event/i }));
-    expect((screen.getByLabelText("Starts") as HTMLInputElement).value).toBe(
-      "2026-10-15T21:00"
-    );
-    expect((screen.getByLabelText("Ends") as HTMLInputElement).value).toBe(
-      "2026-10-15T22:00"
-    );
+    expect((screen.getByLabelText("Starts") as HTMLInputElement).value).toBe("2026-10-15T21:00");
+    expect((screen.getByLabelText("Ends") as HTMLInputElement).value).toBe("2026-10-15T22:00");
   });
 
   test("a sibling event added in the stack gets the same zone-aware defaults", async () => {
@@ -119,13 +113,11 @@ describe("zone-aware defaults", () => {
           assignees={assignees}
           currentUserId="u1"
         />
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
     await user.click(screen.getByRole("button", { name: /add a task/i }));
     await user.click(screen.getByRole("button", { name: /event/i }));
-    expect((screen.getByLabelText("Start") as HTMLInputElement).value).toBe(
-      "2026-10-15T21:00"
-    );
+    expect((screen.getByLabelText("Start") as HTMLInputElement).value).toBe("2026-10-15T21:00");
   });
 });
 
@@ -139,7 +131,7 @@ describe("sibling kinds follow the viewer's permissions", () => {
         currentUserId="u1"
         siblingKinds={["time", "note_sibling"]}
         canPin={false}
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: /add a task/i }));
     expect(screen.getByRole("button", { name: /time/i })).toBeInTheDocument();
@@ -171,24 +163,24 @@ describe("validation errors", () => {
     }));
     const user = setupUser();
     render(
-      <TaskComposer scope={{ kind: "matter", matterId: "m1" }} assignees={assignees} currentUserId="u1" />
+      <TaskComposer
+        scope={{ kind: "matter", matterId: "m1" }}
+        assignees={assignees}
+        currentUserId="u1"
+      />,
     );
     await user.click(screen.getByRole("button", { name: /add a task/i }));
     await user.type(screen.getByPlaceholderText("Task title"), "Serve subpoena");
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Priority" }),
-      "urgent"
-    );
+    await user.selectOptions(screen.getByRole("combobox", { name: "Priority" }), "urgent");
     await user.click(screen.getByRole("button", { name: /save task/i }));
 
     expect(await screen.findByText("Invalid due date")).toBeInTheDocument();
-    expect(
-      (screen.getByPlaceholderText("Task title") as HTMLInputElement).value
-    ).toBe("Serve subpoena");
-    expect(
-      (screen.getByRole("combobox", { name: "Priority" }) as HTMLSelectElement)
-        .value
-    ).toBe("urgent");
+    expect((screen.getByPlaceholderText("Task title") as HTMLInputElement).value).toBe(
+      "Serve subpoena",
+    );
+    expect((screen.getByRole("combobox", { name: "Priority" }) as HTMLSelectElement).value).toBe(
+      "urgent",
+    );
   });
 
   test("event location and deadline source ref errors are shown", async () => {
@@ -228,9 +220,7 @@ describe("validation errors", () => {
     await user.type(screen.getByPlaceholderText(/deadline title/i), "Answer");
     await user.type(screen.getByLabelText("Due date"), "2026-10-16");
     await user.click(screen.getByRole("button", { name: /save deadline/i }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      /no longer exists/i
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no longer exists/i);
   });
 });
 
@@ -238,7 +228,11 @@ describe("reset and collapse after a successful save", () => {
   test("works twice in a row and clears the fields", async () => {
     const user = setupUser();
     render(
-      <TaskComposer scope={{ kind: "matter", matterId: "m1" }} assignees={assignees} currentUserId="u1" />
+      <TaskComposer
+        scope={{ kind: "matter", matterId: "m1" }}
+        assignees={assignees}
+        currentUserId="u1"
+      />,
     );
     for (let round = 1; round <= 2; round++) {
       await user.click(screen.getByRole("button", { name: /add a task/i }));
@@ -247,9 +241,7 @@ describe("reset and collapse after a successful save", () => {
       await user.type(title, `Task ${round}`);
       await user.click(screen.getByRole("button", { name: /save task/i }));
       await waitFor(() =>
-        expect(
-          screen.getByRole("button", { name: /add a task/i })
-        ).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: /add a task/i })).toBeInTheDocument(),
       );
       expect(mocks.task).toHaveBeenCalledTimes(round);
     }
@@ -261,15 +253,11 @@ describe("accessible names", () => {
     const user = setupUser();
     render(<EventComposer scope={{ kind: "matter", matterId: "m1" }} />);
     await user.click(screen.getByRole("button", { name: /schedule an event/i }));
-    expect(
-      screen.getByRole("combobox", { name: "Event type" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Event type" })).toBeInTheDocument();
     await act(async () => {
       await user.click(screen.getByRole("button", { name: /deadline/i }));
     });
-    expect(
-      screen.getByRole("combobox", { name: "Deadline kind" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Deadline kind" })).toBeInTheDocument();
   });
 });
 
@@ -283,7 +271,7 @@ describe("intake (lead) scope", () => {
         assignees={assignees}
         currentUserId="u1"
         siblingKinds={[]}
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: /add a task/i }));
     expect(screen.queryByText(/also capture/i)).toBeNull();
@@ -300,7 +288,7 @@ describe("intake (lead) scope", () => {
     render(
       <UserTimeZoneProvider timeZone="America/Denver">
         <EventComposer scope={{ kind: "lead", leadId: "l2" }} siblingKinds={[]} />
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
     await user.click(screen.getByRole("button", { name: /schedule an event/i }));
     await user.type(screen.getByPlaceholderText(/^event title/i), "Consultation");

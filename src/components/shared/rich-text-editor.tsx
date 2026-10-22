@@ -21,12 +21,7 @@
 
 "use client";
 
-import {
-  useEditor,
-  useEditorState,
-  EditorContent,
-  type Editor,
-} from "@tiptap/react";
+import { useEditor, useEditorState, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
   Bold,
@@ -89,7 +84,7 @@ export function RichTextEditor({
           "[&_ul]:my-1 [&_ol]:my-1 [&_li]:text-xs",
           "[&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-3 [&_blockquote]:text-ink-3 [&_blockquote]:italic",
           "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[11px] [&_code]:font-mono",
-          "[&_pre]:bg-paper-2 [&_pre]:p-2 [&_pre]:rounded [&_pre]:text-[11px]"
+          "[&_pre]:bg-paper-2 [&_pre]:p-2 [&_pre]:rounded [&_pre]:text-[11px]",
         ),
         ...(placeholder ? { "aria-placeholder": placeholder } : {}),
       },
@@ -108,7 +103,7 @@ export function RichTextEditor({
         className={cn(
           "border border-line rounded-md bg-white",
           "min-h-[120px] px-3 py-2 text-xs text-ink-4",
-          className
+          className,
         )}
       >
         Loading editor…
@@ -121,7 +116,7 @@ export function RichTextEditor({
       className={cn(
         "border border-line rounded-md bg-white overflow-hidden",
         "focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500/30",
-        className
+        className,
       )}
     >
       <EditorToolbar editor={editor} />
@@ -136,13 +131,7 @@ export function RichTextEditor({
 /** Hint text shown while the document is empty. Tiptap's Placeholder
  *  extension lives in @tiptap/extensions (not a direct dependency), so
  *  this is a plain overlay driven by the editor's empty state. */
-function EditorPlaceholder({
-  editor,
-  text,
-}: {
-  editor: Editor;
-  text?: string;
-}) {
+function EditorPlaceholder({ editor, text }: { editor: Editor; text?: string }) {
   const isEmpty = useEditorState({
     editor,
     selector: ({ editor }) => editor.isEmpty,
@@ -181,9 +170,7 @@ function EditorToolbar({ editor }: { editor: Editor }) {
       <ToolbarButton
         label="Heading"
         active={active.heading}
-        onClick={() =>
-          editor.chain().focus().toggleHeading({ level: 2 }).run()
-        }
+        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
       >
         <Heading2 size={13} />
       </ToolbarButton>
@@ -267,9 +254,7 @@ function ToolbarButton({
       onClick={onClick}
       className={cn(
         "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors",
-        active
-          ? "bg-brand-soft text-brand-700"
-          : "text-ink-3 hover:bg-paper-2 hover:text-ink-2"
+        active ? "bg-brand-soft text-brand-700" : "text-ink-3 hover:bg-paper-2 hover:text-ink-2",
       )}
     >
       {children}

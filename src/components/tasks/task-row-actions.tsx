@@ -89,10 +89,7 @@ export function TaskStatusToggle({
     return (
       <span
         aria-hidden="true"
-        className={
-          circle +
-          (done ? "bg-ok border-ok text-white" : "border-line")
-        }
+        className={circle + (done ? "bg-ok border-ok text-white" : "border-line")}
       >
         {done ? <Check size={10} strokeWidth={3} /> : null}
       </span>
@@ -247,10 +244,7 @@ export function TaskRowMenu({
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Set status</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={task.status}
-                  onValueChange={onSelectStatus}
-                >
+                <DropdownMenuRadioGroup value={task.status} onValueChange={onSelectStatus}>
                   {TASK_STATUSES.map((s) => (
                     <DropdownMenuRadioItem key={s} value={s}>
                       {STATUS_LABEL[s]}

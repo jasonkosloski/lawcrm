@@ -18,7 +18,7 @@ afterEach(() => vi.useRealTimers());
 
 function setup(
   over: Partial<Parameters<typeof useDraftAutosave>[0]> = {},
-  values: { current: Record<string, string> } = { current: { name: "A" } }
+  values: { current: Record<string, string> } = { current: { name: "A" } },
 ) {
   const hook = renderHook(
     (props: Parameters<typeof useDraftAutosave>[0]) => useDraftAutosave(props),
@@ -30,7 +30,7 @@ function setup(
         paused: false,
         ...over,
       },
-    }
+    },
   );
   return { hook, values };
 }

@@ -5,11 +5,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { livePortalMatterWhere } from "@/lib/portal/status";
 import { PORTAL_TIME_ZONE } from "@/lib/portal/time-zone";
-import {
-  getInvoiceById,
-  invoiceDaysUntilDue,
-  type InvoiceDetail,
-} from "@/lib/queries/billing";
+import { getInvoiceById, invoiceDaysUntilDue, type InvoiceDetail } from "@/lib/queries/billing";
 
 /**
  * Everything a portal client may see about money lives here (spec:
@@ -52,9 +48,7 @@ async function identityContactId(identityId: string): Promise<string | null> {
 }
 
 /** Matters the identity may see billing on (base gate), or null. */
-async function billingMatterWhere(
-  identityId: string,
-): Promise<Prisma.MatterWhereInput | null> {
+async function billingMatterWhere(identityId: string): Promise<Prisma.MatterWhereInput | null> {
   const live = await livePortalMatterWhere(identityId);
   if (!live) return null;
   return { AND: [live, { portalBillingEnabled: true }] };
@@ -69,10 +63,7 @@ function visibleInvoiceWhere(
     kind: "client",
     status: { in: VISIBLE_STATUSES },
     matter: matterWhere,
-    OR: [
-      { clientId: contactId },
-      { clientId: null, matter: { clientId: contactId } },
-    ],
+    OR: [{ clientId: contactId }, { clientId: null, matter: { clientId: contactId } }],
   };
 }
 
@@ -91,10 +82,7 @@ async function invoicesFor(
 ): Promise<PortalInvoiceRow[]> {
   const rows = await prisma.invoice.findMany({
     where: {
-      AND: [
-        visibleInvoiceWhere(contactId, matterWhere),
-        { matterId },
-      ],
+      AND: [visibleInvoiceWhere(contactId, matterWhere), { matterId }],
     },
     orderBy: [{ issueDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
   });

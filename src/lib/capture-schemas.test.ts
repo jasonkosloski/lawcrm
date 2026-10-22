@@ -112,9 +112,7 @@ describe("eventCaptureSchema", () => {
     });
     expect(r.success).toBe(false);
     expect(
-      r.error?.issues.some(
-        (i) => i.path.includes("endTime") && /after start/i.test(i.message)
-      )
+      r.error?.issues.some((i) => i.path.includes("endTime") && /after start/i.test(i.message)),
     ).toBe(true);
   });
 
@@ -125,10 +123,7 @@ describe("eventCaptureSchema", () => {
     });
     expect(r.success).toBe(false);
     expect(
-      r.error?.issues.some(
-        (i) =>
-          i.path.includes("startTime") && /invalid start/i.test(i.message)
-      )
+      r.error?.issues.some((i) => i.path.includes("startTime") && /invalid start/i.test(i.message)),
     ).toBe(true);
   });
 
@@ -139,9 +134,7 @@ describe("eventCaptureSchema", () => {
     });
     expect(r.success).toBe(false);
     expect(
-      r.error?.issues.some(
-        (i) => i.path.includes("endTime") && /invalid end/i.test(i.message)
-      )
+      r.error?.issues.some((i) => i.path.includes("endTime") && /invalid end/i.test(i.message)),
     ).toBe(true);
   });
 
@@ -320,7 +313,7 @@ describe("impossible calendar dates (parseDateOnly)", () => {
         tempId: "d1",
         title: "ok",
         dueDate: "2026-02-31",
-      }).success
+      }).success,
     ).toBe(false);
     expect(
       timeCaptureSchema.safeParse({
@@ -329,7 +322,7 @@ describe("impossible calendar dates (parseDateOnly)", () => {
         date: "2026-13-01",
         hours: "1",
         activity: "x",
-      }).success
+      }).success,
     ).toBe(false);
   });
 
@@ -340,7 +333,7 @@ describe("impossible calendar dates (parseDateOnly)", () => {
         tempId: "t1",
         title: "ok",
         dueDate: "2026-04-31",
-      }).success
+      }).success,
     ).toBe(false);
   });
 });
@@ -354,14 +347,14 @@ describe("eventCaptureSchema - datetime-local shape", () => {
         ...base,
         startTime: "2026-04-25T10:00:30",
         endTime: "2026-04-25T11:00",
-      }).success
+      }).success,
     ).toBe(true);
     expect(
       eventCaptureSchema.safeParse({
         ...base,
         startTime: "2026-04-25T10:00:00Z",
         endTime: "2026-04-25T11:00:00Z",
-      }).success
+      }).success,
     ).toBe(true);
   });
 
@@ -371,7 +364,7 @@ describe("eventCaptureSchema - datetime-local shape", () => {
         ...base,
         startTime: "2026-04-25",
         endTime: "2026-04-25T11:00",
-      }).success
+      }).success,
     ).toBe(false);
   });
 });

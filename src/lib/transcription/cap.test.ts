@@ -11,12 +11,12 @@ describe("capExceeded", () => {
 describe("monthStart", () => {
   it("uses the tz calendar month", () => {
     expect(monthStart(new Date("2026-11-01T03:00:00Z"), "America/Denver").toISOString()).toBe(
-      "2026-10-01T06:00:00.000Z"
+      "2026-10-01T06:00:00.000Z",
     );
   });
   it("handles DST offset months", () => {
     expect(monthStart(new Date("2026-12-15T12:00:00Z"), "America/Denver").toISOString()).toBe(
-      "2026-12-01T07:00:00.000Z"
+      "2026-12-01T07:00:00.000Z",
     );
   });
 });

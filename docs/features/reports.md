@@ -4,9 +4,11 @@ A single `/reports` page of four server-rendered snapshot cards, shipped 2026-07
 Related: [PERMISSIONS.md](../PERMISSIONS.md)
 
 ## Open work
+
 - [ ] **Reports follow-ups** (P2) — date-range picker, CSV export, per-user drill-down.
 
 ## Shipped
+
 - [x] **Reports dashboard** (2026-07-07) — gated on `reports.view` (page-level guard; sidebar item hidden without it; palette Reports row also gated). CSS bars only, no charting library. Queries in `src/lib/queries/reports.ts` (with integration tests), using viewer-timezone month/quarter windows. Matter rows are filtered by matter-team access (ADR-039). Cards:
   - **Pipeline** — intake funnel by lead stage; open matters by practice area x stage (includes retired practice areas that still hold open matters); leads converted this quarter, dated by the converted matter's `createdAt`.
   - **Utilization** — per-active-user billable vs total hours this month with a capacity tick (`Firm.dailyHoursGoal` x business days); firm MTD vs `monthlyBillableGoal`. Both goals are read fresh off the Firm row.

@@ -32,15 +32,10 @@ import { isHtmlEmailBody } from "@/lib/email-body";
 import { getCommActionPermissions } from "./comm-action-permissions";
 import { noteSnippet } from "./note-snippet";
 import { sanitizeEmailHtml } from "@/lib/sanitize-html";
-import type {
-  FilingLeadOption,
-  FilingMatterOption,
-} from "@/lib/queries/communication";
+import type { FilingLeadOption, FilingMatterOption } from "@/lib/queries/communication";
 import { Badge } from "@/components/ui/badge";
 
-const formatRecipients = (
-  list: Array<{ name?: string; email: string }>
-): string =>
+const formatRecipients = (list: Array<{ name?: string; email: string }>): string =>
   list.map((r) => (r.name ? `${r.name} <${r.email}>` : r.email)).join(", ");
 
 export async function ThreadReader({
@@ -124,9 +119,7 @@ export async function ThreadReader({
               canUnfile={!thread.hasAppSentMail}
             />
             <span className="text-ink-4">·</span>
-            <span className="text-ink-4">
-              {plural(thread.messageCount, "message")}
-            </span>
+            <span className="text-ink-4">{plural(thread.messageCount, "message")}</span>
             {thread.labels.length > 0 && (
               <>
                 <span className="text-ink-4">·</span>
@@ -175,10 +168,7 @@ export async function ThreadReader({
       {/* Messages */}
       <div className="flex-1 px-3 sm:px-6 py-4 sm:py-5 flex flex-col gap-3 sm:gap-4">
         {thread.messages.map((m) => (
-          <article
-            key={m.id}
-            className="bg-white rounded-lg border border-line overflow-hidden"
-          >
+          <article key={m.id} className="bg-white rounded-lg border border-line overflow-hidden">
             {/* Per-message header. On `<sm` it stacks: sender row,
                 then recipients row, then timestamp + log-time row at
                 the bottom. On sm+ the timestamp + actions float to
@@ -186,17 +176,10 @@ export async function ThreadReader({
             <header className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-b border-line">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-ink truncate">
-                    {m.fromName}
-                  </span>
-                  <span className="text-2xs text-ink-4 truncate">
-                    &lt;{m.fromEmail}&gt;
-                  </span>
+                  <span className="text-sm font-medium text-ink truncate">{m.fromName}</span>
+                  <span className="text-2xs text-ink-4 truncate">&lt;{m.fromEmail}&gt;</span>
                   {m.isPrivileged && (
-                    <Badge
-                      variant="warn"
-                      title="Flagged as attorney-client privileged"
-                    >
+                    <Badge variant="warn" title="Flagged as attorney-client privileged">
                       <ShieldCheck size={10} />
                       Privileged
                     </Badge>
@@ -210,16 +193,12 @@ export async function ThreadReader({
                 <div className="text-2xs text-ink-4 mt-0.5 flex flex-col gap-0.5">
                   <div className="break-all">
                     <span>To: </span>
-                    <span>
-                      {formatRecipients(m.toRecipients)}
-                    </span>
+                    <span>{formatRecipients(m.toRecipients)}</span>
                   </div>
                   {m.ccRecipients.length > 0 && (
                     <div className="break-all">
                       <span>Cc: </span>
-                      <span>
-                        {formatRecipients(m.ccRecipients)}
-                      </span>
+                      <span>{formatRecipients(m.ccRecipients)}</span>
                     </div>
                   )}
                 </div>
@@ -229,10 +208,7 @@ export async function ThreadReader({
                   {formatDate(m.sentAt, "datetime_medium", tz)}
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <CommTimeLoggedIndicator
-                    entries={m.timeEntries}
-                    align="right"
-                  />
+                  <CommTimeLoggedIndicator entries={m.timeEntries} align="right" />
                   {perms.canLogTime && (
                     <LogTimeOnCommButton
                       isFiled={thread.matter !== null}
@@ -265,9 +241,7 @@ export async function ThreadReader({
                 dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(m.body) }}
               />
             ) : (
-              <div className="email-body px-3 sm:px-4 py-4 text-ink break-words">
-                {m.body}
-              </div>
+              <div className="email-body px-3 sm:px-4 py-4 text-ink break-words">{m.body}</div>
             )}
 
             {/* Attachments — download / view / file-to-matter chips

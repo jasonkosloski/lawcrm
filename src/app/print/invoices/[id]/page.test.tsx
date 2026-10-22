@@ -43,18 +43,16 @@ const searchParams = Promise.resolve({ autoprint: "1" });
 beforeEach(() => {
   vi.mocked(requirePermission).mockReset().mockResolvedValue("user_1");
   vi.mocked(getInvoiceById).mockReset();
-  vi.mocked(getCurrentFirm).mockReset().mockResolvedValue({} as never);
-  vi.mocked(getCurrentUserTimeZone)
+  vi.mocked(getCurrentFirm)
     .mockReset()
-    .mockResolvedValue("America/Denver");
+    .mockResolvedValue({} as never);
+  vi.mocked(getCurrentUserTimeZone).mockReset().mockResolvedValue("America/Denver");
 });
 
 describe("print invoice page — permission guard", () => {
   test("without billing.view: the guard redirects before any read", async () => {
     vi.mocked(requirePermission).mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
-    await expect(
-      PrintInvoicePage({ params, searchParams })
-    ).rejects.toThrow("NEXT_REDIRECT");
+    await expect(PrintInvoicePage({ params, searchParams })).rejects.toThrow("NEXT_REDIRECT");
     expect(getInvoiceById).not.toHaveBeenCalled();
     expect(getCurrentFirm).not.toHaveBeenCalled();
     expect(getCurrentUserTimeZone).not.toHaveBeenCalled();
@@ -70,12 +68,8 @@ describe("print invoice page — permission guard", () => {
 
 describe("print invoice page - matter wall", () => {
   test("an invoice on a hidden matter 404s before the invoice is read", async () => {
-    vi.mocked(assertChildMatterAccess).mockRejectedValueOnce(
-      new Error("NEXT_NOT_FOUND")
-    );
-    await expect(
-      PrintInvoicePage({ params, searchParams })
-    ).rejects.toThrow("NEXT_NOT_FOUND");
+    vi.mocked(assertChildMatterAccess).mockRejectedValueOnce(new Error("NEXT_NOT_FOUND"));
+    await expect(PrintInvoicePage({ params, searchParams })).rejects.toThrow("NEXT_NOT_FOUND");
     expect(assertChildMatterAccess).toHaveBeenCalledWith("invoice", "inv_1");
     expect(getInvoiceById).not.toHaveBeenCalled();
   });
@@ -84,9 +78,7 @@ describe("print invoice page - matter wall", () => {
 describe("print invoice page — behaviour", () => {
   test("a missing invoice 404s", async () => {
     vi.mocked(getInvoiceById).mockResolvedValue(null);
-    await expect(
-      PrintInvoicePage({ params, searchParams })
-    ).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(PrintInvoicePage({ params, searchParams })).rejects.toThrow("NEXT_NOT_FOUND");
   });
 
   test("renders the preview in print mode with the viewer's zone", async () => {
@@ -97,9 +89,7 @@ describe("print invoice page — behaviour", () => {
     const tree = (await PrintInvoicePage({ params, searchParams })) as {
       props: { children: unknown };
     };
-    const json = JSON.stringify(tree, (_k, v) =>
-      typeof v === "function" ? "fn" : v
-    );
+    const json = JSON.stringify(tree, (_k, v) => (typeof v === "function" ? "fn" : v));
     expect(json).toContain('"printMode":true');
     expect(json).toContain('"timeZone":"America/Denver"');
     expect(json).toContain('"autoprint":true');

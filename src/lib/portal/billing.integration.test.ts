@@ -61,7 +61,11 @@ async function mkInvoice(
   });
 }
 
-async function mkTrust(amount: string, date: string, extra: { createdAt?: Date; type?: string } = {}) {
+async function mkTrust(
+  amount: string,
+  date: string,
+  extra: { createdAt?: Date; type?: string } = {},
+) {
   return prisma.trustTransaction.create({
     data: {
       matterId,
@@ -82,12 +86,21 @@ beforeEach(async () => {
   ({ areaId, stageId } = await seedPracticeArea());
   ({ contactId: clientId } = await seedContact({ email: "jane@example.com" }));
   ({ contactId: otherId } = await seedContact({ email: "bob@example.com" }));
-  identityId = (await prisma.portalIdentity.create({ data: { contactId: clientId, email: "jane@example.com" } })).id;
-  otherIdentityId = (await prisma.portalIdentity.create({ data: { contactId: otherId, email: "bob@example.com" } })).id;
+  identityId = (
+    await prisma.portalIdentity.create({ data: { contactId: clientId, email: "jane@example.com" } })
+  ).id;
+  otherIdentityId = (
+    await prisma.portalIdentity.create({ data: { contactId: otherId, email: "bob@example.com" } })
+  ).id;
   ({ matterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId }));
-  await prisma.matter.update({ where: { id: matterId }, data: { clientId, portalBillingEnabled: true } });
+  await prisma.matter.update({
+    where: { id: matterId },
+    data: { clientId, portalBillingEnabled: true },
+  });
   for (const id of [identityId, otherIdentityId]) {
-    await prisma.portalMatterAccess.create({ data: { identityId: id, matterId, invitedById: userId } });
+    await prisma.portalMatterAccess.create({
+      data: { identityId: id, matterId, invitedById: userId },
+    });
   }
 });
 
@@ -127,7 +140,9 @@ describe("visibility", () => {
 
   test("an invoice billed to the co-client is visible to them, not to the primary client", async () => {
     const inv = await mkInvoice({ clientId: otherId });
-    expect((await listPortalInvoices(otherIdentityId, matterId)).map((r) => r.id)).toEqual([inv.id]);
+    expect((await listPortalInvoices(otherIdentityId, matterId)).map((r) => r.id)).toEqual([
+      inv.id,
+    ]);
     expect(await getPortalInvoice(otherIdentityId, inv.id)).not.toBeNull();
     expect(await getPortalBillingForMatter(otherIdentityId, matterId)).not.toBeNull();
     expect(await getPortalTrust(otherIdentityId, matterId)).toBeNull();
@@ -156,13 +171,22 @@ describe("visibility", () => {
       expect(await getPortalTrust(identityId, matterId)).toBeNull();
       expect(await getPortalBillingForMatter(identityId, matterId)).toBeNull();
     };
-    await prisma.portalMatterAccess.updateMany({ where: { identityId }, data: { revokedAt: new Date() } });
+    await prisma.portalMatterAccess.updateMany({
+      where: { identityId },
+      data: { revokedAt: new Date() },
+    });
     await gone();
-    await prisma.portalMatterAccess.updateMany({ where: { identityId }, data: { revokedAt: null } });
+    await prisma.portalMatterAccess.updateMany({
+      where: { identityId },
+      data: { revokedAt: null },
+    });
     await prisma.firm.update({ where: { id: firmId }, data: { portalEnabled: false } });
     await gone();
     await prisma.firm.update({ where: { id: firmId }, data: { portalEnabled: true } });
-    await prisma.portalIdentity.update({ where: { id: identityId }, data: { disabledAt: new Date() } });
+    await prisma.portalIdentity.update({
+      where: { id: identityId },
+      data: { disabledAt: new Date() },
+    });
     await gone();
   });
 
@@ -176,8 +200,15 @@ describe("visibility", () => {
   });
 
   test("a matter id the identity has no access to returns nothing", async () => {
-    const { matterId: m2 } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId });
-    await prisma.matter.update({ where: { id: m2 }, data: { clientId, portalBillingEnabled: true } });
+    const { matterId: m2 } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+    });
+    await prisma.matter.update({
+      where: { id: m2 },
+      data: { clientId, portalBillingEnabled: true },
+    });
     const inv = await mkInvoice({ matterId: m2 });
     expect(await listPortalInvoices(identityId, m2)).toEqual([]);
     expect(await getPortalInvoice(identityId, inv.id)).toBeNull();

@@ -15,8 +15,7 @@
 export const UPLOAD_REJECTED_MESSAGE =
   "The upload was rejected - the folder may have been removed or you may have lost permission. Refresh the page and try again.";
 
-const FALLBACK_MESSAGE =
-  "Upload failed - check your connection and try again.";
+const FALLBACK_MESSAGE = "Upload failed - check your connection and try again.";
 
 export function blobUploadErrorMessage(err: unknown): string {
   const message = err instanceof Error ? err.message : "";

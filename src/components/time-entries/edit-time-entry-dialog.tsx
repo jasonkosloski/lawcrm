@@ -27,25 +27,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import {
-  DateField,
-  TextField,
-  TextareaField,
-} from "@/components/matters/captures/primary-fields";
-import {
-  DurationFields,
-  UtbmsCodeSelect,
-} from "@/components/time-entries/time-entry-fields";
+import { DateField, TextField, TextareaField } from "@/components/matters/captures/primary-fields";
+import { DurationFields, UtbmsCodeSelect } from "@/components/time-entries/time-entry-fields";
 import {
   TIME_ENTRY_STATUSES,
   TIME_ENTRY_STATUS_LABEL as STATUS_LABEL,
   type TimeEntryStatus,
 } from "@/lib/constants/time-entry-status";
 import { updateTimeEntry } from "@/app/actions/time-entries";
-import {
-  timeEntryInitialState,
-  type TimeEntryFormState,
-} from "@/lib/time-entry-constants";
+import { timeEntryInitialState, type TimeEntryFormState } from "@/lib/time-entry-constants";
 import { dateOnlyKey } from "@/lib/format-date";
 
 export type EditableTimeEntry = {
@@ -76,10 +66,11 @@ export function EditTimeEntryDialog({
   // "Entry is already billed") don't reappear when the row menu
   // reopens this still-mounted dialog. See
   // src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    TimeEntryFormState,
-    FormData
-  >(updateTimeEntry.bind(null, entry.id), timeEntryInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<TimeEntryFormState, FormData>(
+    updateTimeEntry.bind(null, entry.id),
+    timeEntryInitialState,
+    open,
+  );
 
   const [date, setDate] = useState(dateOnlyKey(entry.date));
   const [hours, setHours] = useState(entry.hours.toString());
@@ -140,11 +131,7 @@ export function EditTimeEntryDialog({
               placeholder="Date"
               error={errs.date?.[0]}
             />
-            <DurationFields
-              hours={hours}
-              onHoursChange={setHours}
-              error={errs.hours?.[0]}
-            />
+            <DurationFields hours={hours} onHoursChange={setHours} error={errs.hours?.[0]} />
           </div>
 
           <TextField
@@ -164,11 +151,7 @@ export function EditTimeEntryDialog({
             error={errs.narrative?.[0]}
           />
 
-          <UtbmsCodeSelect
-            value={utbmsCode}
-            onChange={setUtbmsCode}
-            error={errs.utbmsCode?.[0]}
-          />
+          <UtbmsCodeSelect value={utbmsCode} onChange={setUtbmsCode} error={errs.utbmsCode?.[0]} />
 
           <div className="flex flex-col gap-0.5">
             <NativeSelect
@@ -187,9 +170,7 @@ export function EditTimeEntryDialog({
                 </NativeSelectOption>
               ))}
             </NativeSelect>
-            {errs.status && (
-              <div className="text-2xs text-warn">{errs.status[0]}</div>
-            )}
+            {errs.status && <div className="text-2xs text-warn">{errs.status[0]}</div>}
           </div>
 
           <div className="flex flex-wrap items-center gap-4 text-xs">
@@ -223,11 +204,7 @@ export function EditTimeEntryDialog({
           </div>
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>

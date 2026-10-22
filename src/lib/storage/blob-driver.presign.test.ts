@@ -50,7 +50,7 @@ function stubToken(encoding: "raw" | "escaped" = "raw") {
         ? raw
         : raw.replace(
             /[\u0080-\uffff]/g,
-            (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`
+            (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
           );
     return {
       delegationToken: `${b64url(json)}.sig`,
@@ -63,12 +63,8 @@ function stubToken(encoding: "raw" | "escaped" = "raw") {
 /** The signature the server will recompute: HMAC over the canonical
  *  string of the DECODED pathname (ADR-018, verified live). */
 function expectedSignature(pathname: string): string {
-  const canonical = [`operation=get`, `pathname=${pathname}`]
-    .sort()
-    .join("\n");
-  return createHmac("sha256", SIGNING_TOKEN)
-    .update(canonical)
-    .digest("base64url");
+  const canonical = [`operation=get`, `pathname=${pathname}`].sort().join("\n");
+  return createHmac("sha256", SIGNING_TOKEN).update(canonical).digest("base64url");
 }
 
 beforeEach(() => {
@@ -116,9 +112,7 @@ describe.each([
   test("carries the SDK signature computed over the decoded pathname", async () => {
     const url = new URL(await signedBlobUrl(storedUrl(key)));
 
-    expect(url.searchParams.get("vercel-blob-signature")).toBe(
-      expectedSignature(key)
-    );
+    expect(url.searchParams.get("vercel-blob-signature")).toBe(expectedSignature(key));
     expect(url.searchParams.get("vercel-blob-delegation")).toBeTruthy();
     // Query holds ONLY SDK params - no junk keys from a '?' in the name.
     for (const name of url.searchParams.keys()) {
@@ -134,9 +128,7 @@ describe.each([
   test("download=1 is appended outside the signed params", async () => {
     const url = new URL(await signedBlobUrl(storedUrl(key), { download: true }));
     expect(url.searchParams.get("download")).toBe("1");
-    expect(url.searchParams.get("vercel-blob-signature")).toBe(
-      expectedSignature(key)
-    );
+    expect(url.searchParams.get("vercel-blob-signature")).toBe(expectedSignature(key));
     expect(decodeURIComponent(url.pathname.slice(1))).toBe(key);
   });
 });

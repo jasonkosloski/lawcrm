@@ -39,8 +39,10 @@ const SELECT = {
 } as const;
 
 function parse(
-  input: VenueInput
-): { ok: true; data: { name: string; city: string | null; county: string | null; state: string } } | Invalid {
+  input: VenueInput,
+):
+  | { ok: true; data: { name: string; city: string | null; county: string | null; state: string } }
+  | Invalid {
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
     const errors: Record<string, string[]> = {};
@@ -62,7 +64,7 @@ function revalidate() {
 }
 
 export async function createVenue(
-  input: VenueInput
+  input: VenueInput,
 ): Promise<
   | { ok: true; venue: VenueOption }
   | { ok: false; code: "exists"; venue: VenueOption }
@@ -88,7 +90,7 @@ export async function createVenue(
 
 export async function updateVenue(
   id: string,
-  input: VenueInput
+  input: VenueInput,
 ): Promise<
   | { ok: true; venue: VenueOption }
   | { ok: false; code: "exists"; venue: VenueOption }
@@ -121,7 +123,7 @@ export async function updateVenue(
 
 export async function setVenueActive(
   id: string,
-  active: boolean
+  active: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("venues.edit");
   const row = await prisma.venue.findUnique({
@@ -131,16 +133,13 @@ export async function setVenueActive(
   if (!row) return { ok: false, error: "Not found" };
   if (row.isActive === active) return { ok: true };
   await prisma.venue.update({ where: { id }, data: { isActive: active } });
-  await logSettingsChange(
-    userId,
-    `Venue "${row.name}" ${active ? "restored" : "archived"}`
-  );
+  await logSettingsChange(userId, `Venue "${row.name}" ${active ? "restored" : "archived"}`);
   revalidate();
   return { ok: true };
 }
 
 export async function deleteVenue(
-  id: string
+  id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const userId = await requirePermission("venues.delete");
   const row = await prisma.venue.findUnique({ where: { id }, select: { name: true } });

@@ -21,11 +21,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Paperclip, Search, Upload, X } from "lucide-react";
 import { upload } from "@vercel/blob/client";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
@@ -33,10 +29,7 @@ import { formatFileSize } from "@/lib/document-display";
 import { MAX_DOCUMENT_BYTES } from "@/lib/document-form";
 import { contentTypeForFilename } from "@/app/api/documents/upload/upload-config";
 import { makeStorageKey, type StorageDriver } from "@/lib/storage/storage-key";
-import {
-  MAX_SEND_ATTACHMENTS,
-  MAX_SEND_ATTACHMENT_BYTES,
-} from "@/lib/email-send-status";
+import { MAX_SEND_ATTACHMENTS, MAX_SEND_ATTACHMENT_BYTES } from "@/lib/email-send-status";
 import {
   findUploadedDocument,
   listAttachableDocuments,
@@ -144,7 +137,7 @@ export function SendAttachmentsField({
       setError(
         room < MAX_DOCUMENT_BYTES
           ? `Not enough room: ${formatFileSize(Math.max(room, 0))} left of the ${MAX_TOTAL_MB} MB attachment limit.`
-          : `File is too large (max ${Math.round(MAX_DOCUMENT_BYTES / (1024 * 1024))} MB).`
+          : `File is too large (max ${Math.round(MAX_DOCUMENT_BYTES / (1024 * 1024))} MB).`,
       );
       return;
     }
@@ -174,7 +167,7 @@ export function SendAttachmentsField({
         }
         if (!doc) {
           setError(
-            "Uploaded, but the document isn't ready yet. Try attaching it from the list in a moment."
+            "Uploaded, but the document isn't ready yet. Try attaching it from the list in a moment.",
           );
           return;
         }
@@ -206,7 +199,7 @@ export function SendAttachmentsField({
       setError(
         storageDriver === "vercel-blob"
           ? blobUploadErrorMessage(err)
-          : "Upload failed - check your connection and try again."
+          : "Upload failed - check your connection and try again.",
       );
     } finally {
       setUploading(false);
@@ -229,9 +222,7 @@ export function SendAttachmentsField({
             <Paperclip size={10} className="text-ink-4 shrink-0" />
             <span className="truncate max-w-48">{d.name}</span>
             {d.fileSize != null && (
-              <span className="font-mono text-ink-4 shrink-0">
-                {formatFileSize(d.fileSize)}
-              </span>
+              <span className="font-mono text-ink-4 shrink-0">{formatFileSize(d.fileSize)}</span>
             )}
             <button
               type="button"
@@ -264,10 +255,7 @@ export function SendAttachmentsField({
           <PopoverContent align="start" className="w-80">
             <div className="flex flex-col gap-2">
               <div className="relative">
-                <Search
-                  size={12}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4"
-                />
+                <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4" />
                 <input
                   type="text"
                   autoFocus
@@ -279,13 +267,9 @@ export function SendAttachmentsField({
                 />
               </div>
               <ul className="flex flex-col gap-px max-h-64 overflow-y-auto">
-                {docs === null && (
-                  <li className="text-2xs text-ink-4 px-2 py-1.5">Loading…</li>
-                )}
+                {docs === null && <li className="text-2xs text-ink-4 px-2 py-1.5">Loading…</li>}
                 {docs?.length === 0 && (
-                  <li className="text-2xs text-ink-4 italic px-2 py-1.5">
-                    No documents match.
-                  </li>
+                  <li className="text-2xs text-ink-4 italic px-2 py-1.5">No documents match.</li>
                 )}
                 {docs?.map((d) => {
                   const attached = value.some((v) => v.id === d.id);
@@ -299,9 +283,7 @@ export function SendAttachmentsField({
                         }}
                         className={cn(
                           "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-left transition-colors",
-                          attached
-                            ? "text-ink-4 cursor-default"
-                            : "text-ink hover:bg-paper-2"
+                          attached ? "text-ink-4 cursor-default" : "text-ink hover:bg-paper-2",
                         )}
                       >
                         <span className="flex-1 truncate">{d.name}</span>
@@ -327,8 +309,7 @@ export function SendAttachmentsField({
                     Upload new…
                   </Button>
                   <p className="text-2xs text-ink-4">
-                    Uploads are filed to this record&apos;s documents as
-                    correspondence.
+                    Uploads are filed to this record&apos;s documents as correspondence.
                   </p>
                 </>
               )}

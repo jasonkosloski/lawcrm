@@ -30,11 +30,7 @@ import { maybeRunDeadlineNotificationSweep } from "@/lib/notification-sweeps";
 import { Greeting } from "@/components/dashboard/greeting";
 import type { DashboardCardKey } from "@/lib/dashboard-prefs";
 import { getDashboardLayout } from "@/lib/queries/dashboard-prefs";
-import {
-  dueTodayCount,
-  loadDashboardData,
-  unavailableCards,
-} from "@/lib/queries/dashboard-data";
+import { dueTodayCount, loadDashboardData, unavailableCards } from "@/lib/queries/dashboard-data";
 
 export default async function DashboardPage() {
   // Authenticate before anything else - including the post-response
@@ -66,16 +62,10 @@ export default async function DashboardPage() {
     agenda: <AgendaCard items={data.agenda} />,
     tasks: <TasksCard tasks={data.tasks} />,
     followUps: <FollowUpsCard items={data.followUps} />,
-    activity: (
-      <ActivityCard
-        items={data.activity}
-        canViewActivityLog={data.canViewActivityLog}
-      />
-    ),
+    activity: <ActivityCard items={data.activity} canViewActivityLog={data.canViewActivityLog} />,
     deadlines: <DeadlinesCard data={data.deadlines} />,
   };
-  if (!layout.hidden.includes("triage"))
-    cards.triage = <TriageCard data={data.triage} />;
+  if (!layout.hidden.includes("triage")) cards.triage = <TriageCard data={data.triage} />;
   if (data.kpis) cards.kpis = <KpisCard kpis={data.kpis} />;
   // Null without reports.view (or when hidden).
   if (data.pulse) cards.pulse = <PulseCard pulse={data.pulse} />;

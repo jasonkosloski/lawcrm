@@ -163,7 +163,12 @@ describe("deliverInvoiceEmail", () => {
   });
 
   test("missing invoice returns a warning without throwing or emailing", async () => {
-    const r = await deliverInvoiceEmail({ invoiceId: "nope", to: "client@x.com", userId, kind: "initial" });
+    const r = await deliverInvoiceEmail({
+      invoiceId: "nope",
+      to: "client@x.com",
+      userId,
+      kind: "initial",
+    });
     expect(r.ok).toBe(false);
     expect(cap.sent).toHaveLength(0);
   });

@@ -19,7 +19,6 @@ export type MatterDraftListItem = {
   deletesInDays: number | null;
 };
 
-
 function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
 }
@@ -65,12 +64,11 @@ export async function listMatterDrafts(): Promise<MatterDraftListItem[]> {
   return drafts.map((d, i) => {
     const v = vals[i];
     const daysLeft = Math.ceil(
-      (d.updatedAt.getTime() + MATTER_DRAFT_RETENTION_DAYS * DAY_MS - now) / DAY_MS
+      (d.updatedAt.getTime() + MATTER_DRAFT_RETENTION_DAYS * DAY_MS - now) / DAY_MS,
     );
     return {
       id: d.id,
-      clientLabel:
-        str(v.newClientName) || contactName.get(str(v.clientId)) || "Untitled draft",
+      clientLabel: str(v.newClientName) || contactName.get(str(v.clientId)) || "Untitled draft",
       practiceAreaName: areaName.get(str(v.practiceAreaId)) ?? null,
       updatedAt: d.updatedAt,
       createdByName: userName.get(d.createdById) ?? "Unknown",

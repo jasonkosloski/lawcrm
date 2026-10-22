@@ -24,7 +24,7 @@ function renderDialog(over: Partial<React.ComponentProps<typeof DeleteDocumentDi
       unsavedAttachments={["timeline.csv", "photo.jpg"]}
       savedAttachments={["report.pdf"]}
       {...over}
-    />
+    />,
   );
   return { onOpenChange };
 }
@@ -32,9 +32,13 @@ function renderDialog(over: Partial<React.ComponentProps<typeof DeleteDocumentDi
 describe("DeleteDocumentDialog", () => {
   test("lists unsaved attachments and says saved ones stay", () => {
     renderDialog();
-    expect(screen.getByText(/These 2 attachments haven't been copied anywhere else/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/These 2 attachments haven't been copied anywhere else/),
+    ).toBeInTheDocument();
     expect(screen.getByText("timeline.csv")).toBeInTheDocument();
-    expect(screen.getByText(/“report\.pdf” has a copy in another folder — that copy stays/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/“report\.pdf” has a copy in another folder — that copy stays/),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText(/Delete them with the email/)).toBeChecked();
   });
 

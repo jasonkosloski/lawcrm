@@ -14,15 +14,14 @@ vi.mock("@/app/actions/portal-messages", () => ({
   markStaffPortalThreadRead: vi.fn().mockResolvedValue(undefined),
 }));
 
-import {
-  markStaffPortalThreadRead,
-  sendStaffPortalMessage,
-} from "@/app/actions/portal-messages";
+import { markStaffPortalThreadRead, sendStaffPortalMessage } from "@/app/actions/portal-messages";
 
 const mockedSend = vi.mocked(sendStaffPortalMessage);
 const mockedMark = vi.mocked(markStaffPortalThreadRead);
 
-const conversation = (over: Partial<Parameters<typeof PortalConversation>[0]["conversation"]> = {}) => ({
+const conversation = (
+  over: Partial<Parameters<typeof PortalConversation>[0]["conversation"]> = {},
+) => ({
   messages: [
     {
       id: "m1",
@@ -44,9 +43,7 @@ const conversation = (over: Partial<Parameters<typeof PortalConversation>[0]["co
   ...over,
 });
 
-const setup = (
-  over: Partial<Parameters<typeof PortalConversation>[0]> = {}
-) =>
+const setup = (over: Partial<Parameters<typeof PortalConversation>[0]> = {}) =>
   render(
     <PortalConversation
       matterId="matter_1"
@@ -54,7 +51,7 @@ const setup = (
       canSend
       tz="America/Denver"
       {...over}
-    />
+    />,
   );
 
 beforeEach(() => {
@@ -83,13 +80,11 @@ describe("PortalConversation", () => {
   test("hint appears only when nobody has live portal access", () => {
     const { unmount } = setup();
     expect(
-      screen.queryByText("No one has portal access on this matter yet.")
+      screen.queryByText("No one has portal access on this matter yet."),
     ).not.toBeInTheDocument();
     unmount();
     setup({ conversation: conversation({ hasLiveAccess: false }) });
-    expect(
-      screen.getByText("No one has portal access on this matter yet.")
-    ).toBeInTheDocument();
+    expect(screen.getByText("No one has portal access on this matter yet.")).toBeInTheDocument();
   });
 
   test("composer is hidden without canSend", () => {
@@ -135,7 +130,7 @@ describe("PortalConversation", () => {
     await userEvent.type(screen.getByRole("textbox"), "Hi there");
     await userEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("Couldn't send. Please try again.")
+      expect(screen.getByRole("alert")).toHaveTextContent("Couldn't send. Please try again."),
     );
     expect(screen.getByRole("textbox")).toHaveValue("Hi there");
     expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
@@ -149,7 +144,7 @@ describe("PortalConversation", () => {
         conversation={conversation()}
         canSend
         tz="America/Denver"
-      />
+      />,
     );
     rerender(
       <PortalConversation
@@ -157,7 +152,7 @@ describe("PortalConversation", () => {
         conversation={conversation({ unread: 0 })}
         canSend={false}
         tz="America/Denver"
-      />
+      />,
     );
     expect(mockedMark).toHaveBeenCalledTimes(1);
   });
@@ -185,7 +180,7 @@ describe("PortalConversation", () => {
         },
       ];
       rerender(
-        <PortalConversation matterId="matter_1" conversation={more} canSend tz="America/Denver" />
+        <PortalConversation matterId="matter_1" conversation={more} canSend tz="America/Denver" />,
       );
       expect(thread.scrollTop).toBe(900);
     } finally {

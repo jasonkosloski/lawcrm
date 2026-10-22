@@ -18,22 +18,10 @@
 
 "use client";
 
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  ArrowDown,
-  ArrowUp,
-  EyeOff,
-  GripVertical,
-  RotateCcw,
-  Settings2,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, EyeOff, GripVertical, RotateCcw, Settings2 } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -90,13 +78,9 @@ const zoneName = (z: Zone) => (z === "band" ? "Band" : `Column ${z + 1}`);
 const zoneId = (z: Zone) => `zone:${z}`;
 const label = (k: DashboardCardKey) => DASHBOARD_CARDS[k].label;
 
-const zoneList = (l: DashboardLayout, z: Zone) =>
-  z === "band" ? l.band : l.columns[z];
+const zoneList = (l: DashboardLayout, z: Zone) => (z === "band" ? l.band : l.columns[z]);
 
-const zonesOf = (l: DashboardLayout): Zone[] => [
-  "band",
-  ...l.columns.map((_, i) => i),
-];
+const zonesOf = (l: DashboardLayout): Zone[] => ["band", ...l.columns.map((_, i) => i)];
 
 function zoneOfCard(l: DashboardLayout, key: DashboardCardKey): Zone | null {
   return zonesOf(l).find((z) => zoneList(l, z).includes(key)) ?? null;
@@ -110,16 +94,14 @@ function zoneOfCard(l: DashboardLayout, key: DashboardCardKey): Zone | null {
 export function applyDragEnd(
   layout: DashboardLayout,
   activeKey: DashboardCardKey,
-  over: { zone: Zone; index: number } | null
+  over: { zone: Zone; index: number } | null,
 ): DashboardLayout {
   if (!over) return layout;
   return moveCard(
     layout,
     activeKey,
-    over.zone === "band"
-      ? { zone: "band" }
-      : { zone: "column", index: over.zone },
-    over.index
+    over.zone === "band" ? { zone: "band" } : { zone: "column", index: over.zone },
+    over.index,
   );
 }
 
@@ -131,26 +113,21 @@ export function applyDragEnd(
  * last card, so "append" is reachable.
  */
 export const zoneCollision: CollisionDetection = (args) => {
-  const zones = args.droppableContainers.filter((c) =>
-    String(c.id).startsWith("zone:")
-  );
+  const zones = args.droppableContainers.filter((c) => String(c.id).startsWith("zone:"));
   let hits = pointerWithin({ ...args, droppableContainers: zones });
-  if (hits.length === 0)
-    hits = rectIntersection({ ...args, droppableContainers: zones });
+  if (hits.length === 0) hits = rectIntersection({ ...args, droppableContainers: zones });
   const zone = hits[0];
   if (!zone) return [];
 
   const items = args.droppableContainers.filter(
-    (c) =>
-      !String(c.id).startsWith("zone:") &&
-      c.data.current?.sortable?.containerId === zone.id
+    (c) => !String(c.id).startsWith("zone:") && c.data.current?.sortable?.containerId === zone.id,
   );
   if (items.length === 0) return [zone];
 
   const y = args.pointerCoordinates?.y;
   if (y !== undefined) {
     const lastBottom = Math.max(
-      ...items.map((c) => args.droppableRects.get(c.id)?.bottom ?? -Infinity)
+      ...items.map((c) => args.droppableRects.get(c.id)?.bottom ?? -Infinity),
     );
     if (y > lastBottom) return [zone];
   }
@@ -160,7 +137,7 @@ export const zoneCollision: CollisionDetection = (args) => {
 /** Resolve a dnd-kit `over.id` (zone container or card) to a drop spot. */
 function resolveOver(
   layout: DashboardLayout,
-  overId: string
+  overId: string,
 ): { zone: Zone; index: number } | null {
   if (overId.startsWith("zone:")) {
     const raw = overId.slice(5);
@@ -186,12 +163,7 @@ type Props = {
   greeting?: ReactNode;
 };
 
-export function DashboardCustomizer({
-  initialLayout,
-  cards,
-  unavailable = [],
-  greeting,
-}: Props) {
+export function DashboardCustomizer({ initialLayout, cards, unavailable = [], greeting }: Props) {
   const router = useRouter();
   const rootRef = useRef<HTMLDivElement>(null);
   const [committed, setCommitted] = useState(initialLayout);
@@ -214,8 +186,7 @@ export function DashboardCustomizer({
       if (rootRef.current?.getAttribute("data-dragging") === "true") return;
       // Esc meant for another overlay (palette, open select) is not ours.
       const target = e.target instanceof Element ? e.target : null;
-      if (target?.closest("select,[role=combobox],[role=listbox],[role=dialog]"))
-        return;
+      if (target?.closest("select,[role=combobox],[role=listbox],[role=dialog]")) return;
       const outside = (n: EventTarget | null) =>
         n instanceof Element &&
         n !== document.body &&
@@ -248,15 +219,10 @@ export function DashboardCustomizer({
   };
 
   const spans = SPLIT_SPANS[layout.split];
-  const shown = (keys: DashboardCardKey[]) =>
-    keys.filter((k) => present(cards, k));
+  const shown = (keys: DashboardCardKey[]) => keys.filter((k) => present(cards, k));
 
   return (
-    <div
-      ref={rootRef}
-      data-customizer
-      data-dragging={activeKey ? "true" : undefined}
-    >
+    <div ref={rootRef} data-customizer data-dragging={activeKey ? "true" : undefined}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">{greeting}</div>
         {!editing && (
@@ -279,9 +245,7 @@ export function DashboardCustomizer({
             layout={layout}
             saving={saving}
             onSplit={(s) => setLayout((l) => setSplit(l, s))}
-            onRestore={(k) =>
-              setLayout((l) => moveCard(l, k, { zone: "column", index: 0 }))
-            }
+            onRestore={(k) => setLayout((l) => moveCard(l, k, { zone: "column", index: 0 }))}
             onReset={() => setLayout(mergeLayout(DEFAULT_LAYOUT))}
             onCancel={cancel}
             onDone={done}
@@ -370,9 +334,7 @@ function Toolbar({
     >
       <SplitPicker value={layout.split} onChange={onSplit} />
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <span className="text-xs text-ink-3">
-          Hidden ({layout.hidden.length})
-        </span>
+        <span className="text-xs text-ink-3">Hidden ({layout.hidden.length})</span>
         {layout.hidden.map((k) => (
           <button
             key={k}
@@ -425,9 +387,7 @@ function EditBody({
   }
   return (
     <p className="px-3 py-3 text-xs text-ink-4">
-      {unavailable.includes(k)
-        ? "Not available for your role"
-        : "Shown after you save"}
+      {unavailable.includes(k) ? "Not available for your role" : "Shown after you save"}
     </p>
   );
 }
@@ -457,7 +417,7 @@ function DragEditor({
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   // Highlight the zone containing the current drop target (card or zone).
@@ -469,8 +429,7 @@ function DragEditor({
     return r ? zoneName(r.zone) : "its original place";
   };
   const announcements: Announcements = {
-    onDragStart: ({ active }) =>
-      `Picked up ${label(active.id as DashboardCardKey)}.`,
+    onDragStart: ({ active }) => `Picked up ${label(active.id as DashboardCardKey)}.`,
     onDragOver: ({ active, over }) =>
       `${label(active.id as DashboardCardKey)} is over ${where(over?.id)}.`,
     onDragEnd: ({ active, over }) =>
@@ -481,8 +440,7 @@ function DragEditor({
       `Move cancelled. ${label(active.id as DashboardCardKey)} returned to ${where(active.id)}.`,
   };
 
-  const onDragStart = (e: DragStartEvent) =>
-    setActiveKey(e.active.id as DashboardCardKey);
+  const onDragStart = (e: DragStartEvent) => setActiveKey(e.active.id as DashboardCardKey);
   const onDragEnd = (e: DragEndEvent) => {
     setActiveKey(null);
     setOverId(null);
@@ -498,8 +456,7 @@ function DragEditor({
     cards,
     unavailable,
     overZone,
-    onHide: (k: DashboardCardKey) =>
-      setLayout((l) => moveCard(l, k, { zone: "hidden" })),
+    onHide: (k: DashboardCardKey) => setLayout((l) => moveCard(l, k, { zone: "hidden" })),
   };
 
   return (
@@ -560,28 +517,14 @@ function DropZone({
         overZone === zone ? "border-brand-300 bg-paper-2" : "border-line-2"
       }`}
     >
-      <div className="px-1 text-2xs font-medium text-ink-3">
-        {zoneName(zone)}
-      </div>
-      <SortableContext
-        id={zoneId(zone)}
-        items={keys}
-        strategy={verticalListSortingStrategy}
-      >
+      <div className="px-1 text-2xs font-medium text-ink-3">{zoneName(zone)}</div>
+      <SortableContext id={zoneId(zone)} items={keys} strategy={verticalListSortingStrategy}>
         {keys.map((k) => (
-          <SortableCard
-            key={k}
-            k={k}
-            cards={cards}
-            unavailable={unavailable}
-            onHide={onHide}
-          />
+          <SortableCard key={k} k={k} cards={cards} unavailable={unavailable} onHide={onHide} />
         ))}
       </SortableContext>
       {keys.length === 0 && (
-        <p className="px-1 py-4 text-center text-xs text-ink-4">
-          Drop a card here
-        </p>
+        <p className="px-1 py-4 text-center text-xs text-ink-4">Drop a card here</p>
       )}
     </div>
   );
@@ -611,9 +554,7 @@ function SortableCard({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`rounded-xl border border-line bg-card ${
-        isDragging ? "opacity-40" : ""
-      }`}
+      className={`rounded-xl border border-line bg-card ${isDragging ? "opacity-40" : ""}`}
     >
       <div className="flex items-center gap-2 border-b border-line px-2 py-1">
         <button
@@ -626,9 +567,7 @@ function SortableCard({
         >
           <GripVertical size={14} />
         </button>
-        <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">
-          {label(k)}
-        </span>
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink">{label(k)}</span>
         <button
           type="button"
           aria-label={`Hide ${label(k)}`}
@@ -657,18 +596,12 @@ function ListEditor({
   unavailable: DashboardCardKey[];
 }) {
   const move = (k: DashboardCardKey, zone: Zone, position?: number) =>
-    setLayout((l) =>
-      applyDragEnd(l, k, { zone, index: position ?? zoneList(l, zone).length })
-    );
+    setLayout((l) => applyDragEnd(l, k, { zone, index: position ?? zoneList(l, zone).length }));
   const iconBtn =
     "flex size-7 items-center justify-center rounded text-ink-3 hover:bg-paper-2 hover:text-ink disabled:pointer-events-none disabled:opacity-30";
 
   return (
-    <div
-      role="region"
-      aria-label="Arrange cards"
-      className="flex flex-col gap-4 lg:hidden"
-    >
+    <div role="region" aria-label="Arrange cards" className="flex flex-col gap-4 lg:hidden">
       {zonesOf(layout).map((zone) => {
         const keys = zoneList(layout, zone);
         return (
@@ -678,12 +611,8 @@ function ListEditor({
             aria-label={zoneName(zone)}
             className="flex flex-col gap-2 rounded-xl border border-dashed border-line-2 p-2"
           >
-            <div className="px-1 text-2xs font-medium text-ink-3">
-              {zoneName(zone)}
-            </div>
-            {keys.length === 0 && (
-              <p className="px-1 py-2 text-xs text-ink-4">No cards</p>
-            )}
+            <div className="px-1 text-2xs font-medium text-ink-3">{zoneName(zone)}</div>
+            {keys.length === 0 && <p className="px-1 py-2 text-xs text-ink-4">No cards</p>}
             <ul className="flex flex-col gap-2">
               {keys.map((k, i) => (
                 <li
@@ -716,9 +645,7 @@ function ListEditor({
                     <button
                       type="button"
                       aria-label={`Hide ${label(k)}`}
-                      onClick={() =>
-                        setLayout((l) => moveCard(l, k, { zone: "hidden" }))
-                      }
+                      onClick={() => setLayout((l) => moveCard(l, k, { zone: "hidden" }))}
                       className={iconBtn}
                     >
                       <EyeOff size={14} />

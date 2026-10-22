@@ -25,16 +25,11 @@ import { NotesTabBody } from "@/components/matters/notes/notes-tab-body";
 import { requireUser } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
 
-export default async function MatterNotesPage({
-  params,
-}: PageProps<"/matters/[id]">) {
+export default async function MatterNotesPage({ params }: PageProps<"/matters/[id]">) {
   await requireUser();
   const { id } = await params;
   await assertMatterAccess(id);
-  const [notes, access] = await Promise.all([
-    getMatterNotes(id),
-    getNoteAccess(),
-  ]);
+  const [notes, access] = await Promise.all([getMatterNotes(id), getNoteAccess()]);
 
   return (
     <div className="p-5 flex flex-col gap-4">
@@ -42,12 +37,7 @@ export default async function MatterNotesPage({
         <NoteComposer
           scope={{ kind: "matter", matterId: id }}
           canPin={access.canPin}
-          allowedKinds={allowedCaptureKinds(access, [
-            "task",
-            "event",
-            "deadline",
-            "time",
-          ])}
+          allowedKinds={allowedCaptureKinds(access, ["task", "event", "deadline", "time"])}
         />
       )}
       <NotesTabBody notes={notes} scope={{ kind: "matter", matterId: id }} access={access} />

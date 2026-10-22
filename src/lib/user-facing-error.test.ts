@@ -9,7 +9,7 @@ describe("toUserMessage", () => {
   test("passes a UserFacingError message through without logging", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(toUserMessage(new UserFacingError("Nothing to bill"), "x", "ctx")).toBe(
-      "Nothing to bill"
+      "Nothing to bill",
     );
     expect(spy).not.toHaveBeenCalled();
   });
@@ -18,7 +18,7 @@ describe("toUserMessage", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const boom = new Error("Invalid `prisma.invoice.create()` invocation in /var/task/x.js");
     expect(toUserMessage(boom, "Couldn't generate invoice.", "billing")).toBe(
-      "Couldn't generate invoice."
+      "Couldn't generate invoice.",
     );
     expect(spy).toHaveBeenCalledWith("[billing]", boom);
   });

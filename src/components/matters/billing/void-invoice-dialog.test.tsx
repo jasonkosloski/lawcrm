@@ -45,38 +45,22 @@ describe("VoidInvoiceDialog", () => {
     expect(screen.getByText("Void invoice INV-001")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Voiding returns its time and expenses to unbilled. Filed copies are stamped VOID."
-      )
+        "Voiding returns its time and expenses to unbilled. Filed copies are stamped VOID.",
+      ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("checkbox", { name: "Email the client a voided copy" })
-    ).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Email the client a voided copy" })).toBeChecked();
     expect(screen.getByLabelText(/recipient/i)).toHaveValue("client@x.com");
   });
 
   test("without canSendInvoice there is no checkbox or recipient", () => {
-    render(
-      <VoidInvoiceDialog
-        {...props}
-        canSendInvoice={false}
-        open
-        onOpenChange={vi.fn()}
-      />
-    );
+    render(<VoidInvoiceDialog {...props} canSendInvoice={false} open onOpenChange={vi.fn()} />);
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.queryByLabelText(/recipient/i)).toBeNull();
   });
 
   test("button is disabled while ticked with an empty recipient", async () => {
     const user = setupUser();
-    render(
-      <VoidInvoiceDialog
-        {...props}
-        clientEmail={null}
-        open
-        onOpenChange={vi.fn()}
-      />
-    );
+    render(<VoidInvoiceDialog {...props} clientEmail={null} open onOpenChange={vi.fn()} />);
     expect(voidBtn()).toBeDisabled();
     await user.click(screen.getByRole("checkbox"));
     expect(voidBtn()).toBeEnabled();

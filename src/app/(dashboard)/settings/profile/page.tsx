@@ -43,17 +43,13 @@ export default async function ProfileSettingsPage() {
     <div className="max-w-2xl">
       <header className="flex items-center gap-4 mb-6">
         <Avatar className="h-12 w-12">
-          {user.avatarUrl ? (
-            <AvatarImage src={user.avatarUrl} alt="" />
-          ) : null}
+          {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt="" /> : null}
           <AvatarFallback className="text-sm font-semibold bg-[#efe3d9] text-ink-2">
             {user.initials}
           </AvatarFallback>
         </Avatar>
         <div className="min-w-0">
-          <h1 className="text-base font-semibold text-ink truncate">
-            {user.name}
-          </h1>
+          <h1 className="text-base font-semibold text-ink truncate">{user.name}</h1>
           <p className="text-xs text-ink-3 truncate">
             {[user.email, user.jobTitle].filter(Boolean).join(" · ")}
           </p>
@@ -66,7 +62,7 @@ export default async function ProfileSettingsPage() {
                     "inline-flex items-center text-2xs font-medium px-1.5 py-0.5 rounded-full border",
                     ur.role.name === "Admin"
                       ? "bg-brand-soft text-brand-700 border-brand-200"
-                      : "bg-paper-2 text-ink-3 border-line"
+                      : "bg-paper-2 text-ink-3 border-line",
                   )}
                 >
                   {ur.role.name}
@@ -92,8 +88,7 @@ export default async function ProfileSettingsPage() {
       <EmailSignatureForm signature={user.emailSignature} />
 
       <p className="mt-6 text-2xs text-ink-4">
-        Your email is your Google sign-in. An administrator manages job
-        titles and roles on Team.
+        Your email is your Google sign-in. An administrator manages job titles and roles on Team.
       </p>
     </div>
   );

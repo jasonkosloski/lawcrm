@@ -14,9 +14,7 @@ vi.mock("@/lib/feedback", () => ({
 vi.mock("@/app/actions/expenses", () => ({
   deleteExpense: vi.fn(),
   updateExpense: vi.fn(async () => ({ status: "ok" })),
-  searchReceiptDocuments: vi.fn(async () => [
-    { id: "doc-new", name: "New receipt.pdf" },
-  ]),
+  searchReceiptDocuments: vi.fn(async () => [{ id: "doc-new", name: "New receipt.pdf" }]),
 }));
 
 import { deleteExpense, updateExpense } from "@/app/actions/expenses";
@@ -60,7 +58,7 @@ const renderRow = (over: Partial<Parameters<typeof ExpenseRowActions>[0]> = {}) 
       canEdit={false}
       canDelete
       {...over}
-    />
+    />,
   );
 
 describe("ExpenseRowActions", () => {
@@ -104,9 +102,7 @@ describe("ExpenseRowActions", () => {
     await user.click(screen.getByRole("button", { name: /expense actions/i }));
     await user.click(await screen.findByText(/delete expense/i));
     await waitFor(() =>
-      expect(alertSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/billed on an invoice/)
-      )
+      expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/billed on an invoice/)),
     );
   });
 });

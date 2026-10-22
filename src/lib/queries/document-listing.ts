@@ -29,7 +29,10 @@ export type FolderListing = {
 
 const ROOT_NAME = "All documents";
 
-export async function getFolderListing(scope: RecordScope, folderId: string | null): Promise<FolderListing> {
+export async function getFolderListing(
+  scope: RecordScope,
+  folderId: string | null,
+): Promise<FolderListing> {
   const own = await prisma.document.findMany({
     where: { ...scopeWhere(scope), folderId, parentDocumentId: null },
     orderBy: [{ name: "asc" }, { id: "asc" }],
@@ -63,16 +66,20 @@ export async function getFolderListing(scope: RecordScope, folderId: string | nu
             c.fileUrl === a.fileUrl &&
             c.id !== a.id &&
             c.id !== a.parentDocumentId &&
-            c.parentDocumentId !== a.parentDocumentId
+            c.parentDocumentId !== a.parentDocumentId,
         )
-        .map((c) => folderName(c.folderId))
+        .map((c) => folderName(c.folderId)),
     ),
   ];
 
   const shaped = new Map((await shapeDocumentRows([...own, ...attachments])).map((r) => [r.id, r]));
   const row = (d: (typeof own)[number]): ListingRow => {
     const isEmail = emailKindOf(d.contentType, d.name) !== null;
-    return { ...shaped.get(d.id)!, isEmail, attachmentsPending: isEmail && d.attachmentsExtractedAt === null };
+    return {
+      ...shaped.get(d.id)!,
+      isEmail,
+      attachmentsPending: isEmail && d.attachmentsExtractedAt === null,
+    };
   };
 
   return {

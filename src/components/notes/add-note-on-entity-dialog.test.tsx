@@ -26,12 +26,8 @@ import type { NoteAttachmentFormState } from "@/lib/note-attachment-form";
 // reference-equal across submissions. Returning the SAME object
 // each time would mask the very bug this suite pins (React bails
 // out on Object.is-equal state).
-const action = vi.fn<
-  (
-    prev: NoteAttachmentFormState,
-    formData: FormData
-  ) => Promise<NoteAttachmentFormState>
->();
+const action =
+  vi.fn<(prev: NoteAttachmentFormState, formData: FormData) => Promise<NoteAttachmentFormState>>();
 
 beforeEach(() => {
   action.mockReset();
@@ -53,9 +49,7 @@ describe("AddNoteOnEntityDialog — close on success", () => {
   test("closes the dialog after a successful add", async () => {
     const user = setupUser();
     const onOpenChange = vi.fn();
-    render(
-      <AddNoteOnEntityDialog {...baseProps} open onOpenChange={onOpenChange} />
-    );
+    render(<AddNoteOnEntityDialog {...baseProps} open onOpenChange={onOpenChange} />);
 
     // Submit stays disabled until there's non-whitespace content.
     await user.type(screen.getByPlaceholderText("Write a note…"), "Called opposing counsel");
@@ -103,9 +97,7 @@ describe("AddNoteOnEntityDialog — close on success", () => {
     await user.click(screen.getByRole("button", { name: /add note/i }));
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     await waitFor(() =>
-      expect(
-        screen.queryByRole("button", { name: /add note/i })
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole("button", { name: /add note/i })).not.toBeInTheDocument(),
     );
 
     // Round two: reopen and add again. With the effect keyed on
@@ -113,10 +105,7 @@ describe("AddNoteOnEntityDialog — close on success", () => {
     // already "ok", so the close effect never re-fired.
     await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
     onOpenChange.mockClear();
-    await user.type(
-      await screen.findByPlaceholderText("Write a note…"),
-      "Second note"
-    );
+    await user.type(await screen.findByPlaceholderText("Write a note…"), "Second note");
     await user.click(screen.getByRole("button", { name: /add note/i }));
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
@@ -130,16 +119,12 @@ describe("AddNoteOnEntityDialog — close on success", () => {
     }));
     const user = setupUser();
     const onOpenChange = vi.fn();
-    render(
-      <AddNoteOnEntityDialog {...baseProps} open onOpenChange={onOpenChange} />
-    );
+    render(<AddNoteOnEntityDialog {...baseProps} open onOpenChange={onOpenChange} />);
 
     await user.type(screen.getByPlaceholderText("Write a note…"), "   x");
     await user.click(screen.getByRole("button", { name: /add note/i }));
 
-    expect(
-      await screen.findByText("Note text is required.")
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Note text is required.")).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 });
@@ -148,18 +133,10 @@ describe("AddNoteOnEntityDialog - form behavior", () => {
   test("the note text is labelled and the type pills expose aria-pressed", async () => {
     const user = setupUser();
     render(<AddNoteOnEntityDialog {...baseProps} open onOpenChange={vi.fn()} />);
-    expect(screen.getByLabelText("Note")).toBe(
-      screen.getByPlaceholderText("Write a note…")
-    );
-    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.getByLabelText("Note")).toBe(screen.getByPlaceholderText("Write a note…"));
+    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByRole("button", { name: "Memo" }));
-    expect(screen.getByRole("button", { name: "Memo" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.getByRole("button", { name: "Memo" })).toHaveAttribute("aria-pressed", "true");
   });
 
   test("a failed submit keeps the typed text and the chosen type", async () => {
@@ -176,7 +153,7 @@ describe("AddNoteOnEntityDialog - form behavior", () => {
     expect(screen.getByPlaceholderText("Write a note…")).toHaveValue("keep this");
     expect(screen.getByRole("button", { name: "Strategy" })).toHaveAttribute(
       "aria-pressed",
-      "true"
+      "true",
     );
     const fd = action.mock.calls[0][1];
     expect(fd.get("type")).toBe("strategy");
@@ -191,11 +168,7 @@ describe("AddNoteOnEntityDialog - form behavior", () => {
           <button type="button" onClick={() => setOpen(true)}>
             reopen dialog
           </button>
-          <AddNoteOnEntityDialog
-            {...baseProps}
-            open={open}
-            onOpenChange={setOpen}
-          />
+          <AddNoteOnEntityDialog {...baseProps} open={open} onOpenChange={setOpen} />
         </>
       );
     }
@@ -204,15 +177,10 @@ describe("AddNoteOnEntityDialog - form behavior", () => {
     await user.click(screen.getByRole("button", { name: "Chatter" }));
     await user.type(screen.getByPlaceholderText("Write a note…"), "abandoned");
     await user.click(screen.getByRole("button", { name: /cancel/i }));
-    await waitFor(() =>
-      expect(screen.queryByPlaceholderText("Write a note…")).toBeNull()
-    );
+    await waitFor(() => expect(screen.queryByPlaceholderText("Write a note…")).toBeNull());
 
     await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
     expect(await screen.findByPlaceholderText("Write a note…")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.getByRole("button", { name: "Note" })).toHaveAttribute("aria-pressed", "true");
   });
 });

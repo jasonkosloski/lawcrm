@@ -32,10 +32,7 @@ export function readRecents(userId: string): RecentRef[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(
       (r): r is RecentRef =>
-        r &&
-        typeof r === "object" &&
-        typeof r.kind === "string" &&
-        typeof r.id === "string"
+        r && typeof r === "object" && typeof r.kind === "string" && typeof r.id === "string",
     );
   } catch {
     return [];
@@ -45,10 +42,10 @@ export function readRecents(userId: string): RecentRef[] {
 export function pushRecent(userId: string, ref: RecentRef): void {
   if (typeof window === "undefined" || !userId) return;
   const current = readRecents(userId);
-  const deduped = [
-    ref,
-    ...current.filter((r) => !(r.kind === ref.kind && r.id === ref.id)),
-  ].slice(0, MAX_RECENTS);
+  const deduped = [ref, ...current.filter((r) => !(r.kind === ref.kind && r.id === ref.id))].slice(
+    0,
+    MAX_RECENTS,
+  );
   try {
     window.localStorage.setItem(storageKey(userId), JSON.stringify(deduped));
   } catch {

@@ -32,7 +32,7 @@ import { runConflictMatcher } from "@/lib/conflict-check";
 import { assertLeadAccess } from "@/lib/lead-access";
 
 export async function runLeadConflictCheck(
-  leadId: string
+  leadId: string,
 ): Promise<{ ok: boolean; error?: string; severity?: string }> {
   await requirePermission("intake.conflict_check.run");
   // Restricted intake: 404 unless the viewer may see this lead (ADR-049).
@@ -67,8 +67,7 @@ export async function runLeadConflictCheck(
   // previously cleared this lead despite a flag, re-running the
   // matcher shouldn't silently revert that decision; surface the
   // re-run result without changing status.
-  const newStatus =
-    lead.conflictCheck === "override" ? "override" : result.severity;
+  const newStatus = lead.conflictCheck === "override" ? "override" : result.severity;
 
   await prisma.lead.update({
     where: { id: leadId },
@@ -104,16 +103,12 @@ const overrideSchema = z.object({
   /** Free-text justification — required for ethics-audit
    *  defensibility. "Informed-consent waiver signed", "former
    *  client, no substantial relationship," etc. */
-  notes: z
-    .string()
-    .trim()
-    .min(5, "Justification is required (5+ characters).")
-    .max(2000),
+  notes: z.string().trim().min(5, "Justification is required (5+ characters).").max(2000),
 });
 
 export async function overrideLeadConflictCheck(
   leadId: string,
-  formData: FormData
+  formData: FormData,
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("intake.conflict_check.override");
   // Restricted intake: 404 unless the viewer may see this lead (ADR-049).
@@ -125,9 +120,7 @@ export async function overrideLeadConflictCheck(
   if (!parsed.success) {
     return {
       ok: false,
-      error:
-        parsed.error.flatten().fieldErrors.notes?.[0] ??
-        "Invalid justification.",
+      error: parsed.error.flatten().fieldErrors.notes?.[0] ?? "Invalid justification.",
     };
   }
 
@@ -144,8 +137,7 @@ export async function overrideLeadConflictCheck(
   if (lead.conflictCheck !== "warn" && lead.conflictCheck !== "conflict") {
     return {
       ok: false,
-      error:
-        "Override only applies to flagged or conflicted leads. Run the conflict check first.",
+      error: "Override only applies to flagged or conflicted leads. Run the conflict check first.",
     };
   }
 

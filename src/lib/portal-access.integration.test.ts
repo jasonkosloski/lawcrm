@@ -17,8 +17,7 @@ let hostHeader = "portal.localhost:3000";
 vi.mock("next/headers", () => ({
   headers: async () => ({ get: (n: string) => (n === "host" ? hostHeader : null) }),
   cookies: async () => ({
-    get: (name: string) =>
-      jar.has(name) ? { name, value: jar.get(name)! } : undefined,
+    get: (name: string) => (jar.has(name) ? { name, value: jar.get(name)! } : undefined),
   }),
 }));
 vi.mock("next/navigation", () => ({
@@ -59,8 +58,7 @@ beforeEach(async () => {
   const { userId } = await seedUser({ firmId });
   const { areaId, stageId } = await seedPracticeArea();
   const mk = async (name: string) =>
-    (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name }))
-      .matterId;
+    (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name })).matterId;
   matterA = await mk("A");
   matterB = await mk("B");
   matterC = await mk("C");

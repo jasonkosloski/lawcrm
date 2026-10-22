@@ -14,7 +14,7 @@ import { revokeStaffSession } from "@/lib/clerk-admin";
 import { getStaffAuth } from "@/lib/staff-auth";
 
 export async function revokeMySession(
-  sessionId: string
+  sessionId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const auth = await getStaffAuth();
   if (auth.status !== "ok") return { ok: false, error: "Sign in again." };

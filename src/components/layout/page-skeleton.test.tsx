@@ -14,11 +14,11 @@ describe("PageSkeleton", () => {
   });
 
   test("withTopBar={false} renders only the body: no nested scroll container, still has placeholders", () => {
-    const { container } = render(
-      <PageSkeleton variant="detail" withTopBar={false} />
-    );
+    const { container } = render(<PageSkeleton variant="detail" withTopBar={false} />);
     expect(container.querySelector(".brand-gradient-line")).toBeNull();
     expect(container.querySelector(".overflow-y-auto")).toBeNull();
-    expect(container.querySelectorAll(".animate-pulse, [data-slot='skeleton']").length).toBeGreaterThan(0);
+    expect(
+      container.querySelectorAll(".animate-pulse, [data-slot='skeleton']").length,
+    ).toBeGreaterThan(0);
   });
 });

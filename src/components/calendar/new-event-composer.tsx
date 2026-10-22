@@ -22,12 +22,7 @@
 "use client";
 
 import { EventPrivateToggle } from "@/components/calendar/event-private-toggle";
-import {
-  useActionState,
-  useEffect,
-  useState,
-  useTransition,
-} from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { createCalendarEvent } from "@/app/actions/calendar-events";
 import {
@@ -62,15 +57,14 @@ export function NewEventComposer({
   onClose?: () => void;
 }) {
   const tz = useUserTimeZone();
-  const [state, formAction, isPending] = useActionState<
-    CreateCalendarEventState,
-    FormData
-  >(createCalendarEvent, createCalendarEventInitialState);
+  const [state, formAction, isPending] = useActionState<CreateCalendarEventState, FormData>(
+    createCalendarEvent,
+    createCalendarEventInitialState,
+  );
   const [, startTransition] = useTransition();
 
   const [title, setTitle] = useState("");
-  const [type, setType] =
-    useState<(typeof EVENT_TYPES)[number]>("meeting");
+  const [type, setType] = useState<(typeof EVENT_TYPES)[number]>("meeting");
   const [isAllDay, setIsAllDay] = useState(false);
   const [startTime, setStartTime] = useState(() => nextHourInTz(tz));
   const [endTime, setEndTime] = useState(() => nextHourInTz(tz, 1));
@@ -154,9 +148,7 @@ export function NewEventComposer({
                 className="h-8 px-2 rounded-md border border-line text-xs text-ink bg-white font-mono"
               />
               {errs.startTime?.[0] && (
-                <span className="text-2xs text-warn">
-                  {errs.startTime[0]}
-                </span>
+                <span className="text-2xs text-warn">{errs.startTime[0]}</span>
               )}
             </label>
             <label className="flex flex-col gap-1 text-2xs text-ink-3">
@@ -169,9 +161,7 @@ export function NewEventComposer({
                 required
                 className="h-8 px-2 rounded-md border border-line text-xs text-ink bg-white font-mono"
               />
-              {errs.endTime?.[0] && (
-                <span className="text-2xs text-warn">{errs.endTime[0]}</span>
-              )}
+              {errs.endTime?.[0] && <span className="text-2xs text-warn">{errs.endTime[0]}</span>}
             </label>
           </>
         ) : (
@@ -255,8 +245,8 @@ export function NewEventComposer({
         <span>
           <span className="text-ink">Show details to everyone in the firm</span>
           <span className="block text-3xs text-ink-4 leading-relaxed mt-0.5">
-            Off: invited attendees and the matter team always see details;
-            others follow your profile default (usually &ldquo;Busy&rdquo;).
+            Off: invited attendees and the matter team always see details; others follow your
+            profile default (usually &ldquo;Busy&rdquo;).
           </span>
         </span>
       </label>
@@ -269,11 +259,7 @@ export function NewEventComposer({
       />
 
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
-        <Button
-          type="submit"
-          disabled={isPending || state.status === "ok"}
-          size="sm"
-        >
+        <Button type="submit" disabled={isPending || state.status === "ok"} size="sm">
           {isPending ? "Creating…" : "Create event"}
         </Button>
       </div>

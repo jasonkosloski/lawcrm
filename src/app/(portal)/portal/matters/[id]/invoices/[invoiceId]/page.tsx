@@ -59,12 +59,7 @@ export default async function PortalInvoicePage({
         <PrintButton />
       </div>
       <div className="overflow-hidden rounded-xl bg-white shadow-xs ring-1 ring-line print:rounded-none print:shadow-none print:ring-0">
-        <InvoicePreview
-          invoice={invoice}
-          firm={firm}
-          timeZone={PORTAL_TIME_ZONE}
-          printMode
-        />
+        <InvoicePreview invoice={invoice} firm={firm} timeZone={PORTAL_TIME_ZONE} printMode />
       </div>
     </div>
   );

@@ -62,16 +62,11 @@ const DEFAULT_POOL_MAX = 5;
 /** Pool size from `DATABASE_POOL_MAX` (a positive integer), else the default. */
 export function resolvePoolMax(raw: string | undefined): number {
   const n = Number(raw);
-  return raw !== undefined && Number.isInteger(n) && n >= 1
-    ? n
-    : DEFAULT_POOL_MAX;
+  return raw !== undefined && Number.isInteger(n) && n >= 1 ? n : DEFAULT_POOL_MAX;
 }
 
 /** pg pool settings - see file header for the sizing and idle reasoning. */
-export function poolConfig(
-  connectionString: string,
-  rawPoolMax: string | undefined
-): PoolConfig {
+export function poolConfig(connectionString: string, rawPoolMax: string | undefined): PoolConfig {
   return {
     connectionString,
     max: resolvePoolMax(rawPoolMax),
@@ -88,7 +83,7 @@ const createClient = () => {
   if (!connectionString) {
     throw new Error(
       "DATABASE_URL is not set. Configure it in your env (locally: .env, " +
-        "production: Vercel project env vars)."
+        "production: Vercel project env vars).",
     );
   }
   const pool = new Pool(poolConfig(connectionString, process.env.DATABASE_POOL_MAX));

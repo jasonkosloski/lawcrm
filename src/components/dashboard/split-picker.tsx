@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  DASHBOARD_SPLITS,
-  SPLIT_SPANS,
-  type DashboardSplit,
-} from "@/lib/dashboard-prefs";
+import { DASHBOARD_SPLITS, SPLIT_SPANS, type DashboardSplit } from "@/lib/dashboard-prefs";
 import { cn } from "@/lib/utils";
 
 /** "8/4" -> "8 / 4" (accessible name and visible label). */
@@ -35,18 +31,12 @@ export function SplitPicker({
     onChange(next);
     const group = e.currentTarget.parentElement;
     requestAnimationFrame(() =>
-      group
-        ?.querySelectorAll<HTMLElement>('[role="radio"]')
-        [(i + step + n) % n]?.focus()
+      group?.querySelectorAll<HTMLElement>('[role="radio"]')[(i + step + n) % n]?.focus(),
     );
   };
 
   return (
-    <div
-      role="radiogroup"
-      aria-label="Column layout"
-      className="flex items-center gap-1"
-    >
+    <div role="radiogroup" aria-label="Column layout" className="flex items-center gap-1">
       {DASHBOARD_SPLITS.map((split, i) => {
         const checked = split === value;
         return (
@@ -63,17 +53,14 @@ export function SplitPicker({
               "flex h-7 w-14 items-stretch gap-0.5 rounded-md border p-1 transition-colors",
               checked
                 ? "border-brand-300 bg-paper-2"
-                : "border-line-2 bg-white hover:border-brand-300"
+                : "border-line-2 bg-white hover:border-brand-300",
             )}
           >
             {SPLIT_SPANS[split].map((span, c) => (
               <span
                 key={c}
                 style={{ flexGrow: span }}
-                className={cn(
-                  "rounded-sm",
-                  checked ? "bg-ink-3" : "bg-line-2"
-                )}
+                className={cn("rounded-sm", checked ? "bg-ink-3" : "bg-line-2")}
               />
             ))}
           </button>

@@ -39,7 +39,7 @@ describe("ContactReactivateButton", () => {
     await user.click(screen.getByRole("button", { name: /reactivate/i }));
 
     expect(confirmAction).toHaveBeenCalledWith(
-      expect.objectContaining({ title: expect.stringContaining('"Dana"') })
+      expect.objectContaining({ title: expect.stringContaining('"Dana"') }),
     );
     await waitFor(() => expect(mockedReactivate).toHaveBeenCalledWith("c1"));
     await waitFor(() => expect(refresh).toHaveBeenCalled());

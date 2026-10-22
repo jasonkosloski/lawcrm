@@ -34,21 +34,14 @@ afterEach(() => {
 
 describe("SearchResults — empty states", () => {
   test("an expanded type with no hits names the type and links to all types", () => {
-    render(
-      <SearchResults
-        expandedType="note"
-        result={{ query: "zebra", groups: [] }}
-      />
-    );
+    render(<SearchResults expandedType="note" result={{ query: "zebra", groups: [] }} />);
     expect(screen.getByText(/No notes results for/)).toBeTruthy();
     const link = screen.getByRole("link", { name: /Search all types/ });
     expect(link.getAttribute("href")).toBe("/search?q=zebra");
   });
 
   test("no expanded type shows the generic empty state", () => {
-    render(
-      <SearchResults expandedType={null} result={{ query: "zebra", groups: [] }} />
-    );
+    render(<SearchResults expandedType={null} result={{ query: "zebra", groups: [] }} />);
     expect(screen.getByText(/No results for/)).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();
   });
@@ -86,15 +79,14 @@ describe("SearchResults", () => {
             },
           ],
         }}
-      />
+      />,
     );
-    expect(
-      screen.queryByRole("link", { name: /order ambulance mugs/i })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /order ambulance mugs/i })).not.toBeInTheDocument();
     expect(screen.getByText("Order ambulance mugs")).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /subpoena ambulance records/i })
-    ).toHaveAttribute("href", "/matters/m1/tasks");
+    expect(screen.getByRole("link", { name: /subpoena ambulance records/i })).toHaveAttribute(
+      "href",
+      "/matters/m1/tasks",
+    );
   });
 });
 
@@ -107,11 +99,7 @@ describe("SaveSearchButton", () => {
     await userEvent.setup().click(screen.getByRole("button"));
 
     await waitFor(() => expect(notifyError).toHaveBeenCalled());
-    expect(createSavedSearch).toHaveBeenCalledWith(
-      "ambulance",
-      "ambulance",
-      null
-    );
+    expect(createSavedSearch).toHaveBeenCalledWith("ambulance", "ambulance", null);
   });
 
   test("a validation error from the action is shown", async () => {

@@ -52,9 +52,7 @@ export function MatterTabs({
 }) {
   const pathname = usePathname();
   const tabs = TABS.filter(
-    (t) =>
-      (canViewBilling || t.slug !== "billing") &&
-      (canViewRecords || t.slug !== "records")
+    (t) => (canViewBilling || t.slug !== "billing") && (canViewRecords || t.slug !== "records"),
   );
   const base = `/matters/${matterId}`;
 
@@ -84,7 +82,7 @@ export function MatterTabs({
                 "px-3 py-2.5 text-sm border-b-2 transition-colors whitespace-nowrap shrink-0",
                 active
                   ? "text-ink border-ink font-medium"
-                  : "text-ink-3 border-transparent hover:text-ink hover:border-line"
+                  : "text-ink-3 border-transparent hover:text-ink hover:border-line",
               )}
             >
               {t.label}

@@ -1,8 +1,20 @@
 import { describe, expect, test } from "vitest";
 import type { FolderNode } from "@/lib/folder-tree";
-import { ROOT_KEY, ancestorChain, attachmentsByEmail, filesByFolder, filterTree, nameMatches } from "./file-tree";
+import {
+  ROOT_KEY,
+  ancestorChain,
+  attachmentsByEmail,
+  filesByFolder,
+  filterTree,
+  nameMatches,
+} from "./file-tree";
 
-const node = (id: string, name: string, parentId: string | null, children: FolderNode[] = []): FolderNode => ({
+const node = (
+  id: string,
+  name: string,
+  parentId: string | null,
+  children: FolderNode[] = [],
+): FolderNode => ({
   id,
   name,
   parentId,
@@ -14,7 +26,9 @@ const node = (id: string, name: string, parentId: string | null, children: Folde
 //     Officer Smith
 // Medical
 const TREE: FolderNode[] = [
-  node("disc", "Discovery", null, [node("body", "Bodycam", "disc", [node("smith", "Officer Smith", "body")])]),
+  node("disc", "Discovery", null, [
+    node("body", "Bodycam", "disc", [node("smith", "Officer Smith", "body")]),
+  ]),
   node("med", "Medical", null),
 ];
 
@@ -85,14 +99,28 @@ describe("filterTree", () => {
 describe("email attachments", () => {
   const files = [
     { id: "e1", name: "Incident.eml", folderId: "disc" },
-    { id: "a2", name: "timeline.csv", folderId: "disc", parentDocumentId: "e1", attachmentIndex: 1 },
+    {
+      id: "a2",
+      name: "timeline.csv",
+      folderId: "disc",
+      parentDocumentId: "e1",
+      attachmentIndex: 1,
+    },
     { id: "a1", name: "report.pdf", folderId: "disc", parentDocumentId: "e1", attachmentIndex: 0 },
     { id: "x", name: "Brief.pdf", folderId: null },
   ];
 
   test("attachments leave the folder list and group under their email, in order", () => {
-    expect(filesByFolder(files).get("disc")?.map((f) => f.id)).toEqual(["e1"]);
-    expect(attachmentsByEmail(files).get("e1")?.map((f) => f.id)).toEqual(["a1", "a2"]);
+    expect(
+      filesByFolder(files)
+        .get("disc")
+        ?.map((f) => f.id),
+    ).toEqual(["e1"]);
+    expect(
+      attachmentsByEmail(files)
+        .get("e1")
+        ?.map((f) => f.id),
+    ).toEqual(["a1", "a2"]);
   });
 
   test("the filter shows an email when an attachment matches", () => {

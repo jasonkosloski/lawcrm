@@ -21,7 +21,11 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  NativeSelect,
+  NativeSelectOptGroup,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/empty-state";
 import {
@@ -43,11 +47,7 @@ import {
   setTaskListActive,
 } from "@/app/actions/automations";
 import { automationInitialState, type AutomationFormState } from "@/lib/automation-form";
-import type {
-  AutoApplyRow,
-  DeadlineRuleRow,
-  TaskListRow,
-} from "@/lib/queries/automations";
+import type { AutoApplyRow, DeadlineRuleRow, TaskListRow } from "@/lib/queries/automations";
 import { DeadlineRuleDialog } from "./deadline-rule-dialog";
 import { TaskListDialog } from "./task-list-dialog";
 import { Button } from "@/components/ui/button";
@@ -77,8 +77,14 @@ export function AutomationsLibrary({
   practiceAreas: { id: string; name: string }[];
   can: AutomationPermissions;
 }) {
-  const [ruleDialog, setRuleDialog] = useState<{ open: boolean; rule: DeadlineRuleRow | null }>({ open: false, rule: null });
-  const [listDialog, setListDialog] = useState<{ open: boolean; list: TaskListRow | null }>({ open: false, list: null });
+  const [ruleDialog, setRuleDialog] = useState<{ open: boolean; rule: DeadlineRuleRow | null }>({
+    open: false,
+    rule: null,
+  });
+  const [listDialog, setListDialog] = useState<{ open: boolean; list: TaskListRow | null }>({
+    open: false,
+    list: null,
+  });
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -119,14 +125,23 @@ export function AutomationsLibrary({
           icon={CalendarClock}
           title="Deadline rules"
           hint="Reusable deadlines — “N days after/before” a date. Apply one from any matter's Deadlines tab."
-          action={can.ruleCreate && (
-            <Button size="xs" type="button" onClick={() => setRuleDialog({ open: true, rule: null })}>
-              <Plus size={13} /> New rule
-            </Button>
-          )}
+          action={
+            can.ruleCreate && (
+              <Button
+                size="xs"
+                type="button"
+                onClick={() => setRuleDialog({ open: true, rule: null })}
+              >
+                <Plus size={13} /> New rule
+              </Button>
+            )
+          }
         />
         {rules.length === 0 ? (
-          <Empty title="No deadline rules yet" text="Create one for each recurring deadline — notice periods, filing windows, pretrial dates." />
+          <Empty
+            title="No deadline rules yet"
+            text="Create one for each recurring deadline — notice periods, filing windows, pretrial dates."
+          />
         ) : (
           <Rows>
             {rules.map((r) => (
@@ -142,8 +157,25 @@ export function AutomationsLibrary({
                     disabled={pending}
                     onEdit={can.ruleEdit ? () => setRuleDialog({ open: true, rule: r }) : undefined}
                     archived={!r.isActive}
-                    onToggleArchive={can.ruleEdit ? () => run(() => setDeadlineRuleActive(r.id, !r.isActive)) : undefined}
-                    onDelete={can.ruleDelete ? () => void confirmThen({ title: `Delete the rule "${r.title}"?`, description: `Deadlines it already created stay on their matters.${defaultsNote("rule", r.id)}`, confirmLabel: "Delete rule", destructive: true }, () => deleteDeadlineRule(r.id)) : undefined}
+                    onToggleArchive={
+                      can.ruleEdit
+                        ? () => run(() => setDeadlineRuleActive(r.id, !r.isActive))
+                        : undefined
+                    }
+                    onDelete={
+                      can.ruleDelete
+                        ? () =>
+                            void confirmThen(
+                              {
+                                title: `Delete the rule "${r.title}"?`,
+                                description: `Deadlines it already created stay on their matters.${defaultsNote("rule", r.id)}`,
+                                confirmLabel: "Delete rule",
+                                destructive: true,
+                              },
+                              () => deleteDeadlineRule(r.id),
+                            )
+                        : undefined
+                    }
                   />
                 }
               />
@@ -158,14 +190,23 @@ export function AutomationsLibrary({
           icon={ListChecks}
           title="Task lists"
           hint="Reusable checklists. Apply one from any matter's Tasks tab."
-          action={can.listCreate && (
-            <Button size="xs" type="button" onClick={() => setListDialog({ open: true, list: null })}>
-              <Plus size={13} /> New task list
-            </Button>
-          )}
+          action={
+            can.listCreate && (
+              <Button
+                size="xs"
+                type="button"
+                onClick={() => setListDialog({ open: true, list: null })}
+              >
+                <Plus size={13} /> New task list
+              </Button>
+            )
+          }
         />
         {lists.length === 0 ? (
-          <Empty title="No task lists yet" text="Create checklists for intake, case opening, discovery, closing — whatever repeats." />
+          <Empty
+            title="No task lists yet"
+            text="Create checklists for intake, case opening, discovery, closing — whatever repeats."
+          />
         ) : (
           <Rows>
             {lists.map((l) => (
@@ -181,8 +222,25 @@ export function AutomationsLibrary({
                     disabled={pending}
                     onEdit={can.listEdit ? () => setListDialog({ open: true, list: l }) : undefined}
                     archived={!l.isActive}
-                    onToggleArchive={can.listEdit ? () => run(() => setTaskListActive(l.id, !l.isActive)) : undefined}
-                    onDelete={can.listDelete ? () => void confirmThen({ title: `Delete the task list "${l.name}"?`, description: `Tasks it already created stay on their matters.${defaultsNote("list", l.id)}`, confirmLabel: "Delete task list", destructive: true }, () => deleteTaskList(l.id)) : undefined}
+                    onToggleArchive={
+                      can.listEdit
+                        ? () => run(() => setTaskListActive(l.id, !l.isActive))
+                        : undefined
+                    }
+                    onDelete={
+                      can.listDelete
+                        ? () =>
+                            void confirmThen(
+                              {
+                                title: `Delete the task list "${l.name}"?`,
+                                description: `Tasks it already created stay on their matters.${defaultsNote("list", l.id)}`,
+                                confirmLabel: "Delete task list",
+                                destructive: true,
+                              },
+                              () => deleteTaskList(l.id),
+                            )
+                        : undefined
+                    }
                   />
                 }
               />
@@ -199,18 +257,31 @@ export function AutomationsLibrary({
           hint="Runs when a matter is created from the New-matter form or by converting a lead. Rules that can't be dated yet (e.g. no incident date) become a “Set date” task instead."
         />
         {can.defaultsCreate && (
-          <AddDefaultForm rules={rules.filter((r) => r.isActive)} lists={lists.filter((l) => l.isActive)} practiceAreas={practiceAreas} />
+          <AddDefaultForm
+            rules={rules.filter((r) => r.isActive)}
+            lists={lists.filter((l) => l.isActive)}
+            practiceAreas={practiceAreas}
+          />
         )}
         {defaults.length === 0 ? (
-          <Empty title="Nothing applies automatically yet" text="Add a rule or task list above to have new matters start with it." />
+          <Empty
+            title="Nothing applies automatically yet"
+            text="Add a rule or task list above to have new matters start with it."
+          />
         ) : (
           <Rows>
             {defaults.map((d) => (
               <div key={d.id} className="flex items-center gap-3 px-3 py-2">
-                {d.targetKind === "rule" ? <CalendarClock size={14} className="text-ink-4" /> : <ListChecks size={14} className="text-ink-4" />}
+                {d.targetKind === "rule" ? (
+                  <CalendarClock size={14} className="text-ink-4" />
+                ) : (
+                  <ListChecks size={14} className="text-ink-4" />
+                )}
                 <div className="flex-1 min-w-0 text-xs text-ink">
                   <span className="font-medium">{d.targetName}</span>
-                  {!d.targetActive && <span className="ml-1.5 text-2xs text-warn">(archived — skipped)</span>}
+                  {!d.targetActive && (
+                    <span className="ml-1.5 text-2xs text-warn">(archived — skipped)</span>
+                  )}
                   <span className="text-ink-4"> → new matters in </span>
                   <span className="font-medium">{d.practiceAreaName ?? "every practice area"}</span>
                 </div>
@@ -259,7 +330,7 @@ function AddDefaultForm({
   const [state, formAction, isPending] = useDialogActionState<AutomationFormState, FormData>(
     addAutoApply,
     automationInitialState,
-    true
+    true,
   );
   // Dispatch manually instead of <form action>: React 19 resets the
   // form after the action settles even on a validation error, which
@@ -283,22 +354,36 @@ function AddDefaultForm({
     >
       <input type="hidden" name="trigger" value="matter_created" />
       <NativeSelect name="target" required defaultValue="" aria-label="Rule or task list">
-        <NativeSelectOption value="" disabled>Choose a rule or task list…</NativeSelectOption>
+        <NativeSelectOption value="" disabled>
+          Choose a rule or task list…
+        </NativeSelectOption>
         {rules.length > 0 && (
           <NativeSelectOptGroup label="Deadline rules">
-            {rules.map((r) => <NativeSelectOption key={r.id} value={`rule:${r.id}`}>{r.title}</NativeSelectOption>)}
+            {rules.map((r) => (
+              <NativeSelectOption key={r.id} value={`rule:${r.id}`}>
+                {r.title}
+              </NativeSelectOption>
+            ))}
           </NativeSelectOptGroup>
         )}
         {lists.length > 0 && (
           <NativeSelectOptGroup label="Task lists">
-            {lists.map((l) => <NativeSelectOption key={l.id} value={`list:${l.id}`}>{l.name}</NativeSelectOption>)}
+            {lists.map((l) => (
+              <NativeSelectOption key={l.id} value={`list:${l.id}`}>
+                {l.name}
+              </NativeSelectOption>
+            ))}
           </NativeSelectOptGroup>
         )}
       </NativeSelect>
       <span className="text-xs text-ink-4">for new matters in</span>
       <NativeSelect name="practiceAreaId" defaultValue="" aria-label="Practice area">
         <NativeSelectOption value="">Every practice area</NativeSelectOption>
-        {practiceAreas.map((a) => <NativeSelectOption key={a.id} value={a.id}>{a.name}</NativeSelectOption>)}
+        {practiceAreas.map((a) => (
+          <NativeSelectOption key={a.id} value={a.id}>
+            {a.name}
+          </NativeSelectOption>
+        ))}
       </NativeSelect>
       <Button size="xs" type="submit" disabled={isPending}>
         <Plus size={13} /> Add
@@ -368,9 +453,7 @@ function Row({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-ink truncate">{title}</span>
-          {badge && (
-            <Badge variant="neutral">{badge}</Badge>
-          )}
+          {badge && <Badge variant="neutral">{badge}</Badge>}
           {inactive && <span className="text-2xs text-ink-4 shrink-0">Archived</span>}
         </div>
         {sub && <div className="text-2xs text-ink-4 truncate">{sub}</div>}

@@ -43,9 +43,7 @@ export type ExpenseSummary = {
 /** Pull every expense row on a matter, ordered newest-first. Joined
  *  to invoice number for the "billed on Invoice X" link, and to the
  *  logger user for attribution on the row. */
-export async function getMatterExpenses(
-  matterId: string
-): Promise<ExpenseSummary> {
+export async function getMatterExpenses(matterId: string): Promise<ExpenseSummary> {
   const rows = await prisma.expense.findMany({
     where: { matterId },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
@@ -57,9 +55,7 @@ export async function getMatterExpenses(
     },
   });
   // Resolve loggers in one batch — same pattern as documents.
-  const loggerIds = [
-    ...new Set(rows.map((r) => r.loggedBy).filter((v): v is string => !!v)),
-  ];
+  const loggerIds = [...new Set(rows.map((r) => r.loggedBy).filter((v): v is string => !!v))];
   const loggers =
     loggerIds.length > 0
       ? await prisma.user.findMany({

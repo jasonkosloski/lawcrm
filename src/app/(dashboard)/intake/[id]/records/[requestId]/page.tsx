@@ -34,8 +34,8 @@ export default async function LeadRecordsRequestPage({
       {isConverted && (
         <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-paper-2 px-3 py-2.5">
           <p className="text-xs text-ink-3">
-            This lead converted — its records requests were carried forward to
-            the matter. Add new requests there.
+            This lead converted — its records requests were carried forward to the matter. Add new
+            requests there.
           </p>
           {lead.convertedMatterId && (
             <Link

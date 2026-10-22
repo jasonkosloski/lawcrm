@@ -22,8 +22,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
-  const mod =
-    await importOriginal<typeof import("@/lib/google/gmail-client")>();
+  const mod = await importOriginal<typeof import("@/lib/google/gmail-client")>();
   return { ...mod, gmailFetch: vi.fn() };
 });
 
@@ -36,10 +35,7 @@ import {
   googleEventIdFor,
 } from "@/lib/google/calendar-shared";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
-import {
-  deleteEventFromGoogle,
-  pushEventToGoogle,
-} from "./google-calendar-push";
+import { deleteEventFromGoogle, pushEventToGoogle } from "./google-calendar-push";
 
 const mockedFetch = vi.mocked(gmailFetch);
 
@@ -80,14 +76,10 @@ async function seedGoogleAccount(opts?: {
   const account = await prisma.emailAccount.create({
     data: {
       userId: opts?.ownerId ?? userId,
-      emailAddress:
-        opts?.email ?? `me-${Math.random().toString(36).slice(2, 8)}@gmail.com`,
-      refreshToken:
-        opts?.refreshToken === undefined ? "rt-secret" : opts.refreshToken,
+      emailAddress: opts?.email ?? `me-${Math.random().toString(36).slice(2, 8)}@gmail.com`,
+      refreshToken: opts?.refreshToken === undefined ? "rt-secret" : opts.refreshToken,
       grantedScopes:
-        opts?.grantedScopes === undefined
-          ? `openid ${CALENDAR_EVENTS_SCOPE}`
-          : opts.grantedScopes,
+        opts?.grantedScopes === undefined ? `openid ${CALENDAR_EVENTS_SCOPE}` : opts.grantedScopes,
       syncStatus: "connected",
       ...(opts?.createdAt ? { createdAt: opts.createdAt } : {}),
     },
@@ -97,14 +89,10 @@ async function seedGoogleAccount(opts?: {
 }
 
 /** A CRM event created by `userId` (override with `createdById`). */
-async function seedEvent(opts?: {
-  createdById?: string | null;
-  title?: string;
-}): Promise<string> {
+async function seedEvent(opts?: { createdById?: string | null; title?: string }): Promise<string> {
   const ev = await prisma.calendarEvent.create({
     data: {
-      createdById:
-        opts?.createdById === undefined ? userId : opts.createdById,
+      createdById: opts?.createdById === undefined ? userId : opts.createdById,
       title: opts?.title ?? "Deposition prep",
       type: "meeting",
       startTime: new Date("2026-08-01T14:00:00Z"),
@@ -140,7 +128,7 @@ const googleOk = (body?: { id?: string; updated?: string }) =>
       id: body?.id ?? "g-1",
       updated: body?.updated ?? "2026-08-01T16:00:00.000Z",
     }),
-    { status: 200 }
+    { status: 200 },
   );
 
 describe("pushEventToGoogle — creator/account resolution", () => {
@@ -226,9 +214,7 @@ describe("pushEventToGoogle — creator/account resolution", () => {
     mockedFetch.mockResolvedValue(googleOk());
 
     await pushEventToGoogle(eventId);
-    expect(JSON.parse(String(mockedFetch.mock.calls[0][2]?.body)).visibility).toBe(
-      "private"
-    );
+    expect(JSON.parse(String(mockedFetch.mock.calls[0][2]?.body)).visibility).toBe("private");
 
     await prisma.calendarEvent.update({
       where: { id: eventId },
@@ -237,9 +223,7 @@ describe("pushEventToGoogle — creator/account resolution", () => {
     mockedFetch.mockClear();
     mockedFetch.mockResolvedValue(googleOk());
     await pushEventToGoogle(eventId);
-    expect(JSON.parse(String(mockedFetch.mock.calls[0][2]?.body)).visibility).toBe(
-      "default"
-    );
+    expect(JSON.parse(String(mockedFetch.mock.calls[0][2]?.body)).visibility).toBe("default");
   });
 
   test("creator-less event (legacy row) is skipped silently", async () => {
@@ -303,9 +287,7 @@ describe("pushEventToGoogle — insert vs patch + mapping upsert", () => {
   test("insert upserts the mapping row with the response id + updated stamp", async () => {
     const accountId = await seedGoogleAccount();
     const eventId = await seedEvent();
-    mockedFetch.mockResolvedValue(
-      googleOk({ id: "g-new", updated: "2026-08-02T09:30:00.000Z" })
-    );
+    mockedFetch.mockResolvedValue(googleOk({ id: "g-new", updated: "2026-08-02T09:30:00.000Z" }));
 
     await pushEventToGoogle(eventId);
 
@@ -314,9 +296,7 @@ describe("pushEventToGoogle — insert vs patch + mapping upsert", () => {
     });
     expect(mapping.googleEventId).toBe("g-new");
     expect(mapping.googleCalendarId).toBe("primary");
-    expect(mapping.googleUpdatedAt?.toISOString()).toBe(
-      "2026-08-02T09:30:00.000Z"
-    );
+    expect(mapping.googleUpdatedAt?.toISOString()).toBe("2026-08-02T09:30:00.000Z");
   });
 
   test("insert sends a deterministic Google event id (idempotent create, F698)", async () => {
@@ -338,17 +318,13 @@ describe("pushEventToGoogle — insert vs patch + mapping upsert", () => {
     const googleId = googleEventIdFor(eventId);
     mockedFetch
       .mockResolvedValueOnce(new Response("{}", { status: 409 }))
-      .mockResolvedValueOnce(
-        googleOk({ id: googleId, updated: "2026-08-04T10:00:00.000Z" })
-      );
+      .mockResolvedValueOnce(googleOk({ id: googleId, updated: "2026-08-04T10:00:00.000Z" }));
 
     await pushEventToGoogle(eventId);
 
     expect(mockedFetch).toHaveBeenCalledTimes(2);
     const [, patchUrl, patchInit] = mockedFetch.mock.calls[1];
-    expect(patchUrl).toBe(
-      `${CALENDAR_API_BASE}/calendars/primary/events/${googleId}`
-    );
+    expect(patchUrl).toBe(`${CALENDAR_API_BASE}/calendars/primary/events/${googleId}`);
     expect(patchInit?.method).toBe("PATCH");
     // status:confirmed revives a copy cancelled at Google.
     expect(JSON.parse(String(patchInit?.body)).status).toBe("confirmed");
@@ -357,35 +333,27 @@ describe("pushEventToGoogle — insert vs patch + mapping upsert", () => {
       where: { eventId_accountId: { eventId, accountId } },
     });
     expect(mapping.googleEventId).toBe(googleId);
-    expect(mapping.googleUpdatedAt?.toISOString()).toBe(
-      "2026-08-04T10:00:00.000Z"
-    );
+    expect(mapping.googleUpdatedAt?.toISOString()).toBe("2026-08-04T10:00:00.000Z");
   });
 
   test("existing mapping → PATCH events/{googleEventId}, not POST", async () => {
     const accountId = await seedGoogleAccount();
     const eventId = await seedEvent();
     await seedMapping({ eventId, accountId, googleEventId: "g-77" });
-    mockedFetch.mockResolvedValue(
-      googleOk({ id: "g-77", updated: "2026-08-03T12:00:00.000Z" })
-    );
+    mockedFetch.mockResolvedValue(googleOk({ id: "g-77", updated: "2026-08-03T12:00:00.000Z" }));
 
     await pushEventToGoogle(eventId);
 
     expect(mockedFetch).toHaveBeenCalledTimes(1);
     const [, url, init] = mockedFetch.mock.calls[0];
-    expect(url).toBe(
-      `${CALENDAR_API_BASE}/calendars/primary/events/g-77`
-    );
+    expect(url).toBe(`${CALENDAR_API_BASE}/calendars/primary/events/g-77`);
     expect(init?.method).toBe("PATCH");
     // Mapping stamp refreshed, still exactly one row.
     const mappings = await prisma.calendarEventSync.findMany({
       where: { eventId },
     });
     expect(mappings).toHaveLength(1);
-    expect(mappings[0].googleUpdatedAt?.toISOString()).toBe(
-      "2026-08-03T12:00:00.000Z"
-    );
+    expect(mappings[0].googleUpdatedAt?.toISOString()).toBe("2026-08-03T12:00:00.000Z");
   });
 
   test("pulled (Google-born) event: PATCH carries the echo marker, making the copy 'ours'", async () => {
@@ -461,9 +429,7 @@ describe("pushEventToGoogle — never-rejects contract", () => {
   test("GmailAuthError → reconnect signal recorded on the account, no throw", async () => {
     const accountId = await seedGoogleAccount();
     const eventId = await seedEvent();
-    mockedFetch.mockRejectedValue(
-      new GmailAuthError("Reconnect this mailbox.", accountId)
-    );
+    mockedFetch.mockRejectedValue(new GmailAuthError("Reconnect this mailbox.", accountId));
 
     await expect(pushEventToGoogle(eventId)).resolves.toBeUndefined();
 

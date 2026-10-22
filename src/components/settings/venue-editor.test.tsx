@@ -12,9 +12,33 @@ vi.mock("@/app/actions/venues", () => actions);
 
 import { VenueEditor } from "./venue-editor";
 
-const used = { id: "v1", name: "Aurora", city: "Aurora", county: "Arapahoe", state: "CO", isActive: true, matterCount: 2 };
-const unused = { id: "v2", name: "Denver", city: null, county: null, state: "CO", isActive: true, matterCount: 0 };
-const archived = { id: "v3", name: "Old Court", city: null, county: null, state: "CO", isActive: false, matterCount: 1 };
+const used = {
+  id: "v1",
+  name: "Aurora",
+  city: "Aurora",
+  county: "Arapahoe",
+  state: "CO",
+  isActive: true,
+  matterCount: 2,
+};
+const unused = {
+  id: "v2",
+  name: "Denver",
+  city: null,
+  county: null,
+  state: "CO",
+  isActive: true,
+  matterCount: 0,
+};
+const archived = {
+  id: "v3",
+  name: "Old Court",
+  city: null,
+  county: null,
+  state: "CO",
+  isActive: false,
+  matterCount: 1,
+};
 const all = { canAdd: true, canEdit: true, canDelete: true };
 
 beforeEach(() => Object.values(actions).forEach((f) => f.mockReset()));
@@ -35,7 +59,9 @@ describe("VenueEditor", () => {
   });
 
   test("hides Add without venues.add; hides row controls without keys", () => {
-    render(<VenueEditor venues={[unused, archived]} canAdd={false} canEdit={false} canDelete={false} />);
+    render(
+      <VenueEditor venues={[unused, archived]} canAdd={false} canEdit={false} canDelete={false} />,
+    );
     expect(screen.queryByRole("button", { name: /add venue/i })).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit Denver" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Archive Denver" })).toBeNull();
@@ -58,7 +84,12 @@ describe("VenueEditor", () => {
     expect(screen.getByLabelText(/^state/i)).toHaveValue("CO");
     await userEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() =>
-      expect(actions.createVenue).toHaveBeenCalledWith({ name: "Boulder", city: "", county: "", state: "CO" })
+      expect(actions.createVenue).toHaveBeenCalledWith({
+        name: "Boulder",
+        city: "",
+        county: "",
+        state: "CO",
+      }),
     );
   });
 
@@ -69,7 +100,10 @@ describe("VenueEditor", () => {
   });
 
   test("shows delete error", async () => {
-    actions.deleteVenue.mockResolvedValue({ ok: false, error: "A matter uses this venue. Archive it instead." });
+    actions.deleteVenue.mockResolvedValue({
+      ok: false,
+      error: "A matter uses this venue. Archive it instead.",
+    });
     render(<VenueEditor venues={[unused]} {...all} />);
     await userEvent.click(screen.getByRole("button", { name: "Delete Denver" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Archive it instead");

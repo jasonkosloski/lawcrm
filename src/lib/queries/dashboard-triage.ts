@@ -29,26 +29,14 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { isCurrentUserAdmin } from "@/lib/firm";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { visibleEmailThreadWhere } from "@/lib/email-visibility";
-import {
-  matterAccessWhere,
-  optionalRecordAccessClause,
-} from "@/lib/matter-access";
+import { matterAccessWhere, optionalRecordAccessClause } from "@/lib/matter-access";
 import { TASK_CLOSED_STATUSES } from "@/lib/constants/task-status";
-import {
-  dateOnlyRange,
-  daysUntilDateOnly,
-  todayKey,
-} from "@/lib/format-date";
+import { dateOnlyRange, daysUntilDateOnly, todayKey } from "@/lib/format-date";
 import { MISSING_SIGNED_AGREEMENT_WHERE } from "@/lib/queries/agreement-missing";
 
 export const TRIAGE_GROUP_LIMIT = 5;
 
-export type TriageGroupKey =
-  | "deadlines"
-  | "tasks"
-  | "email"
-  | "uploads"
-  | "agreements";
+export type TriageGroupKey = "deadlines" | "tasks" | "email" | "uploads" | "agreements";
 
 export type TriageRow = {
   id: string;
@@ -178,8 +166,7 @@ export async function getTriage(tz: string): Promise<TriageData> {
       rows.map((t) => ({
         id: t.id,
         title: t.title,
-        context:
-          t.matter?.name ?? (t.lead ? `Intake · ${t.lead.name}` : null),
+        context: t.matter?.name ?? (t.lead ? `Intake · ${t.lead.name}` : null),
         href: t.matterId
           ? `/matters/${t.matterId}/tasks`
           : t.leadId
@@ -295,12 +282,6 @@ export async function getTriage(tz: string): Promise<TriageData> {
       })()
     : Promise.resolve(null);
 
-  const all = await Promise.all([
-    deadlinesP,
-    tasksP,
-    emailP,
-    uploadsP,
-    agreementsP,
-  ]);
+  const all = await Promise.all([deadlinesP, tasksP, emailP, uploadsP, agreementsP]);
   return { groups: all.filter((g): g is TriageGroup => g !== null) };
 }

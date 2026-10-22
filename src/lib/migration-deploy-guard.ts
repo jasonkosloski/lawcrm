@@ -49,7 +49,10 @@ export function stripSqlComments(sql: string): string {
 }
 
 const DESTRUCTIVE_PATTERNS: { label: string; re: RegExp }[] = [
-  { label: "DROP TABLE/COLUMN/SCHEMA/TYPE/VIEW", re: /\bDROP\s+(TABLE|COLUMN|SCHEMA|TYPE|VIEW|MATERIALIZED\s+VIEW)\b/i },
+  {
+    label: "DROP TABLE/COLUMN/SCHEMA/TYPE/VIEW",
+    re: /\bDROP\s+(TABLE|COLUMN|SCHEMA|TYPE|VIEW|MATERIALIZED\s+VIEW)\b/i,
+  },
   { label: "RENAME", re: /\bRENAME\b/i },
   { label: "column type change", re: /\bALTER\s+COLUMN\s+("[^"]+"|\S+)\s+(SET\s+DATA\s+)?TYPE\b/i },
   { label: "SET NOT NULL", re: /\bSET\s+NOT\s+NULL\b/i },
@@ -79,7 +82,7 @@ export function findDestructiveStatements(sql: string): DestructiveFinding[] {
 /** Migration folder names not yet applied, in apply (lexical) order. */
 export function pendingMigrations(
   folders: readonly string[],
-  applied: ReadonlySet<string>
+  applied: ReadonlySet<string>,
 ): string[] {
   return folders.filter((name) => !applied.has(name)).sort();
 }
@@ -100,7 +103,7 @@ export function formatBlocked(blocked: readonly BlockedMigration[]): string {
     .map(
       (b) =>
         `  ${b.name}\n` +
-        b.findings.map((f) => `    line ${f.line} (${f.label}): ${f.text}`).join("\n")
+        b.findings.map((f) => `    line ${f.line} (${f.label}): ${f.text}`).join("\n"),
     )
     .join("\n");
 }

@@ -34,8 +34,7 @@ import { logActivity } from "@/lib/activity-log";
 export const MAX_EXTRACTED_ATTACHMENTS = 100;
 
 export type ExtractResult =
-  | { ok: true; created: number; alreadyExtracted?: boolean }
-  | { ok: false; reason: string };
+  { ok: true; created: number; alreadyExtracted?: boolean } | { ok: false; reason: string };
 
 /** "eml" / "msg" for an email document, else null. */
 export function emailKindOf(contentType: string | null, name: string): "eml" | "msg" | null {
@@ -43,10 +42,22 @@ export function emailKindOf(contentType: string | null, name: string): "eml" | "
   return r === "eml" || r === "msg" ? r : null;
 }
 
-export async function extractEmailAttachments(documentId: string, actorId: string): Promise<ExtractResult> {
+export async function extractEmailAttachments(
+  documentId: string,
+  actorId: string,
+): Promise<ExtractResult> {
   const email = await prisma.document.findUnique({
     where: { id: documentId },
-    select: { id: true, matterId: true, leadId: true, folderId: true, name: true, contentType: true, fileUrl: true, category: true },
+    select: {
+      id: true,
+      matterId: true,
+      leadId: true,
+      folderId: true,
+      name: true,
+      contentType: true,
+      fileUrl: true,
+      category: true,
+    },
   });
   if (!email?.fileUrl) return { ok: false, reason: "Email not found." };
   const kind = emailKindOf(email.contentType, email.name);
@@ -70,7 +81,10 @@ export async function extractEmailAttachments(documentId: string, actorId: strin
     }
     if (stat.size > EMAIL_MAX_BYTES) {
       await release();
-      return { ok: false, reason: "This email is too large to extract attachments from — download it instead." };
+      return {
+        ok: false,
+        reason: "This email is too large to extract attachments from — download it instead.",
+      };
     }
     const read = await readStoredBytes(email.fileUrl, EMAIL_MAX_BYTES, stat);
     if (!read) {
@@ -91,7 +105,9 @@ export async function extractEmailAttachments(documentId: string, actorId: strin
       const name = capDocumentName(f.name);
       // Same server-side MIME rule as uploads (never the email's claim).
       const contentType = contentTypeForFilename(name);
-      const saved = await storeFile(new File([new Uint8Array(f.content)], name, { type: contentType }));
+      const saved = await storeFile(
+        new File([new Uint8Array(f.content)], name, { type: contentType }),
+      );
       stored.push(saved.key);
       rows.push({ name, index, key: saved.key, size: saved.size, contentType });
     }
@@ -113,8 +129,8 @@ export async function extractEmailAttachments(documentId: string, actorId: strin
             uploadedBy: actorId,
           },
           select: { id: true },
-        })
-      )
+        }),
+      ),
     );
 
     if (rows.length > 0) {
@@ -123,8 +139,12 @@ export async function extractEmailAttachments(documentId: string, actorId: strin
         leadId: email.leadId,
         userId: actorId,
         type: "document",
-        title: rows.length === 1 ? "Email attachment added" : `${rows.length} email attachments added`,
-        detail: `From ${email.name}: ${rows.map((r) => r.name).join(", ").slice(0, 300)}`,
+        title:
+          rows.length === 1 ? "Email attachment added" : `${rows.length} email attachments added`,
+        detail: `From ${email.name}: ${rows
+          .map((r) => r.name)
+          .join(", ")
+          .slice(0, 300)}`,
       });
     }
     return { ok: true, created: rows.length };
@@ -135,7 +155,10 @@ export async function extractEmailAttachments(documentId: string, actorId: strin
     });
     await Promise.all(stored.map((k) => deleteFile(k).catch(() => undefined)));
     await release().catch(() => undefined);
-    return { ok: false, reason: "The attachments couldn't be extracted. The email may be corrupt." };
+    return {
+      ok: false,
+      reason: "The attachments couldn't be extracted. The email may be corrupt.",
+    };
   }
 }
 
@@ -143,7 +166,7 @@ export async function extractEmailAttachments(documentId: string, actorId: strin
  *  document is an email; never throws (the upload already succeeded). */
 export async function extractIfEmail(
   doc: { id: string; contentType: string | null; name: string },
-  actorId: string
+  actorId: string,
 ): Promise<void> {
   try {
     if (!emailKindOf(doc.contentType, doc.name)) return;

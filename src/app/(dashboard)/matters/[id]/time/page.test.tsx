@@ -15,11 +15,7 @@
 
 import { describe, expect, test, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import type {
-  ExpenseSummary,
-  MatterTimeSummary,
-  TimeEntryRow,
-} from "@/lib/queries/matter-detail";
+import type { ExpenseSummary, MatterTimeSummary, TimeEntryRow } from "@/lib/queries/matter-detail";
 
 // Page auth guard (src/lib/current-user.ts) — session exists here.
 vi.mock("@/lib/matter-access", () => ({
@@ -51,13 +47,7 @@ vi.mock("@/components/matters/captures/time-composer", () => ({
 vi.mock("@/components/time-entries/time-entry-row-actions", () => ({
   // Surface the capability props so tests can assert what the page
   // computed for each row.
-  TimeEntryRowMenu: ({
-    canEdit,
-    canDelete,
-  }: {
-    canEdit?: boolean;
-    canDelete?: boolean;
-  }) => (
+  TimeEntryRowMenu: ({ canEdit, canDelete }: { canEdit?: boolean; canDelete?: boolean }) => (
     <div
       data-testid="time-entry-menu"
       data-can-edit={String(canEdit)}
@@ -95,9 +85,7 @@ const mockedFindDocuments = vi.mocked(prisma.document.findMany);
 const mockedCount = vi.mocked(prisma.timeEntry.count);
 
 const props = (id = "matter_1") =>
-  ({ params: Promise.resolve({ id }) }) as Parameters<
-    typeof MatterTimePage
-  >[0];
+  ({ params: Promise.resolve({ id }) }) as Parameters<typeof MatterTimePage>[0];
 
 const emptySummary: MatterTimeSummary = {
   totalHours: 0,
@@ -139,13 +127,11 @@ const timeEntry = (): TimeEntryRow => ({
 /** Grant every expense key except the ones listed. */
 const grantAllExcept = (...denied: string[]) => {
   mockedHasPermission.mockImplementation(async (key: string) =>
-    denied.includes(key) ? false : true
+    denied.includes(key) ? false : true,
   );
 };
 
-const arrange = (
-  opts: { entries?: TimeEntryRow[]; total?: number } = {}
-) => {
+const arrange = (opts: { entries?: TimeEntryRow[]; total?: number } = {}) => {
   const entries = opts.entries ?? [];
   const total = opts.total ?? entries.length;
   mockedTimeEntries.mockResolvedValue(entries);

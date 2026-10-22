@@ -45,22 +45,10 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import {
-  formatHourLabel,
-  HOUR_HEIGHT_PX,
-  HOURS,
-} from "@/lib/calendar-utils";
+import { formatHourLabel, HOUR_HEIGHT_PX, HOURS } from "@/lib/calendar-utils";
 import { dateKeyInTz, dateOnlyKey } from "@/lib/format-date";
-import type {
-  CalendarItem,
-  CalendarEventRow,
-  CalendarDeadlineRow,
-} from "@/lib/queries/calendar";
-import {
-  bucketItemsByDay,
-  deadlineRank,
-  weekdayShort,
-} from "./bucket-items";
+import type { CalendarItem, CalendarEventRow, CalendarDeadlineRow } from "@/lib/queries/calendar";
+import { bucketItemsByDay, deadlineRank, weekdayShort } from "./bucket-items";
 import { DeadlineChip, WeekAllDayCell, WeekTimeColumn } from "./week-day-column";
 import { useEventMoves } from "./use-event-moves";
 
@@ -106,7 +94,7 @@ export function WeekView({
   const editable = editableEventIds ? new Set(editableEventIds) : null;
   const { renderItems, moveEvent } = useEventMoves(
     items,
-    editable ? (id) => editable.has(id) : undefined
+    editable ? (id) => editable.has(id) : undefined,
   );
 
   const canDragEvent = editable ? (id: string) => editable.has(id) : undefined;
@@ -133,12 +121,8 @@ export function WeekView({
     return {
       day,
       key,
-      allDayEvents: dayItems.filter(
-        (i): i is CalendarEventRow => i.kind === "event" && i.isAllDay
-      ),
-      timedEvents: dayItems.filter(
-        (i): i is CalendarEventRow => i.kind === "event" && !i.isAllDay
-      ),
+      allDayEvents: dayItems.filter((i): i is CalendarEventRow => i.kind === "event" && i.isAllDay),
+      timedEvents: dayItems.filter((i): i is CalendarEventRow => i.kind === "event" && !i.isAllDay),
       // Critical-first in every layout, so when a day is crowded the
       // deadline that matters most is the last one anyone loses.
       deadlines: dayItems
@@ -179,25 +163,16 @@ export function WeekView({
             title="Open day view"
             className={cn(
               "flex flex-col items-center gap-0.5 py-2 border-l border-line transition-colors hover:bg-brand-tint/40",
-              weekend && "bg-paper"
+              weekend && "bg-paper",
             )}
           >
-            <div
-              className={cn(
-                "text-2xs font-mono",
-                weekend ? "text-ink-4/80" : "text-ink-4"
-              )}
-            >
+            <div className={cn("text-2xs font-mono", weekend ? "text-ink-4/80" : "text-ink-4")}>
               {weekdayShort(day)}
             </div>
             <div
               className={cn(
                 "text-base font-display tracking-tight",
-                dayIsToday
-                  ? "text-brand-700 font-semibold"
-                  : weekend
-                    ? "text-ink-3"
-                    : "text-ink"
+                dayIsToday ? "text-brand-700 font-semibold" : weekend ? "text-ink-3" : "text-ink",
               )}
             >
               {day.getUTCDate()}
@@ -237,7 +212,7 @@ export function WeekView({
                 key={b.key}
                 className={cn(
                   "border-l border-line p-1 flex flex-col gap-1 min-w-0",
-                  weekend && "bg-paper"
+                  weekend && "bg-paper",
                 )}
               >
                 {b.deadlines.map((d) => (
@@ -262,9 +237,7 @@ export function WeekView({
   // empty days a real drop target instead of a hairline.
   const maxAllDayChipCount = Math.max(
     1,
-    ...byDayBuckets.map(
-      (b) => b.allDayEvents.length + b.deadlines.length
-    )
+    ...byDayBuckets.map((b) => b.allDayEvents.length + b.deadlines.length),
   );
   // ~32px per chip (a two-line all-day chip is ~31px; a deadline
   // chip is shorter) + padding. Deliberately NOT capped: the cell

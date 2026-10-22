@@ -7,7 +7,7 @@ import { visibilityChangeForMove } from "@/lib/portal/share-delta";
 export function moveWarning(
   docs: { clientShare: string | null; folderId: string | null; status?: string }[],
   targetFolderId: string | null,
-  folders: { id: string; parentId: string | null; clientShared: boolean }[]
+  folders: { id: string; parentId: string | null; clientShared: boolean }[],
 ): string | null {
   return visibilityWarning(visibilityChangeForMove(docs, targetFolderId, folders));
 }
@@ -25,14 +25,14 @@ export function visibilityWarning({
     parts.push(
       becomesVisible === 1
         ? "This file will become visible to the client."
-        : `${becomesVisible} files will become visible to the client.`
+        : `${becomesVisible} files will become visible to the client.`,
     );
   }
   if (becomesHidden > 0) {
     parts.push(
       becomesHidden === 1
         ? "This file will no longer be visible to the client."
-        : `${becomesHidden} files will no longer be visible to the client.`
+        : `${becomesHidden} files will no longer be visible to the client.`,
     );
   }
   return parts.length > 0 ? parts.join(" ") : null;

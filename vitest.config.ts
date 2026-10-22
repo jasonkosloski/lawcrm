@@ -75,12 +75,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "html"],
       include: ["src/lib/**", "src/app/actions/**"],
-      exclude: [
-        "**/*.test.*",
-        "**/__tests__/**",
-        "src/generated/**",
-        "src/**/*.d.ts",
-      ],
+      exclude: ["**/*.test.*", "**/__tests__/**", "src/generated/**", "src/**/*.d.ts"],
       // Enforced only by `npm run test:coverage` (vitest applies
       // thresholds solely under --coverage); the commit hook runs the
       // plain suite. Floors set just below current coverage so a legitimate

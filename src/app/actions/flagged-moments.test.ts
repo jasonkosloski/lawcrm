@@ -25,15 +25,7 @@
  * `permission-check.integration.test.ts`.
  */
 
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
@@ -126,8 +118,7 @@ beforeEach(async () => {
     await seedDocument({
       matterId,
       name: "Deposition transcript.docx",
-      contentType:
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     })
   ).documentId;
   imageDocId = (
@@ -223,7 +214,11 @@ describe("createFlaggedMoment — anchor × renderer fit", () => {
   });
 
   test("PDF takes a page span, with or without a quote", async () => {
-    const span = await createFlaggedMoment(pdfDocId, { ...noteOnly, pageNumber: 4, endPageNumber: 6 });
+    const span = await createFlaggedMoment(pdfDocId, {
+      ...noteOnly,
+      pageNumber: 4,
+      endPageNumber: 6,
+    });
     expect(span.ok).toBe(true);
     expect(await prisma.flaggedMoment.findUnique({ where: { id: span.id! } })).toMatchObject({
       pageNumber: 4,
@@ -237,9 +232,14 @@ describe("createFlaggedMoment — anchor × renderer fit", () => {
       quote: "the driver accelerated",
     });
     expect(passage.ok).toBe(true);
-    const titles = (await prisma.activityLog.findMany({ where: { matterId, type: "evidence" } })).map((l) => l.title);
+    const titles = (
+      await prisma.activityLog.findMany({ where: { matterId, type: "evidence" } })
+    ).map((l) => l.title);
     expect(titles).toEqual(
-      expect.arrayContaining(["Pages 4–6 flagged", "Passage flagged: pp. 9–10 · “the driver accelerated”"])
+      expect.arrayContaining([
+        "Pages 4–6 flagged",
+        "Passage flagged: pp. 9–10 · “the driver accelerated”",
+      ]),
     );
   });
 
@@ -257,7 +257,11 @@ describe("createFlaggedMoment — anchor × renderer fit", () => {
   test("page + quote is PDF-only; time + page is never valid", async () => {
     const onDocx = await createFlaggedMoment(docxDocId, { ...noteOnly, pageNumber: 2, quote: "x" });
     expect(onDocx.ok).toBe(false);
-    const timePage = await createFlaggedMoment(videoDocId, { ...noteOnly, timeSeconds: 5, pageNumber: 2 });
+    const timePage = await createFlaggedMoment(videoDocId, {
+      ...noteOnly,
+      timeSeconds: 5,
+      pageNumber: 2,
+    });
     expect(timePage.ok).toBe(false);
     expect(timePage.error).toMatch(/at most one anchor/i);
     expect(await prisma.flaggedMoment.count()).toBe(0);
@@ -471,7 +475,7 @@ describe("updateFlaggedMoment — ownership", () => {
     // The real requirePermission redirects (throws) on denial.
     mockedRequire.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
     await expect(
-      updateFlaggedMoment(flagId, { ...validInput, description: "Hijacked" })
+      updateFlaggedMoment(flagId, { ...validInput, description: "Hijacked" }),
     ).rejects.toThrow();
     const row = await prisma.flaggedMoment.findUnique({
       where: { id: flagId },
@@ -564,10 +568,8 @@ describe("updateFlaggedMoment — anchor kind lock", () => {
       expect(res.ok).toBe(false);
       expect(res.error).toMatch(/kind can't change/i);
       // Row untouched — including the anchor columns.
-      expect(
-        await prisma.flaggedMoment.findUnique({ where: { id: flagId } })
-      ).toEqual(before);
-    }
+      expect(await prisma.flaggedMoment.findUnique({ where: { id: flagId } })).toEqual(before);
+    },
   );
 });
 
@@ -623,7 +625,7 @@ describe("update/delete — authenticate before touching the DB", () => {
     mockedGetUser.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
     const findSpy = vi.spyOn(prisma.flaggedMoment, "findUnique");
     await expect(
-      updateFlaggedMoment("ghost-flag", { ...validInput, description: "" })
+      updateFlaggedMoment("ghost-flag", { ...validInput, description: "" }),
     ).rejects.toThrow("NEXT_REDIRECT");
     expect(findSpy).not.toHaveBeenCalled();
     findSpy.mockRestore();
@@ -632,9 +634,7 @@ describe("update/delete — authenticate before touching the DB", () => {
   test("deleteFlaggedMoment with no session rejects before lookup", async () => {
     mockedGetUser.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
     const findSpy = vi.spyOn(prisma.flaggedMoment, "findUnique");
-    await expect(deleteFlaggedMoment("ghost-flag")).rejects.toThrow(
-      "NEXT_REDIRECT"
-    );
+    await expect(deleteFlaggedMoment("ghost-flag")).rejects.toThrow("NEXT_REDIRECT");
     expect(findSpy).not.toHaveBeenCalled();
     findSpy.mockRestore();
   });
@@ -695,22 +695,18 @@ describe("update/delete — flag vanished (F1001)", () => {
       },
     });
     await prisma.flaggedMoment.delete({ where: { id: flagId } });
-    const spy = vi
-      .spyOn(prisma.flaggedMoment, "findUnique")
-      .mockResolvedValueOnce(stale as never);
+    const spy = vi.spyOn(prisma.flaggedMoment, "findUnique").mockResolvedValueOnce(stale as never);
     const res = await updateFlaggedMoment(flagId, validInput);
     spy.mockRestore();
     expect(res).toEqual({ ok: false, error: "Flag not found" });
     // The stale row must leave other viewers' rails.
-    expect(revalidatePath).toHaveBeenCalledWith(
-      `/matters/${matterId}/documents/${videoDocId}`
-    );
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/documents/${videoDocId}`);
     expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/evidence`);
     // No "Flag edited" entry for a write that never happened.
     expect(
       await prisma.activityLog.count({
         where: { matterId, title: { startsWith: "Flag edited" } },
-      })
+      }),
     ).toBe(0);
   });
 
@@ -732,19 +728,15 @@ describe("update/delete — flag vanished (F1001)", () => {
       },
     });
     await prisma.flaggedMoment.delete({ where: { id: flagId } });
-    const spy = vi
-      .spyOn(prisma.flaggedMoment, "findUnique")
-      .mockResolvedValueOnce(stale as never);
+    const spy = vi.spyOn(prisma.flaggedMoment, "findUnique").mockResolvedValueOnce(stale as never);
     const res = await deleteFlaggedMoment(flagId);
     spy.mockRestore();
     expect(res).toEqual({ ok: false, error: "Flag not found" });
-    expect(revalidatePath).toHaveBeenCalledWith(
-      `/matters/${matterId}/documents/${videoDocId}`
-    );
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/documents/${videoDocId}`);
     expect(
       await prisma.activityLog.count({
         where: { matterId, title: { startsWith: "Flag removed" } },
-      })
+      }),
     ).toBe(0);
   });
 });
@@ -833,7 +825,7 @@ describe("updateFlaggedMoment — audit trail (F997)", () => {
     expect(
       await prisma.activityLog.count({
         where: { matterId, title: { startsWith: "Flag edited" } },
-      })
+      }),
     ).toBe(0);
   });
 });
@@ -885,11 +877,9 @@ describe("update/delete — evidence-anchored flags respect the matter wall", ()
     // thing under test) but is not on the restricted matter's team.
     mockedGetUser.mockResolvedValue(otherUserId);
     await expect(
-      updateFlaggedMoment(flag.id, { ...validInput, description: "Hijack" })
+      updateFlaggedMoment(flag.id, { ...validInput, description: "Hijack" }),
     ).rejects.toThrow("404");
-    await expect(deleteFlaggedMoment(flag.id)).rejects.toThrow(
-      "404"
-    );
+    await expect(deleteFlaggedMoment(flag.id)).rejects.toThrow("404");
     const row = await prisma.flaggedMoment.findUniqueOrThrow({
       where: { id: flag.id },
     });

@@ -34,7 +34,7 @@ export const NOTE_PIN_PERMISSION = "notes.pin";
  *  `pinRequested` adds `notes.pin` for a pinned primary note. */
 export function requiredCapturePermissions(
   captures: readonly ValidCapture[],
-  opts: { ignoreKinds?: readonly CaptureKind[]; pinRequested?: boolean } = {}
+  opts: { ignoreKinds?: readonly CaptureKind[]; pinRequested?: boolean } = {},
 ): string[] {
   const keys = new Set<string>();
   for (const cap of captures) {

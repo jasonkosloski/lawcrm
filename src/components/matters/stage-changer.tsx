@@ -37,11 +37,7 @@ import { useOptimistic, useState, useTransition } from "react";
 import { Check, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { confirmAction, notifyError } from "@/lib/feedback";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { updateMatterStage } from "@/app/actions/matters";
 
 export type StageOption = {
@@ -80,7 +76,7 @@ export const COMBINED_TERMINAL_LABEL = "Closed";
  */
 export function stepperSteps(
   stages: readonly StageOption[],
-  currentStageId: string
+  currentStageId: string,
 ): { steps: StepperStep[]; currentIndex: number } {
   const terminal = stages.filter((s) => s.isTerminal);
   const asStep = (s: StageOption): StepperStep => ({
@@ -126,8 +122,7 @@ export function StageChanger({
   currentStageId: string;
   canEdit: boolean;
 }) {
-  const [optimisticStageId, setOptimisticStageId] =
-    useOptimistic(currentStageId);
+  const [optimisticStageId, setOptimisticStageId] = useOptimistic(currentStageId);
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
 
@@ -182,8 +177,7 @@ export function StageChanger({
   if (stages.length === 0) {
     return (
       <div className="text-2xs text-ink-4">
-        No stages configured for this practice area — add stages in
-        Settings → Practice areas.
+        No stages configured for this practice area — add stages in Settings → Practice areas.
       </div>
     );
   }
@@ -193,9 +187,7 @@ export function StageChanger({
       {/* ── Header row ─────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="text-2xs font-medium text-ink-3">
-            Stage
-          </div>
+          <div className="text-2xs font-medium text-ink-3">Stage</div>
           {pending && (
             <span className="inline-flex items-center gap-1 text-2xs text-ink-4">
               <Loader2 size={10} className="animate-spin" />
@@ -212,7 +204,7 @@ export function StageChanger({
                 "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium",
                 "bg-white text-ink-2 border border-line",
                 "hover:border-brand-300 hover:text-brand-700 transition-colors",
-                "disabled:opacity-60 disabled:cursor-wait"
+                "disabled:opacity-60 disabled:cursor-wait",
               )}
             >
               Change stage
@@ -228,8 +220,7 @@ export function StageChanger({
                   // Archived stages can't be moved into (the server
                   // refuses); only list one when it is the current one.
                   if (stage.isActive === false && !isCurrent) return null;
-                  const isPassed =
-                    currentIndex >= 0 && idx < currentIndex && !isCurrent;
+                  const isPassed = currentIndex >= 0 && idx < currentIndex && !isCurrent;
 
                   return (
                     <li key={stage.id}>
@@ -241,13 +232,13 @@ export function StageChanger({
                           "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-left transition-colors",
                           isCurrent
                             ? "bg-paper-2 text-ink font-medium cursor-default"
-                            : "text-ink hover:bg-paper-2"
+                            : "text-ink hover:bg-paper-2",
                         )}
                       >
                         <span
                           className={cn(
                             "inline-flex items-center justify-center w-4 h-4 shrink-0",
-                            isPassed ? "text-ok" : "text-ink-4"
+                            isPassed ? "text-ok" : "text-ink-4",
                           )}
                         >
                           {isCurrent ? (
@@ -285,15 +276,12 @@ export function StageChanger({
             const connectorFilled = idx < stepIndex;
 
             return (
-              <div
-                key={step.key}
-                className="relative flex-1 flex flex-col items-center min-w-0"
-              >
+              <div key={step.key} className="relative flex-1 flex flex-col items-center min-w-0">
                 {idx < steps.length - 1 && (
                   <div
                     className={cn(
                       "absolute top-[5px] left-1/2 w-full h-[2px]",
-                      connectorFilled ? "bg-ok" : "bg-line"
+                      connectorFilled ? "bg-ok" : "bg-line",
                     )}
                   />
                 )}
@@ -307,7 +295,7 @@ export function StageChanger({
                         : "bg-brand-500 ring-4 ring-brand-100"
                       : isPassed
                         ? "bg-ok"
-                        : "bg-white border-2 border-line"
+                        : "bg-white border-2 border-line",
                   )}
                   aria-current={isCurrent ? "step" : undefined}
                   title={step.title}
@@ -322,7 +310,7 @@ export function StageChanger({
                         : "text-brand-700 font-semibold"
                       : isPassed
                         ? "text-ink-3"
-                        : "text-ink-4"
+                        : "text-ink-4",
                   )}
                 >
                   {step.label}
@@ -338,11 +326,7 @@ export function StageChanger({
       <div className="text-2xs text-ink-4 leading-relaxed">
         {isTerminalCurrent ? (
           <>
-            Matter is{" "}
-            <span className="text-ink-2 font-medium">
-              {currentStage?.name}
-            </span>
-            .
+            Matter is <span className="text-ink-2 font-medium">{currentStage?.name}</span>.
           </>
         ) : (
           <>
@@ -355,8 +339,7 @@ export function StageChanger({
             {stagesRemaining > 0 && (
               <>
                 {" · "}
-                {stagesRemaining} stage{stagesRemaining === 1 ? "" : "s"}{" "}
-                remaining
+                {stagesRemaining} stage{stagesRemaining === 1 ? "" : "s"} remaining
               </>
             )}
           </>

@@ -31,9 +31,7 @@ vi.mock("@/lib/clerk-admin", () => ({
 }));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn().mockResolvedValue("test-user"),
-  requirePermissionResult: vi
-    .fn()
-    .mockResolvedValue({ ok: true, userId: "test-user" }),
+  requirePermissionResult: vi.fn().mockResolvedValue({ ok: true, userId: "test-user" }),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 
@@ -41,10 +39,7 @@ import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermissionResult } from "@/lib/permission-check";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import {
-  inviteFirmMember,
-  updateFirmMember,
-} from "@/app/actions/team";
+import { inviteFirmMember, updateFirmMember } from "@/app/actions/team";
 import { teamInitialState } from "@/lib/team-form";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
@@ -69,11 +64,7 @@ beforeEach(async () => {
   defaultRoleId = f.defaultRoleId;
 });
 
-function updateForm(opts: {
-  name?: string;
-  roleIds?: string[];
-  active?: boolean;
-}): FormData {
+function updateForm(opts: { name?: string; roleIds?: string[]; active?: boolean }): FormData {
   const fd = new FormData();
   fd.set("name", opts.name ?? "Edited Name");
   fd.set("initials", "EN");
@@ -85,10 +76,7 @@ function updateForm(opts: {
   return fd;
 }
 
-function inviteForm(
-  overrides: Record<string, string> = {},
-  roleIds: string[] = []
-): FormData {
+function inviteForm(overrides: Record<string, string> = {}, roleIds: string[] = []): FormData {
   const fd = new FormData();
   const defaults: Record<string, string> = {
     name: "New Hire",
@@ -129,16 +117,14 @@ describe("permission gate — denial is a form error, not a redirect", () => {
     const updated = await updateFirmMember(
       member.userId,
       teamInitialState,
-      updateForm({ name: "Hacked" })
+      updateForm({ name: "Hacked" }),
     );
 
     for (const res of [invited, updated]) {
       expect(res.status).toBe("error");
       expect(res.errors?._form?.[0]).toMatch(/permission/);
     }
-    expect(
-      await prisma.user.count({ where: { email: "new.hire@example.com" } })
-    ).toBe(0);
+    expect(await prisma.user.count({ where: { email: "new.hire@example.com" } })).toBe(0);
     const row = await prisma.user.findUniqueOrThrow({
       where: { id: member.userId },
       select: { name: true },
@@ -154,9 +140,7 @@ describe("updateFirmMember — role changes apply as a diff", () => {
   let litigationId: string;
 
   beforeEach(async () => {
-    adminUserId = (
-      await seedUser({ firmId, roleIds: [adminRoleId, defaultRoleId] })
-    ).userId;
+    adminUserId = (await seedUser({ firmId, roleIds: [adminRoleId, defaultRoleId] })).userId;
     billingId = (
       await prisma.role.create({
         data: { firmId, name: "Billing", isSystem: false },
@@ -215,16 +199,14 @@ describe("updateFirmMember — role changes apply as a diff", () => {
     const res = await updateFirmMember(
       member.userId,
       teamInitialState,
-      updateForm({ name: "Member", roleIds: [defaultRoleId, litigationId] })
+      updateForm({ name: "Member", roleIds: [defaultRoleId, litigationId] }),
     );
     expect(res.status).toBe("ok");
 
     const rows = await prisma.userRole.findMany({
       where: { userId: member.userId },
     });
-    expect(rows.map((r) => r.roleId).sort()).toEqual(
-      [defaultRoleId, litigationId].sort()
-    );
+    expect(rows.map((r) => r.roleId).sort()).toEqual([defaultRoleId, litigationId].sort());
     const byRole = new Map(rows.map((r) => [r.roleId, r]));
     expect(byRole.get(litigationId)?.assignedById).toBe(adminUserId);
     expect(byRole.get(defaultRoleId)?.assignedById).toBeNull();
@@ -241,9 +223,7 @@ describe("team actions — input integrity", () => {
   let adminUserId: string;
 
   beforeEach(async () => {
-    adminUserId = (
-      await seedUser({ firmId, roleIds: [adminRoleId, defaultRoleId] })
-    ).userId;
+    adminUserId = (await seedUser({ firmId, roleIds: [adminRoleId, defaultRoleId] })).userId;
     mockedGetUser.mockResolvedValue(adminUserId);
   });
 
@@ -254,7 +234,7 @@ describe("team actions — input integrity", () => {
     const res = await updateFirmMember(
       adminUserId,
       teamInitialState,
-      updateForm({ name: "Me", roleIds: [adminRoleId], active: false })
+      updateForm({ name: "Me", roleIds: [adminRoleId], active: false }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.user.findUniqueOrThrow({
@@ -274,7 +254,7 @@ describe("team actions — input integrity", () => {
     const res = await updateFirmMember(
       stranger.userId,
       teamInitialState,
-      updateForm({ name: "Renamed" })
+      updateForm({ name: "Renamed" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.name?.[0]).toMatch(/not found/i);
@@ -290,7 +270,7 @@ describe("team actions — input integrity", () => {
     const before = await prisma.user.count();
     const res = await inviteFirmMember(
       teamInitialState,
-      inviteForm({ email: "Taken@Example.com" })
+      inviteForm({ email: "Taken@Example.com" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.email?.[0]).toMatch(/already exists/);
@@ -305,7 +285,7 @@ describe("team actions — input integrity", () => {
     });
     const res = await inviteFirmMember(
       teamInitialState,
-      inviteForm({}, [foreignRole.id, other.adminRoleId])
+      inviteForm({}, [foreignRole.id, other.adminRoleId]),
     );
     expect(res.status).toBe("ok");
     const created = await prisma.user.findUniqueOrThrow({
@@ -324,7 +304,7 @@ describe("team actions — input integrity", () => {
     const res = await updateFirmMember(
       member.userId,
       teamInitialState,
-      updateForm({ name: "Member", roleIds: [] })
+      updateForm({ name: "Member", roleIds: [] }),
     );
     expect(res.status).toBe("ok");
     const rows = await prisma.userRole.findMany({
@@ -355,13 +335,13 @@ describe("updateFirmMember — serialization failure", () => {
       new Prisma.PrismaClientKnownRequestError("write conflict", {
         code: "P2034",
         clientVersion: "test",
-      })
+      }),
     );
     try {
       const res = await updateFirmMember(
         member.userId,
         teamInitialState,
-        updateForm({ name: "Edited" })
+        updateForm({ name: "Edited" }),
       );
       expect(res.status).toBe("error");
       expect(res.errors?._form?.[0]).toMatch(/try again/i);
@@ -382,7 +362,7 @@ describe("updateFirmMember — serialization failure", () => {
       .mockRejectedValueOnce(new Error("connection reset"));
     try {
       await expect(
-        updateFirmMember(member.userId, teamInitialState, updateForm({}))
+        updateFirmMember(member.userId, teamInitialState, updateForm({})),
       ).rejects.toThrow("connection reset");
     } finally {
       spy.mockRestore();

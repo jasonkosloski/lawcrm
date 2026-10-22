@@ -134,9 +134,7 @@ export function ClientRequestsCard({
                         {r.dueDate && ` · Due ${formatDateOnly(r.dueDate, "medium")}`}
                       </div>
                       {r.returnNote && r.status === "open" && (
-                        <div className="text-2xs text-ink-4">
-                          Sent back: {r.returnNote}
-                        </div>
+                        <div className="text-2xs text-ink-4">Sent back: {r.returnNote}</div>
                       )}
                       {r.documents.length > 0 && (
                         <ul className="mt-1 flex flex-col gap-0.5">
@@ -213,15 +211,9 @@ export function ClientRequestsCard({
         )}
       </CardContent>
       {editing && (
-        <RequestDialog
-          matterId={matterId}
-          editing={editing}
-          onClose={() => setEditing(null)}
-        />
+        <RequestDialog matterId={matterId} editing={editing} onClose={() => setEditing(null)} />
       )}
-      {sendBackFor && (
-        <SendBackDialog request={sendBackFor} onClose={() => setSendBackFor(null)} />
-      )}
+      {sendBackFor && <SendBackDialog request={sendBackFor} onClose={() => setSendBackFor(null)} />}
     </Card>
   );
 }
@@ -339,9 +331,7 @@ function SendBackDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Send back &quot;{request.title}&quot;</DialogTitle>
-          <DialogDescription>
-            The request reopens in the portal with your note.
-          </DialogDescription>
+          <DialogDescription>The request reopens in the portal with your note.</DialogDescription>
         </DialogHeader>
         <label className="flex flex-col gap-1 text-xs text-ink-2">
           Note to the client

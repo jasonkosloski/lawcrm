@@ -31,39 +31,36 @@ export type ActiveTimerSession = {
   startedAt: string;
 };
 
-export const getCurrentTimerSession = cache(
-  async (): Promise<ActiveTimerSession | null> => {
-    // The cached resolver, not a bare auth(): every auth() runs the
-    // jwt callback's DB lookup, and the shell resolves the user for
-    // the sidebar in the same request. (It redirects to /login when
-    // signed out, exactly as the sidebar query beside it does.)
-    const userId = await getCurrentUserId();
-    const t = await prisma.timerSession.findUnique({
-      where: { userId },
-      select: {
-        id: true,
-        matterId: true,
-        activity: true,
-        startedAt: true,
-        matter: { select: { name: true, color: true } },
-      },
-    });
-    if (!t) return null;
-    // Matter wall: a timer left running on a matter the user can no
-    // longer access (removed from the team, wall switched on) shows
-    // nothing identifying it - the stop composer asks for a matter.
-    const visible =
-      !t.matterId || (await canAccessMatter(userId, t.matterId));
-    return {
-      id: t.id,
-      matterId: visible ? t.matterId : null,
-      matterName: visible ? (t.matter?.name ?? null) : null,
-      matterColor: visible ? (t.matter?.color ?? null) : null,
-      activity: t.activity,
-      startedAt: t.startedAt.toISOString(),
-    };
-  }
-);
+export const getCurrentTimerSession = cache(async (): Promise<ActiveTimerSession | null> => {
+  // The cached resolver, not a bare auth(): every auth() runs the
+  // jwt callback's DB lookup, and the shell resolves the user for
+  // the sidebar in the same request. (It redirects to /login when
+  // signed out, exactly as the sidebar query beside it does.)
+  const userId = await getCurrentUserId();
+  const t = await prisma.timerSession.findUnique({
+    where: { userId },
+    select: {
+      id: true,
+      matterId: true,
+      activity: true,
+      startedAt: true,
+      matter: { select: { name: true, color: true } },
+    },
+  });
+  if (!t) return null;
+  // Matter wall: a timer left running on a matter the user can no
+  // longer access (removed from the team, wall switched on) shows
+  // nothing identifying it - the stop composer asks for a matter.
+  const visible = !t.matterId || (await canAccessMatter(userId, t.matterId));
+  return {
+    id: t.id,
+    matterId: visible ? t.matterId : null,
+    matterName: visible ? (t.matter?.name ?? null) : null,
+    matterColor: visible ? (t.matter?.color ?? null) : null,
+    activity: t.activity,
+    startedAt: t.startedAt.toISOString(),
+  };
+});
 
 export type TimerMatterOption = { id: string; name: string };
 

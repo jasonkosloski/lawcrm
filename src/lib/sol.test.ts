@@ -26,13 +26,19 @@ const key = (x: Date | null) => (x ? x.toISOString().slice(0, 10) : null);
 
 describe("parseSolDateInput", () => {
   test("parses a valid date to UTC midnight (same instant as new Date)", () => {
-    expect(parseSolDateInput("2026-06-01")?.toISOString()).toBe(
-      "2026-06-01T00:00:00.000Z"
-    );
+    expect(parseSolDateInput("2026-06-01")?.toISOString()).toBe("2026-06-01T00:00:00.000Z");
     expect(parseSolDateInput("2024-02-29")).not.toBeNull();
   });
   test("rejects malformed and non-existent days", () => {
-    for (const bad of ["", "garbage", "2026-6-1", "2026-02-31", "2025-02-29", "2026-13-01", "2026-06-01T00:00"]) {
+    for (const bad of [
+      "",
+      "garbage",
+      "2026-6-1",
+      "2026-02-31",
+      "2025-02-29",
+      "2026-13-01",
+      "2026-06-01T00:00",
+    ]) {
       expect(parseSolDateInput(bad)).toBeNull();
     }
   });
@@ -40,11 +46,27 @@ describe("parseSolDateInput", () => {
 
 describe("isAutoDerivedSol", () => {
   test("null SOL is auto; matching computed is auto; anything else is manual", () => {
-    expect(isAutoDerivedSol({ storedSol: null, storedIncident: null, storedPeriod: null })).toBe(true);
-    expect(isAutoDerivedSol({ storedSol: d("2026-06-01"), storedIncident: d("2024-06-01"), storedPeriod: Y2 })).toBe(true);
-    expect(isAutoDerivedSol({ storedSol: d("2027-01-15"), storedIncident: d("2024-06-01"), storedPeriod: Y2 })).toBe(false);
+    expect(isAutoDerivedSol({ storedSol: null, storedIncident: null, storedPeriod: null })).toBe(
+      true,
+    );
+    expect(
+      isAutoDerivedSol({
+        storedSol: d("2026-06-01"),
+        storedIncident: d("2024-06-01"),
+        storedPeriod: Y2,
+      }),
+    ).toBe(true);
+    expect(
+      isAutoDerivedSol({
+        storedSol: d("2027-01-15"),
+        storedIncident: d("2024-06-01"),
+        storedPeriod: Y2,
+      }),
+    ).toBe(false);
     // Cannot be computed -> treated as a manual date (kept, never recomputed).
-    expect(isAutoDerivedSol({ storedSol: d("2026-06-01"), storedIncident: null, storedPeriod: Y2 })).toBe(false);
+    expect(
+      isAutoDerivedSol({ storedSol: d("2026-06-01"), storedIncident: null, storedPeriod: Y2 }),
+    ).toBe(false);
   });
 });
 
@@ -143,7 +165,7 @@ describe("resolveEditedSolDate", () => {
         posted: null,
         stored: null,
         incident: null,
-      })
+      }),
     ).toBeNull();
   });
 });
@@ -188,15 +210,27 @@ describe("computeSolDate (calendar arithmetic, ADR-035)", () => {
   });
 
   test("months keep the day of month and clamp at month end", () => {
-    expect(key(computeSolDate(d("2026-02-01T00:00:00Z"), { amount: 1, unit: "MONTHS" }))).toBe("2026-03-01");
-    expect(key(computeSolDate(d("2026-08-31T00:00:00Z"), { amount: 6, unit: "MONTHS" }))).toBe("2027-02-28");
-    expect(key(computeSolDate(d("2026-01-15T00:00:00Z"), { amount: 18, unit: "MONTHS" }))).toBe("2027-07-15");
+    expect(key(computeSolDate(d("2026-02-01T00:00:00Z"), { amount: 1, unit: "MONTHS" }))).toBe(
+      "2026-03-01",
+    );
+    expect(key(computeSolDate(d("2026-08-31T00:00:00Z"), { amount: 6, unit: "MONTHS" }))).toBe(
+      "2027-02-28",
+    );
+    expect(key(computeSolDate(d("2026-01-15T00:00:00Z"), { amount: 18, unit: "MONTHS" }))).toBe(
+      "2027-07-15",
+    );
   });
 
   test("days are plain day counts (crossing a leap day)", () => {
-    expect(key(computeSolDate(d("2026-02-01T00:00:00Z"), { amount: 30, unit: "DAYS" }))).toBe("2026-03-03");
-    expect(key(computeSolDate(d("2028-02-28T00:00:00Z"), { amount: 2, unit: "DAYS" }))).toBe("2028-03-01");
-    expect(key(computeSolDate(d("2026-01-15T00:00:00Z"), { amount: 180, unit: "DAYS" }))).toBe("2026-07-14");
+    expect(key(computeSolDate(d("2026-02-01T00:00:00Z"), { amount: 30, unit: "DAYS" }))).toBe(
+      "2026-03-03",
+    );
+    expect(key(computeSolDate(d("2028-02-28T00:00:00Z"), { amount: 2, unit: "DAYS" }))).toBe(
+      "2028-03-01",
+    );
+    expect(key(computeSolDate(d("2026-01-15T00:00:00Z"), { amount: 180, unit: "DAYS" }))).toBe(
+      "2026-07-14",
+    );
   });
 
   test("keeps UTC midnight and is independent of the process time zone (Denver + UTC)", () => {
@@ -205,10 +239,18 @@ describe("computeSolDate (calendar arithmetic, ADR-035)", () => {
       for (const tz of ["America/Denver", "America/Chicago", "UTC", "Pacific/Auckland"]) {
         process.env.TZ = tz;
         // Spans spring-forward in the US zones.
-        expect(computeSolDate(d("2026-01-15T00:00:00Z"), { amount: 180, unit: "DAYS" })!.toISOString()).toBe("2026-07-14T00:00:00.000Z");
-        expect(computeSolDate(d("2024-02-29T00:00:00Z"), { amount: 1, unit: "YEARS" })!.toISOString()).toBe("2025-02-28T00:00:00.000Z");
-        expect(computeSolDate(d("2026-03-08T00:00:00Z"), { amount: 1, unit: "MONTHS" })!.toISOString()).toBe("2026-04-08T00:00:00.000Z");
-        expect(computeSolDate(d("2026-10-31T00:00:00Z"), { amount: 1, unit: "YEARS" })!.toISOString()).toBe("2027-10-31T00:00:00.000Z");
+        expect(
+          computeSolDate(d("2026-01-15T00:00:00Z"), { amount: 180, unit: "DAYS" })!.toISOString(),
+        ).toBe("2026-07-14T00:00:00.000Z");
+        expect(
+          computeSolDate(d("2024-02-29T00:00:00Z"), { amount: 1, unit: "YEARS" })!.toISOString(),
+        ).toBe("2025-02-28T00:00:00.000Z");
+        expect(
+          computeSolDate(d("2026-03-08T00:00:00Z"), { amount: 1, unit: "MONTHS" })!.toISOString(),
+        ).toBe("2026-04-08T00:00:00.000Z");
+        expect(
+          computeSolDate(d("2026-10-31T00:00:00Z"), { amount: 1, unit: "YEARS" })!.toISOString(),
+        ).toBe("2027-10-31T00:00:00.000Z");
       }
     } finally {
       if (prevTz === undefined) delete process.env.TZ;

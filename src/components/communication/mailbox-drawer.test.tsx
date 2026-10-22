@@ -23,11 +23,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => searchParams,
 }));
 
-import {
-  MailboxDrawer,
-  MailboxDrawerProvider,
-  MailboxDrawerTrigger,
-} from "./mailbox-drawer";
+import { MailboxDrawer, MailboxDrawerProvider, MailboxDrawerTrigger } from "./mailbox-drawer";
 
 /** Stub matchMedia so `useIsDesktop` sees a fixed viewport —
  *  happy-dom's own media-query evaluation isn't reliable enough to
@@ -44,7 +40,7 @@ function mockViewport(desktop: boolean) {
         removeListener: vi.fn(),
         dispatchEvent: vi.fn(),
         onchange: null,
-      }) as unknown as MediaQueryList
+      }) as unknown as MediaQueryList,
   );
 }
 
@@ -60,7 +56,7 @@ function renderDrawer() {
       <MailboxDrawer>
         <a href="/communication?filter=sent">Sent folder</a>
       </MailboxDrawer>
-    </MailboxDrawerProvider>
+    </MailboxDrawerProvider>,
   );
   // The drawer container is the close button's direct parent — the
   // only stable handle on it (it renders no landmark role itself).
@@ -124,8 +120,7 @@ describe("MailboxDrawer - trigger state + auto-close", () => {
     mockViewport(false);
     const user = userEvent.setup();
     const { rerender } = renderWithRerender();
-    const container = screen.getByRole("button", { name: "Close folder list" })
-      .parentElement!;
+    const container = screen.getByRole("button", { name: "Close folder list" }).parentElement!;
 
     await user.click(screen.getByRole("button", { name: "Open folder list" }));
     expect(container).not.toHaveAttribute("inert");

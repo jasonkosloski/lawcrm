@@ -56,29 +56,21 @@ describe("normalizeContactPhones", () => {
       { label: "Cell", number: "", isPrimary: true },
       { label: "Office", number: "222", isPrimary: false },
     ]);
-    expect(out).toEqual([
-      { label: "Office", number: "222", isPrimary: true },
-    ]);
+    expect(out).toEqual([{ label: "Office", number: "222", isPrimary: true }]);
   });
 });
 
 describe("phoneDedupeKey", () => {
   test("is formatting-insensitive for US-style numbers", () => {
-    expect(phoneDedupeKey("(303) 555-0101")).toBe(
-      phoneDedupeKey("303.555.0101")
-    );
+    expect(phoneDedupeKey("(303) 555-0101")).toBe(phoneDedupeKey("303.555.0101"));
   });
 
   test("different numbers get different keys", () => {
-    expect(phoneDedupeKey("303-555-0101")).not.toBe(
-      phoneDedupeKey("303-555-0102")
-    );
+    expect(phoneDedupeKey("303-555-0101")).not.toBe(phoneDedupeKey("303-555-0102"));
   });
 
   test("digit-free inputs fall back to the trimmed lowercase string", () => {
-    expect(phoneDedupeKey(" Ask Reception ")).toBe(
-      phoneDedupeKey("ask reception")
-    );
+    expect(phoneDedupeKey(" Ask Reception ")).toBe(phoneDedupeKey("ask reception"));
     expect(phoneDedupeKey("ask reception")).toBe("ask reception");
   });
 });

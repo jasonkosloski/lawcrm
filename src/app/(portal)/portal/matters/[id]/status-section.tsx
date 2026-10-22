@@ -10,11 +10,7 @@ function postedLabel(u: PortalStatusUpdateView): string {
   return formatDate(u.postedAt, "medium", PORTAL_TIME_ZONE);
 }
 
-export function StatusSection({
-  updates,
-}: {
-  updates: PortalStatusUpdateView[];
-}) {
+export function StatusSection({ updates }: { updates: PortalStatusUpdateView[] }) {
   const [latest, ...earlier] = updates;
   return (
     <section aria-labelledby="status-heading" className="flex flex-col gap-3">
@@ -39,9 +35,7 @@ export function StatusSection({
               {latest.edited ? " (edited)" : ""}
             </span>
           </div>
-          <p className="text-sm whitespace-pre-line text-ink-2">
-            {latest.body}
-          </p>
+          <p className="text-sm whitespace-pre-line text-ink-2">{latest.body}</p>
         </div>
       )}
 
@@ -62,9 +56,7 @@ export function StatusSection({
                     {u.edited ? " (edited)" : ""}
                   </span>
                 </div>
-                <p className="text-sm whitespace-pre-line text-ink-2">
-                  {u.body}
-                </p>
+                <p className="text-sm whitespace-pre-line text-ink-2">{u.body}</p>
               </li>
             ))}
           </ul>

@@ -37,10 +37,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
-import {
-  writebackGmailMessages,
-  writebackGmailThread,
-} from "@/lib/google/gmail-writeback";
+import { writebackGmailMessages, writebackGmailThread } from "@/lib/google/gmail-writeback";
 
 /** The mailbox-scoped thread lookup both actions share. */
 async function findOwnThread(threadId: string) {
@@ -63,7 +60,7 @@ async function findOwnThread(threadId: string) {
  *  `setEmailThreadStarred` - this reads-modifies-writes, so a stale UI
  *  inverts intent. */
 export async function toggleEmailThreadStar(
-  threadId: string
+  threadId: string,
 ): Promise<{ ok: boolean; isStarred?: boolean }> {
   const thread = await findOwnThread(threadId);
   // Not the caller's thread (or nonexistent) — refuse without
@@ -76,7 +73,7 @@ export async function toggleEmailThreadStar(
  *  writes nothing. */
 export async function setEmailThreadStarred(
   threadId: string,
-  starred: boolean
+  starred: boolean,
 ): Promise<{ ok: boolean; isStarred?: boolean }> {
   const thread = await findOwnThread(threadId);
   if (!thread) return { ok: false };
@@ -86,7 +83,7 @@ export async function setEmailThreadStarred(
 
 async function applyStar(
   thread: NonNullable<Awaited<ReturnType<typeof findOwnThread>>>,
-  isStarred: boolean
+  isStarred: boolean,
 ): Promise<{ ok: boolean; isStarred?: boolean }> {
   await prisma.emailThread.update({
     where: { id: thread.id },
@@ -96,7 +93,7 @@ async function applyStar(
     await writebackGmailThread(
       thread.accountId,
       thread.externalId,
-      isStarred ? { addLabelIds: ["STARRED"] } : { removeLabelIds: ["STARRED"] }
+      isStarred ? { addLabelIds: ["STARRED"] } : { removeLabelIds: ["STARRED"] },
     );
   }
   revalidateThreadSurfaces(thread.matterId);
@@ -105,7 +102,7 @@ async function applyStar(
 
 export async function setEmailThreadArchived(
   threadId: string,
-  archived: boolean
+  archived: boolean,
 ): Promise<{ ok: boolean }> {
   const thread = await findOwnThread(threadId);
   if (!thread) return { ok: false };
@@ -128,7 +125,7 @@ export async function setEmailThreadArchived(
     await writebackGmailMessages(
       thread.accountId,
       syncedIds,
-      archived ? { removeLabelIds: ["INBOX"] } : { addLabelIds: ["INBOX"] }
+      archived ? { removeLabelIds: ["INBOX"] } : { addLabelIds: ["INBOX"] },
     );
   }
   revalidateThreadSurfaces(thread.matterId);

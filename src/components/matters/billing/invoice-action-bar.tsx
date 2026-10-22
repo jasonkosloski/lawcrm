@@ -50,22 +50,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  approveInvoice,
-  deleteInvoice,
-  setInvoiceStatus,
-} from "@/app/actions/billing";
+import { approveInvoice, deleteInvoice, setInvoiceStatus } from "@/app/actions/billing";
 import {
   canDeleteInvoice,
   canVoidInvoice,
   invoiceStatusTransitions,
   type InvoiceKind,
 } from "@/lib/billing-form";
-import {
-  confirmAction,
-  notifyError,
-  type ConfirmOptions,
-} from "@/lib/feedback";
+import { confirmAction, notifyError, type ConfirmOptions } from "@/lib/feedback";
 import { ApplyTrustDialog } from "./apply-trust-dialog";
 import { RecordPaymentDialog } from "./record-payment-dialog";
 import { ResendInvoiceDialog } from "./resend-invoice-dialog";
@@ -140,16 +132,12 @@ export function InvoiceActionBar({
   const [voidOpen, setVoidOpen] = useState(false);
   const [applyTrustOpen, setApplyTrustOpen] = useState(false);
 
-  const canApprove =
-    canApproveInvoice && kind === "client" && currentStatus === "draft";
-  const canSend =
-    canSendInvoice && kind === "client" && currentStatus === "approved";
+  const canApprove = canApproveInvoice && kind === "client" && currentStatus === "draft";
+  const canSend = canSendInvoice && kind === "client" && currentStatus === "approved";
   const canResend =
     canSendInvoice &&
     kind === "client" &&
-    (currentStatus === "sent" ||
-      currentStatus === "partial" ||
-      currentStatus === "paid");
+    (currentStatus === "sent" || currentStatus === "partial" || currentStatus === "paid");
   const canRecordPayment =
     canRecordInvoicePayment &&
     kind === "client" &&
@@ -165,10 +153,8 @@ export function InvoiceActionBar({
     canApproveInvoice &&
     kind === "internal_record" &&
     invoiceStatusTransitions(currentStatus, kind).includes("paid");
-  const deleteAllowed =
-    canDeleteDraft && canDeleteInvoice(currentStatus, paidAmount, kind);
-  const voidAllowed =
-    canVoid && canVoidInvoice(currentStatus, paidAmount, kind);
+  const deleteAllowed = canDeleteDraft && canDeleteInvoice(currentStatus, paidAmount, kind);
+  const voidAllowed = canVoid && canVoidInvoice(currentStatus, paidAmount, kind);
 
   const nothingToDo =
     !canApprove &&
@@ -333,8 +319,7 @@ export function InvoiceActionBar({
               onClick={() =>
                 transitionTo("paid", {
                   title: `Lock internal record ${invoiceNumber}?`,
-                  description:
-                    "Linked time entries stay linked; void unlinks them back to WIP.",
+                  description: "Linked time entries stay linked; void unlinks them back to WIP.",
                   confirmLabel: "Mark recorded",
                 })
               }
@@ -370,10 +355,7 @@ export function InvoiceActionBar({
                   </DropdownMenuItem>
                 )}
                 {deleteAllowed && (
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={handleDelete}
-                  >
+                  <DropdownMenuItem variant="destructive" onClick={handleDelete}>
                     <Trash2 />
                     Delete draft
                   </DropdownMenuItem>
@@ -389,8 +371,7 @@ export function InvoiceActionBar({
                         ? setVoidOpen(true)
                         : transitionTo("void", {
                             title: `Void invoice ${invoiceNumber}?`,
-                            description:
-                              "Linked time entries return to billable WIP.",
+                            description: "Linked time entries return to billable WIP.",
                             confirmLabel: "Void invoice",
                             destructive: true,
                           })

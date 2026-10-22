@@ -9,9 +9,7 @@ import { resolveCaptureAccess } from "./capture-access";
 describe("resolveCaptureAccess", () => {
   test("an admin may add every sibling kind and pin", () => {
     const a = resolveCaptureAccess(true, new Set());
-    expect(a.kinds.sort()).toEqual(
-      ["deadline", "event", "note_sibling", "task", "time"].sort()
-    );
+    expect(a.kinds.sort()).toEqual(["deadline", "event", "note_sibling", "task", "time"].sort());
     expect(a.canPin).toBe(true);
   });
 
@@ -24,12 +22,10 @@ describe("resolveCaptureAccess", () => {
   test("each kind follows its own create key; pinning needs notes.pin", () => {
     const a = resolveCaptureAccess(
       false,
-      new Set(["time_entries.create", "notes.create", "events.create"])
+      new Set(["time_entries.create", "notes.create", "events.create"]),
     );
     expect(a.kinds.sort()).toEqual(["event", "note_sibling", "time"]);
     expect(a.canPin).toBe(false);
-    expect(
-      resolveCaptureAccess(false, new Set(["notes.create", "notes.pin"])).canPin
-    ).toBe(true);
+    expect(resolveCaptureAccess(false, new Set(["notes.create", "notes.pin"])).canPin).toBe(true);
   });
 });

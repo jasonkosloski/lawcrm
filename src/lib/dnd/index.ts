@@ -7,12 +7,7 @@
  * the consumer-side hook.
  */
 
-export {
-  setDragPayload,
-  readPayload,
-  hasKind,
-  type DragPayload,
-} from "./payload";
+export { setDragPayload, readPayload, hasKind, type DragPayload } from "./payload";
 
 export {
   useDropTarget,
@@ -20,8 +15,4 @@ export {
   type UseDropTargetResult,
 } from "./use-drop-target";
 
-export {
-  setActiveDrag,
-  clearActiveDrag,
-  peekActiveDrag,
-} from "./active-drag";
+export { setActiveDrag, clearActiveDrag, peekActiveDrag } from "./active-drag";

@@ -76,7 +76,7 @@ export type RepresentationChoice = "unknown" | "yes" | "no";
  *  represented by the firm, so they never persist a value. */
 export function representationFlag(
   choice: RepresentationChoice,
-  isClient: boolean
+  isClient: boolean,
 ): boolean | null {
   if (isClient) return null;
   return choice === "yes" ? true : choice === "no" ? false : null;
@@ -85,6 +85,9 @@ export function representationFlag(
 /** True when a free-text subrole names opposing counsel ("Opposing
  *  counsel", "opposing-counsel", "opposing_counsel", ...). */
 export function isOpposingCounselRole(role: string | null | undefined): boolean {
-  const norm = (role ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const norm = (role ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
   return /^opposing_(counsel|attorney|lawyer)$/.test(norm);
 }

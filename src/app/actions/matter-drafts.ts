@@ -7,11 +7,7 @@ import { logActivity } from "@/lib/activity-log";
 import { deleteFile } from "@/lib/file-storage";
 import { isStoredFileReferenced } from "@/lib/stored-file-refs";
 import { ADMIN_ROLE_NAME } from "@/lib/role-constants";
-import {
-  DRAFT_PERMISSION,
-  assertDraftAccess,
-  canAccessDraft,
-} from "@/lib/draft-access";
+import { DRAFT_PERMISSION, assertDraftAccess, canAccessDraft } from "@/lib/draft-access";
 
 export type DraftValues = Record<string, string | string[]>;
 
@@ -61,7 +57,7 @@ function leadUserIdOf(values: DraftValues): string | null {
 export async function saveMatterDraft(
   draftId: string | null,
   expectedUpdatedAt: string | null,
-  values: DraftValues
+  values: DraftValues,
 ): Promise<SaveDraftResult> {
   const userId = await requirePermission(DRAFT_PERMISSION);
   if (!valuesAreValid(values)) return { ok: false, code: "invalid" };
@@ -123,7 +119,7 @@ async function deleteStoredFiles(keys: string[]): Promise<void> {
 }
 
 export async function deleteMatterDraft(
-  id: string
+  id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const userId = await requirePermission(DRAFT_PERMISSION);
   const draft = await assertDraftAccess(id);
@@ -167,9 +163,7 @@ export async function deleteMatterDraft(
   return { ok: true };
 }
 
-export async function setDraftFileOriginating(
-  fileId: string
-): Promise<{ ok: boolean }> {
+export async function setDraftFileOriginating(fileId: string): Promise<{ ok: boolean }> {
   await requirePermission(DRAFT_PERMISSION);
   const file = await prisma.matterDraftFile.findUnique({
     where: { id: fileId },
@@ -195,9 +189,7 @@ export async function setDraftFileOriginating(
   return { ok: true };
 }
 
-export async function removeDraftFile(
-  fileId: string
-): Promise<{ ok: boolean }> {
+export async function removeDraftFile(fileId: string): Promise<{ ok: boolean }> {
   const userId = await requirePermission(DRAFT_PERMISSION);
   const file = await prisma.matterDraftFile.findUnique({
     where: { id: fileId },

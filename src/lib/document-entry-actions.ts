@@ -84,21 +84,21 @@ export type EntryAction = {
   shortcut?: string;
 };
 
-
 export const canDeleteFolder = (f: FolderTarget, perms: WorkspacePerms) =>
   perms.folderDelete && !f.isProtected && !f.hasProtectedDescendant;
 
 /** Actions for a right-click on empty space (the current folder). */
 export function backgroundActions(
   perms: WorkspacePerms,
-  opts: { atDepthCap: boolean; hasEntries: boolean }
+  opts: { atDepthCap: boolean; hasEntries: boolean },
 ): EntryAction[] {
   const out: EntryAction[] = [];
   if (perms.writable && perms.folderCreate && !opts.atDepthCap) {
     out.push({ id: "new-folder", label: "New folder", group: 0 });
   }
   if (perms.writable && perms.upload) out.push({ id: "upload", label: "Upload files", group: 0 });
-  if (opts.hasEntries) out.push({ id: "select-all", label: "Select all", group: 1, shortcut: "⌘A" });
+  if (opts.hasEntries)
+    out.push({ id: "select-all", label: "Select all", group: 1, shortcut: "⌘A" });
   return out;
 }
 
@@ -124,10 +124,11 @@ function docActions(d: DocTarget, perms: WorkspacePerms): EntryAction[] {
     out.push(
       d.isShared
         ? { id: "unshare", label: "Stop sharing", group: 2 }
-        : { id: "share", label: "Share with client", group: 2 }
+        : { id: "share", label: "Share with client", group: 2 },
     );
   }
-  if (d.canDelete) out.push({ id: "delete", label: "Delete", group: 3, destructive: true, shortcut: "⌫" });
+  if (d.canDelete)
+    out.push({ id: "delete", label: "Delete", group: 3, destructive: true, shortcut: "⌫" });
   return out;
 }
 
@@ -139,14 +140,16 @@ function folderActions(f: FolderTarget, perms: WorkspacePerms): EntryAction[] {
   if (perms.writable && perms.folderCreate && !f.atDepthCap) {
     out.push({ id: "new-folder", label: "New folder inside", group: 1 });
   }
-  if (perms.writable && perms.upload) out.push({ id: "upload", label: "Upload files here", group: 1 });
-  if (perms.folderEdit && !f.isProtected) out.push({ id: "rename", label: "Rename", group: 2, shortcut: "F2" });
+  if (perms.writable && perms.upload)
+    out.push({ id: "upload", label: "Upload files here", group: 1 });
+  if (perms.folderEdit && !f.isProtected)
+    out.push({ id: "rename", label: "Rename", group: 2, shortcut: "F2" });
   if (perms.organize && !f.isProtected) out.push({ id: "move", label: "Move to…", group: 2 });
   if (perms.share && !f.isProtected) {
     out.push(
       f.clientShared
         ? { id: "unshare", label: "Stop sharing folder", group: 3 }
-        : { id: "share", label: "Share folder with client", group: 3 }
+        : { id: "share", label: "Share folder with client", group: 3 },
     );
   }
   if (canDeleteFolder(f, perms)) {
@@ -166,7 +169,8 @@ function multiActions(targets: ActionTarget[], perms: WorkspacePerms): EntryActi
     out.push({ id: "download", label: `Download ${plural(downloadable, "file")}`, group: 0 });
   }
   const movable = !docs.some((d) => d.isAttachment) && !folders.some((f) => f.isProtected);
-  if (perms.organize && movable) out.push({ id: "move", label: `Move ${plural(n, "item")} to…`, group: 1 });
+  if (perms.organize && movable)
+    out.push({ id: "move", label: `Move ${plural(n, "item")} to…`, group: 1 });
   if (perms.organize && folders.length === 0) {
     out.push({ id: "copy", label: `Copy ${plural(n, "file")} to…`, group: 1 });
   }
@@ -175,12 +179,19 @@ function multiActions(targets: ActionTarget[], perms: WorkspacePerms): EntryActi
     out.push(
       allShared
         ? { id: "unshare", label: "Stop sharing", group: 2 }
-        : { id: "share", label: "Share with client", group: 2 }
+        : { id: "share", label: "Share with client", group: 2 },
     );
   }
-  const deletable = docs.every((d) => d.canDelete) && folders.every((f) => canDeleteFolder(f, perms));
+  const deletable =
+    docs.every((d) => d.canDelete) && folders.every((f) => canDeleteFolder(f, perms));
   if (deletable) {
-    out.push({ id: "delete", label: `Delete ${plural(n, "item")}`, group: 3, destructive: true, shortcut: "⌫" });
+    out.push({
+      id: "delete",
+      label: `Delete ${plural(n, "item")}`,
+      group: 3,
+      destructive: true,
+      shortcut: "⌫",
+    });
   }
   return out;
 }

@@ -87,7 +87,7 @@ type AuthEventInput = {
  */
 export async function recordAuthEvent(
   input: AuthEventInput,
-  db: Pick<Tx, "activityLog"> = prisma
+  db: Pick<Tx, "activityLog"> = prisma,
 ): Promise<void> {
   const detail = await authEventDetail(input.reason);
   await db.activityLog.create({

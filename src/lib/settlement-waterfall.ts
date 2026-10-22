@@ -22,7 +22,7 @@ import { roundMoney } from "@/lib/money";
  *  (upsertSettlement) and the read-side recomputation. */
 export function firmFeeFromPercent(
   grossAmount: Prisma.Decimal,
-  firmFeePercent: Prisma.Decimal
+  firmFeePercent: Prisma.Decimal,
 ): Prisma.Decimal {
   return roundMoney(grossAmount.mul(firmFeePercent).div(100));
 }
@@ -56,18 +56,10 @@ export function computeSettlementWaterfall(input: WaterfallInput): Waterfall {
     input.firmFeePercent !== null
       ? firmFeeFromPercent(input.grossAmount, input.firmFeePercent)
       : roundMoney(input.firmFee);
-  const lienAmounts = input.liens.map((l) =>
-    roundMoney(l.negotiatedAmount ?? l.originalAmount)
-  );
-  const lienTotal = lienAmounts.reduce(
-    (sum, a) => sum.add(a),
-    new Prisma.Decimal(0)
-  );
+  const lienAmounts = input.liens.map((l) => roundMoney(l.negotiatedAmount ?? l.originalAmount));
+  const lienTotal = lienAmounts.reduce((sum, a) => sum.add(a), new Prisma.Decimal(0));
   const clientNet = roundMoney(
-    input.grossAmount
-      .sub(firmFee)
-      .sub(roundMoney(input.advancedCosts))
-      .sub(lienTotal)
+    input.grossAmount.sub(firmFee).sub(roundMoney(input.advancedCosts)).sub(lienTotal),
   );
   return { firmFee, lienAmounts, lienTotal, clientNet };
 }

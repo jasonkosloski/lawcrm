@@ -37,9 +37,7 @@ export function summarizePreflight(users: PreflightUser[]): {
   total: number;
 } {
   return {
-    outsideFirmDomain: users.filter(
-      (u) => !u.email.toLowerCase().endsWith(FIRM_EMAIL_DOMAIN)
-    ),
+    outsideFirmDomain: users.filter((u) => !u.email.toLowerCase().endsWith(FIRM_EMAIL_DOMAIN)),
     linked: users.filter((u) => u.clerkUserId !== null).length,
     total: users.length,
   };
@@ -47,11 +45,10 @@ export function summarizePreflight(users: PreflightUser[]): {
 
 export function formatPreflight(
   db: { host: string; userPrefix: string },
-  s: ReturnType<typeof summarizePreflight>
+  s: ReturnType<typeof summarizePreflight>,
 ): string {
   const lines = [
-    `Connected to ${db.host}` +
-      (db.userPrefix ? ` as user "${db.userPrefix}..."` : ""),
+    `Connected to ${db.host}` + (db.userPrefix ? ` as user "${db.userPrefix}..."` : ""),
     `Active users: ${s.total}; already linked to Clerk: ${s.linked}`,
   ];
   if (s.outsideFirmDomain.length === 0) {
@@ -59,7 +56,7 @@ export function formatPreflight(
   } else {
     lines.push(
       `Active users NOT on ${FIRM_EMAIL_DOMAIN} (${s.outsideFirmDomain.length}) - need a manual plan before cutover:`,
-      ...s.outsideFirmDomain.map((u) => `  - ${u.name} <${u.email}>`)
+      ...s.outsideFirmDomain.map((u) => `  - ${u.name} <${u.email}>`),
     );
   }
   return lines.join("\n");

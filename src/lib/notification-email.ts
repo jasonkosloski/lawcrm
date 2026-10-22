@@ -55,10 +55,7 @@ import {
   type NotificationCategory,
 } from "@/lib/notification-categories";
 import { decideEmail, type EmailDecision } from "@/lib/notification-email-policy";
-import {
-  digestNotificationEmail,
-  instantNotificationEmail,
-} from "@/lib/notification-emails";
+import { digestNotificationEmail, instantNotificationEmail } from "@/lib/notification-emails";
 
 export const NOTIFICATION_EMAIL_DIGEST_HOUR = 7;
 export const NOTIFICATION_EMAIL_MAX_ATTEMPTS = 3;
@@ -208,10 +205,7 @@ async function loadContext(tx: Tx, userIds: string[]) {
 const LOCKED_TX = { maxWait: 15_000, timeout: 15_000 };
 
 /** Decide pending (and abandoned) rows; claim the ones to send now. */
-async function claimInstant(
-  now: Date,
-  result: EmailDeliveryResult
-): Promise<InstantJob[]> {
+async function claimInstant(now: Date, result: EmailDeliveryResult): Promise<InstantJob[]> {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${EMAIL_LOCK_KEY})`;
     const rows = await tx.notification.findMany({
@@ -254,10 +248,7 @@ async function claimInstant(
 
 /** For recipients whose digest is due: re-decide their held rows and
  *  claim the survivors plus the local day. */
-async function claimDigests(
-  now: Date,
-  result: EmailDeliveryResult
-): Promise<DigestJob[]> {
+async function claimDigests(now: Date, result: EmailDeliveryResult): Promise<DigestJob[]> {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${EMAIL_LOCK_KEY})`;
     const heldUsers = await tx.notification.findMany({
@@ -266,7 +257,10 @@ async function claimDigests(
       select: { userId: true },
     });
     if (heldUsers.length === 0) return [];
-    const ctx = await loadContext(tx, heldUsers.map((h) => h.userId));
+    const ctx = await loadContext(
+      tx,
+      heldUsers.map((h) => h.userId),
+    );
     const jobs: DigestJob[] = [];
     for (const [userId, user] of ctx.recipients) {
       const tz = user.timeZone || FALLBACK_TIME_ZONE;
@@ -349,7 +343,10 @@ async function releaseDigests(jobs: DigestJob[]): Promise<void> {
 /** Stable across retries/reclaims of the same digest: user + local day
  *  + the exact row set. */
 function digestIdempotencyKey(job: DigestJob): string {
-  const ids = job.rows.map((r) => r.id).sort().join(",");
+  const ids = job.rows
+    .map((r) => r.id)
+    .sort()
+    .join(",");
   const hash = createHash("sha256").update(ids).digest("hex").slice(0, 24);
   return `notification-digest-${job.userId}-${job.day}-${hash}`;
 }
@@ -362,7 +359,7 @@ function digestIdempotencyKey(job: DigestJob): string {
  */
 export async function runNotificationEmailDelivery(
   now: Date = new Date(),
-  opts: EmailDeliveryOptions = {}
+  opts: EmailDeliveryOptions = {},
 ): Promise<EmailDeliveryResult> {
   const budgetMs = opts.budgetMs ?? DEFAULT_BUDGET_MS;
   const interval = opts.minSendIntervalMs ?? DEFAULT_MIN_SEND_INTERVAL_MS;

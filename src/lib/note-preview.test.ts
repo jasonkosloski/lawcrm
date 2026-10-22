@@ -3,21 +3,17 @@ import { notePreviewText } from "./note-preview";
 
 describe("notePreviewText", () => {
   test("strips tags and collapses whitespace", () => {
-    expect(notePreviewText("<p>Hello</p>\n<p>  big   world </p>")).toBe(
-      "Hello big world"
-    );
+    expect(notePreviewText("<p>Hello</p>\n<p>  big   world </p>")).toBe("Hello big world");
   });
 
   test("decodes sanitizer-escaped entities", () => {
-    expect(
-      notePreviewText('<p>Smith &amp; Jones said "no" &lt;today&gt;</p>')
-    ).toBe('Smith & Jones said "no" <today>');
+    expect(notePreviewText('<p>Smith &amp; Jones said "no" &lt;today&gt;</p>')).toBe(
+      'Smith & Jones said "no" <today>',
+    );
   });
 
   test("decodes AFTER stripping, so an escaped tag stays text", () => {
-    expect(notePreviewText("<p>&lt;script&gt;x&lt;/script&gt;</p>")).toBe(
-      "<script>x</script>"
-    );
+    expect(notePreviewText("<p>&lt;script&gt;x&lt;/script&gt;</p>")).toBe("<script>x</script>");
   });
 
   test("cuts to the cap after decoding, never mid-entity", () => {

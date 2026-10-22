@@ -55,7 +55,7 @@ export async function fileInvoicePdf(input: {
   const name = `Invoice ${input.invoiceNumber} (${KIND_WORD[input.kind]} ${dateOnlyKey(input.day)}).pdf`;
   const folderId = await invoicesFolder(input.matterId);
   const stored = await storeFile(
-    new File([new Uint8Array(input.bytes)], name, { type: "application/pdf" })
+    new File([new Uint8Array(input.bytes)], name, { type: "application/pdf" }),
   );
   try {
     const doc = await prisma.document.create({

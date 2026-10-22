@@ -21,7 +21,13 @@ vi.mock("@/lib/file-storage", () => ({
 import { prisma } from "@/lib/prisma";
 import { deleteFile, storeFile } from "@/lib/file-storage";
 import { stampFiledInvoicePdfs } from "@/lib/billing/void-filing";
-import { resetDb, seedFirm, seedMatter, seedPracticeArea, seedUser } from "@/test/integration-helpers";
+import {
+  resetDb,
+  seedFirm,
+  seedMatter,
+  seedPracticeArea,
+  seedUser,
+} from "@/test/integration-helpers";
 
 beforeAll(() => {
   expect(process.env.DATABASE_URL).toMatch(/lawcrm_test/);
@@ -47,8 +53,14 @@ async function seedDoc(name: string, key: string | null, createdAt: Date) {
   if (key && key !== "gone") store.set(key, pdfBytes);
   return prisma.document.create({
     data: {
-      matterId, invoiceId, name, fileUrl: key, fileSize: pdfBytes.length,
-      contentType: "application/pdf", source: "invoice", createdAt,
+      matterId,
+      invoiceId,
+      name,
+      fileUrl: key,
+      fileSize: pdfBytes.length,
+      contentType: "application/pdf",
+      source: "invoice",
+      createdAt,
     },
   });
 }
@@ -62,7 +74,9 @@ beforeEach(async () => {
   const { userId } = await seedUser({ firmId });
   const area = await seedPracticeArea();
   ({ matterId } = await seedMatter({
-    practiceAreaId: area.areaId, stageId: area.stageId, leadUserId: userId,
+    practiceAreaId: area.areaId,
+    stageId: area.stageId,
+    leadUserId: userId,
   }));
   invoiceId = (
     await prisma.invoice.create({
@@ -81,7 +95,10 @@ describe("stampFiledInvoicePdfs", () => {
     const res = await stampFiledInvoicePdfs({ invoiceId, matterId, voidedOn: "October 21, 2026" });
     expect(res).toMatchObject({ stamped: 2, failed: 0 });
     expect(res.latest?.name).toBe("b.pdf");
-    for (const [doc, old] of [[a, "old-a"], [b, "old-b"]] as const) {
+    for (const [doc, old] of [
+      [a, "old-a"],
+      [b, "old-b"],
+    ] as const) {
       const row = await prisma.document.findUniqueOrThrow({ where: { id: doc.id } });
       expect(row.name).toBe(doc.name);
       expect(row.fileUrl).not.toBe(old);
@@ -97,7 +114,11 @@ describe("stampFiledInvoicePdfs", () => {
     const a = await seedDoc("a.pdf", "gone", new Date("2026-10-01T00:00:00Z"));
     const res = await stampFiledInvoicePdfs({ invoiceId, matterId, voidedOn: "October 21, 2026" });
     expect(res).toEqual({
-      stamped: 0, failed: 1, failedNames: ["a.pdf"], stampedNames: [], latest: null,
+      stamped: 0,
+      failed: 1,
+      failedNames: ["a.pdf"],
+      stampedNames: [],
+      latest: null,
     });
     const row = await prisma.document.findUniqueOrThrow({ where: { id: a.id } });
     expect(row.fileUrl).toBe("gone");
@@ -113,7 +134,11 @@ describe("stampFiledInvoicePdfs", () => {
     });
     const res = await stampFiledInvoicePdfs({ invoiceId, matterId, voidedOn: "October 21, 2026" });
     expect(res).toEqual({
-      stamped: 0, failed: 1, failedNames: ["a.pdf"], stampedNames: [], latest: null,
+      stamped: 0,
+      failed: 1,
+      failedNames: ["a.pdf"],
+      stampedNames: [],
+      latest: null,
     });
     expect(vi.mocked(deleteFile)).toHaveBeenCalledWith("new0__a.pdf");
     expect(store.has("new0__a.pdf")).toBe(false);
@@ -132,26 +157,36 @@ describe("stampFiledInvoicePdfs", () => {
 
   test("no filed documents", async () => {
     expect(await stampFiledInvoicePdfs({ invoiceId, matterId, voidedOn: "x" })).toEqual({
-      stamped: 0, failed: 0, failedNames: [], stampedNames: [], latest: null,
+      stamped: 0,
+      failed: 0,
+      failedNames: [],
+      stampedNames: [],
+      latest: null,
     });
   });
 
   test("reports stamped names and ignores documents on another matter", async () => {
     await seedDoc("a.pdf", "old-a", new Date("2026-10-01T00:00:00Z"));
     const other = await seedMatter({
-      practiceAreaId: (await prisma.matter.findUniqueOrThrow({ where: { id: matterId } })).practiceAreaId,
+      practiceAreaId: (await prisma.matter.findUniqueOrThrow({ where: { id: matterId } }))
+        .practiceAreaId,
       stageId: (await prisma.matter.findUniqueOrThrow({ where: { id: matterId } })).stageId,
       leadUserId: (await prisma.user.findFirstOrThrow()).id,
     });
     store.set("old-x", pdfBytes);
     const stray = await prisma.document.create({
       data: {
-        matterId: other.matterId, invoiceId, name: "x.pdf", fileUrl: "old-x",
+        matterId: other.matterId,
+        invoiceId,
+        name: "x.pdf",
+        fileUrl: "old-x",
         contentType: "application/pdf",
       },
     });
     const res = await stampFiledInvoicePdfs({ invoiceId, matterId, voidedOn: "x" });
     expect(res.stampedNames).toEqual(["a.pdf"]);
-    expect((await prisma.document.findUniqueOrThrow({ where: { id: stray.id } })).fileUrl).toBe("old-x");
+    expect((await prisma.document.findUniqueOrThrow({ where: { id: stray.id } })).fileUrl).toBe(
+      "old-x",
+    );
   });
 });

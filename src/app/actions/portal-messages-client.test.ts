@@ -42,7 +42,9 @@ async function teamMember(opts: { keyed: boolean; active?: boolean }) {
     select: { id: true },
   });
   if (opts.keyed) {
-    await prisma.rolePermission.create({ data: { roleId: role.id, permission: "portal.view_messages" } });
+    await prisma.rolePermission.create({
+      data: { roleId: role.id, permission: "portal.view_messages" },
+    });
   }
   const { userId } = await seedUser({ firmId, roleIds: [role.id], isActive: opts.active ?? true });
   await prisma.matterTeamMember.create({ data: { matterId, userId, role: "paralegal" } });
@@ -58,12 +60,23 @@ beforeEach(async () => {
   await prisma.firm.update({ where: { id: firmId }, data: { portalEnabled: true } });
   ({ userId: lead } = await seedUser({ firmId }));
   ({ areaId, stageId } = await seedPracticeArea());
-  ({ matterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: lead, name: "Smith v. Jones" }));
+  ({ matterId } = await seedMatter({
+    practiceAreaId: areaId,
+    stageId,
+    leadUserId: lead,
+    name: "Smith v. Jones",
+  }));
   ({ contactId } = await seedContact({ name: "Jane Client", email: "jane@example.com" }));
-  identityId = (await prisma.portalIdentity.create({ data: { contactId, email: "jane@example.com" } })).id;
+  identityId = (
+    await prisma.portalIdentity.create({ data: { contactId, email: "jane@example.com" } })
+  ).id;
   await prisma.portalMatterAccess.create({ data: { identityId, matterId, invitedById: lead } });
   vi.mocked(canAccessMatter).mockClear();
-  vi.mocked(getPortalIdentity).mockResolvedValue({ identityId, contactId, email: "jane@example.com" });
+  vi.mocked(getPortalIdentity).mockResolvedValue({
+    identityId,
+    contactId,
+    email: "jane@example.com",
+  });
 });
 
 describe("sendPortalMessage gates and validation", () => {
@@ -78,9 +91,13 @@ describe("sendPortalMessage gates and validation", () => {
     await prisma.matter.update({ where: { id: matterId }, data: { isArchived: true } });
     expect(await sendPortalMessage(matterId, "hi")).toEqual(cant);
     await prisma.matter.update({ where: { id: matterId }, data: { isArchived: false } });
-    const other = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: lead })).matterId;
+    const other = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: lead }))
+      .matterId;
     expect(await sendPortalMessage(other, "hi")).toEqual(cant);
-    await prisma.portalMatterAccess.updateMany({ where: { identityId }, data: { revokedAt: new Date() } });
+    await prisma.portalMatterAccess.updateMany({
+      where: { identityId },
+      data: { revokedAt: new Date() },
+    });
     expect(await sendPortalMessage(matterId, "hi")).toEqual(cant);
     expect(await prisma.portalMessage.count()).toBe(0);
   });
@@ -99,30 +116,54 @@ describe("sendPortalMessage rate limit", () => {
     });
     await prisma.portalMessage.create({
       data: {
-        threadId: thread.id, body: "old", authorKind: "client", authorIdentityId: identityId,
+        threadId: thread.id,
+        body: "old",
+        authorKind: "client",
+        authorIdentityId: identityId,
         createdAt: new Date(Date.now() - 2 * 3600_000),
       },
     });
     await prisma.portalMessage.createMany({
       data: Array.from({ length: 28 }, (_, i) => ({
-        threadId: thread.id, body: `m${i}`, authorKind: "client", authorIdentityId: identityId,
+        threadId: thread.id,
+        body: `m${i}`,
+        authorKind: "client",
+        authorIdentityId: identityId,
       })),
     });
     // None of these may count toward this identity's 30 on this matter.
     const { contactId: otherContact } = await seedContact({ name: "Co", email: "co@example.com" });
-    const co = await prisma.portalIdentity.create({ data: { contactId: otherContact, email: "co@example.com" } });
+    const co = await prisma.portalIdentity.create({
+      data: { contactId: otherContact, email: "co@example.com" },
+    });
     await prisma.portalMessage.createMany({
       data: [
-        ...Array.from({ length: 5 }, (_, i) => ({ threadId: thread.id, body: `s${i}`, authorKind: "staff", authorUserId: lead })),
-        ...Array.from({ length: 5 }, (_, i) => ({ threadId: thread.id, body: `c${i}`, authorKind: "client", authorIdentityId: co.id })),
+        ...Array.from({ length: 5 }, (_, i) => ({
+          threadId: thread.id,
+          body: `s${i}`,
+          authorKind: "staff",
+          authorUserId: lead,
+        })),
+        ...Array.from({ length: 5 }, (_, i) => ({
+          threadId: thread.id,
+          body: `c${i}`,
+          authorKind: "client",
+          authorIdentityId: co.id,
+        })),
       ],
     });
-    const otherMatter = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: lead })).matterId;
+    const otherMatter = (await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: lead }))
+      .matterId;
     const otherThread = await prisma.portalThread.create({
       data: { matterId: otherMatter, lastMessageAt: new Date(), lastFromClient: true },
     });
     await prisma.portalMessage.createMany({
-      data: Array.from({ length: 10 }, (_, i) => ({ threadId: otherThread.id, body: `o${i}`, authorKind: "client", authorIdentityId: identityId })),
+      data: Array.from({ length: 10 }, (_, i) => ({
+        threadId: otherThread.id,
+        body: `o${i}`,
+        authorKind: "client",
+        authorIdentityId: identityId,
+      })),
     });
     expect(await sendPortalMessage(matterId, "29th")).toEqual({ ok: true });
     expect(await sendPortalMessage(matterId, "30th")).toEqual({ ok: true });
@@ -137,10 +178,16 @@ describe("sendPortalMessage effects", () => {
   test("stores, advances read state, writes the activity row", async () => {
     expect(await sendPortalMessage(matterId, "  hello  ")).toEqual({ ok: true });
     const msg = await prisma.portalMessage.findFirstOrThrow({});
-    expect(msg).toMatchObject({ body: "hello", authorKind: "client", authorIdentityId: identityId });
+    expect(msg).toMatchObject({
+      body: "hello",
+      authorKind: "client",
+      authorIdentityId: identityId,
+    });
     const rs = await prisma.portalReadState.findFirstOrThrow({ where: { identityId } });
     expect(rs.lastReadAt.getTime()).toBe(msg.createdAt.getTime());
-    expect(await prisma.activityLog.count({ where: { matterId, title: "Sent a portal message" } })).toBe(1);
+    expect(
+      await prisma.activityLog.count({ where: { matterId, title: "Sent a portal message" } }),
+    ).toBe(1);
   });
 
   test("notifies only keyed, active, accessible team members", async () => {
@@ -163,8 +210,13 @@ describe("sendPortalMessage effects", () => {
   test("a non-team user holding the key who cannot access the matter gets nothing", async () => {
     // Walls bind users off the team: a keyed non-team user is never a recipient.
     await prisma.firm.update({ where: { id: firmId }, data: { matterVisibility: "TEAM" } });
-    const role = await prisma.role.create({ data: { firmId, name: "outsider" }, select: { id: true } });
-    await prisma.rolePermission.create({ data: { roleId: role.id, permission: "portal.view_messages" } });
+    const role = await prisma.role.create({
+      data: { firmId, name: "outsider" },
+      select: { id: true },
+    });
+    await prisma.rolePermission.create({
+      data: { roleId: role.id, permission: "portal.view_messages" },
+    });
     const { userId: outsider } = await seedUser({ firmId, roleIds: [role.id] });
     await sendPortalMessage(matterId, "hello");
     expect(await notifs(outsider)).toHaveLength(0);
@@ -195,7 +247,10 @@ describe("sendPortalMessage effects", () => {
     await sendPortalMessage(matterId, "one");
     await sendPortalMessage(matterId, "two");
     expect(await notifs(keyed)).toHaveLength(1);
-    await prisma.notification.updateMany({ where: { userId: keyed }, data: { readAt: new Date() } });
+    await prisma.notification.updateMany({
+      where: { userId: keyed },
+      data: { readAt: new Date() },
+    });
     await sendPortalMessage(matterId, "three");
     expect(await notifs(keyed)).toHaveLength(2);
   });
@@ -210,11 +265,16 @@ describe("markPortalMessagesRead", () => {
       data: { matterId, lastMessageAt: new Date(), lastFromClient: false },
     });
     await markPortalMessagesRead(matterId);
-    const rs = await prisma.portalReadState.findFirstOrThrow({ where: { threadId: thread.id, identityId } });
+    const rs = await prisma.portalReadState.findFirstOrThrow({
+      where: { threadId: thread.id, identityId },
+    });
     expect(rs.lastReadAt.getTime()).toBe(thread.lastMessageAt.getTime());
 
     await prisma.portalReadState.deleteMany({});
-    await prisma.portalMatterAccess.updateMany({ where: { identityId }, data: { revokedAt: new Date() } });
+    await prisma.portalMatterAccess.updateMany({
+      where: { identityId },
+      data: { revokedAt: new Date() },
+    });
     await markPortalMessagesRead(matterId);
     expect(await prisma.portalReadState.count()).toBe(0);
   });
@@ -226,19 +286,25 @@ describe("markPortalMessagesRead", () => {
     });
     vi.mocked(revalidatePath).mockClear();
     await markPortalMessagesRead(matterId);
-    const first = await prisma.portalReadState.findFirstOrThrow({ where: { threadId: thread.id, identityId } });
+    const first = await prisma.portalReadState.findFirstOrThrow({
+      where: { threadId: thread.id, identityId },
+    });
     expect(first.lastReadAt.getTime()).toBe(last.getTime());
     expect(revalidatePath).toHaveBeenCalledWith("/portal");
 
     vi.mocked(revalidatePath).mockClear();
     await markPortalMessagesRead(matterId);
-    const second = await prisma.portalReadState.findFirstOrThrow({ where: { threadId: thread.id, identityId } });
+    const second = await prisma.portalReadState.findFirstOrThrow({
+      where: { threadId: thread.id, identityId },
+    });
     expect(second.updatedAt.getTime()).toBe(first.updatedAt.getTime());
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   test("off the portal host does nothing", async () => {
-    await prisma.portalThread.create({ data: { matterId, lastMessageAt: new Date(), lastFromClient: false } });
+    await prisma.portalThread.create({
+      data: { matterId, lastMessageAt: new Date(), lastFromClient: false },
+    });
     vi.mocked(getPortalIdentity).mockResolvedValue(null);
     await markPortalMessagesRead(matterId);
     expect(await prisma.portalReadState.count()).toBe(0);

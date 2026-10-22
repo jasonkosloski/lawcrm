@@ -37,13 +37,8 @@ const okPreview = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-async function openAndPick(
-  user: ReturnType<typeof userEvent.setup>,
-  templateId = "t1"
-) {
-  await user.click(
-    screen.getByRole("button", { name: /generate from template/i })
-  );
+async function openAndPick(user: ReturnType<typeof userEvent.setup>, templateId = "t1") {
+  await user.click(screen.getByRole("button", { name: /generate from template/i }));
   await user.selectOptions(screen.getByLabelText("Template"), templateId);
 }
 
@@ -55,32 +50,34 @@ beforeEach(() => {
 describe("GenerateFromTemplateDialog", () => {
   it("shows the merged preview with missing + unknown field warnings", async () => {
     previewMock.mockResolvedValue(
-      okPreview({ missing: ["client.phone"], unresolved: ["made.up"] })
+      okPreview({ missing: ["client.phone"], unresolved: ["made.up"] }),
     );
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog
+        scope={{ kind: "matter", matterId: "m1" }}
+        templates={TEMPLATES}
+        canUpload
+      />,
     );
     await openAndPick(user);
 
     expect(await screen.findByText("Dear Maria Alvarez,")).toBeInTheDocument();
     expect(previewMock).toHaveBeenCalledWith("t1", { kind: "matter", matterId: "m1" });
-    expect(screen.getByText(/Not on file for this matter/)).toHaveTextContent(
-      "client.phone"
-    );
-    expect(screen.getByText(/Unknown fields/)).toHaveTextContent(
-      "{{made.up}}"
-    );
+    expect(screen.getByText(/Not on file for this matter/)).toHaveTextContent("client.phone");
+    expect(screen.getByText(/Unknown fields/)).toHaveTextContent("{{made.up}}");
   });
 
   it("groups non-curated categories under their raw label", async () => {
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog
+        scope={{ kind: "matter", matterId: "m1" }}
+        templates={TEMPLATES}
+        canUpload
+      />,
     );
-    await user.click(
-      screen.getByRole("button", { name: /generate from template/i })
-    );
+    await user.click(screen.getByRole("button", { name: /generate from template/i }));
     expect(screen.getByRole("group", { name: "Demand letters" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "intake" })).toBeInTheDocument();
   });
@@ -93,13 +90,11 @@ describe("GenerateFromTemplateDialog", () => {
         scope={{ kind: "matter", matterId: "m1" }}
         templates={TEMPLATES}
         canUpload={false}
-      />
+      />,
     );
     await openAndPick(user);
     await screen.findByText("Dear Maria Alvarez,");
-    expect(
-      screen.queryByRole("button", { name: /save to documents/i })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /save to documents/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /copy text/i })).toBeEnabled();
   });
 
@@ -108,7 +103,11 @@ describe("GenerateFromTemplateDialog", () => {
     generateMock.mockResolvedValue({ ok: false, error: "Storage is down." });
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog
+        scope={{ kind: "matter", matterId: "m1" }}
+        templates={TEMPLATES}
+        canUpload
+      />,
     );
     await openAndPick(user);
     await screen.findByText("Dear Maria Alvarez,");
@@ -129,7 +128,11 @@ describe("GenerateFromTemplateDialog", () => {
     });
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog scope={{ kind: "lead", leadId: "l1" }} templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog
+        scope={{ kind: "lead", leadId: "l1" }}
+        templates={TEMPLATES}
+        canUpload
+      />,
     );
     await openAndPick(user);
     await screen.findByText("Dear Maria Alvarez,");
@@ -150,7 +153,11 @@ describe("GenerateFromTemplateDialog", () => {
     });
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog
+        scope={{ kind: "matter", matterId: "m1" }}
+        templates={TEMPLATES}
+        canUpload
+      />,
     );
     await openAndPick(user);
     await screen.findByText("Dear Maria Alvarez,");
@@ -160,9 +167,7 @@ describe("GenerateFromTemplateDialog", () => {
     expect(status).toHaveTextContent("Demand letter — Apr 15, 2026.md");
     expect(status).toHaveTextContent(/All documents/);
     // Can't double-save the same preview into a duplicate.
-    expect(
-      screen.queryByRole("button", { name: /save to documents/i })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /save to documents/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
   });
 
@@ -170,7 +175,11 @@ describe("GenerateFromTemplateDialog", () => {
     previewMock.mockResolvedValue(okPreview());
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog
+        scope={{ kind: "matter", matterId: "m1" }}
+        templates={TEMPLATES}
+        canUpload
+      />,
     );
     await openAndPick(user);
     await screen.findByText("Dear Maria Alvarez,");
@@ -192,7 +201,11 @@ describe("GenerateFromTemplateDialog", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog
+        scope={{ kind: "matter", matterId: "m1" }}
+        templates={TEMPLATES}
+        canUpload
+      />,
     );
     await openAndPick(user);
     await screen.findByText("Dear Maria Alvarez,");
@@ -211,7 +224,11 @@ describe("GenerateFromTemplateDialog", () => {
     generateMock.mockResolvedValue({ ok: false, error: "Storage is down." });
     const user = userEvent.setup();
     render(
-      <GenerateFromTemplateDialog scope={{ kind: "matter", matterId: "m1" }} templates={TEMPLATES} canUpload />
+      <GenerateFromTemplateDialog
+        scope={{ kind: "matter", matterId: "m1" }}
+        templates={TEMPLATES}
+        canUpload
+      />,
     );
     await openAndPick(user);
     await screen.findByText("Dear Maria Alvarez,");
@@ -219,12 +236,8 @@ describe("GenerateFromTemplateDialog", () => {
     await screen.findByText("Storage is down.");
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() =>
-      expect(screen.queryByText("Storage is down.")).not.toBeInTheDocument()
-    );
-    await user.click(
-      screen.getByRole("button", { name: /generate from template/i })
-    );
+    await waitFor(() => expect(screen.queryByText("Storage is down.")).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /generate from template/i }));
     expect(screen.queryByText("Dear Maria Alvarez,")).not.toBeInTheDocument();
     expect(screen.queryByText("Storage is down.")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Template")).toHaveValue("");
@@ -242,7 +255,7 @@ describe("GenerateFromTemplateDialog", () => {
         recordsRequestId="rr1"
         defaultTemplateId="t2"
         triggerLabel="Generate letter"
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: "Generate letter" }));
     expect(await screen.findByText("Dear Maria Alvarez,")).toBeInTheDocument();
@@ -250,14 +263,14 @@ describe("GenerateFromTemplateDialog", () => {
     expect(previewMock).toHaveBeenCalledWith(
       "t2",
       { kind: "matter", matterId: "m1" },
-      { recordsRequestId: "rr1" }
+      { recordsRequestId: "rr1" },
     );
     await user.click(screen.getByRole("button", { name: /save to documents/i }));
     await screen.findByText("Letter.md");
     expect(generateMock).toHaveBeenCalledWith(
       "t2",
       { kind: "matter", matterId: "m1" },
-      { recordsRequestId: "rr1" }
+      { recordsRequestId: "rr1" },
     );
   });
 
@@ -269,7 +282,7 @@ describe("GenerateFromTemplateDialog", () => {
         templates={TEMPLATES}
         canUpload
         defaultTemplateId="gone"
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: /generate from template/i }));
     expect(screen.getByLabelText("Template")).toHaveValue("");

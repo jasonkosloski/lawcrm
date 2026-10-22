@@ -31,9 +31,7 @@ describe("TABLES_IN_DELETE_ORDER", () => {
   });
 
   it("lists each table once", () => {
-    expect(new Set(TABLES_IN_DELETE_ORDER).size).toBe(
-      TABLES_IN_DELETE_ORDER.length
-    );
+    expect(new Set(TABLES_IN_DELETE_ORDER).size).toBe(TABLES_IN_DELETE_ORDER.length);
   });
 });
 
@@ -57,8 +55,7 @@ describe("run lock", () => {
 
 describe("resetDb guard", () => {
   it("refuses a non-local DATABASE_URL before touching any table", async () => {
-    process.env.DATABASE_URL =
-      "postgresql://u:p@db.prisma.io:5432/lawcrm_prod";
+    process.env.DATABASE_URL = "postgresql://u:p@db.prisma.io:5432/lawcrm_prod";
     await expect(resetDb()).rejects.toThrow(/not localhost/);
   });
 
@@ -91,12 +88,9 @@ describe("connection pool", () => {
           await theirs;
           return true;
         },
-        { maxWait: 5_000, timeout: 10_000 }
+        { maxWait: 5_000, timeout: 10_000 },
       );
-    const results = await Promise.all([
-      run(releaseA, bStarted),
-      run(releaseB, aStarted),
-    ]);
+    const results = await Promise.all([run(releaseA, bStarted), run(releaseB, aStarted)]);
     expect(results).toEqual([true, true]);
   });
 });

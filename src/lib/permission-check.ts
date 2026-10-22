@@ -49,41 +49,39 @@ type ResolvedPermissions = {
  * Cached per-request (keyed by user id) so concurrent checks don't
  * re-fetch.
  */
-const resolveUserPermissions = cache(
-  async (userId: string): Promise<ResolvedPermissions> => {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        isActive: true,
-        userRoles: {
-          select: {
-            role: {
-              select: {
-                name: true,
-                permissions: { select: { permission: true } },
-              },
+const resolveUserPermissions = cache(async (userId: string): Promise<ResolvedPermissions> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      isActive: true,
+      userRoles: {
+        select: {
+          role: {
+            select: {
+              name: true,
+              permissions: { select: { permission: true } },
             },
           },
         },
       },
-    });
-    if (!user || !user.isActive) {
-      return { isAdmin: false, granted: new Set<string>() };
-    }
-    const granted = new Set<string>();
-    let isAdmin = false;
-    for (const ur of user.userRoles) {
-      if (ur.role.name === ADMIN_ROLE_NAME) {
-        isAdmin = true;
-        continue; // admin gets all — don't bother accumulating
-      }
-      for (const rp of ur.role.permissions) {
-        granted.add(rp.permission);
-      }
-    }
-    return { isAdmin, granted };
+    },
+  });
+  if (!user || !user.isActive) {
+    return { isAdmin: false, granted: new Set<string>() };
   }
-);
+  const granted = new Set<string>();
+  let isAdmin = false;
+  for (const ur of user.userRoles) {
+    if (ur.role.name === ADMIN_ROLE_NAME) {
+      isAdmin = true;
+      continue; // admin gets all — don't bother accumulating
+    }
+    for (const rp of ur.role.permissions) {
+      granted.add(rp.permission);
+    }
+  }
+  return { isAdmin, granted };
+});
 
 const resolveCurrentUserPermissions = async (): Promise<ResolvedPermissions> =>
   resolveUserPermissions(await getCurrentUserId());
@@ -94,18 +92,13 @@ const resolveCurrentUserPermissions = async (): Promise<ResolvedPermissions> =>
  * (route handlers the Clerk middleware does not cover, where
  * `getCurrentUserId()` would throw). Admins always do.
  */
-export async function userHasPermission(
-  userId: string,
-  permission: string
-): Promise<boolean> {
+export async function userHasPermission(userId: string, permission: string): Promise<boolean> {
   const { isAdmin, granted } = await resolveUserPermissions(userId);
   return isAdmin || granted.has(permission);
 }
 
 /** True when the current user has `permission`. Admins always do. */
-export async function currentUserHasPermission(
-  permission: string
-): Promise<boolean> {
+export async function currentUserHasPermission(permission: string): Promise<boolean> {
   const { isAdmin, granted } = await resolveCurrentUserPermissions();
   return isAdmin || granted.has(permission);
 }
@@ -114,7 +107,7 @@ export async function currentUserHasPermission(
  *  Useful for "show this section if the user can do anything in it"
  *  navigation gates. */
 export async function currentUserHasAnyPermission(
-  permissions: readonly string[]
+  permissions: readonly string[],
 ): Promise<boolean> {
   const { isAdmin, granted } = await resolveCurrentUserPermissions();
   if (isAdmin) return true;
@@ -143,9 +136,7 @@ export async function getCurrentUserPermissions(): Promise<{
  *  record kinds in one request (note/primary captures), where each
  *  kind must clear its own create gate. Admin always passes. Returns
  *  the userId like `requirePermission`. */
-export async function requirePermissions(
-  permissions: Iterable<string>
-): Promise<string> {
+export async function requirePermissions(permissions: Iterable<string>): Promise<string> {
   const userId = await getCurrentUserId();
   const { isAdmin, granted } = await resolveCurrentUserPermissions();
   if (!isAdmin) {
@@ -159,9 +150,7 @@ export async function requirePermissions(
 /** Server-action guard. Bounces users without `permission` to the
  *  dashboard. Admin always passes. Returns the userId for chaining
  *  into the action body, mirroring `requireAdmin()`. */
-export async function requirePermission(
-  permission: string
-): Promise<string> {
+export async function requirePermission(permission: string): Promise<string> {
   const userId = await getCurrentUserId();
   const ok = await currentUserHasPermission(permission);
   if (!ok) {
@@ -174,8 +163,7 @@ export async function requirePermission(
 }
 
 /** Message returned by `requirePermissionResult` on denial. */
-export const PERMISSION_DENIED_MESSAGE =
-  "You do not have permission to do that.";
+export const PERMISSION_DENIED_MESSAGE = "You do not have permission to do that.";
 
 /**
  * Non-redirecting twin of `requirePermission` for actions whose
@@ -187,7 +175,7 @@ export const PERMISSION_DENIED_MESSAGE =
  * that depend on the redirect keep using `requirePermission`.
  */
 export async function requirePermissionResult(
-  permission: string
+  permission: string,
 ): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
   const userId = await getCurrentUserId();
   const ok = await currentUserHasPermission(permission);

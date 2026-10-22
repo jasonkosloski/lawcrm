@@ -22,19 +22,17 @@ import { NextRequest, type NextFetchEvent } from "next/server";
 // our handler directly with a signed-out `auth()`. The cron paths are
 // self-authenticated, so the handler never consults it.
 vi.mock("@clerk/nextjs/server", () => ({
-  clerkMiddleware:
-    (handler: (...a: unknown[]) => unknown) =>
-    (req: unknown, evt: unknown) =>
-      handler(async () => ({ userId: null }), req, evt),
+  clerkMiddleware: (handler: (...a: unknown[]) => unknown) => (req: unknown, evt: unknown) =>
+    handler(async () => ({ userId: null }), req, evt),
 }));
 
 import { proxy } from "./proxy";
 
 type Cron = { path: string; schedule: string };
 
-const config = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "..", "vercel.json"), "utf8")
-) as { crons?: Cron[] };
+const config = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "vercel.json"), "utf8")) as {
+  crons?: Cron[];
+};
 const crons = config.crons ?? [];
 
 describe("vercel.json crons", () => {
@@ -55,9 +53,7 @@ describe("vercel.json crons", () => {
   it.each(crons)("$path maps to a GET route handler", ({ path: p }) => {
     const file = path.join(__dirname, "app", p, "route.ts");
     expect(fs.existsSync(file)).toBe(true);
-    expect(fs.readFileSync(file, "utf8")).toMatch(
-      /export async function GET\b/
-    );
+    expect(fs.readFileSync(file, "utf8")).toMatch(/export async function GET\b/);
   });
 
   it.each(crons)("$path passes the proxy without a session", async ({ path: p }) => {
@@ -65,7 +61,7 @@ describe("vercel.json crons", () => {
       new NextRequest(new URL(p, "https://app.example.com"), {
         headers: { authorization: "Bearer cron-secret" },
       }),
-      {} as NextFetchEvent
+      {} as NextFetchEvent,
     )) as Response;
     expect(res.status).toBe(200);
     expect(res.headers.has("location")).toBe(false);
@@ -73,8 +69,7 @@ describe("vercel.json crons", () => {
 });
 
 const root = path.join(__dirname, "..");
-const readRoot = (...parts: string[]): string =>
-  fs.readFileSync(path.join(root, ...parts), "utf8");
+const readRoot = (...parts: string[]): string => fs.readFileSync(path.join(root, ...parts), "utf8");
 
 describe(".env.example documents what the crons and Google sync need", () => {
   const envExample = readRoot(".env.example");
@@ -97,12 +92,8 @@ describe("tooling wiring", () => {
 
   it("runs the migration drift check from the pre-commit hook when prisma/ is staged", () => {
     expect(readRoot(".husky", "pre-commit")).toMatch(/check:migrations/);
-    expect(pkg.scripts["check:migrations"]).toBe(
-      "node scripts/check-migrations.mjs"
-    );
-    expect(fs.existsSync(path.join(root, "scripts", "check-migrations.mjs"))).toBe(
-      true
-    );
+    expect(pkg.scripts["check:migrations"]).toBe("node scripts/check-migrations.mjs");
+    expect(fs.existsSync(path.join(root, "scripts", "check-migrations.mjs"))).toBe(true);
   });
 
   it("keeps the Prisma packages on one exact version (CLI, client, adapter)", () => {

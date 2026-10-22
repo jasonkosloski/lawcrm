@@ -66,9 +66,7 @@ describe("DeclineLeadButton", () => {
     for (let i = 0; i < 2; i++) {
       await open(user);
       await user.click(screen.getByRole("button", { name: /decline lead/i }));
-      await waitFor(() =>
-        expect(screen.queryByPlaceholderText(REASON)).not.toBeInTheDocument()
-      );
+      await waitFor(() => expect(screen.queryByPlaceholderText(REASON)).not.toBeInTheDocument());
     }
     expect(mockedDecline).toHaveBeenCalledTimes(2);
   });

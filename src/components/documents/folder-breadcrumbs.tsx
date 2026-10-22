@@ -24,7 +24,12 @@ export function FolderBreadcrumbs({
   const crumbs = currentFolderId ? folderPath(folders, currentFolderId) : [];
   return (
     <nav aria-label="Folder path" className="flex items-center gap-1 min-w-0 text-xs">
-      <Crumb href={basePath} folderId={null} name="All documents" current={currentFolderId === null} />
+      <Crumb
+        href={basePath}
+        folderId={null}
+        name="All documents"
+        current={currentFolderId === null}
+      />
       {crumbs.map((c, i) => (
         <span key={c.id} className="flex items-center gap-1 min-w-0">
           <ChevronRight size={12} className="shrink-0 text-ink-4" />

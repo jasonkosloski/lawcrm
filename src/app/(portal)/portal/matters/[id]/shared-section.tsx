@@ -12,23 +12,14 @@ export function formatBytes(n: number | null): string | null {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function SharedSection({
-  documents,
-}: {
-  documents: PortalDocumentRow[];
-}) {
+export function SharedSection({ documents }: { documents: PortalDocumentRow[] }) {
   return (
     <section aria-labelledby="shared-heading" className="flex flex-col gap-3">
       <h2 id="shared-heading" className="text-sm font-semibold text-ink-2">
         Shared with you
       </h2>
       {documents.length === 0 ? (
-        <EmptyState
-          framed
-          icon={Inbox}
-          title="Nothing shared yet"
-          className="bg-white py-8"
-        />
+        <EmptyState framed icon={Inbox} title="Nothing shared yet" className="bg-white py-8" />
       ) : (
         <ul className="divide-y divide-line-2 overflow-hidden rounded-xl bg-white shadow-xs ring-1 ring-line">
           {documents.map((d) => (
@@ -42,18 +33,12 @@ export function SharedSection({
                     {d.name}
                   </span>
                   <span className="text-xs text-ink-3">
-                    {[
-                      formatDate(d.createdAt, "medium", "America/Denver"),
-                      formatBytes(d.fileSize),
-                    ]
+                    {[formatDate(d.createdAt, "medium", "America/Denver"), formatBytes(d.fileSize)]
                       .filter(Boolean)
                       .join(" · ")}
                   </span>
                 </span>
-                <Download
-                  className="size-4 shrink-0 text-ink-4"
-                  aria-hidden="true"
-                />
+                <Download className="size-4 shrink-0 text-ink-4" aria-hidden="true" />
               </a>
             </li>
           ))}

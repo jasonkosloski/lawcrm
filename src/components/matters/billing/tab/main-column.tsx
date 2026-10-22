@@ -9,12 +9,7 @@ import {
   BILLING_MODE_LABEL,
   type BillingMode,
 } from "@/lib/billing-mode-constants";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -75,21 +70,17 @@ export function MainColumn({
   // still owe money (drafts / approved haven't reached the client;
   // internal records have no AR).
   const openInvoiceCount = billing.invoices.filter(
-    (i) => i.kind === "client" && (i.status === "sent" || i.status === "partial")
+    (i) => i.kind === "client" && (i.status === "sent" || i.status === "partial"),
   ).length;
 
-  const invoiceHref = (invId: string): string =>
-    `/matters/${matterId}/billing?invoice=${invId}`;
+  const invoiceHref = (invId: string): string => `/matters/${matterId}/billing?invoice=${invId}`;
 
   const billingMode = billing.billingMode as BillingMode;
   const isTraditional = billingMode === "client";
 
   // WIP = unbilled time + unbilled billable expenses: the invoice
   // actions bundle both, so the KPI and card must count both.
-  const wipTotal = bundleTotal(
-    billing.wip.amountTotal,
-    unbilledExpenses.total
-  );
+  const wipTotal = bundleTotal(billing.wip.amountTotal, unbilledExpenses.total);
   const wipItemCount = billing.wip.entryCount + unbilledExpenses.count;
   const wipSecondary = [
     `${billing.wip.hoursTotal.toFixed(1)} h · ${billing.wip.entryCount} ${billing.wip.entryCount === 1 ? "entry" : "entries"}`,
@@ -109,7 +100,7 @@ export function MainColumn({
             "inline-flex items-center text-2xs font-medium px-2 py-0.5 rounded-full border",
             isTraditional
               ? "bg-paper-2 text-ink-3 border-line"
-              : "bg-brand-soft text-brand-700 border-brand-200"
+              : "bg-brand-soft text-brand-700 border-brand-200",
           )}
           title={BILLING_MODE_DESCRIPTION[billingMode]}
         >
@@ -117,10 +108,7 @@ export function MainColumn({
         </span>
         <span className="text-2xs text-ink-4">
           ·{" "}
-          <Link
-            href={`/matters/${matterId}/edit`}
-            className="hover:text-brand-700 hover:underline"
-          >
+          <Link href={`/matters/${matterId}/edit`} className="hover:text-brand-700 hover:underline">
             change on matter edit
           </Link>
         </span>
@@ -133,10 +121,9 @@ export function MainColumn({
               {BILLING_MODE_LABEL[billingMode]} flow isn&apos;t implemented yet.
             </div>
             <div className="text-ink-3 mt-0.5">
-              {BILLING_MODE_DESCRIPTION[billingMode]} For now this matter
-              uses the traditional client-billing UX below — generated
-              invoices won&apos;t carry the mode-specific letterhead or
-              workflow until that lands.
+              {BILLING_MODE_DESCRIPTION[billingMode]} For now this matter uses the traditional
+              client-billing UX below — generated invoices won&apos;t carry the mode-specific
+              letterhead or workflow until that lands.
             </div>
           </div>
         </div>
@@ -177,9 +164,7 @@ export function MainColumn({
         <CardHeader className="pb-2 pt-4 px-4">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             Work-in-progress
-            <span className="text-2xs font-mono font-normal text-ink-4">
-              {wipItemCount}
-            </span>
+            <span className="text-2xs font-mono font-normal text-ink-4">{wipItemCount}</span>
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 flex flex-col gap-3">
@@ -209,8 +194,8 @@ export function MainColumn({
           ) : (
             wipItemCount > 0 && (
               <div className="text-2xs text-ink-4 italic">
-                Generating an invoice from this work-in-progress needs the
-                billing.generate_invoice permission.
+                Generating an invoice from this work-in-progress needs the billing.generate_invoice
+                permission.
               </div>
             )
           )}
@@ -250,9 +235,8 @@ export function MainColumn({
               </Table>
               {billing.wip.entryCount > billing.wip.recent.length && (
                 <div className="px-4 py-2 text-2xs text-ink-4 border-t border-line bg-paper-2/50">
-                  Showing {billing.wip.recent.length} of{" "}
-                  {billing.wip.entryCount} unbilled entries — generating the
-                  invoice bundles all of them.
+                  Showing {billing.wip.recent.length} of {billing.wip.entryCount} unbilled entries —
+                  generating the invoice bundles all of them.
                 </div>
               )}
             </div>

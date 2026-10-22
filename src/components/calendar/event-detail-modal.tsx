@@ -32,36 +32,14 @@ import { useCallback, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useUserTimeZone } from "@/components/user-time-zone";
-import {
-  normalizeVideoUrl,
-  toScheduleWire,
-  videoHref,
-} from "@/lib/event-schedule";
-import {
-  ArrowRight,
-  Calendar,
-  Link as LinkIcon,
-  MapPin,
-  Trash2,
-  Video,
-  X,
-} from "lucide-react";
-import {
-  deleteCalendarEvent,
-  updateCalendarEvent,
-} from "@/app/actions/calendar-events";
+import { normalizeVideoUrl, toScheduleWire, videoHref } from "@/lib/event-schedule";
+import { ArrowRight, Calendar, Link as LinkIcon, MapPin, Trash2, Video, X } from "lucide-react";
+import { deleteCalendarEvent, updateCalendarEvent } from "@/app/actions/calendar-events";
 import { updateCalendarEventInitialState } from "@/lib/calendar-event-form";
 import { confirmAction } from "@/lib/feedback";
-import {
-  EVENT_TYPES,
-  EVENT_TYPE_LABEL,
-} from "@/lib/constants/calendar-event-type";
+import { EVENT_TYPES, EVENT_TYPE_LABEL } from "@/lib/constants/calendar-event-type";
 import { serializeAttendees } from "./attendee-picker";
-import type {
-  CalendarEventDetail,
-  EventNote,
-  EventTimeEntry,
-} from "@/lib/queries/calendar";
+import type { CalendarEventDetail, EventNote, EventTimeEntry } from "@/lib/queries/calendar";
 import { EventNotesSection } from "./event-notes-section";
 import { EventShareSection } from "./event-share-section";
 import type { EventPortalShareProp } from "@/lib/queries/portal-status";
@@ -73,17 +51,8 @@ import {
   type EventEditState,
 } from "./event-detail-helpers";
 import { ModalShell } from "./event-modal-shell";
-import {
-  InlineText,
-  InlineTextarea,
-  InlineSelect,
-  InlineTimeEditor,
-} from "./event-inline-editors";
-import {
-  BusyEventView,
-  EventVisibilityRow,
-  EventAttendeesSection,
-} from "./event-detail-sections";
+import { InlineText, InlineTextarea, InlineSelect, InlineTimeEditor } from "./event-inline-editors";
+import { BusyEventView, EventVisibilityRow, EventAttendeesSection } from "./event-detail-sections";
 import { Button } from "@/components/ui/button";
 
 // Settable event-type labels are centralized; "deadline" is the
@@ -141,9 +110,7 @@ function EventDetailModalInner({
   // action and flash "Event not found".
   const [deleted, setDeleted] = useState(false);
   const [savePending, startSave] = useTransition();
-  const [committed, setCommitted] = useState<EventEditState>(() =>
-    buildInitialState(event, tz)
-  );
+  const [committed, setCommitted] = useState<EventEditState>(() => buildInitialState(event, tz));
   const [error, setError] = useState<string | null>(null);
 
   // Re-sync local state whenever a fresh `event` prop lands: the
@@ -192,17 +159,14 @@ function EventDetailModalInner({
       // `event` prop after this save settles.
       fd.set("attendees", serializeAttendees(next.attendees));
       startSave(async () => {
-        const res = await updateCalendarEvent(
-          event.id,
-          updateCalendarEventInitialState,
-          fd
-        );
+        const res = await updateCalendarEvent(event.id, updateCalendarEventInitialState, fd);
         if (res.status === "error") {
           // Pull the first error message we can find: field-level
           // first, then the action's own error key.
           const first =
-            Object.values(res.errors ?? {}).flat().find(Boolean) ??
-            "Couldn't save change.";
+            Object.values(res.errors ?? {})
+              .flat()
+              .find(Boolean) ?? "Couldn't save change.";
           setError(first);
           setCommitted(previous);
         }
@@ -212,7 +176,7 @@ function EventDetailModalInner({
         // refresh just re-ran every calendar query.
       });
     },
-    [committed, event.id]
+    [committed, event.id],
   );
 
   // Returns false when the link is invalid so the inline editor stays
@@ -248,9 +212,7 @@ function EventDetailModalInner({
         return;
       }
       setDeleted(true);
-      router.push(
-        res.matterId ? `/matters/${res.matterId}/events` : "/calendar"
-      );
+      router.push(res.matterId ? `/matters/${res.matterId}/events` : "/calendar");
     });
   };
 
@@ -272,13 +234,7 @@ function EventDetailModalInner({
   // single line "Busy" — so the click-on-busy-block behavior is
   // predictable but no detail leaks.
   if (!event.viewerCanSeeDetails) {
-    return (
-      <BusyEventView
-        dateLabel={dateLabel}
-        startsAndEnds={startsAndEnds}
-        close={close}
-      />
-    );
+    return <BusyEventView dateLabel={dateLabel} startsAndEnds={startsAndEnds} close={close} />;
   }
 
   return (
@@ -364,12 +320,8 @@ function EventDetailModalInner({
               />
             ) : (
               <div className="flex flex-col leading-tight">
-                <span className="text-xs text-ink font-medium">
-                  {dateLabel}
-                </span>
-                <span className="text-2xs text-ink-3 font-mono">
-                  {startsAndEnds}
-                </span>
+                <span className="text-xs text-ink font-medium">{dateLabel}</span>
+                <span className="text-2xs text-ink-3 font-mono">{startsAndEnds}</span>
               </div>
             )}
           </Row>
@@ -419,9 +371,7 @@ function EventDetailModalInner({
                             Join video call
                           </a>
                         ) : (
-                          <span className="text-xs text-ink truncate">
-                            {val}
-                          </span>
+                          <span className="text-xs text-ink truncate">{val}</span>
                         );
                       }
                     : undefined
@@ -460,12 +410,8 @@ function EventDetailModalInner({
                   className="w-1.5 h-1.5 rounded-full shrink-0"
                   style={{ background: event.matter.color }}
                 />
-                <span className="font-medium truncate">
-                  {event.matter.name}
-                </span>
-                <span className="text-2xs text-ink-4 shrink-0">
-                  · {event.matter.area}
-                </span>
+                <span className="font-medium truncate">{event.matter.name}</span>
+                <span className="text-2xs text-ink-4 shrink-0">· {event.matter.area}</span>
               </Link>
             </Row>
           )}
@@ -489,16 +435,12 @@ function EventDetailModalInner({
               specific event visible in full regardless; "Private"
               is the explicit hide (creator only, ADR-037) and
               wins over both the profile default and show-details. */}
-          {canEdit && (
-            <EventVisibilityRow committed={committed} commit={commit} />
-          )}
+          {canEdit && <EventVisibilityRow committed={committed} commit={commit} />}
 
           {/* Description */}
           {(canEdit || committed.description) && (
             <div className="pt-3 border-t border-line">
-              <div className="text-2xs font-medium text-ink-3 mb-1.5">
-                Description
-              </div>
+              <div className="text-2xs font-medium text-ink-3 mb-1.5">Description</div>
               {canEdit ? (
                 <InlineTextarea
                   value={committed.description}
@@ -570,9 +512,7 @@ function EventDetailModalInner({
             </Button>
           )}
           {canEdit && savePending && (
-            <span className="text-2xs font-mono text-ink-4 mr-auto">
-              Saving…
-            </span>
+            <span className="text-2xs font-mono text-ink-4 mr-auto">Saving…</span>
           )}
           {event.matter && (
             <Button size="xs" render={<Link href={`/matters/${event.matter.id}`} />}>

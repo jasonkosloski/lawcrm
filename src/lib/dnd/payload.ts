@@ -49,7 +49,7 @@ const KIND_MIME = "application/x-lawcrm-dnd-kind";
  */
 export function setDragPayload<K extends string, D>(
   e: React.DragEvent,
-  payload: DragPayload<K, D>
+  payload: DragPayload<K, D>,
 ): void {
   e.dataTransfer.setData(PAYLOAD_MIME, JSON.stringify(payload.data));
   e.dataTransfer.setData(KIND_MIME, payload.kind);
@@ -92,10 +92,7 @@ export function hasKind(e: React.DragEvent, kind: string): boolean {
  * Generic over the shape of the data so callers can narrow the
  * return without `as`.
  */
-export function readPayload<D>(
-  e: React.DragEvent,
-  expectedKind: string
-): D | null {
+export function readPayload<D>(e: React.DragEvent, expectedKind: string): D | null {
   const kind = e.dataTransfer.getData(KIND_MIME);
   if (kind !== expectedKind) return null;
   const json = e.dataTransfer.getData(PAYLOAD_MIME);

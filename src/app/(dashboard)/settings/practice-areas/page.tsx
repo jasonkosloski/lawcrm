@@ -14,12 +14,7 @@
 
 import Link from "next/link";
 import { ChevronRight, Plus } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { getCurrentFirm } from "@/lib/firm";
@@ -56,10 +51,9 @@ export default async function PracticeAreasSettingsPage() {
       <div>
         <h1 className="text-lg font-semibold text-ink">Practice areas</h1>
         <p className="text-xs text-ink-4 mt-1 leading-relaxed">
-          Configure the practice areas your firm takes. Each area has its
-          own case-lifecycle stages, which new matters progress through.
-          Archive an area to remove it from new-matter dropdowns while
-          keeping historical matters intact.
+          Configure the practice areas your firm takes. Each area has its own case-lifecycle stages,
+          which new matters progress through. Archive an area to remove it from new-matter dropdowns
+          while keeping historical matters intact.
         </p>
       </div>
 
@@ -78,9 +72,7 @@ export default async function PracticeAreasSettingsPage() {
       </Card>
 
       <section className="flex flex-col gap-2">
-        <div className="text-2xs font-medium text-ink-3">
-          Active ({active.length})
-        </div>
+        <div className="text-2xs font-medium text-ink-3">Active ({active.length})</div>
         {active.length === 0 ? (
           <Card>
             <CardContent className="px-4 py-6 text-xs text-ink-4">
@@ -103,9 +95,7 @@ export default async function PracticeAreasSettingsPage() {
 
       {archived.length > 0 && (
         <section className="flex flex-col gap-2">
-          <div className="text-2xs font-medium text-ink-3">
-            Archived ({archived.length})
-          </div>
+          <div className="text-2xs font-medium text-ink-3">Archived ({archived.length})</div>
           <div className="flex flex-col gap-1.5">
             {archived.map((a) => (
               <AreaRow key={a.id} area={a} muted />
@@ -156,13 +146,9 @@ function AreaRow({
           >
             {area.name}
           </Link>
-          {!area.isActive && (
-            <span className="text-2xs text-ink-4 font-mono">archived</span>
-          )}
+          {!area.isActive && <span className="text-2xs text-ink-4 font-mono">archived</span>}
         </div>
-        {area.label && (
-          <div className="text-2xs text-ink-4 truncate">{area.label}</div>
-        )}
+        {area.label && <div className="text-2xs text-ink-4 truncate">{area.label}</div>}
       </div>
 
       <div className="hidden sm:flex flex-col items-end text-2xs text-ink-4 font-mono">

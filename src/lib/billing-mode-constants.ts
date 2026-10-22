@@ -20,12 +20,7 @@
  * bundle (same pattern as `role-constants.ts`).
  */
 
-export const BILLING_MODES = [
-  "client",
-  "court_voucher",
-  "fee_petition",
-  "none",
-] as const;
+export const BILLING_MODES = ["client", "court_voucher", "fee_petition", "none"] as const;
 
 export type BillingMode = (typeof BILLING_MODES)[number];
 
@@ -39,8 +34,7 @@ export const BILLING_MODE_LABEL: Record<BillingMode, string> = {
 /// One-line description for select hints + the "what does this
 /// mean?" tooltip on the billing tab. Keep terse.
 export const BILLING_MODE_DESCRIPTION: Record<BillingMode, string> = {
-  client:
-    "Traditional invoicing — generate an invoice from WIP, send to the client, mark paid.",
+  client: "Traditional invoicing — generate an invoice from WIP, send to the client, mark paid.",
   court_voucher:
     "Court-appointed work paid by an agency. Generate a voucher document for entry into the agency's reimbursement system (e.g. eVoucher).",
   fee_petition:

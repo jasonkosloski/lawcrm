@@ -34,14 +34,10 @@ export type StaffAuth =
   | { status: "ok"; userId: string; clerkUserId: string; sessionId: string };
 
 /** The user's verified primary email, lowercased; null if none. */
-async function verifiedPrimaryEmail(
-  clerkUserId: string
-): Promise<string | null> {
+async function verifiedPrimaryEmail(clerkUserId: string): Promise<string | null> {
   const client = await clerkClient();
   const user = await client.users.getUser(clerkUserId);
-  const primary = user.emailAddresses.find(
-    (e) => e.id === user.primaryEmailAddressId
-  );
+  const primary = user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId);
   if (!primary || primary.verification?.status !== "verified") return null;
   return primary.emailAddress.trim().toLowerCase();
 }
@@ -50,10 +46,7 @@ async function verifiedPrimaryEmail(
  * Map a Clerk identity to a firm user, linking on first sign-in.
  * Exported for tests; callers use `getStaffAuth`.
  */
-export async function resolveStaffUser(
-  clerkUserId: string,
-  sessionId: string
-): Promise<StaffAuth> {
+export async function resolveStaffUser(clerkUserId: string, sessionId: string): Promise<StaffAuth> {
   const noAccess: StaffAuth = { status: "no_access", clerkUserId };
   const ok = (userId: string): StaffAuth => ({
     status: "ok",
@@ -159,9 +152,7 @@ export const getStaffAuth = cache(async (): Promise<StaffAuth> => {
  * (so the proxy never buffers their body): authenticate the request
  * directly instead of reading middleware state.
  */
-export async function getStaffAuthFromRequest(
-  req: Request
-): Promise<StaffAuth> {
+export async function getStaffAuthFromRequest(req: Request): Promise<StaffAuth> {
   if (await requestIsOnPortalHost()) return { status: "signed_out" };
   const client = await clerkClient();
   const state = await client.authenticateRequest(req, {

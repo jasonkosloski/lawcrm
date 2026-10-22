@@ -80,9 +80,7 @@ export function DashboardTaskRow({
   const titleNode = (
     <div className="flex-1 min-w-0">
       <div className="text-xs text-ink truncate">{title}</div>
-      {matterName && (
-        <div className="text-2xs text-ink-4 truncate">{matterName}</div>
-      )}
+      {matterName && <div className="text-2xs text-ink-4 truncate">{matterName}</div>}
     </div>
   );
 
@@ -92,15 +90,13 @@ export function DashboardTaskRow({
         <span
           className={cn(
             "w-1.5 h-1.5 rounded-full shrink-0",
-            PRIORITY_DOT[priority] ?? PRIORITY_DOT.normal
+            PRIORITY_DOT[priority] ?? PRIORITY_DOT.normal,
           )}
           title={`${priority} priority`}
         />
         {matterId || leadId ? (
           <Link
-            href={
-              matterId ? `/matters/${matterId}/tasks` : `/intake/${leadId}/tasks`
-            }
+            href={matterId ? `/matters/${matterId}/tasks` : `/intake/${leadId}/tasks`}
             className="flex-1 min-w-0 flex items-center gap-3"
           >
             {titleNode}

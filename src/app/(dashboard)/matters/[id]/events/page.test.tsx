@@ -64,11 +64,7 @@ vi.mock("@/components/matters/events/event-row-expandable", () => ({
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { getMatterById } from "@/lib/queries/matters";
 import { getMatterEvents } from "@/lib/queries/matter-detail";
-import {
-  getCalendarEventById,
-  getEventNotes,
-  getEventTimeEntries,
-} from "@/lib/queries/calendar";
+import { getCalendarEventById, getEventNotes, getEventTimeEntries } from "@/lib/queries/calendar";
 import type { CalendarEventDetail } from "@/lib/queries/calendar";
 import type { MatterEventRow } from "@/lib/queries/matter-detail";
 import MatterEventsPage from "./page";
@@ -90,9 +86,7 @@ const matterEvent: MatterEventRow = {
   timeEntries: [],
 };
 
-const eventDetail = (
-  over?: Partial<CalendarEventDetail>
-): CalendarEventDetail => ({
+const eventDetail = (over?: Partial<CalendarEventDetail>): CalendarEventDetail => ({
   id: "evt_ours",
   title: "Deposition prep",
   type: "meeting",
@@ -120,10 +114,8 @@ const renderPage = async (eventParam?: string) => {
   render(
     await MatterEventsPage({
       params: Promise.resolve({ id: "m1" }),
-      searchParams: Promise.resolve(
-        eventParam ? { event: eventParam } : {}
-      ),
-    } as Parameters<typeof MatterEventsPage>[0])
+      searchParams: Promise.resolve(eventParam ? { event: eventParam } : {}),
+    } as Parameters<typeof MatterEventsPage>[0]),
   );
 };
 
@@ -184,7 +176,7 @@ describe("MatterEventsPage — ?event= visibility gating", () => {
 
   test("scrubbed 'Busy' event — notes/time entries are NOT fetched", async () => {
     vi.mocked(getCalendarEventById).mockResolvedValue(
-      eventDetail({ title: "Busy", viewerCanSeeDetails: false })
+      eventDetail({ title: "Busy", viewerCanSeeDetails: false }),
     );
     await renderPage("evt_ours");
     // Modal still renders the Busy shell (same as calendar grid) …

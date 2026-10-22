@@ -14,9 +14,10 @@ describe("ImageViewer", () => {
     expect(button).toHaveAttribute("aria-pressed", "false");
     button.focus();
     await userEvent.keyboard("{Enter}");
-    expect(
-      screen.getByRole("button", { name: /fit scene photo\.jpg/i })
-    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /fit scene photo\.jpg/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   test("the image keeps its alt text", () => {

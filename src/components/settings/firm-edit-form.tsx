@@ -22,10 +22,7 @@
 import { useActionState, useTransition } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { updateFirmAction } from "@/app/actions/firm";
-import {
-  firmInitialState,
-  type FirmFormState,
-} from "@/lib/firm-form";
+import { firmInitialState, type FirmFormState } from "@/lib/firm-form";
 import type { FirmGoals, FirmProfile } from "@/lib/firm";
 import { dateOnlyKey } from "@/lib/format-date";
 import { MatterNameTemplateField } from "./matter-name-template-field";
@@ -33,17 +30,11 @@ import { DEFAULT_MATTER_NAME_TEMPLATE } from "@/lib/matter-name-template";
 import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 
-export function FirmEditForm({
-  firm,
-  goals,
-}: {
-  firm: FirmProfile;
-  goals: FirmGoals;
-}) {
-  const [state, formAction, isPending] = useActionState<
-    FirmFormState,
-    FormData
-  >(updateFirmAction, firmInitialState);
+export function FirmEditForm({ firm, goals }: { firm: FirmProfile; goals: FirmGoals }) {
+  const [state, formAction, isPending] = useActionState<FirmFormState, FormData>(
+    updateFirmAction,
+    firmInitialState,
+  );
   const [, startTransition] = useTransition();
 
   const errs = state.errors ?? {};
@@ -51,9 +42,7 @@ export function FirmEditForm({
   // establishedAt is a date-only value (UTC midnight, ADR-012): the
   // input's YYYY-MM-DD is its UTC calendar day on server and client
   // alike — never a local-zone getter.
-  const establishedDateValue = firm.establishedAt
-    ? dateOnlyKey(firm.establishedAt)
-    : "";
+  const establishedDateValue = firm.establishedAt ? dateOnlyKey(firm.establishedAt) : "";
 
   return (
     <form
@@ -94,11 +83,7 @@ export function FirmEditForm({
             />
           )}
         </Field>
-        <Field
-          label="EIN"
-          hint="Federal tax ID — appears on invoices."
-          error={errs.ein?.[0]}
-        >
+        <Field label="EIN" hint="Federal tax ID — appears on invoices." error={errs.ein?.[0]}>
           {(c) => (
             <input
               {...c}
@@ -121,11 +106,7 @@ export function FirmEditForm({
             />
           )}
         </Field>
-        <Field
-          label="Website"
-          error={errs.website?.[0]}
-          className="sm:col-span-2"
-        >
+        <Field label="Website" error={errs.website?.[0]} className="sm:col-span-2">
           {(c) => (
             <input
               {...c}
@@ -169,11 +150,7 @@ export function FirmEditForm({
 
       <SectionHeader label="Address" />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Field
-          label="Address line 1"
-          error={errs.addressLine1?.[0]}
-          className="sm:col-span-2"
-        >
+        <Field label="Address line 1" error={errs.addressLine1?.[0]} className="sm:col-span-2">
           {(c) => (
             <input
               {...c}
@@ -236,11 +213,7 @@ export function FirmEditForm({
             )}
           </Field>
         </div>
-        <Field
-          label="Country"
-          error={errs.country?.[0]}
-          className="sm:col-span-2"
-        >
+        <Field label="Country" error={errs.country?.[0]} className="sm:col-span-2">
           {(c) => (
             <input
               {...c}
@@ -307,17 +280,11 @@ export function FirmEditForm({
       </div>
 
       <FormErrorBanner
-        message={formErrorMessage(
-          state,
-          "Couldn’t save — check the highlighted fields."
-        )}
+        message={formErrorMessage(state, "Couldn’t save — check the highlighted fields.")}
       />
 
       <div className="flex items-center gap-3 pt-2 border-t border-line">
-        <Button
-          type="submit"
-          disabled={isPending}
-        >
+        <Button type="submit" disabled={isPending}>
           {isPending ? "Saving…" : "Save changes"}
         </Button>
         {state.status === "ok" && (
@@ -332,9 +299,5 @@ export function FirmEditForm({
 }
 
 function SectionHeader({ label }: { label: string }) {
-  return (
-    <div className="text-2xs font-medium text-ink-3 -mb-3">
-      {label}
-    </div>
-  );
+  return <div className="text-2xs font-medium text-ink-3 -mb-3">{label}</div>;
 }

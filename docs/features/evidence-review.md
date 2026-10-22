@@ -4,9 +4,11 @@ Reviewers flag moments, pages and passages on any viewable document, with a cate
 Related: [documents.md](documents.md), [ADR-041](../decisions/041-pdfs-render-in-the-page-with-pdf.md), [ADR-042](../decisions/042-excel-and-email-convert-on-the-server.md), [PERMISSIONS.md](../PERMISSIONS.md)
 
 ## Open work
+
 - [~] **Evidence review follow-ups** (P2) — shipped on every file type (below). Transcripts for audio/video shipped, including flagging from a transcript selection (span flag with the quote). Queued: OCR + text extraction feeding search (scanned PDFs with no text layer can only take page flags until OCR ships); `EvidenceSync` multi-track alignment (bodycam + dashcam side-by-side); the `Evidence`-model ingestion pipeline (both models retained); an occurrence index for quote relocation on repeated phrases in docx/text.
 
 ## Shipped
+
 - [x] **Flags on every viewable file type** (2026-07-07; media-only foundation earlier the same day) — every renderer in the document viewer wraps in a generic ReviewPanel (`src/components/evidence/review-panel.tsx`: rail + inline composer; renderer adapters supply anchor capture + navigation). At most one anchor per flag; anchorless = the document as a whole.
   - **Audio/video**: "Flag this moment" captures the player position (mm:ss editing via `src/lib/media-time.ts`, optional span end, set-to-current-time); clicking a flag seeks.
   - **PDF** (pdf.js viewer, ADR-041): selecting text raises "Flag selection" -> page + quote flag. A selection across a page break becomes a page span (`pp. 4-5`, up to 25 pages) + quote, relocated and highlighted across the break (pages disambiguate repeated phrases; composer warns when the passage repeats within them). "Flag this page" prefills the current page; optional "To page" makes a page-range flag (exhibit, section) without a quote. Clicking a flag scrolls and highlights; every flagged passage on a visible page keeps a soft persistent highlight.

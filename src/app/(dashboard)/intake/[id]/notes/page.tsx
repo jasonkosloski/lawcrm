@@ -23,9 +23,7 @@ import { NotesTabBody } from "@/components/matters/notes/notes-tab-body";
 import { requireUser } from "@/lib/current-user";
 import { assertLeadAccess } from "@/lib/lead-access";
 
-export default async function LeadNotesPage({
-  params,
-}: PageProps<"/intake/[id]/notes">) {
+export default async function LeadNotesPage({ params }: PageProps<"/intake/[id]/notes">) {
   await requireUser();
   const { id } = await params;
   await assertLeadAccess(id);
@@ -51,8 +49,8 @@ export default async function LeadNotesPage({
       {isConverted ? (
         <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-paper-2 px-3 py-2.5">
           <p className="text-xs text-ink-3">
-            This lead converted — its intake notes were carried forward to
-            the matter. Write new notes there.
+            This lead converted — its intake notes were carried forward to the matter. Write new
+            notes there.
           </p>
           {lead.convertedMatterId && (
             <Link

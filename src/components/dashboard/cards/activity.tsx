@@ -14,11 +14,7 @@ export function ActivityCard({
     <DashboardCard
       title="Recent activity"
       viewAllHref={canViewActivityLog ? "/settings/activity" : undefined}
-      empty={
-        items.length === 0
-          ? { icon: History, text: "No recent activity." }
-          : null
-      }
+      empty={items.length === 0 ? { icon: History, text: "No recent activity." } : null}
     >
       <div className="flex flex-col">
         {items.map((item) => {
@@ -36,12 +32,8 @@ export function ActivityCard({
                 <div className="truncate text-2xs text-ink-3">{item.detail}</div>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-0.5">
-                <span className="text-2xs text-ink-4 tabular-nums">
-                  {item.time}
-                </span>
-                <span className="text-2xs text-ink-4">
-                  {item.source}
-                </span>
+                <span className="text-2xs text-ink-4 tabular-nums">{item.time}</span>
+                <span className="text-2xs text-ink-4">{item.source}</span>
               </div>
             </DashboardRow>
           );

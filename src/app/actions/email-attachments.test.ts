@@ -23,15 +23,7 @@
  *   - activity log: "Filed email attachment" on the matter
  */
 
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,8 +35,7 @@ vi.mock("@/lib/permission-check", () => ({
 }));
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/lib/google/gmail-client")>();
+  const actual = await importOriginal<typeof import("@/lib/google/gmail-client")>();
   return { ...actual, gmailFetch: vi.fn() };
 });
 
@@ -155,10 +146,9 @@ async function seedAttachment(opts?: {
 }
 
 function gmailPayload(bytes: string): Response {
-  return new Response(
-    JSON.stringify({ data: Buffer.from(bytes).toString("base64url") }),
-    { status: 200 }
-  );
+  return new Response(JSON.stringify({ data: Buffer.from(bytes).toString("base64url") }), {
+    status: 200,
+  });
 }
 
 describe("gate + scoping", () => {
@@ -181,9 +171,9 @@ describe("gate + scoping", () => {
   test("unknown matter", async () => {
     const attachmentId = await seedAttachment();
     // Unknown == hidden: the matter wall answers with notFound().
-    await expect(
-      actions.fileAttachmentToMatter(attachmentId, "nope")
-    ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
+    await expect(actions.fileAttachmentToMatter(attachmentId, "nope")).rejects.toThrow(
+      /NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/,
+    );
   });
 
   test("a folder from a DIFFERENT matter must not leak the file into it", async () => {
@@ -198,11 +188,7 @@ describe("gate + scoping", () => {
       matterId: otherMatter.matterId,
       name: "Foreign",
     });
-    const res = await actions.fileAttachmentToMatter(
-      attachmentId,
-      matterId,
-      folderId
-    );
+    const res = await actions.fileAttachmentToMatter(attachmentId, matterId, folderId);
     expect(res).toEqual({
       ok: false,
       error: "Folder not found in this matter.",
@@ -220,11 +206,7 @@ describe("filing", () => {
     });
     mockedGmailFetch.mockResolvedValue(gmailPayload("PDF-BYTES"));
 
-    const res = await actions.fileAttachmentToMatter(
-      attachmentId,
-      matterId,
-      folderId
-    );
+    const res = await actions.fileAttachmentToMatter(attachmentId, matterId, folderId);
     expect(res).toEqual({ ok: true });
 
     const doc = await prisma.document.findFirstOrThrow();
@@ -257,22 +239,15 @@ describe("filing", () => {
     expect(activity.title).toBe("Filed email attachment");
     expect(activity.detail).toBe("scan.pdf");
 
-    expect(revalidatePath).toHaveBeenCalledWith(
-      `/matters/${matterId}/documents`
-    );
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/documents`);
   });
 
   test("re-filing the same attachment to the same matter no-ops with alreadyFiled", async () => {
     const attachmentId = await seedAttachment();
     mockedGmailFetch.mockResolvedValue(gmailPayload("PDF-BYTES"));
 
-    expect(
-      await actions.fileAttachmentToMatter(attachmentId, matterId)
-    ).toEqual({ ok: true });
-    const again = await actions.fileAttachmentToMatter(
-      attachmentId,
-      matterId
-    );
+    expect(await actions.fileAttachmentToMatter(attachmentId, matterId)).toEqual({ ok: true });
+    const again = await actions.fileAttachmentToMatter(attachmentId, matterId);
     expect(again).toEqual({ ok: true, alreadyFiled: true });
 
     // No duplicate row, no duplicate audit entry — and the bytes
@@ -293,10 +268,7 @@ describe("filing", () => {
     });
 
     await actions.fileAttachmentToMatter(attachmentId, matterId);
-    const res = await actions.fileAttachmentToMatter(
-      attachmentId,
-      second.matterId
-    );
+    const res = await actions.fileAttachmentToMatter(attachmentId, second.matterId);
     expect(res).toEqual({ ok: true });
 
     const docs = await prisma.document.findMany({
@@ -310,9 +282,7 @@ describe("filing", () => {
 
   test("disconnected + uncached → friendly reconnect error, nothing created", async () => {
     const attachmentId = await seedAttachment();
-    mockedGmailFetch.mockRejectedValue(
-      new GmailAuthError("revoked", "acct-1")
-    );
+    mockedGmailFetch.mockRejectedValue(new GmailAuthError("revoked", "acct-1"));
     const res = await actions.fileAttachmentToMatter(attachmentId, matterId);
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/[Rr]econnect/);
@@ -337,9 +307,7 @@ describe("repeat filing does not re-read the bytes (F661)", () => {
   test("alreadyFiled is decided from the backfilled fileSize before any storage read", async () => {
     const attachmentId = await seedAttachment();
     mockedGmailFetch.mockResolvedValue(gmailPayload("PDF-BYTES"));
-    expect(
-      await actions.fileAttachmentToMatter(attachmentId, matterId)
-    ).toEqual({ ok: true });
+    expect(await actions.fileAttachmentToMatter(attachmentId, matterId)).toEqual({ ok: true });
 
     // Remove the cached attachment bytes from storage. A re-filing that
     // still read them first would fail; the size-based dedupe must not.
@@ -350,9 +318,10 @@ describe("repeat filing does not re-read the bytes (F661)", () => {
     });
     await deleteFile(cached.fileUrl as string);
 
-    expect(
-      await actions.fileAttachmentToMatter(attachmentId, matterId)
-    ).toEqual({ ok: true, alreadyFiled: true });
+    expect(await actions.fileAttachmentToMatter(attachmentId, matterId)).toEqual({
+      ok: true,
+      alreadyFiled: true,
+    });
   });
 });
 
@@ -399,10 +368,7 @@ describe("failures return a result instead of throwing (F670)", () => {
       leadUserId: userId,
     });
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const res = await actions.fileAttachmentToMatter(
-      attachmentId,
-      second.matterId
-    );
+    const res = await actions.fileAttachmentToMatter(attachmentId, second.matterId);
     errSpy.mockRestore();
     expect(res.ok).toBe(false);
   });
@@ -411,9 +377,7 @@ describe("failures return a result instead of throwing (F670)", () => {
     const attachmentId = await seedAttachment();
     mockedGmailFetch.mockResolvedValue(gmailPayload("PDF-BYTES"));
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const spy = vi
-      .spyOn(prisma.document, "create")
-      .mockRejectedValueOnce(new Error("db down"));
+    const spy = vi.spyOn(prisma.document, "create").mockRejectedValueOnce(new Error("db down"));
 
     const res = await actions.fileAttachmentToMatter(attachmentId, matterId);
 

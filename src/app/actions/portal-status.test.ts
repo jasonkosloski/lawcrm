@@ -124,22 +124,28 @@ describe("permissions and walls", () => {
   test("a walled user gets not-found and nothing changes", async () => {
     const existing = await seedUpdate();
     await prisma.firm.update({ where: { id: firmId }, data: { matterVisibility: "TEAM" } });
-    sessionUser = await userWith(["portal.add_updates", "portal.edit_updates", "portal.delete_updates"]);
+    sessionUser = await userWith([
+      "portal.add_updates",
+      "portal.edit_updates",
+      "portal.delete_updates",
+    ]);
     const notFound = { digest: expect.stringContaining("404") };
     await expect(postStatusUpdate(matterId, input)).rejects.toMatchObject(notFound);
     await expect(editStatusUpdate(existing.id, input)).rejects.toMatchObject(notFound);
     await expect(deleteStatusUpdate(existing.id)).rejects.toMatchObject(notFound);
     expect(await prisma.portalStatusUpdate.count()).toBe(1);
-    expect((await prisma.portalStatusUpdate.findUniqueOrThrow({ where: { id: existing.id } })).body).toBe(
-      "Old body"
-    );
+    expect(
+      (await prisma.portalStatusUpdate.findUniqueOrThrow({ where: { id: existing.id } })).body,
+    ).toBe("Old body");
   });
 });
 
 describe("validation", () => {
   test("rejects an empty or too-long stage label and a too-long body", async () => {
     expect((await postStatusUpdate(matterId, { ...input, stageLabel: "  " })).ok).toBe(false);
-    expect((await postStatusUpdate(matterId, { ...input, stageLabel: "x".repeat(61) })).ok).toBe(false);
+    expect((await postStatusUpdate(matterId, { ...input, stageLabel: "x".repeat(61) })).ok).toBe(
+      false,
+    );
     expect((await postStatusUpdate(matterId, { ...input, body: "x".repeat(4001) })).ok).toBe(false);
     expect((await postStatusUpdate(matterId, { ...input, body: " " })).ok).toBe(false);
     expect(await prisma.portalStatusUpdate.count()).toBe(0);
@@ -311,7 +317,10 @@ describe("event sharing", () => {
     const err = { ok: false, error: "Event not found." };
     expect(await shareEventWithClient(eventId, share)).toEqual(err);
     expect(await updateEventShare(eventId, share)).toEqual(err);
-    expect(await stopSharingEvent(eventId)).toEqual({ ok: false, error: "This event isn't shared." });
+    expect(await stopSharingEvent(eventId)).toEqual({
+      ok: false,
+      error: "This event isn't shared.",
+    });
     expect(await prisma.portalSharedEvent.count()).toBe(0);
 
     // A share that already exists (made while the event was visible) can be
@@ -347,7 +356,11 @@ describe("event sharing", () => {
   });
 
   test("share, update and stop round-trip with activity and revalidation", async () => {
-    const { eventId } = await seedCalendarEvent({ matterId, createdById: admin, title: "Internal" });
+    const { eventId } = await seedCalendarEvent({
+      matterId,
+      createdById: admin,
+      title: "Internal",
+    });
     expect(await shareEventWithClient(eventId, share)).toEqual({ ok: true });
     const row = await prisma.portalSharedEvent.findUniqueOrThrow({ where: { eventId } });
     expect(row).toMatchObject({
@@ -361,9 +374,11 @@ describe("event sharing", () => {
       expect(revalidatePath).toHaveBeenCalledWith(path);
     }
 
-    expect(await updateEventShare(eventId, { clientTitle: "Mediation 2", clientNote: "" })).toEqual({
-      ok: true,
-    });
+    expect(await updateEventShare(eventId, { clientTitle: "Mediation 2", clientNote: "" })).toEqual(
+      {
+        ok: true,
+      },
+    );
     const after = await prisma.portalSharedEvent.findUniqueOrThrow({ where: { eventId } });
     expect(after.clientTitle).toBe("Mediation 2");
     expect(after.clientNote).toBeNull();
@@ -372,8 +387,14 @@ describe("event sharing", () => {
     expect(await stopSharingEvent(eventId)).toEqual({ ok: true });
     expect(await prisma.portalSharedEvent.count()).toBe(0);
     expect(await eventActivity(matterId, "Stopped sharing event with client")).toBe(1);
-    expect(await stopSharingEvent(eventId)).toEqual({ ok: false, error: "This event isn't shared." });
-    expect(await updateEventShare(eventId, share)).toEqual({ ok: false, error: "This event isn't shared." });
+    expect(await stopSharingEvent(eventId)).toEqual({
+      ok: false,
+      error: "This event isn't shared.",
+    });
+    expect(await updateEventShare(eventId, share)).toEqual({
+      ok: false,
+      error: "This event isn't shared.",
+    });
   });
 
   test("sharing twice upserts a single row", async () => {
@@ -426,14 +447,14 @@ describe("event sharing", () => {
     const notShared = { ok: false, error: "This event isn't shared." };
     expect(await updateEventShare(eventId, share)).toEqual(notShared);
     expect(await stopSharingEvent(eventId)).toEqual(notShared);
-    expect((await prisma.portalSharedEvent.findUniqueOrThrow({ where: { eventId } })).matterId).toBe(
-      matterId
-    );
+    expect(
+      (await prisma.portalSharedEvent.findUniqueOrThrow({ where: { eventId } })).matterId,
+    ).toBe(matterId);
 
     expect(await shareEventWithClient(eventId, share)).toEqual({ ok: true });
-    expect((await prisma.portalSharedEvent.findUniqueOrThrow({ where: { eventId } })).matterId).toBe(
-      other
-    );
+    expect(
+      (await prisma.portalSharedEvent.findUniqueOrThrow({ where: { eventId } })).matterId,
+    ).toBe(other);
     expect(await eventActivity(other, "Shared event with client")).toBe(1);
   });
 
@@ -442,14 +463,14 @@ describe("event sharing", () => {
     expect((await shareEventWithClient(eventId, { clientTitle: "  " })).ok).toBe(false);
     expect((await shareEventWithClient(eventId, { clientTitle: "x".repeat(201) })).ok).toBe(false);
     expect(
-      (await shareEventWithClient(eventId, { clientTitle: "ok", clientNote: "y".repeat(2001) })).ok
+      (await shareEventWithClient(eventId, { clientTitle: "ok", clientNote: "y".repeat(2001) })).ok,
     ).toBe(false);
     expect(await prisma.portalSharedEvent.count()).toBe(0);
     expect(
       await shareEventWithClient(eventId, {
         clientTitle: ` ${"x".repeat(200)} `,
         clientNote: ` ${"y".repeat(2000)} `,
-      })
+      }),
     ).toEqual({ ok: true });
     const row = await prisma.portalSharedEvent.findFirstOrThrow();
     expect(row.clientTitle).toHaveLength(200);

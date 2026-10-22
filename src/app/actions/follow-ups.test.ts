@@ -22,10 +22,7 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
-import {
-  setEmailThreadFollowUp,
-  setMessengerThreadFollowUp,
-} from "@/app/actions/follow-ups";
+import { setEmailThreadFollowUp, setMessengerThreadFollowUp } from "@/app/actions/follow-ups";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
@@ -108,9 +105,7 @@ describe("setEmailThreadFollowUp", () => {
       select: { followUpAt: true },
     });
     // End-of-day (local): a "by Friday" follow-up stays active all Friday.
-    expect(thread.followUpAt).toEqual(
-      new Date(2026, 5, 12, 23, 59, 59, 999)
-    );
+    expect(thread.followUpAt).toEqual(new Date(2026, 5, 12, 23, 59, 59, 999));
   });
 
   test("clears followUpAt when passed null", async () => {
@@ -153,10 +148,7 @@ describe("setEmailThreadFollowUp", () => {
     // Signed in as `userId`, targeting the other user's thread — must
     // read as not-found (indistinguishable from a nonexistent id) and
     // leave the row untouched.
-    const result = await setEmailThreadFollowUp(
-      otherUsersThreadId,
-      "2026-06-12"
-    );
+    const result = await setEmailThreadFollowUp(otherUsersThreadId, "2026-06-12");
     expect(result).toEqual({ ok: false, error: "Thread not found" });
 
     const thread = await prisma.emailThread.findUniqueOrThrow({
@@ -170,9 +162,9 @@ describe("setEmailThreadFollowUp", () => {
     // getCurrentUserId throws a Next.js redirect when unauthenticated;
     // simulate that and pin that no write happens first.
     mockedGetUser.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
-    await expect(
-      setEmailThreadFollowUp(emailThreadId, "2026-06-12")
-    ).rejects.toThrow("NEXT_REDIRECT");
+    await expect(setEmailThreadFollowUp(emailThreadId, "2026-06-12")).rejects.toThrow(
+      "NEXT_REDIRECT",
+    );
 
     const thread = await prisma.emailThread.findUniqueOrThrow({
       where: { id: emailThreadId },
@@ -186,10 +178,7 @@ describe("setMessengerThreadFollowUp", () => {
   test("any signed-in user can set + clear on the firm-shared line", async () => {
     // The messenger inbox is firm-wide, so a user with no personal
     // claim on the line (it has userId null) can still snooze.
-    const set = await setMessengerThreadFollowUp(
-      messengerThreadId,
-      "2026-06-12"
-    );
+    const set = await setMessengerThreadFollowUp(messengerThreadId, "2026-06-12");
     expect(set).toEqual({ ok: true });
 
     let thread = await prisma.messengerThread.findUniqueOrThrow({
@@ -210,9 +199,9 @@ describe("setMessengerThreadFollowUp", () => {
 
   test("throws (login redirect) before writing when there is no session", async () => {
     mockedGetUser.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
-    await expect(
-      setMessengerThreadFollowUp(messengerThreadId, "2026-06-12")
-    ).rejects.toThrow("NEXT_REDIRECT");
+    await expect(setMessengerThreadFollowUp(messengerThreadId, "2026-06-12")).rejects.toThrow(
+      "NEXT_REDIRECT",
+    );
 
     const thread = await prisma.messengerThread.findUniqueOrThrow({
       where: { id: messengerThreadId },
@@ -222,10 +211,7 @@ describe("setMessengerThreadFollowUp", () => {
   });
 
   test("unknown thread id reads as not found", async () => {
-    const result = await setMessengerThreadFollowUp(
-      "nonexistent-thread-id",
-      "2026-06-12"
-    );
+    const result = await setMessengerThreadFollowUp("nonexistent-thread-id", "2026-06-12");
     expect(result).toEqual({ ok: false, error: "Thread not found" });
   });
 });

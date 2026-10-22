@@ -14,13 +14,7 @@
 import { useEffect } from "react";
 import { errorDetails } from "@/lib/error-details";
 
-export default function GlobalError({
-  error,
-  retry,
-}: {
-  error: unknown;
-  retry: () => void;
-}) {
+export default function GlobalError({ error, retry }: { error: unknown; retry: () => void }) {
   useEffect(() => {
     console.error("Root error boundary caught:", error);
   }, [error]);
@@ -38,12 +32,10 @@ export default function GlobalError({
           color: "#0f1b2e",
         }}
       >
-        <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>
-          Application error
-        </h1>
+        <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>Application error</h1>
         <p style={{ fontSize: 14, color: "#475569", marginBottom: 16 }}>
-          The app failed to start. Try reloading; if the problem persists,
-          this is the message to share with support:
+          The app failed to start. Try reloading; if the problem persists, this is the message to
+          share with support:
         </p>
         {(message || digest) && (
           <pre

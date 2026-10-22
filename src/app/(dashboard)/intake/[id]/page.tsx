@@ -45,13 +45,7 @@ const ASSESSMENT_LABEL: Record<string, string> = {
   weak: "Weak",
 };
 
-function AssessmentBar({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | null;
-}) {
+function AssessmentBar({ label, value }: { label: string; value: string | null }) {
   if (!value) {
     return (
       <div className="flex items-center gap-2 text-xs">
@@ -60,14 +54,8 @@ function AssessmentBar({
       </div>
     );
   }
-  const pct =
-    value === "strong" ? "w-full" : value === "moderate" ? "w-2/3" : "w-1/3";
-  const color =
-    value === "strong"
-      ? "bg-ok"
-      : value === "moderate"
-        ? "bg-brand-500"
-        : "bg-warn";
+  const pct = value === "strong" ? "w-full" : value === "moderate" ? "w-2/3" : "w-1/3";
+  const color = value === "strong" ? "bg-ok" : value === "moderate" ? "bg-brand-500" : "bg-warn";
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className="w-20 text-ink-4">{label}</span>
@@ -81,9 +69,7 @@ function AssessmentBar({
   );
 }
 
-export default async function LeadOverviewPage({
-  params,
-}: PageProps<"/intake/[id]">) {
+export default async function LeadOverviewPage({ params }: PageProps<"/intake/[id]">) {
   // Pages guard themselves: layouts don't re-run on soft navigation (ADR-028).
   await requireUser();
   const { id } = await params;
@@ -109,7 +95,7 @@ export default async function LeadOverviewPage({
         }).then(async (r) =>
           // Matter wall: hits on matters this viewer can't access keep
           // their severity but lose the matter name (display only).
-          redactConflictResultForViewer(await getCurrentUserId(), r)
+          redactConflictResultForViewer(await getCurrentUserId(), r),
         ),
     // No re-run / override on a closed lead.
     !isResolved && currentUserHasPermission("intake.conflict_check.run"),
@@ -131,9 +117,7 @@ export default async function LeadOverviewPage({
   // The stored statuteWindow is a snapshot from intake day; show the
   // live countdown so the <= 30 day warning can actually fire.
   const statute =
-    lead.statuteDaysRemaining !== null
-      ? describeStatuteRemaining(lead.statuteDaysRemaining)
-      : null;
+    lead.statuteDaysRemaining !== null ? describeStatuteRemaining(lead.statuteDaysRemaining) : null;
 
   return (
     <div className="p-3 sm:p-6">
@@ -145,9 +129,7 @@ export default async function LeadOverviewPage({
           {/* Summary */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">
-                Case summary
-              </CardTitle>
+              <CardTitle className="text-sm font-semibold">Case summary</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4">
               {lead.summary ? (
@@ -159,21 +141,14 @@ export default async function LeadOverviewPage({
               )}
 
               <dl className="grid grid-cols-2 gap-y-3 gap-x-6 text-xs mt-5 pt-4 border-t border-line">
-                <Field
-                  icon={<MapPin size={11} />}
-                  label="Location"
-                  value={lead.location}
-                />
+                <Field icon={<MapPin size={11} />} label="Location" value={lead.location} />
                 <Field
                   icon={<Hourglass size={11} />}
                   label="Date of incident"
                   value={formatDateOnly(lead.dateOfIncident)}
                 />
                 <Field label="Injuries" value={lead.injuries} />
-                <Field
-                  label="Prior counsel"
-                  value={lead.priorCounsel ? "Yes" : "No"}
-                />
+                <Field label="Prior counsel" value={lead.priorCounsel ? "Yes" : "No"} />
               </dl>
             </CardContent>
           </Card>
@@ -181,24 +156,15 @@ export default async function LeadOverviewPage({
           {/* Assessment */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">
-                Assessment
-              </CardTitle>
+              <CardTitle className="text-sm font-semibold">Assessment</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4 flex flex-col gap-2.5">
-              <AssessmentBar
-                label="Liability"
-                value={lead.liabilityAssessment}
-              />
+              <AssessmentBar label="Liability" value={lead.liabilityAssessment} />
               <AssessmentBar label="Damages" value={lead.damagesAssessment} />
               {lead.defendantAbility && (
                 <div className="mt-2 pt-3 border-t border-line text-xs">
-                  <div className="text-ink-4 mb-1">
-                    Defendant&apos;s ability to pay
-                  </div>
-                  <div className="text-ink leading-relaxed">
-                    {lead.defendantAbility}
-                  </div>
+                  <div className="text-ink-4 mb-1">Defendant&apos;s ability to pay</div>
+                  <div className="text-ink leading-relaxed">{lead.defendantAbility}</div>
                 </div>
               )}
             </CardContent>
@@ -222,15 +188,9 @@ export default async function LeadOverviewPage({
                     className="w-1.5 h-1.5 rounded-full shrink-0"
                     style={{ background: lead.convertedMatter.color }}
                   />
-                  <span className="font-medium">
-                    {lead.convertedMatter.name}
-                  </span>
-                  <span className="text-2xs text-ink-4">
-                    · {lead.convertedMatter.area}
-                  </span>
-                  <span className="text-2xs text-ink-4">
-                    · {lead.convertedMatter.stage}
-                  </span>
+                  <span className="font-medium">{lead.convertedMatter.name}</span>
+                  <span className="text-2xs text-ink-4">· {lead.convertedMatter.area}</span>
+                  <span className="text-2xs text-ink-4">· {lead.convertedMatter.stage}</span>
                 </Link>
               </CardContent>
             </Card>
@@ -244,9 +204,7 @@ export default async function LeadOverviewPage({
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">
-                <p className="text-xs text-ink">
-                  {lead.declineReason ?? "No reason recorded."}
-                </p>
+                <p className="text-xs text-ink">{lead.declineReason ?? "No reason recorded."}</p>
               </CardContent>
             </Card>
           )}
@@ -276,25 +234,18 @@ export default async function LeadOverviewPage({
             </CardHeader>
             <CardContent className="px-4 pb-4 flex flex-col gap-2">
               <div className="flex items-center gap-2 text-xs">
-                <span className="text-ink font-medium truncate">
-                  {lead.displayName}
-                </span>
+                <span className="text-ink font-medium truncate">{lead.displayName}</span>
               </div>
               {lead.contact?.organization && (
                 <div className="flex items-center gap-2 text-xs">
                   <Building2 size={12} className="text-ink-4 shrink-0" />
-                  <span className="text-ink-3 truncate">
-                    {lead.contact.organization}
-                  </span>
+                  <span className="text-ink-3 truncate">{lead.contact.organization}</span>
                 </div>
               )}
               {lead.displayEmail && (
                 <div className="flex items-center gap-2 text-xs">
                   <Mail size={12} className="text-ink-4 shrink-0" />
-                  <EmailLink
-                    email={lead.displayEmail}
-                    className="text-ink truncate"
-                  />
+                  <EmailLink email={lead.displayEmail} className="text-ink truncate" />
                 </div>
               )}
               {/* Render all phones from the joined Contact when present
@@ -303,36 +254,23 @@ export default async function LeadOverviewPage({
                   backfilled rows. */}
               {lead.contact && lead.contact.phones.length > 0 ? (
                 lead.contact.phones.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center gap-2 text-xs"
-                  >
+                  <div key={p.id} className="flex items-center gap-2 text-xs">
                     <Phone size={12} className="text-ink-4 shrink-0" />
-                    {p.label && (
-                      <span className="text-ink-4 mr-1">{p.label}</span>
-                    )}
-                    <span className="text-ink font-mono">
-                      {formatPhone(p.number)}
-                    </span>
+                    {p.label && <span className="text-ink-4 mr-1">{p.label}</span>}
+                    <span className="text-ink font-mono">{formatPhone(p.number)}</span>
                     {p.isPrimary && lead.contact!.phones.length > 1 && (
-                      <span className="text-3xs text-brand-700">
-                        primary
-                      </span>
+                      <span className="text-3xs text-brand-700">primary</span>
                     )}
                   </div>
                 ))
               ) : lead.displayPhone ? (
                 <div className="flex items-center gap-2 text-xs">
                   <Phone size={12} className="text-ink-4 shrink-0" />
-                  <span className="text-ink font-mono">
-                    {formatPhone(lead.displayPhone)}
-                  </span>
+                  <span className="text-ink font-mono">{formatPhone(lead.displayPhone)}</span>
                 </div>
               ) : null}
               {!lead.displayEmail && !lead.displayPhone && (
-                <div className="text-xs text-ink-4">
-                  No contact info provided.
-                </div>
+                <div className="text-xs text-ink-4">No contact info provided.</div>
               )}
             </CardContent>
           </Card>
@@ -358,10 +296,7 @@ export default async function LeadOverviewPage({
                   warn={!!statute?.warn && !isResolved}
                   mono
                 />
-                <MetaRow
-                  label="Received"
-                  value={formatDate(lead.createdAt, "medium", tz)}
-                />
+                <MetaRow label="Received" value={formatDate(lead.createdAt, "medium", tz)} />
               </dl>
             </CardContent>
           </Card>
@@ -377,12 +312,7 @@ export default async function LeadOverviewPage({
               <ConflictCheckCard
                 leadId={lead.id}
                 status={
-                  lead.conflictCheck as
-                    | "pending"
-                    | "clear"
-                    | "warn"
-                    | "conflict"
-                    | "override"
+                  lead.conflictCheck as "pending" | "clear" | "warn" | "conflict" | "override"
                 }
                 checkedAt={lead.conflictCheckedAt}
                 resolutionNotes={lead.conflictResolutionNotes}
@@ -457,12 +387,7 @@ function MetaRow({
   return (
     <div className="flex items-center justify-between">
       <span className="text-ink-4">{label}</span>
-      <span
-        className={
-          (warn ? "text-warn font-medium" : "text-ink") +
-          (mono ? " font-mono" : "")
-        }
-      >
+      <span className={(warn ? "text-warn font-medium" : "text-ink") + (mono ? " font-mono" : "")}>
         {value ?? "—"}
       </span>
     </div>

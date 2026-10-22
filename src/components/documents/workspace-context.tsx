@@ -9,7 +9,12 @@
 
 import { createContext, useContext } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import type { ActionTarget, EntryAction, EntryActionId, WorkspacePerms } from "@/lib/document-entry-actions";
+import type {
+  ActionTarget,
+  EntryAction,
+  EntryActionId,
+  WorkspacePerms,
+} from "@/lib/document-entry-actions";
 import type { ClickMods, EntryKey, Selection } from "@/lib/document-selection";
 
 export type WorkspaceCtx = {
@@ -51,7 +56,12 @@ export function useFolderDropTarget(folderId: string | null, place: "tree" | "ro
   });
   let state: DropState = "idle";
   if (ws?.dragging && isOver) state = ws.canDropOn(folderId) ? "over" : "blocked";
-  else if (ws && ws.fileDropFolder !== undefined && ws.fileDropFolder === folderId && place !== "crumb") {
+  else if (
+    ws &&
+    ws.fileDropFolder !== undefined &&
+    ws.fileDropFolder === folderId &&
+    place !== "crumb"
+  ) {
     state = "over";
   }
   return {

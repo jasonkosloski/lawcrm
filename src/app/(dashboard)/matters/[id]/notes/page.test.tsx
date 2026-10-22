@@ -45,7 +45,7 @@ const renderPage = async () =>
   render(
     await MatterNotesPage({
       params: Promise.resolve({ id: "m1" }),
-    } as Parameters<typeof MatterNotesPage>[0])
+    } as Parameters<typeof MatterNotesPage>[0]),
   );
 
 afterEach(() => vi.clearAllMocks());
@@ -54,17 +54,13 @@ describe("MatterNotesPage", () => {
   test("notes.create + notes.pin: composer with the pin toggle", async () => {
     grant(["notes.create", "notes.pin"]);
     await renderPage();
-    expect(
-      screen.getByTestId("note-composer").getAttribute("data-can-pin")
-    ).toBe("true");
+    expect(screen.getByTestId("note-composer").getAttribute("data-can-pin")).toBe("true");
   });
 
   test("notes.create without notes.pin: composer, no pin", async () => {
     grant(["notes.create"]);
     await renderPage();
-    expect(
-      screen.getByTestId("note-composer").getAttribute("data-can-pin")
-    ).toBe("false");
+    expect(screen.getByTestId("note-composer").getAttribute("data-can-pin")).toBe("false");
   });
 
   test("no notes.create: no composer, but the notes still list", async () => {

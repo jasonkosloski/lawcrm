@@ -37,10 +37,7 @@ import { DEADLINE_KINDS } from "@/lib/constants/deadline-status";
 import { TASK_PRIORITIES } from "@/lib/constants/priority";
 import type { InboxActionFormState } from "@/lib/inbox-action-form";
 import { logActivity } from "@/lib/activity-log";
-import {
-  isEffectivelyEmpty,
-  sanitizeUserHtml as sanitize,
-} from "@/lib/sanitize-html";
+import { isEffectivelyEmpty, sanitizeUserHtml as sanitize } from "@/lib/sanitize-html";
 import { notePreviewText } from "@/lib/note-preview";
 
 /** Resolve the matter for an email thread. Inbox actions require a
@@ -50,7 +47,7 @@ import { notePreviewText } from "@/lib/note-preview";
  *  null, exactly like an unknown id. */
 async function resolveEmailMatter(
   emailThreadId: string,
-  userId: string
+  userId: string,
 ): Promise<{ matterId: string } | null> {
   const t = await prisma.emailThread.findFirst({
     where: { id: emailThreadId, ...visibleEmailThreadWhere(userId) },
@@ -64,7 +61,7 @@ async function resolveEmailMatter(
  *  defaultMatter when the item itself isn't filed — matches the
  *  read-time behavior in the messenger reader. */
 async function resolveMessengerMatter(
-  messengerItemId: string
+  messengerItemId: string,
 ): Promise<{ matterId: string } | null> {
   const item = await prisma.messengerItem.findUnique({
     where: { id: messengerItemId },
@@ -83,7 +80,7 @@ async function resolveMessengerMatter(
 function revalidateForSpawn(
   matterId: string,
   kind: "task" | "deadline" | "note",
-  source: "email" | "messenger"
+  source: "email" | "messenger",
 ): void {
   revalidatePath(`/matters/${matterId}`);
   revalidatePath("/communication");
@@ -160,7 +157,7 @@ const noteSchema = z.object({
 export async function createTaskFromEmail(
   emailThreadId: string,
   _prev: InboxActionFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<InboxActionFormState> {
   await requirePermission("tasks.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -202,7 +199,7 @@ export async function createTaskFromEmail(
 export async function createDeadlineFromEmail(
   emailThreadId: string,
   _prev: InboxActionFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<InboxActionFormState> {
   await requirePermission("deadlines.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -244,7 +241,7 @@ export async function createDeadlineFromEmail(
 export async function createNoteFromEmail(
   emailThreadId: string,
   _prev: InboxActionFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<InboxActionFormState> {
   await requirePermission("notes.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -300,7 +297,7 @@ export async function createNoteFromEmail(
 export async function createTaskFromMessage(
   messengerItemId: string,
   _prev: InboxActionFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<InboxActionFormState> {
   await requirePermission("tasks.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -342,7 +339,7 @@ export async function createTaskFromMessage(
 export async function createDeadlineFromMessage(
   messengerItemId: string,
   _prev: InboxActionFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<InboxActionFormState> {
   await requirePermission("deadlines.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -384,7 +381,7 @@ export async function createDeadlineFromMessage(
 export async function createNoteFromMessage(
   messengerItemId: string,
   _prev: InboxActionFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<InboxActionFormState> {
   await requirePermission("notes.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;

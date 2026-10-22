@@ -38,11 +38,7 @@ import {
   requirePermissionResult,
   requirePermissions,
 } from "@/lib/permission-check";
-import {
-  resetDb,
-  seedFirm,
-  seedUser,
-} from "@/test/integration-helpers";
+import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
 
@@ -91,9 +87,7 @@ describe("Admin role short-circuits to all-granted", () => {
 
     expect(await currentUserHasPermission("matters.manage_team")).toBe(true);
     expect(await currentUserHasPermission("billing.send_invoice")).toBe(true);
-    expect(await currentUserHasPermission("firm.manage_permissions")).toBe(
-      true
-    );
+    expect(await currentUserHasPermission("firm.manage_permissions")).toBe(true);
   });
 
   test("admin's resolved permissions surface isAdmin=true", async () => {
@@ -156,9 +150,7 @@ describe("Non-admin grants flow through RolePermission rows", () => {
 
     // Holds keys from BOTH roles.
     expect(await currentUserHasPermission("billing.send_invoice")).toBe(true);
-    expect(await currentUserHasPermission("intake.conflict_check.run")).toBe(
-      true
-    );
+    expect(await currentUserHasPermission("intake.conflict_check.run")).toBe(true);
     // Doesn't hold keys from neither.
     expect(await currentUserHasPermission("matters.delete")).toBe(false);
   });
@@ -190,9 +182,7 @@ describe("requirePermission — redirect on miss", () => {
 
     // The mocked redirect throws `__REDIRECT__:/` — assert the
     // shape rather than a specific error class.
-    await expect(
-      requirePermission("matters.delete")
-    ).rejects.toThrow(/__REDIRECT__:\//);
+    await expect(requirePermission("matters.delete")).rejects.toThrow(/__REDIRECT__:\//);
   });
 
   test("returns the userId when the key is held", async () => {
@@ -223,17 +213,15 @@ describe("requirePermissions — every key required", () => {
   test("redirects when ANY one key is missing, even if others are held", async () => {
     const { userId } = await seedUser({ firmId, roleIds: [customRoleId] });
     mockedGetUser.mockResolvedValue(userId);
-    await expect(
-      requirePermissions(["billing.send_invoice", "matters.delete"])
-    ).rejects.toThrow(/__REDIRECT__:\//);
+    await expect(requirePermissions(["billing.send_invoice", "matters.delete"])).rejects.toThrow(
+      /__REDIRECT__:\//,
+    );
   });
 
   test("admins pass regardless of keys", async () => {
     const { userId } = await seedUser({ firmId, roleIds: [adminRoleId] });
     mockedGetUser.mockResolvedValue(userId);
-    expect(
-      await requirePermissions(["matters.delete", "billing.send_invoice"])
-    ).toBe(userId);
+    expect(await requirePermissions(["matters.delete", "billing.send_invoice"])).toBe(userId);
   });
 
   test("inactive users are denied (even holding the keys)", async () => {
@@ -243,9 +231,7 @@ describe("requirePermissions — every key required", () => {
       isActive: false,
     });
     mockedGetUser.mockResolvedValue(userId);
-    await expect(
-      requirePermissions(["billing.send_invoice"])
-    ).rejects.toThrow(/__REDIRECT__:\//);
+    await expect(requirePermissions(["billing.send_invoice"])).rejects.toThrow(/__REDIRECT__:\//);
   });
 });
 
@@ -269,10 +255,7 @@ describe("currentUserHasAnyPermission", () => {
     const { userId } = await seedUser({ firmId, roleIds: [defaultRoleId] });
     mockedGetUser.mockResolvedValue(userId);
 
-    const out = await currentUserHasAnyPermission([
-      "matters.delete",
-      "firm.manage_roles",
-    ]);
+    const out = await currentUserHasAnyPermission(["matters.delete", "firm.manage_roles"]);
     expect(out).toBe(false);
   });
 
@@ -280,9 +263,7 @@ describe("currentUserHasAnyPermission", () => {
     const { userId } = await seedUser({ firmId, roleIds: [adminRoleId] });
     mockedGetUser.mockResolvedValue(userId);
 
-    expect(
-      await currentUserHasAnyPermission(["this.does.not.exist"])
-    ).toBe(true);
+    expect(await currentUserHasAnyPermission(["this.does.not.exist"])).toBe(true);
   });
 });
 

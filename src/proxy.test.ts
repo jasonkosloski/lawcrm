@@ -31,16 +31,16 @@ vi.mock("@clerk/nextjs/server", () => ({
       handler: (
         auth: () => Promise<{ userId: string | null }>,
         req: NextRequest,
-        evt: NextFetchEvent
+        evt: NextFetchEvent,
       ) => unknown,
-      options: unknown
+      options: unknown,
     ) => {
       clerk.options = options;
       return (req: NextRequest, evt: NextFetchEvent) => {
         clerk.handlerCalls++;
         return handler(async () => ({ userId: clerk.userId }), req, evt);
       };
-    }
+    },
   ),
 }));
 
@@ -48,8 +48,7 @@ import { config, isPortalHost, proxy as rawProxy } from "./proxy";
 import { staffAuthorizedParties } from "@/lib/staff-authorized-parties";
 
 const EVENT = {} as NextFetchEvent;
-const proxy = async (req: NextRequest) =>
-  (await rawProxy(req, EVENT)) as Response;
+const proxy = async (req: NextRequest) => (await rawProxy(req, EVENT)) as Response;
 
 beforeEach(() => {
   clerk.userId = null;
@@ -57,10 +56,7 @@ beforeEach(() => {
 });
 
 /** `signedIn: true` makes Clerk's auth() report a user. */
-function makeRequest(
-  url: string,
-  init?: { signedIn?: boolean; headers?: Record<string, string> }
-) {
+function makeRequest(url: string, init?: { signedIn?: boolean; headers?: Record<string, string> }) {
   if (init?.signedIn) clerk.userId = "user_clerk_1";
   return new NextRequest(new URL(url, "https://app.example.com"), {
     headers: new Headers(init?.headers),
@@ -83,9 +79,7 @@ describe("proxy auth gate", () => {
 
   it("encodes ?next= for a simple path", async () => {
     const res = await proxy(makeRequest("/matters"));
-    expect(new URL(res.headers.get("location")!).search).toBe(
-      "?next=%2Fmatters"
-    );
+    expect(new URL(res.headers.get("location")!).search).toBe("?next=%2Fmatters");
   });
 
   it("omits ?next= when the target is the bare root", async () => {
@@ -101,7 +95,7 @@ describe("proxy auth gate", () => {
       const res = await proxy(makeRequest(path));
       expect(res.status).toBe(200);
       expect(res.headers.has("location")).toBe(false);
-    }
+    },
   );
 
   it("passes the Clerk webhook without a session (it verifies its own signature)", async () => {
@@ -119,9 +113,7 @@ describe("proxy auth gate", () => {
     "/api/matter-draft-sweep",
     "/api/documents/upload/blob",
   ])("passes self-authenticated machine endpoint %s through without a session", async (path) => {
-    const res = await proxy(
-      makeRequest(path, { headers: { authorization: "Bearer x" } })
-    );
+    const res = await proxy(makeRequest(path, { headers: { authorization: "Bearer x" } }));
     expect(res.status).toBe(200);
     expect(res.headers.has("location")).toBe(false);
   });
@@ -177,7 +169,7 @@ describe("proxy auth gate", () => {
       const res = await proxy(makeRequest(path));
       expect(res.status).toBe(307);
       expect(new URL(res.headers.get("location")!).pathname).toBe("/login");
-    }
+    },
   );
 
   it.each(["/login", "/login/", "/login/factor-two"])(
@@ -186,7 +178,7 @@ describe("proxy auth gate", () => {
       const res = await proxy(makeRequest(path));
       expect(res.status).toBe(200);
       expect(res.headers.has("location")).toBe(false);
-    }
+    },
   );
 
   it("Auth.js's /api/auth is no longer public", async () => {
@@ -206,18 +198,14 @@ describe("proxy auth gate", () => {
     expect(typeof opts).toBe("function");
     vi.stubEnv("STAFF_ORIGINS", "https://crm.example.com");
     expect(opts(undefined).authorizedParties).toEqual(staffAuthorizedParties());
-    expect(opts(undefined).authorizedParties).toContain(
-      "https://crm.example.com"
-    );
+    expect(opts(undefined).authorizedParties).toContain("https://crm.example.com");
     vi.unstubAllEnvs();
   });
 });
 
 describe("x-pathname request-header injection", () => {
   it("forwards pathname + search to layouts on signed-in pass-through", async () => {
-    const res = await proxy(
-      makeRequest("/matters/42?tab=notes", { signedIn: true })
-    );
+    const res = await proxy(makeRequest("/matters/42?tab=notes", { signedIn: true }));
     expect(forwardedHeader(res, "x-pathname")).toBe("/matters/42?tab=notes");
   });
 
@@ -231,7 +219,7 @@ describe("x-pathname request-header injection", () => {
       makeRequest("/matters", {
         signedIn: true,
         headers: { "x-pathname": "https://evil.example.com/phish" },
-      })
+      }),
     );
     expect(forwardedHeader(res, "x-pathname")).toBe("/matters");
   });
@@ -251,13 +239,12 @@ describe("proxy matcher", () => {
   // Next anchors matcher sources like this when it compiles them.
   const re = new RegExp(`^${source}$`);
 
-  it.each([
-    "/api/documents/upload",
-    "/_next/static/chunks/a.js",
-    "/favicon.ico",
-  ])("does not run the proxy for %s", (path) => {
-    expect(re.test(path)).toBe(false);
-  });
+  it.each(["/api/documents/upload", "/_next/static/chunks/a.js", "/favicon.ico"])(
+    "does not run the proxy for %s",
+    (path) => {
+      expect(re.test(path)).toBe(false);
+    },
+  );
 
   it.each([
     "/",
@@ -292,9 +279,7 @@ describe("proxy CSP nonce", () => {
   });
 
   it("covers the public login page too", async () => {
-    expect((await proxy(makeRequest("/login"))).headers.get(CSP)).toContain(
-      "'nonce-"
-    );
+    expect((await proxy(makeRequest("/login"))).headers.get(CSP)).toContain("'nonce-");
   });
 
   it("API routes get no page policy", async () => {
@@ -315,8 +300,7 @@ describe("portal host routing", () => {
     new NextRequest(new URL(path, "https://portal.example.com"), {
       headers: new Headers({ host: "portal.example.com" }),
     });
-  const rewriteOf = (res: Response) =>
-    new URL(res.headers.get("x-middleware-rewrite")!);
+  const rewriteOf = (res: Response) => new URL(res.headers.get("x-middleware-rewrite")!);
 
   it("isPortalHost strips the port and matches PORTAL_HOST", () => {
     expect(isPortalHost("portal.example.com")).toBe(true);
@@ -411,11 +395,9 @@ describe("portal host routing", () => {
 
   it("staff host: the portal upload route is unreachable", async () => {
     expect(
-      (await proxy(makeRequest("/portal/api/documents/upload/local", { signedIn: true }))).status
+      (await proxy(makeRequest("/portal/api/documents/upload/local", { signedIn: true }))).status,
     ).toBe(404);
-    const res = await proxy(
-      makeRequest("/api/documents/upload/local", { signedIn: true })
-    );
+    const res = await proxy(makeRequest("/api/documents/upload/local", { signedIn: true }));
     expect(res.headers.has("x-middleware-rewrite")).toBe(false);
   });
 

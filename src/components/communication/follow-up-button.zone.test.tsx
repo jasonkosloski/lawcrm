@@ -27,12 +27,12 @@ const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
 
 function renderButton(
   followUpAt: Date | null,
-  action: FollowUpAction = vi.fn(async () => ({ ok: true as const }))
+  action: FollowUpAction = vi.fn(async () => ({ ok: true as const })),
 ) {
   return render(
     <UserTimeZoneProvider timeZone={TZ}>
       <FollowUpButton threadId="t1" followUpAt={followUpAt} action={action} />
-    </UserTimeZoneProvider>
+    </UserTimeZoneProvider>,
   );
 }
 
@@ -72,9 +72,7 @@ describe("evening in the viewer's zone", () => {
 
     await user.click(chip());
     await screen.findByText(/follow up by/i);
-    const input = document.querySelector(
-      'input[type="date"]'
-    ) as HTMLInputElement;
+    const input = document.querySelector('input[type="date"]') as HTMLInputElement;
     // The stored instant is Apr 28 in UTC but Apr 27 for the viewer.
     expect(input.value).toBe("2026-04-27");
     expect(input.min).toBe("2026-04-27");
@@ -109,9 +107,7 @@ describe("a thrown action does not escape the transition", () => {
     await user.click(screen.getByRole("button", { name: "Today" }));
 
     await waitFor(() =>
-      expect(notifyError).toHaveBeenCalledWith(
-        expect.stringMatching(/try again/i)
-      )
+      expect(notifyError).toHaveBeenCalledWith(expect.stringMatching(/try again/i)),
     );
   });
 });

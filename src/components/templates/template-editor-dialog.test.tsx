@@ -21,9 +21,7 @@ vi.mock("@/app/actions/document-templates", () => ({
 describe("TemplateEditorDialog insert-field picker", () => {
   it("opens the grouped field menu without throwing and lists every group + field", async () => {
     const user = userEvent.setup();
-    render(
-      <TemplateEditorDialog open onOpenChange={() => {}} template={null} />
-    );
+    render(<TemplateEditorDialog open onOpenChange={() => {}} template={null} />);
 
     await user.click(screen.getByRole("button", { name: /insert field/i }));
 
@@ -48,9 +46,7 @@ describe("TemplateEditorDialog insert-field picker", () => {
 
     // Dialog content mounts in a portal — query the document, not
     // the render container.
-    const body = document.querySelector(
-      '[name="body"]'
-    ) as HTMLTextAreaElement;
+    const body = document.querySelector('[name="body"]') as HTMLTextAreaElement;
     expect(body.value).toContain(`{{${first.key}}}`);
   });
 });
@@ -71,22 +67,10 @@ describe("TemplateEditorDialog edit + preview behaviour", () => {
     // The page keeps the dialog mounted and flips `open`, which is
     // when the fields sync from the row.
     const { rerender } = render(
-      <TemplateEditorDialog
-        open={false}
-        onOpenChange={() => {}}
-        template={legacyTemplate}
-      />
+      <TemplateEditorDialog open={false} onOpenChange={() => {}} template={legacyTemplate} />,
     );
-    rerender(
-      <TemplateEditorDialog
-        open
-        onOpenChange={() => {}}
-        template={legacyTemplate}
-      />
-    );
-    const select = document.querySelector(
-      '[name="category"]'
-    ) as HTMLSelectElement;
+    rerender(<TemplateEditorDialog open onOpenChange={() => {}} template={legacyTemplate} />);
+    const select = document.querySelector('[name="category"]') as HTMLSelectElement;
     expect(select.value).toBe("intake");
     expect(select.selectedOptions[0]?.textContent).toBe("intake");
   });
@@ -114,10 +98,7 @@ describe("TemplateEditorDialog edit + preview behaviour", () => {
     expect(body.className).toContain("hidden");
 
     fireEvent.invalid(body);
-    expect(screen.getByRole("button", { name: "Write" })).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.getByRole("button", { name: "Write" })).toHaveAttribute("aria-pressed", "true");
     expect(body.className).not.toContain("hidden");
   });
 
@@ -130,8 +111,6 @@ describe("TemplateEditorDialog edit + preview behaviour", () => {
     await user.paste("Dear {{client-name}}");
     await user.click(screen.getByRole("button", { name: "Preview" }));
 
-    expect(screen.getByText(/Unknown fields/)).toHaveTextContent(
-      "{{client-name}}"
-    );
+    expect(screen.getByText(/Unknown fields/)).toHaveTextContent("{{client-name}}");
   });
 });

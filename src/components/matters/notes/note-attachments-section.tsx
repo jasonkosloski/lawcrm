@@ -43,33 +43,16 @@ import type {
   NoteAttachedTask,
   NoteAttachedTimeEntry,
 } from "@/lib/queries/matter-detail";
-import {
-  AddDeadlineForm,
-  AddTaskForm,
-  AddTimeEntryForm,
-} from "./note-attachment-forms";
+import { AddDeadlineForm, AddTaskForm, AddTimeEntryForm } from "./note-attachment-forms";
 import { CaptureStack } from "@/components/matters/captures/capture-stack";
-import {
-  allowedCaptureKinds,
-  type NoteAccess,
-  type NoteCapture,
-} from "@/lib/note-constants";
+import { allowedCaptureKinds, type NoteAccess, type NoteCapture } from "@/lib/note-constants";
 import { addCapturesToNoteBulk } from "@/app/actions/note-attachments";
-import {
-  bulkAttachInitialState,
-  type BulkAttachFormState,
-} from "@/lib/note-attachment-form";
-import {
-  daysUntilDateOnly,
-  formatDateOnly,
-} from "@/lib/format-date";
+import { bulkAttachInitialState, type BulkAttachFormState } from "@/lib/note-attachment-form";
+import { daysUntilDateOnly, formatDateOnly } from "@/lib/format-date";
 import { confirmAction, notifyError } from "@/lib/feedback";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { Button } from "@/components/ui/button";
-import {
-  TIME_ENTRY_STATUS_LABEL,
-  type TimeEntryStatus,
-} from "@/lib/constants/time-entry-status";
+import { TIME_ENTRY_STATUS_LABEL, type TimeEntryStatus } from "@/lib/constants/time-entry-status";
 
 const formatDate = (d: Date): string => formatDateOnly(d, "short");
 
@@ -122,11 +105,7 @@ export function NoteAttachmentsSection({
       )}
 
       {timeEntries.length > 0 && (
-        <TimeEntriesGroup
-          entries={timeEntries}
-          matterId={matterId}
-          access={access}
-        />
+        <TimeEntriesGroup entries={timeEntries} matterId={matterId} access={access} />
       )}
 
       {composer === null ? (
@@ -177,10 +156,10 @@ function BulkComposer({
   onSaved: () => void;
 }) {
   const action = addCapturesToNoteBulk.bind(null, noteId);
-  const [state, formAction, isPending] = useActionState<
-    BulkAttachFormState,
-    FormData
-  >(action, bulkAttachInitialState);
+  const [state, formAction, isPending] = useActionState<BulkAttachFormState, FormData>(
+    action,
+    bulkAttachInitialState,
+  );
   const [captures, setCaptures] = useState<NoteCapture[]>([]);
 
   // Close on success. The composer unmounts with it, so there is no
@@ -194,11 +173,7 @@ function BulkComposer({
 
   return (
     <form action={formAction} className="flex flex-col gap-2">
-      <input
-        type="hidden"
-        name="attachments"
-        value={JSON.stringify(captures)}
-      />
+      <input type="hidden" name="attachments" value={JSON.stringify(captures)} />
 
       <CaptureStack
         captures={captures}
@@ -210,9 +185,7 @@ function BulkComposer({
         allowedKinds={allowedCaptureKinds(access, ["task", "deadline", "time"])}
       />
 
-      {errs.attachments && (
-        <div className="text-2xs text-warn">{errs.attachments[0]}</div>
-      )}
+      {errs.attachments && <div className="text-2xs text-warn">{errs.attachments[0]}</div>}
 
       <div className="flex items-center justify-end gap-2">
         <button
@@ -225,11 +198,7 @@ function BulkComposer({
         >
           Cancel
         </button>
-        <Button
-          size="xs"
-          type="submit"
-          disabled={isPending || !hasContent}
-        >
+        <Button size="xs" type="submit" disabled={isPending || !hasContent}>
           {isPending
             ? "Saving…"
             : captures.length > 0
@@ -291,7 +260,7 @@ function ChipDeleteButton({
       className={cn(
         "ml-0.5 shrink-0 opacity-0 group-hover/chip:opacity-100 focus-visible:opacity-100",
         "[@media(pointer:coarse)]:opacity-100 transition-opacity hover:text-warn",
-        className
+        className,
       )}
     >
       <Trash2 size={10} />
@@ -334,41 +303,26 @@ function TaskChip({
         "group/chip inline-flex items-center max-w-full text-2xs px-2 py-1 rounded-md border bg-paper-2/60 border-line",
         "hover:border-brand-300 hover:bg-brand-soft transition-colors",
         done && "opacity-60",
-        pending && "opacity-40"
+        pending && "opacity-40",
       )}
     >
-      <Link
-        href={href}
-        title={task.title}
-        className="inline-flex items-center gap-1.5 min-w-0"
-      >
+      <Link href={href} title={task.title} className="inline-flex items-center gap-1.5 min-w-0">
         <ListTodo size={10} className="shrink-0 text-ink-4" />
         <span
           className={cn(
             "w-1.5 h-1.5 rounded-full shrink-0",
-            TASK_PRIORITY_DOT[task.priority] ?? TASK_PRIORITY_DOT.normal
+            TASK_PRIORITY_DOT[task.priority] ?? TASK_PRIORITY_DOT.normal,
           )}
         />
-        <span
-          className={cn(
-            "truncate text-ink-2",
-            done && "line-through text-ink-4"
-          )}
-        >
+        <span className={cn("truncate text-ink-2", done && "line-through text-ink-4")}>
           {task.title}
         </span>
         {task.dueDate && (
-          <span className="font-mono text-ink-4 shrink-0">
-            {formatDate(task.dueDate)}
-          </span>
+          <span className="font-mono text-ink-4 shrink-0">{formatDate(task.dueDate)}</span>
         )}
       </Link>
       {canDelete && (
-        <ChipDeleteButton
-          label="Delete task"
-          onClick={onDelete}
-          className="text-ink-4"
-        />
+        <ChipDeleteButton label="Delete task" onClick={onDelete} className="text-ink-4" />
       )}
     </span>
   );
@@ -387,8 +341,7 @@ function DeadlineChip({
   const tz = useUserTimeZone();
   // Date-only due date vs the viewer's today, by calendar day: due
   // today is not overdue, and nothing flips the evening before.
-  const isOverdue =
-    deadline.status === "open" && daysUntilDateOnly(deadline.dueDate, tz) < 0;
+  const isOverdue = deadline.status === "open" && daysUntilDateOnly(deadline.dueDate, tz) < 0;
   const isCritical = deadline.kind === "critical";
   const done = deadline.status === "completed" || deadline.status === "waived";
 
@@ -419,25 +372,15 @@ function DeadlineChip({
             ? "bg-brand-soft border-brand-200 text-brand-700 hover:border-brand-300"
             : "bg-paper-2/60 border-line text-ink-2 hover:border-brand-300 hover:bg-brand-soft",
         done && "opacity-60",
-        pending && "opacity-40"
+        pending && "opacity-40",
       )}
     >
-      <Link
-        href={href}
-        title={deadline.title}
-        className="inline-flex items-center gap-1.5 min-w-0"
-      >
+      <Link href={href} title={deadline.title} className="inline-flex items-center gap-1.5 min-w-0">
         <CircleAlert size={10} className="shrink-0" />
-        <span className={cn("truncate", done && "line-through")}>
-          {deadline.title}
-        </span>
-        <span className="font-mono shrink-0">
-          {formatDate(deadline.dueDate)}
-        </span>
+        <span className={cn("truncate", done && "line-through")}>{deadline.title}</span>
+        <span className="font-mono shrink-0">{formatDate(deadline.dueDate)}</span>
       </Link>
-      {canDelete && (
-        <ChipDeleteButton label="Delete deadline" onClick={onDelete} />
-      )}
+      {canDelete && <ChipDeleteButton label="Delete deadline" onClick={onDelete} />}
     </span>
   );
 }
@@ -454,12 +397,9 @@ function DeadlineChip({
  *
  *  Exported for tests. */
 export function aggregateByUser(
-  entries: NoteAttachedTimeEntry[]
+  entries: NoteAttachedTimeEntry[],
 ): Array<{ key: string; initials: string; name: string; hours: number }> {
-  const byUser = new Map<
-    string,
-    { key: string; initials: string; name: string; hours: number }
-  >();
+  const byUser = new Map<string, { key: string; initials: string; name: string; hours: number }>();
   for (const e of entries) {
     const key = e.userId;
     const existing = byUser.get(key);
@@ -515,13 +455,10 @@ function TimeEntriesGroup({
           ) : (
             <ChevronRight size={11} className="text-ink-4 shrink-0" />
           )}
-          <span className="text-2xs font-medium text-ink-3">
-            Time ({entries.length})
-          </span>
+          <span className="text-2xs font-medium text-ink-3">Time ({entries.length})</span>
           <span className="text-2xs font-mono text-ink-3">
             {totalHours.toFixed(1)}h
-            {billableHours !== totalHours &&
-              ` · ${billableHours.toFixed(1)}h billable`}
+            {billableHours !== totalHours && ` · ${billableHours.toFixed(1)}h billable`}
           </span>
           {/* Per-user breakdown only matters when more than one
               person logged time — single-user case is implied by the
@@ -555,9 +492,7 @@ function TimeEntriesGroup({
             <TimeEntryItem
               key={e.id}
               entry={e}
-              canDelete={
-                e.userId === access.userId || access.canDeleteAnyTime
-              }
+              canDelete={e.userId === access.userId || access.canDeleteAnyTime}
             />
           ))}
         </ul>
@@ -566,13 +501,7 @@ function TimeEntriesGroup({
   );
 }
 
-function TimeEntryItem({
-  entry,
-  canDelete,
-}: {
-  entry: NoteAttachedTimeEntry;
-  canDelete: boolean;
-}) {
+function TimeEntryItem({ entry, canDelete }: { entry: NoteAttachedTimeEntry; canDelete: boolean }) {
   const [pending, startTransition] = useTransition();
 
   const onDelete = async () => {
@@ -591,14 +520,13 @@ function TimeEntryItem({
     });
   };
 
-  const mutedForBilling =
-    entry.status === "billed" || entry.status === "written_off";
+  const mutedForBilling = entry.status === "billed" || entry.status === "written_off";
 
   return (
     <li
       className={cn(
         "rounded-md border border-line bg-paper-2/40 p-3 flex flex-col gap-1",
-        pending && "opacity-60"
+        pending && "opacity-60",
       )}
     >
       <div className="flex items-center gap-2">
@@ -609,9 +537,7 @@ function TimeEntryItem({
           {entry.userInitials}
         </span>
         <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-medium text-ink truncate">
-            {entry.activity}
-          </span>
+          <span className="text-xs font-medium text-ink truncate">{entry.activity}</span>
           {entry.privileged && (
             <span
               title="Privileged"
@@ -622,14 +548,9 @@ function TimeEntryItem({
             </span>
           )}
         </div>
-        <span className="font-mono text-2xs text-ink-3 shrink-0">
-          {formatDate(entry.date)}
-        </span>
+        <span className="font-mono text-2xs text-ink-3 shrink-0">{formatDate(entry.date)}</span>
         <span
-          className={cn(
-            "font-mono text-xs shrink-0",
-            mutedForBilling ? "text-ink-4" : "text-ink"
-          )}
+          className={cn("font-mono text-xs shrink-0", mutedForBilling ? "text-ink-4" : "text-ink")}
         >
           {entry.hours.toFixed(1)}h
         </span>
@@ -639,14 +560,12 @@ function TimeEntryItem({
             onClick={onDelete}
             disabled={pending}
             title={
-              entry.status === "billed"
-                ? "Entry is billed — unbill before deleting"
-                : "Delete"
+              entry.status === "billed" ? "Entry is billed — unbill before deleting" : "Delete"
             }
             aria-label="Delete time entry"
             className={cn(
               "inline-flex items-center justify-center w-6 h-6 rounded-md text-ink-3 hover:text-warn hover:bg-warn-soft transition-colors disabled:opacity-60",
-              entry.status === "billed" && "opacity-40"
+              entry.status === "billed" && "opacity-40",
             )}
           >
             <Trash2 size={11} />
@@ -655,13 +574,13 @@ function TimeEntryItem({
       </div>
 
       {entry.narrative && (
-        <div className="text-2xs text-ink-3 leading-relaxed pl-8">
-          {entry.narrative}
-        </div>
+        <div className="text-2xs text-ink-3 leading-relaxed pl-8">{entry.narrative}</div>
       )}
 
       <div className="flex items-center gap-2 pl-8 text-3xs text-ink-4 font-mono">
-        <span>{TIME_ENTRY_STATUS_LABEL[entry.status as TimeEntryStatus]?.toLowerCase() ?? entry.status}</span>
+        <span>
+          {TIME_ENTRY_STATUS_LABEL[entry.status as TimeEntryStatus]?.toLowerCase() ?? entry.status}
+        </span>
         {!entry.billable && <span>· non-billable</span>}
         {entry.noCharge && <span>· no charge</span>}
       </div>
@@ -680,11 +599,9 @@ function AddButtonRow({
 }) {
   // "Add multiple" mixes kinds, so it is offered when the viewer can
   // add at least two of them (a single kind has its own button).
-  const kindCount = [
-    access.canCreateTask,
-    access.canCreateDeadline,
-    access.canCreateTime,
-  ].filter(Boolean).length;
+  const kindCount = [access.canCreateTask, access.canCreateDeadline, access.canCreateTime].filter(
+    Boolean,
+  ).length;
   if (kindCount === 0) return null;
   return (
     <div className="flex items-center gap-1 flex-wrap">
@@ -694,10 +611,7 @@ function AddButtonRow({
         </AddPill>
       )}
       {access.canCreateDeadline && (
-        <AddPill
-          onClick={() => onPick("deadline")}
-          icon={<CircleAlert size={11} />}
-        >
+        <AddPill onClick={() => onPick("deadline")} icon={<CircleAlert size={11} />}>
           Add deadline
         </AddPill>
       )}

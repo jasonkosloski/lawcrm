@@ -31,16 +31,14 @@ describe("isHtmlEmailBody", () => {
   });
 
   test("real sanitizer output that begins with text is still HTML", () => {
-    const bare = sanitizeEmailHtml(
-      "<html><body>Hello AT&T,<br>See you</body></html>"
-    );
+    const bare = sanitizeEmailHtml("<html><body>Hello AT&T,<br>See you</body></html>");
     expect(bare.startsWith("<")).toBe(false);
     expect(isHtmlEmailBody(bare)).toBe(true);
   });
 
   test("a <title> block no longer leaks text in front of the body", () => {
     const out = sanitizeEmailHtml(
-      "<html><head><title>Your statement</title></head><body><div>Body text</div></body></html>"
+      "<html><head><title>Your statement</title></head><body><div>Body text</div></body></html>",
     );
     expect(out).toBe("<div>Body text</div>");
     expect(isHtmlEmailBody(out)).toBe(true);

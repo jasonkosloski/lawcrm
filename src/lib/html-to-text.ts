@@ -66,7 +66,7 @@ export function decodeHtmlEntities(text: string): string {
         }
       }
       return NAMED_ENTITIES[body.toLowerCase()] ?? match;
-    }
+    },
   );
 }
 
@@ -109,8 +109,7 @@ type AnchorFrame = { href: string | null; start: number };
 export function htmlToText(html: string): string {
   // Matches a tag (capturing name + attributes, tolerating quoted
   // ">" inside attribute values) or an HTML comment.
-  const TAG_RE =
-    /<\/?([a-zA-Z][a-zA-Z0-9]*)((?:[^>"']|"[^"]*"|'[^']*')*)\/?>|<!--[\s\S]*?-->/g;
+  const TAG_RE = /<\/?([a-zA-Z][a-zA-Z0-9]*)((?:[^>"']|"[^"]*"|'[^']*')*)\/?>|<!--[\s\S]*?-->/g;
 
   let out = "";
   let last = 0;
@@ -193,8 +192,7 @@ export function htmlToText(html: string): string {
         else pending = 1; // nested list continues the current item
         // <ol start="N"> numbers from N (Tiptap emits it when the user
         // types "3. ").
-        const start =
-          name === "ol" ? /\bstart\s*=\s*["']?(\d{1,6})\b/i.exec(attrs) : null;
+        const start = name === "ol" ? /\bstart\s*=\s*["']?(\d{1,6})\b/i.exec(attrs) : null;
         lists.push({
           ordered: name === "ol",
           count: start ? Math.max(0, Number(start[1]) - 1) : 0,

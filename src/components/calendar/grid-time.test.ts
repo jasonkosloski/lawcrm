@@ -38,21 +38,13 @@ describe("time of day in the user's zone", () => {
     const d = new Date("2026-07-07T15:05:00Z"); // 9:05 MDT
     expect(minutesOnDay(d, DAY, TZ)).toBe(9 * 60 + 5);
     expect(formatTimeShort(d, TZ)).toBe("9:05am");
-    expect(formatTimeShort(new Date("2026-07-07T00:00:00Z"), TZ)).toBe(
-      "6:00pm"
-    );
-    expect(formatTimeShort(new Date("2026-07-07T06:30:00Z"), TZ)).toBe(
-      "12:30am"
-    );
+    expect(formatTimeShort(new Date("2026-07-07T00:00:00Z"), TZ)).toBe("6:00pm");
+    expect(formatTimeShort(new Date("2026-07-07T06:30:00Z"), TZ)).toBe("12:30am");
   });
 
   test("minutesOnDay counts whole days before / after the column", () => {
-    expect(
-      minutesOnDay(new Date("2026-07-06T15:00:00Z"), DAY, TZ)
-    ).toBe(9 * 60 - 1440);
-    expect(
-      minutesOnDay(new Date("2026-07-08T15:00:00Z"), DAY, TZ)
-    ).toBe(9 * 60 + 1440);
+    expect(minutesOnDay(new Date("2026-07-06T15:00:00Z"), DAY, TZ)).toBe(9 * 60 - 1440);
+    expect(minutesOnDay(new Date("2026-07-08T15:00:00Z"), DAY, TZ)).toBe(9 * 60 + 1440);
   });
 });
 
@@ -62,7 +54,7 @@ describe("chipBox", () => {
       new Date("2026-07-07T15:00:00Z"), // 9:00 MDT
       new Date("2026-07-07T16:30:00Z"),
       DAY,
-      TZ
+      TZ,
     );
     expect(b.top).toBe(3 * HOUR_HEIGHT_PX);
     expect(b.height).toBe(1.5 * HOUR_HEIGHT_PX - 2);
@@ -71,12 +63,7 @@ describe("chipBox", () => {
   });
 
   test("a chip positions by the user's zone: 9am MDT is the 9am row even when UTC says 3pm", () => {
-    const b = chipBox(
-      new Date("2026-07-07T15:00:00Z"),
-      new Date("2026-07-07T16:00:00Z"),
-      DAY,
-      TZ
-    );
+    const b = chipBox(new Date("2026-07-07T15:00:00Z"), new Date("2026-07-07T16:00:00Z"), DAY, TZ);
     expect(b.top).toBe(144); // (9 - 6) * 48, not (15 - 6) * 48
   });
 
@@ -85,7 +72,7 @@ describe("chipBox", () => {
       new Date("2026-07-07T11:30:00Z"), // 5:30 MDT
       new Date("2026-07-07T13:00:00Z"), // 7:00 MDT
       DAY,
-      TZ
+      TZ,
     );
     expect(b.top).toBe(0);
     expect(b.clippedTop).toBe(true);
@@ -98,7 +85,7 @@ describe("chipBox", () => {
       new Date("2026-07-08T04:30:00Z"), // 22:30 MDT Jul 7
       new Date("2026-07-08T05:30:00Z"),
       DAY,
-      TZ
+      TZ,
     );
     expect(b.top + b.height).toBeLessThanOrEqual(GRID_HEIGHT_PX);
     expect(b.clippedBottom).toBe(true);
@@ -109,7 +96,7 @@ describe("chipBox", () => {
       new Date("2026-07-07T15:00:00Z"), // Tue 9am
       new Date("2026-07-08T23:00:00Z"), // Wed 5pm
       DAY,
-      TZ
+      TZ,
     );
     expect(b.top).toBe(3 * HOUR_HEIGHT_PX);
     expect(b.top + b.height).toBeLessThanOrEqual(GRID_HEIGHT_PX);
@@ -127,7 +114,7 @@ describe("nowTopPx", () => {
 
   test("null outside the visible hours", () => {
     expect(
-      nowTopPx(new Date("2026-07-07T10:00:00Z"), "2026-07-07", TZ) // 4am
+      nowTopPx(new Date("2026-07-07T10:00:00Z"), "2026-07-07", TZ), // 4am
     ).toBeNull();
   });
 });
@@ -149,10 +136,10 @@ describe("snap + timed drop", () => {
 
   test("instantAtGridMinutes builds the zone's wall clock, not the runner's", () => {
     expect(instantAtGridMinutes(DAY, 0, TZ).toISOString()).toBe(
-      "2026-07-07T12:00:00.000Z" // 6:00 MDT
+      "2026-07-07T12:00:00.000Z", // 6:00 MDT
     );
     expect(instantAtGridMinutes(DAY, 195, TZ).toISOString()).toBe(
-      "2026-07-07T15:15:00.000Z" // 9:15 MDT
+      "2026-07-07T15:15:00.000Z", // 9:15 MDT
     );
   });
 
@@ -161,7 +148,7 @@ describe("snap + timed drop", () => {
       drag({}),
       5 * HOUR_HEIGHT_PX, // 11:00
       DAY,
-      TZ
+      TZ,
     )!;
     expect(s.isAllDay).toBe(false);
     expect(s.start.toISOString()).toBe("2026-07-07T17:00:00.000Z");
@@ -182,16 +169,14 @@ describe("snap + timed drop", () => {
       }),
       4 * HOUR_HEIGHT_PX,
       DAY,
-      TZ
+      TZ,
     )!;
     expect(s.start.toISOString()).toBe("2026-07-07T16:00:00.000Z"); // 10:00
     expect(s.end.toISOString()).toBe("2026-07-07T18:00:00.000Z");
   });
 
   test("dropping a chip back on its own slot is a no-op", () => {
-    expect(
-      computeTimedDrop(drag({}), 3 * HOUR_HEIGHT_PX, DAY, TZ)
-    ).toBeNull();
+    expect(computeTimedDrop(drag({}), 3 * HOUR_HEIGHT_PX, DAY, TZ)).toBeNull();
   });
 
   test("an off-grid 9:07 start dropped on its own 9:00 slot is not rewritten", () => {
@@ -201,15 +186,11 @@ describe("snap + timed drop", () => {
     });
     expect(computeTimedDrop(d, 3 * HOUR_HEIGHT_PX, DAY, TZ)).toBeNull();
     // Moving it a real slot still writes.
-    expect(
-      computeTimedDrop(d, 3.25 * HOUR_HEIGHT_PX, DAY, TZ)
-    ).not.toBeNull();
+    expect(computeTimedDrop(d, 3.25 * HOUR_HEIGHT_PX, DAY, TZ)).not.toBeNull();
   });
 
   test("the same slot on a DIFFERENT day is a real move", () => {
-    expect(
-      computeTimedDrop(drag({}), 3 * HOUR_HEIGHT_PX, "2026-07-08", TZ)
-    ).not.toBeNull();
+    expect(computeTimedDrop(drag({}), 3 * HOUR_HEIGHT_PX, "2026-07-08", TZ)).not.toBeNull();
   });
 });
 
@@ -218,30 +199,30 @@ describe("resize clamps", () => {
     const original = new Date("2026-07-07T15:00:00Z"); // 9:00 MDT
     const proposed = new Date("2026-07-07T09:00:00Z"); // 3:00 MDT
     expect(clampStartToGrid(proposed, original, TZ).toISOString()).toBe(
-      "2026-07-07T12:00:00.000Z" // 6:00 MDT
+      "2026-07-07T12:00:00.000Z", // 6:00 MDT
     );
-    expect(
-      clampStartToGrid(new Date("2026-07-07T14:00:00Z"), original, TZ).toISOString()
-    ).toBe("2026-07-07T14:00:00.000Z");
+    expect(clampStartToGrid(new Date("2026-07-07T14:00:00Z"), original, TZ).toISOString()).toBe(
+      "2026-07-07T14:00:00.000Z",
+    );
   });
 
   test("a bottom-edge drag stops at 10pm of the event's end day", () => {
     const original = new Date("2026-07-07T16:00:00Z");
-    expect(
-      clampEndToGrid(new Date("2026-07-08T09:00:00Z"), original, TZ).toISOString()
-    ).toBe("2026-07-08T04:00:00.000Z"); // 22:00 MDT Jul 7
+    expect(clampEndToGrid(new Date("2026-07-08T09:00:00Z"), original, TZ).toISOString()).toBe(
+      "2026-07-08T04:00:00.000Z",
+    ); // 22:00 MDT Jul 7
   });
 
   test("an event already outside the grid is not pulled to the edge", () => {
     // Starts 5:30 MDT; nudging its top handle must not jump it to 6:00.
     const original = new Date("2026-07-07T11:30:00Z");
-    expect(
-      clampStartToGrid(new Date("2026-07-07T11:30:00Z"), original, TZ).toISOString()
-    ).toBe("2026-07-07T11:30:00.000Z");
+    expect(clampStartToGrid(new Date("2026-07-07T11:30:00Z"), original, TZ).toISOString()).toBe(
+      "2026-07-07T11:30:00.000Z",
+    );
     // Starts after 10pm: bottom handle may not be clamped upward.
     const late = new Date("2026-07-08T05:30:00Z"); // 23:30 MDT
-    expect(
-      clampEndToGrid(new Date("2026-07-08T05:30:00Z"), late, TZ).toISOString()
-    ).toBe("2026-07-08T05:30:00.000Z");
+    expect(clampEndToGrid(new Date("2026-07-08T05:30:00Z"), late, TZ).toISOString()).toBe(
+      "2026-07-08T05:30:00.000Z",
+    );
   });
 });

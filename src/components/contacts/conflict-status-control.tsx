@@ -21,10 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  SelectField,
-  TextareaField,
-} from "@/components/matters/captures/primary-fields";
+import { SelectField, TextareaField } from "@/components/matters/captures/primary-fields";
 import { setContactConflictStatus } from "@/app/actions/contacts";
 
 const STATUS_OPTIONS = [
@@ -61,11 +58,7 @@ export function ConflictStatusControl({
       return;
     }
     startTransition(async () => {
-      const res = await setContactConflictStatus(
-        contactId,
-        status,
-        justification
-      );
+      const res = await setContactConflictStatus(contactId, status, justification);
       if (res.ok) setOpen(false);
       else setError(res.error ?? "Could not update the conflict status");
     });
@@ -88,8 +81,7 @@ export function ConflictStatusControl({
           <DialogHeader>
             <DialogTitle>Update conflict status</DialogTitle>
             <DialogDescription>
-              Manual changes require a justification, which is recorded
-              on the firm activity log.
+              Manual changes require a justification, which is recorded on the firm activity log.
             </DialogDescription>
           </DialogHeader>
 
@@ -124,11 +116,7 @@ export function ConflictStatusControl({
           </div>
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setOpen(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="button" onClick={save} disabled={pending}>

@@ -30,10 +30,7 @@ import { isLenientEmail } from "@/lib/email-shape";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type Tx } from "@/lib/prisma";
 import { assertChildMatterAccess, assertMatterAccess } from "@/lib/matter-access";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { logAuditEntry } from "@/lib/audit-entry";
 import { logActivityTx } from "@/lib/activity-log";
 import {
@@ -42,11 +39,7 @@ import {
   screenMatter,
   type ConflictGateOutcome,
 } from "@/lib/matter-conflict-gate";
-import {
-  parsePhonesJson,
-  phonesSignature,
-  replaceContactPhones,
-} from "@/lib/contact-phones";
+import { parsePhonesJson, phonesSignature, replaceContactPhones } from "@/lib/contact-phones";
 import type { ContactPhoneEntry } from "@/lib/contact-form";
 import {
   CREATE_NEW,
@@ -64,15 +57,14 @@ import { isForeignKeyViolation, isRecordNotFound, isUniqueViolation } from "@/li
 class PartyActionError extends Error {
   constructor(
     readonly field: string,
-    message: string
+    message: string,
   ) {
     super(message);
     this.name = "PartyActionError";
   }
 }
 
-const GONE_MESSAGE =
-  "This party or contact no longer exists. Reload the page and try again.";
+const GONE_MESSAGE = "This party or contact no longer exists. Reload the page and try again.";
 
 /** Map a transaction failure to form state. Known not-found / FK /
  *  duplicate races become inline errors; anything else is rethrown. */
@@ -132,13 +124,13 @@ async function resolveRepresentation(
     newEmail: string | null;
     newPhone: string | null;
     currentRepId?: string | null;
-  }
+  },
 ): Promise<ResolvedRepresentation> {
   if (input.mode === PICK_EXISTING) {
     if (!input.pickedId) {
       throw new PartyActionError(
         "representationContactId",
-        "Pick a representing contact or create a new one"
+        "Pick a representing contact or create a new one",
       );
     }
     const c = await tx.contact.findUnique({
@@ -156,7 +148,7 @@ async function resolveRepresentation(
     if (!c) {
       throw new PartyActionError(
         "representationContactId",
-        "That attorney contact no longer exists. Pick another."
+        "That attorney contact no longer exists. Pick another.",
       );
     }
     if ((c.mergedIntoId || !c.isActive) && c.id !== input.currentRepId) {
@@ -164,7 +156,7 @@ async function resolveRepresentation(
         "representationContactId",
         c.mergedIntoId
           ? "That attorney contact was merged into another. Reload and pick the current one."
-          : "That attorney contact is inactive. Pick another."
+          : "That attorney contact is inactive. Pick another.",
       );
     }
     return {
@@ -180,10 +172,7 @@ async function resolveRepresentation(
   // contact's type later via the contacts directory if it's wrong
   // (e.g. an in-house counsel hire that should be "other").
   if (!input.newName) {
-    throw new PartyActionError(
-      "newRepresentationName",
-      "Attorney name is required"
-    );
+    throw new PartyActionError("newRepresentationName", "Attorney name is required");
   }
   const created = await tx.contact.create({
     data: {
@@ -215,8 +204,7 @@ async function resolveRepresentation(
   };
 }
 
-const optionalText = (max: number) =>
-  z.string().trim().max(max).optional().or(z.literal(""));
+const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
 /** Fields shared by the create and update schemas. */
 const representationFields = {
@@ -226,9 +214,7 @@ const representationFields = {
   /** Either pick an existing Contact (rep is the firm's record of
    *  some attorney) or create a new one inline. Same pattern as
    *  the main party picker. */
-  representationContactMode: z
-    .enum([PICK_EXISTING, CREATE_NEW])
-    .default(CREATE_NEW),
+  representationContactMode: z.enum([PICK_EXISTING, CREATE_NEW]).default(CREATE_NEW),
   representationContactId: optionalText(100),
   /** Inline-create fields used when representationContactMode === CREATE_NEW.
    *  The created Contact gets type "opposing_counsel". */
@@ -248,10 +234,7 @@ type RepresentationInput = {
 
 /** Representation validation only matters when explicitly "yes" —
  *  unknown / pro se don't need a rep contact at all. */
-function validateRepresentation(
-  data: RepresentationInput,
-  ctx: z.RefinementCtx
-) {
+function validateRepresentation(data: RepresentationInput, ctx: z.RefinementCtx) {
   if (data.representation !== "yes") return;
   if (data.representationContactMode === PICK_EXISTING) {
     if (!data.representationContactId) {
@@ -270,10 +253,7 @@ function validateRepresentation(
       message: "Attorney name is required",
     });
   }
-  if (
-    data.newRepresentationEmail &&
-    !isLenientEmail(data.newRepresentationEmail)
-  ) {
+  if (data.newRepresentationEmail && !isLenientEmail(data.newRepresentationEmail)) {
     ctx.addIssue({
       code: "custom",
       path: ["newRepresentationEmail"],
@@ -330,7 +310,7 @@ const partySchema = z
 export async function createMatterContact(
   matterId: string,
   _prev: PartyFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<PartyFormState> {
   const userId = await requirePermission("parties.create");
   await assertMatterAccess(matterId);
@@ -381,9 +361,7 @@ export async function createMatterContact(
       return {
         status: "error",
         errors: {
-          contactId: [
-            "Already listed in this section — edit that row instead",
-          ],
+          contactId: ["Already listed in this section — edit that row instead"],
         },
       };
     }
@@ -423,8 +401,7 @@ export async function createMatterContact(
       const rep =
         data.representation !== "yes"
           ? null
-          : data.representationContactMode === PICK_EXISTING &&
-              data.representationContactId
+          : data.representationContactMode === PICK_EXISTING && data.representationContactId
             ? await prisma.contact.findUnique({
                 where: { id: data.representationContactId },
                 select: { name: true, organization: true },
@@ -466,8 +443,7 @@ export async function createMatterContact(
               ? "expert"
               : data.category === "lay_witness"
                 ? "witness"
-                : data.category === "opposing" &&
-                    isOpposingCounselRole(data.role)
+                : data.category === "opposing" && isOpposingCounselRole(data.role)
                   ? "opposing_counsel"
                   : "other";
 
@@ -507,19 +483,19 @@ export async function createMatterContact(
         if (!hit) {
           throw new PartyActionError(
             "contactId",
-            "That contact no longer exists. Reload the page and pick again."
+            "That contact no longer exists. Reload the page and pick again.",
           );
         }
         if (hit.mergedIntoId) {
           throw new PartyActionError(
             "contactId",
-            "That contact was merged into another. Reload the page and pick the current one."
+            "That contact was merged into another. Reload the page and pick the current one.",
           );
         }
         if (!hit.isActive) {
           throw new PartyActionError(
             "contactId",
-            "That contact is inactive. Reload the page and pick another."
+            "That contact is inactive. Reload the page and pick another.",
           );
         }
         addedName = hit.name;
@@ -566,7 +542,7 @@ export async function createMatterContact(
       const conflictEntry = gate.ok
         ? conflictGateLogEntry(
             gate,
-            `${addedName} added as ${data.category === "client" ? "co-client" : "opposing party"}`
+            `${addedName} added as ${data.category === "client" ? "co-client" : "opposing party"}`,
           )
         : null;
       if (conflictEntry) {
@@ -648,7 +624,7 @@ const partyUpdateSchema = z
 export async function updateMatterContact(
   matterContactId: string,
   _prev: PartyFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<PartyFormState> {
   const userId = await requirePermission("parties.edit");
   await assertChildMatterAccess("party", matterContactId);
@@ -785,8 +761,7 @@ export async function updateMatterContact(
   }
 
   const canEditContact =
-    changedContactFields.length === 0 ||
-    (await currentUserHasPermission("contacts.edit"));
+    changedContactFields.length === 0 || (await currentUserHasPermission("contacts.edit"));
   if (!canEditContact) {
     return {
       status: "error",
@@ -810,8 +785,7 @@ export async function updateMatterContact(
         if (!f.write) continue;
         if (f.key === "name") contactData.name = data.contactName;
         if (f.key === "email") contactData.email = data.contactEmail || null;
-        if (f.key === "organization")
-          contactData.organization = data.contactOrganization || null;
+        if (f.key === "organization") contactData.organization = data.contactOrganization || null;
       }
       if (Object.keys(contactData).length > 0) {
         await tx.contact.update({
@@ -874,7 +848,7 @@ export async function updateMatterContact(
 }
 
 export async function removeMatterContact(
-  matterContactId: string
+  matterContactId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("parties.delete");
   await assertChildMatterAccess("party", matterContactId);
@@ -896,10 +870,7 @@ export async function removeMatterContact(
   // contact, so the row would reappear on next load (plus the user
   // expects the Parties tab to always reflect the matter's client).
   // The proper way to change it is via Matter → Edit.
-  if (
-    row.category === "client" &&
-    row.matter?.clientId === row.contactId
-  ) {
+  if (row.category === "client" && row.matter?.clientId === row.contactId) {
     return {
       ok: false,
       error:
@@ -920,8 +891,7 @@ export async function removeMatterContact(
     source: "Parties",
     icon: "user",
     title: `Removed ${row.contact.name} from ${
-      PARTY_CATEGORY_LABEL[row.category as keyof typeof PARTY_CATEGORY_LABEL] ??
-      row.category
+      PARTY_CATEGORY_LABEL[row.category as keyof typeof PARTY_CATEGORY_LABEL] ?? row.category
     }`,
   });
 

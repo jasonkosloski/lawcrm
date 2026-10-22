@@ -31,8 +31,9 @@ describe("LeadDocumentViewerPage", () => {
       searchParams: Promise.resolve({}),
     } as Parameters<typeof LeadDocumentViewerPage>[0]);
     render(ui);
-    expect(
-      JSON.parse(screen.getByTestId("viewer").getAttribute("data-props")!)
-    ).toMatchObject({ scope: { kind: "lead", leadId: "lead_1" }, documentId: "d1" });
+    expect(JSON.parse(screen.getByTestId("viewer").getAttribute("data-props")!)).toMatchObject({
+      scope: { kind: "lead", leadId: "lead_1" },
+      documentId: "d1",
+    });
   });
 });

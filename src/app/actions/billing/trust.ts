@@ -18,15 +18,8 @@ import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { roundMoney } from "@/lib/money";
 import { UserFacingError, toUserMessage } from "@/lib/user-facing-error";
-import {
-  TRUST_TXN_TYPES,
-  billingInitialState,
-  type BillingFormState,
-} from "@/lib/billing-form";
-import {
-  todayDateOnly,
-  adjustTrustBalance,
-} from "./helpers";
+import { TRUST_TXN_TYPES, billingInitialState, type BillingFormState } from "@/lib/billing-form";
+import { todayDateOnly, adjustTrustBalance } from "./helpers";
 
 // ── Trust ledger ────────────────────────────────────────────────────────
 
@@ -52,7 +45,7 @@ const trustTxnSchema = z.object({
 export async function addTrustTransaction(
   matterId: string,
   _prev: BillingFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<BillingFormState> {
   await requirePermission("trust.record_transaction");
   await assertMatterAccess(matterId);
@@ -69,8 +62,7 @@ export async function addTrustTransaction(
   const positive = roundMoney(data.amount);
   // Disbursement / refund are stored as negative amounts so trust
   // sums match the balance directly. Deposits stay positive.
-  const signed =
-    data.type === "deposit" ? positive : positive.neg();
+  const signed = data.type === "deposit" ? positive : positive.neg();
 
   // Optional date-only field: the picked day, or the user's today
   // when left empty. Reject malformed values up front instead of
@@ -121,11 +113,7 @@ export async function addTrustTransaction(
   } catch (err) {
     return {
       status: "error",
-      error: toUserMessage(
-        err,
-        "Couldn't record transaction.",
-        "billing.addTrustTransaction"
-      ),
+      error: toUserMessage(err, "Couldn't record transaction.", "billing.addTrustTransaction"),
     };
   }
 }

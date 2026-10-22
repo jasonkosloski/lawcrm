@@ -27,10 +27,7 @@
 import { useActionState, useEffect, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { updateFirmMember } from "@/app/actions/team";
-import {
-  teamInitialState,
-  type TeamFormState,
-} from "@/lib/team-form";
+import { teamInitialState, type TeamFormState } from "@/lib/team-form";
 import { DEFAULT_ROLE_NAME } from "@/lib/role-constants";
 import type { FirmUserRow, RoleChip } from "@/lib/queries/team";
 import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
@@ -53,10 +50,10 @@ export function MemberEditForm({
   onDone: () => void;
 }) {
   const action = updateFirmMember.bind(null, member.id);
-  const [state, formAction, isPending] = useActionState<
-    TeamFormState,
-    FormData
-  >(action, teamInitialState);
+  const [state, formAction, isPending] = useActionState<TeamFormState, FormData>(
+    action,
+    teamInitialState,
+  );
   const [, startTransition] = useTransition();
 
   useEffect(() => {
@@ -130,11 +127,7 @@ export function MemberEditForm({
             />
           )}
         </Field>
-        <Field
-          label="Bar number"
-          hint="Attorneys only."
-          error={errs.barNumber?.[0]}
-        >
+        <Field label="Bar number" hint="Attorneys only." error={errs.barNumber?.[0]}>
           {(c) => (
             <input
               {...c}
@@ -154,11 +147,7 @@ export function MemberEditForm({
             // Force-submit the current value via a hidden input and
             // render a non-interactive indicator instead.
             <>
-              <input
-                type="hidden"
-                name="isActive"
-                value={member.isActive ? "on" : ""}
-              />
+              <input type="hidden" name="isActive" value={member.isActive ? "on" : ""} />
               <div
                 className="flex items-center gap-2 text-xs opacity-60"
                 title={
@@ -170,9 +159,7 @@ export function MemberEditForm({
                 <span
                   className={cn(
                     "inline-block w-3.5 h-3.5 rounded-sm border",
-                    member.isActive
-                      ? "bg-brand-500 border-brand-500"
-                      : "border-line"
+                    member.isActive ? "bg-brand-500 border-brand-500" : "border-line",
                   )}
                 />
                 <span>
@@ -196,9 +183,7 @@ export function MemberEditForm({
               </span>
             </label>
           )}
-          {errs.isActive && (
-            <div className="text-2xs text-warn">{errs.isActive[0]}</div>
-          )}
+          {errs.isActive && <div className="text-2xs text-warn">{errs.isActive[0]}</div>}
         </div>
       </div>
 
@@ -221,11 +206,7 @@ export function MemberEditForm({
         >
           Cancel
         </button>
-        <Button
-          size="sm"
-          type="submit"
-          disabled={isPending}
-        >
+        <Button size="sm" type="submit" disabled={isPending}>
           {isPending ? "Saving…" : "Save"}
         </Button>
       </div>
@@ -253,9 +234,7 @@ export function RoleMultiSelect({
 }) {
   return (
     <div className="flex flex-col gap-2 pt-2 border-t border-line">
-      <div className="text-2xs font-medium text-ink-3">
-        Roles
-      </div>
+      <div className="text-2xs font-medium text-ink-3">Roles</div>
       <div className="flex flex-wrap gap-2">
         {options.map((opt) => {
           const isDefault = opt.name === DEFAULT_ROLE_NAME;
@@ -271,7 +250,7 @@ export function RoleMultiSelect({
                   ? "border-line cursor-not-allowed opacity-70"
                   : isLocked
                     ? "border-line cursor-not-allowed opacity-70"
-                    : "border-line cursor-pointer hover:border-brand-300"
+                    : "border-line cursor-pointer hover:border-brand-300",
               )}
               title={
                 isDefault
@@ -289,9 +268,7 @@ export function RoleMultiSelect({
                 disabled={disabled}
                 className="accent-brand-500"
               />
-              {isLocked && checked && (
-                <input type="hidden" name="roleId" value={opt.id} />
-              )}
+              {isLocked && checked && <input type="hidden" name="roleId" value={opt.id} />}
               {opt.name}
             </label>
           );
@@ -299,9 +276,8 @@ export function RoleMultiSelect({
       </div>
       {error && <div className="text-2xs text-warn">{error}</div>}
       <div className="text-3xs text-ink-4 leading-relaxed">
-        Members can hold any number of roles. The{" "}
-        <span className="font-mono">Admin</span> role grants admin
-        powers; manage the role list on{" "}
+        Members can hold any number of roles. The <span className="font-mono">Admin</span> role
+        grants admin powers; manage the role list on{" "}
         <span className="font-mono">Settings → Roles</span>.
       </div>
     </div>

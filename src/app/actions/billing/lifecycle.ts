@@ -32,10 +32,7 @@ import {
   type BillingFormState,
   type InvoiceKind,
 } from "@/lib/billing-form";
-import {
-  ZERO_TOTAL_ERROR,
-  todayDateOnly,
-} from "./helpers";
+import { ZERO_TOTAL_ERROR, todayDateOnly } from "./helpers";
 
 // ── Invoice status transitions ──────────────────────────────────────────
 
@@ -60,7 +57,7 @@ const INVOICE_CHANGED_ERROR =
 
 export async function setInvoiceStatus(
   invoiceId: string,
-  next: string
+  next: string,
 ): Promise<{ ok: boolean; error?: string }> {
   // Own-property check: a plain index lookup would resolve inherited
   // keys ("constructor", "toString") to a function.
@@ -89,10 +86,7 @@ export async function setInvoiceStatus(
  *  callers (InvoiceActionBar) only handle a returned `{ ok: false }`;
  *  a throw would replace the whole page with the error boundary. */
 function invoiceActionError(err: unknown, context: string): string {
-  if (
-    err instanceof Prisma.PrismaClientKnownRequestError &&
-    err.code === "P2025"
-  ) {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
     return "Invoice not found.";
   }
   return toUserMessage(err, "Couldn't update the invoice.", context);
@@ -101,7 +95,7 @@ function invoiceActionError(err: unknown, context: string): string {
 async function setInvoiceStatusUnchecked(
   invoiceId: string,
   next: string,
-  userId: string
+  userId: string,
 ): Promise<{ ok: boolean; error?: string; fromStatus?: string }> {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
@@ -232,7 +226,7 @@ const errMessage = (err: unknown) => (err instanceof Error ? err.message : Strin
 export async function voidInvoice(
   invoiceId: string,
   _prev: BillingFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<BillingFormState> {
   await requirePermission("billing.void_invoice");
   await assertChildMatterAccess("invoice", invoiceId);
@@ -273,7 +267,8 @@ export async function voidInvoice(
     ) {
       return {
         status: "error",
-        error: "Can't void an invoice with payments recorded. Payments can't be reversed in the app yet — ask an admin to correct it.",
+        error:
+          "Can't void an invoice with payments recorded. Payments can't be reversed in the app yet — ask an admin to correct it.",
       };
     }
     const preSent = invoice.kind === "client" && invoice.status === "sent";
@@ -451,9 +446,7 @@ export async function voidInvoice(
 // paidAmount > 0 (defense-in-depth — drafts shouldn't have
 // payments, but the guard catches data drift).
 
-export async function deleteInvoice(
-  invoiceId: string
-): Promise<{ ok: boolean; error?: string }> {
+export async function deleteInvoice(invoiceId: string): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("billing.delete_draft");
   await assertChildMatterAccess("invoice", invoiceId);
   const userId = await getCurrentUserId();
@@ -469,7 +462,7 @@ export async function deleteInvoice(
 
 async function deleteInvoiceUnchecked(
   invoiceId: string,
-  userId: string
+  userId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
@@ -485,9 +478,7 @@ async function deleteInvoiceUnchecked(
   if (!invoice) return { ok: false, error: "Invoice not found." };
 
   const paidNum = invoice.paidAmount.toNumber();
-  if (
-    !canDeleteInvoice(invoice.status, paidNum, invoice.kind as InvoiceKind)
-  ) {
+  if (!canDeleteInvoice(invoice.status, paidNum, invoice.kind as InvoiceKind)) {
     return {
       ok: false,
       error:
@@ -514,11 +505,7 @@ async function deleteInvoiceUnchecked(
     });
     if (
       !fresh ||
-      !canDeleteInvoice(
-        fresh.status,
-        fresh.paidAmount.toNumber(),
-        fresh.kind as InvoiceKind
-      )
+      !canDeleteInvoice(fresh.status, fresh.paidAmount.toNumber(), fresh.kind as InvoiceKind)
     ) {
       return false;
     }
@@ -557,7 +544,7 @@ export async function approveInvoice(
   /** Optional: the total the approver was looking at (e.g. "1234.50").
    *  When given, approval is refused if the invoice total moved since
    *  — the approver must not sign off on a total they never saw. */
-  expectedTotal?: string
+  expectedTotal?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   await requirePermission("billing.approve_invoice");
   await assertChildMatterAccess("invoice", invoiceId);
@@ -575,7 +562,7 @@ export async function approveInvoice(
 async function approveInvoiceUnchecked(
   invoiceId: string,
   userId: string,
-  expectedTotal: string | undefined
+  expectedTotal: string | undefined,
 ): Promise<{ ok: boolean; error?: string }> {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },

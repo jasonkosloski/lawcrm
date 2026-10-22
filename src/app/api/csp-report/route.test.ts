@@ -16,7 +16,7 @@ describe("parseCspReport", () => {
           "violated-directive": "script-src-elem",
           "blocked-uri": "https://evil.example/x.js",
         },
-      })
+      }),
     ).toEqual([
       {
         directive: "script-src-elem",
@@ -28,7 +28,10 @@ describe("parseCspReport", () => {
 
   it("reads Reporting API batches and ignores other report types", () => {
     const out = parseCspReport([
-      { type: "csp-violation", body: { effectiveDirective: "img-src", blockedURL: "x", documentURL: "y" } },
+      {
+        type: "csp-violation",
+        body: { effectiveDirective: "img-src", blockedURL: "x", documentURL: "y" },
+      },
       { type: "deprecation", body: {} },
     ]);
     expect(out).toEqual([{ directive: "img-src", blocked: "x", page: "y" }]);
@@ -44,7 +47,7 @@ describe("POST /api/csp-report", () => {
   it("logs one line per violation and answers 204", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const res = await post(
-      JSON.stringify({ "csp-report": { "violated-directive": "img-src", "blocked-uri": "data" } })
+      JSON.stringify({ "csp-report": { "violated-directive": "img-src", "blocked-uri": "data" } }),
     );
     expect(res.status).toBe(204);
     expect(warn).toHaveBeenCalledWith("[csp-report]", expect.stringContaining("img-src"));

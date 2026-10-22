@@ -43,9 +43,7 @@ describe("canViewEventDetails", () => {
   });
 
   test("branch 1: creator can always see their own event", () => {
-    expect(
-      canViewEventDetails({ ...baseView, viewerId: "creator-1" })
-    ).toBe(true);
+    expect(canViewEventDetails({ ...baseView, viewerId: "creator-1" })).toBe(true);
   });
 
   test("branch 1: creator bypass is suppressed when createdById is null (legacy event)", () => {
@@ -54,7 +52,7 @@ describe("canViewEventDetails", () => {
         ...baseView,
         createdById: null,
         viewerId: "anyone",
-      })
+      }),
     ).toBe(false);
   });
 
@@ -63,7 +61,7 @@ describe("canViewEventDetails", () => {
       canViewEventDetails({
         ...baseView,
         attendeeUserIds: ["someone-else", "viewer-1", "another"],
-      })
+      }),
     ).toBe(true);
   });
 
@@ -72,7 +70,7 @@ describe("canViewEventDetails", () => {
       canViewEventDetails({
         ...baseView,
         attendeeUserIds: ["viewer-1-extra"],
-      })
+      }),
     ).toBe(false);
   });
 
@@ -82,7 +80,7 @@ describe("canViewEventDetails", () => {
         ...baseView,
         matterId: "matter-9",
         matterTeamUserIds: ["viewer-1"],
-      })
+      }),
     ).toBe(true);
   });
 
@@ -94,7 +92,7 @@ describe("canViewEventDetails", () => {
         ...baseView,
         matterId: null,
         matterTeamUserIds: ["viewer-1"],
-      })
+      }),
     ).toBe(false);
   });
 
@@ -104,14 +102,12 @@ describe("canViewEventDetails", () => {
         ...baseView,
         matterId: "matter-9",
         matterTeamUserIds: ["someone-else"],
-      })
+      }),
     ).toBe(false);
   });
 
   test("branch 4: per-event 'show_details' opens the event up to anyone", () => {
-    expect(
-      canViewEventDetails({ ...baseView, eventVisibility: "show_details" })
-    ).toBe(true);
+    expect(canViewEventDetails({ ...baseView, eventVisibility: "show_details" })).toBe(true);
   });
 
   test("branch 5: creator's user-default 'show_details' opens default events", () => {
@@ -120,7 +116,7 @@ describe("canViewEventDetails", () => {
         ...baseView,
         eventVisibility: "default",
         creatorDefaultEventVisibility: "show_details",
-      })
+      }),
     ).toBe(true);
   });
 
@@ -133,7 +129,7 @@ describe("canViewEventDetails", () => {
         ...baseView,
         eventVisibility: "private", // hypothetical future value
         creatorDefaultEventVisibility: "show_details",
-      })
+      }),
     ).toBe(false);
   });
 
@@ -142,7 +138,7 @@ describe("canViewEventDetails", () => {
       canViewEventDetails({
         ...baseView,
         creatorDefaultEventVisibility: "default",
-      })
+      }),
     ).toBe(false);
   });
 
@@ -151,7 +147,7 @@ describe("canViewEventDetails", () => {
       canViewEventDetails({
         ...baseView,
         creatorDefaultEventVisibility: null,
-      })
+      }),
     ).toBe(false);
   });
 });
@@ -166,16 +162,14 @@ const baseEdit: EditInput = {
 
 describe("canEditEvent", () => {
   test("creator can always edit their own event (matter or not)", () => {
-    expect(
-      canEditEvent({ ...baseEdit, viewerId: "creator-1" })
-    ).toBe(true);
+    expect(canEditEvent({ ...baseEdit, viewerId: "creator-1" })).toBe(true);
     expect(
       canEditEvent({
         ...baseEdit,
         viewerId: "creator-1",
         matterId: "m1",
         matterTeamUserIds: [],
-      })
+      }),
     ).toBe(true);
   });
 
@@ -189,7 +183,7 @@ describe("canEditEvent", () => {
         matterId: "m1",
         matterTeamUserIds: ["someone-else"],
         perms: { hasEventsEdit: true, hasEventsEditNonMatter: false },
-      })
+      }),
     ).toBe(true);
   });
 
@@ -201,7 +195,7 @@ describe("canEditEvent", () => {
         ...baseEdit,
         matterId: "m1",
         perms: { hasEventsEdit: false, hasEventsEditNonMatter: true },
-      })
+      }),
     ).toBe(false);
   });
 
@@ -210,7 +204,7 @@ describe("canEditEvent", () => {
       canEditEvent({
         ...baseEdit,
         perms: { hasEventsEdit: false, hasEventsEditNonMatter: true },
-      })
+      }),
     ).toBe(true);
   });
 
@@ -221,7 +215,7 @@ describe("canEditEvent", () => {
       canEditEvent({
         ...baseEdit,
         perms: { hasEventsEdit: true, hasEventsEditNonMatter: false },
-      })
+      }),
     ).toBe(false);
   });
 
@@ -232,15 +226,13 @@ describe("canEditEvent", () => {
   test("createdById null + non-creator viewer + no perms → no edit", () => {
     // Legacy event with no creator stamped: only the permission
     // gates can grant edit access.
-    expect(
-      canEditEvent({ ...baseEdit, createdById: null })
-    ).toBe(false);
+    expect(canEditEvent({ ...baseEdit, createdById: null })).toBe(false);
     expect(
       canEditEvent({
         ...baseEdit,
         createdById: null,
         perms: { hasEventsEdit: false, hasEventsEditNonMatter: true },
-      })
+      }),
     ).toBe(true);
   });
 });
@@ -254,15 +246,13 @@ describe("canViewEventDetails - private events (ADR-037)", () => {
   });
 
   test("attendees and the matter team do NOT unlock a private event", () => {
-    expect(
-      canViewEventDetails({ ...priv, attendeeUserIds: ["viewer-1"] })
-    ).toBe(false);
+    expect(canViewEventDetails({ ...priv, attendeeUserIds: ["viewer-1"] })).toBe(false);
     expect(
       canViewEventDetails({
         ...priv,
         matterId: "m1",
         matterTeamUserIds: ["viewer-1"],
-      })
+      }),
     ).toBe(false);
   });
 
@@ -271,14 +261,12 @@ describe("canViewEventDetails - private events (ADR-037)", () => {
       canViewEventDetails({
         ...priv,
         creatorDefaultEventVisibility: "show_details",
-      })
+      }),
     ).toBe(false);
   });
 
   test("a legacy creator-less private event is visible to nobody", () => {
-    expect(
-      canViewEventDetails({ ...priv, createdById: null, viewerId: "x" })
-    ).toBe(false);
+    expect(canViewEventDetails({ ...priv, createdById: null, viewerId: "x" })).toBe(false);
   });
 });
 
@@ -319,7 +307,7 @@ describe("canViewEventDetails - restricted intake (ADR-049)", () => {
         leadId: "l1",
         leadAccessible: false,
         attendeeUserIds: [baseView.viewerId],
-      })
+      }),
     ).toBe(false);
   });
 
@@ -330,14 +318,14 @@ describe("canViewEventDetails - restricted intake (ADR-049)", () => {
         createdById: baseView.viewerId,
         leadId: "l1",
         leadAccessible: false,
-      })
+      }),
     ).toBe(true);
   });
 
   test("a visible lead changes nothing", () => {
     const input = { ...baseView, attendeeUserIds: [baseView.viewerId] };
-    expect(
-      canViewEventDetails({ ...input, leadId: "l1", leadAccessible: true })
-    ).toBe(canViewEventDetails(input));
+    expect(canViewEventDetails({ ...input, leadId: "l1", leadAccessible: true })).toBe(
+      canViewEventDetails(input),
+    );
   });
 });

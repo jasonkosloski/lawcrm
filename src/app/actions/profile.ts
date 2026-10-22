@@ -48,10 +48,7 @@ const profileSchema = z.object({
     .max(800)
     .optional()
     .or(z.literal(""))
-    .refine(
-      (v) => !v || /^https?:\/\//i.test(v),
-      "Avatar URL must start with http:// or https://"
-    ),
+    .refine((v) => !v || /^https?:\/\//i.test(v), "Avatar URL must start with http:// or https://"),
   /** IANA zone string. Validate that Intl.DateTimeFormat can use
    *  it before committing — bad values would silently break the
    *  formatter for this user. */
@@ -80,7 +77,7 @@ const profileSchema = z.object({
 
 export async function updateProfileAction(
   _prev: ProfileFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<ProfileFormState> {
   // No permission gate — every signed-in user can edit their own
   // profile by definition. The id comes from the session, never
@@ -127,9 +124,7 @@ export async function updateProfileAction(
 /** Save the caller's email signature. Same self-edit model as the
  *  profile: the row comes from the session, never the client. The HTML
  *  is sanitized here (note profile) and an empty editor clears it. */
-export async function updateEmailSignatureAction(
-  html: string
-): Promise<EmailSignatureResult> {
+export async function updateEmailSignatureAction(html: string): Promise<EmailSignatureResult> {
   const userId = await getCurrentUserId();
   if (typeof html !== "string") {
     return { ok: false, error: "Invalid signature." };
@@ -148,7 +143,7 @@ export async function updateEmailSignatureAction(
   });
   await logSettingsChange(
     userId,
-    signature ? "Email signature updated" : "Email signature removed"
+    signature ? "Email signature updated" : "Email signature removed",
   );
 
   revalidatePath("/settings/profile");

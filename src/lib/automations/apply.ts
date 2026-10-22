@@ -75,7 +75,7 @@ export async function applyDeadlineRules(
     anchorDates?: Readonly<Record<string, string>>;
     onDuplicate: "report" | "create" | "skip";
     onUnplanned: "report" | "task";
-  }
+  },
 ): Promise<ApplyDeadlineRulesResult> {
   const result: ApplyDeadlineRulesResult = { created: [], duplicates: [], unplanned: [] };
   if (input.ruleIds.length === 0) return result;
@@ -112,9 +112,7 @@ export async function applyDeadlineRules(
   if (input.onDuplicate === "report" && result.duplicates.length > 0) {
     return result; // nothing written — caller asks for confirmation
   }
-  const toPlan = rules.filter(
-    (r) => input.onDuplicate === "create" || !duplicateIds.has(r.id)
-  );
+  const toPlan = rules.filter((r) => input.onDuplicate === "create" || !duplicateIds.has(r.id));
 
   const plannable: PlannableRule[] = toPlan.map((r) => ({
     id: r.id,
@@ -163,7 +161,12 @@ export async function applyDeadlineRules(
       },
       select: { id: true },
     });
-    result.created.push({ ruleId: r.id, title: r.title, deadlineId: deadline.id, dueKey: p.dueKey });
+    result.created.push({
+      ruleId: r.id,
+      title: r.title,
+      deadlineId: deadline.id,
+      dueKey: p.dueKey,
+    });
   }
 
   for (const u of plan.unplanned) {
@@ -215,7 +218,7 @@ export async function applyTaskList(
     tz: string;
     now?: Date;
     onDuplicate: "report" | "create" | "skip";
-  }
+  },
 ): Promise<ApplyTaskListResult> {
   const list = await tx.taskList.findFirst({
     where: { id: input.taskListId, isActive: true },
@@ -286,7 +289,7 @@ export async function applyAutoDefaults(
     trigger: AutoApplyTrigger;
     tz: string;
     now?: Date;
-  }
+  },
 ): Promise<MatterDefaultsResult> {
   const defaults = await tx.autoApply.findMany({
     where: {
@@ -295,7 +298,9 @@ export async function applyAutoDefaults(
     },
     select: { deadlineRuleId: true, taskListId: true },
   });
-  const ruleIds = [...new Set(defaults.flatMap((d) => (d.deadlineRuleId ? [d.deadlineRuleId] : [])))];
+  const ruleIds = [
+    ...new Set(defaults.flatMap((d) => (d.deadlineRuleId ? [d.deadlineRuleId] : []))),
+  ];
   const listIds = [...new Set(defaults.flatMap((d) => (d.taskListId ? [d.taskListId] : [])))];
 
   const deadlines = await applyDeadlineRules(tx, {

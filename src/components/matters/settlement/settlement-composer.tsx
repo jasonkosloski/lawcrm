@@ -23,14 +23,8 @@ import { cn } from "@/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import { upsertSettlement } from "@/app/actions/settlements";
-import {
-  settlementInitialState,
-  type SettlementFormState,
-} from "@/lib/settlement-constants";
-import {
-  SETTLEMENT_STATUS_LABEL,
-  type SettlementStatus,
-} from "@/lib/constants/settlement-status";
+import { settlementInitialState, type SettlementFormState } from "@/lib/settlement-constants";
+import { SETTLEMENT_STATUS_LABEL, type SettlementStatus } from "@/lib/constants/settlement-status";
 import { Field, FieldError, inputClass } from "@/components/ui/field";
 
 type SettlementInitial = {
@@ -44,8 +38,7 @@ type SettlementInitial = {
   status: string;
 } | null;
 
-const formatMoneyInput = (n: number): string =>
-  n > 0 ? n.toFixed(2) : "";
+const formatMoneyInput = (n: number): string => (n > 0 ? n.toFixed(2) : "");
 
 /** Statuses reachable from `current`, matching the server's rules:
  *  stay, reopen to pending, or step forward one stage. */
@@ -57,13 +50,10 @@ function statusOptions(current: string): string[] {
     closed: [],
   };
   const forward = next[current] ?? [];
-  return current === "pending"
-    ? ["pending", ...forward]
-    : [current, "pending", ...forward];
+  return current === "pending" ? ["pending", ...forward] : [current, "pending", ...forward];
 }
 
-const statusLabel = (s: string): string =>
-  SETTLEMENT_STATUS_LABEL[s as SettlementStatus] ?? s;
+const statusLabel = (s: string): string => SETTLEMENT_STATUS_LABEL[s as SettlementStatus] ?? s;
 
 export function SettlementComposer({
   matterId,
@@ -91,20 +81,17 @@ export function SettlementComposer({
   // form is re-expanded. (New-settlement creates never collapse, so
   // for those the wrapper is inert — errors persist within the one
   // long session, as before.) See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    SettlementFormState,
-    FormData
-  >(action, settlementInitialState, expanded);
+  const [state, formAction, isPending] = useDialogActionState<SettlementFormState, FormData>(
+    action,
+    settlementInitialState,
+    expanded,
+  );
 
-  const [grossAmount, setGrossAmount] = useState(
-    formatMoneyInput(initial?.grossAmount ?? 0)
-  );
+  const [grossAmount, setGrossAmount] = useState(formatMoneyInput(initial?.grossAmount ?? 0));
   const [firmFeePercent, setFirmFeePercent] = useState(
-    initial?.firmFeePercent != null ? String(initial.firmFeePercent) : ""
+    initial?.firmFeePercent != null ? String(initial.firmFeePercent) : "",
   );
-  const [advancedCosts, setAdvancedCosts] = useState(
-    formatMoneyInput(initial?.advancedCosts ?? 0)
-  );
+  const [advancedCosts, setAdvancedCosts] = useState(formatMoneyInput(initial?.advancedCosts ?? 0));
   const [status, setStatus] = useState(initial?.status ?? "pending");
 
   // Re-seed from the server copy whenever it changes. useState only
@@ -114,9 +101,7 @@ export function SettlementComposer({
   // the next Save would silently post it back.
   const reseed = (src: SettlementInitial) => {
     setGrossAmount(formatMoneyInput(src?.grossAmount ?? 0));
-    setFirmFeePercent(
-      src?.firmFeePercent != null ? String(src.firmFeePercent) : ""
-    );
+    setFirmFeePercent(src?.firmFeePercent != null ? String(src.firmFeePercent) : "");
     setAdvancedCosts(formatMoneyInput(src?.advancedCosts ?? 0));
     setStatus(src?.status ?? "pending");
   };
@@ -144,8 +129,7 @@ export function SettlementComposer({
   if (!canEdit && !initial) {
     return (
       <div className="text-2xs text-ink-4 italic">
-        No settlement on this matter yet. Settlement.edit permission
-        required to open one.
+        No settlement on this matter yet. Settlement.edit permission required to open one.
       </div>
     );
   }
@@ -221,9 +205,7 @@ export function SettlementComposer({
             onChange={(e) => setFirmFeePercent(e.target.value)}
             className={cn(inputClass(), "font-mono", errs.firmFeePercent && "border-warn")}
           />
-          {errs.firmFeePercent && (
-            <FieldError>{errs.firmFeePercent[0]}</FieldError>
-          )}
+          {errs.firmFeePercent && <FieldError>{errs.firmFeePercent[0]}</FieldError>}
         </Field>
       </div>
 
@@ -239,9 +221,7 @@ export function SettlementComposer({
             onChange={(e) => setAdvancedCosts(e.target.value)}
             className={cn(inputClass(), "font-mono", errs.advancedCosts && "border-warn")}
           />
-          {errs.advancedCosts && (
-            <FieldError>{errs.advancedCosts[0]}</FieldError>
-          )}
+          {errs.advancedCosts && <FieldError>{errs.advancedCosts[0]}</FieldError>}
         </Field>
         <Field
           label="Status"
@@ -253,9 +233,7 @@ export function SettlementComposer({
             // way, post the current value unchanged.
             <>
               <input type="hidden" name="status" value={status} />
-              <div
-                className="h-8 px-2.5 flex items-center rounded-md border border-line bg-paper text-xs text-ink-3"
-              >
+              <div className="h-8 px-2.5 flex items-center rounded-md border border-line bg-paper text-xs text-ink-3">
                 {statusLabel(status)}
               </div>
             </>
@@ -286,24 +264,14 @@ export function SettlementComposer({
       <input
         type="hidden"
         name="firmFee"
-        value={
-          initial && initial.firmFeePercent === null
-            ? formatMoneyInput(initial.firmFee)
-            : ""
-        }
+        value={initial && initial.firmFeePercent === null ? formatMoneyInput(initial.firmFee) : ""}
       />
 
-      {state.error && (
-        <div className="text-2xs text-warn">{state.error}</div>
-      )}
+      {state.error && <div className="text-2xs text-warn">{state.error}</div>}
 
       <div className="flex justify-end gap-2">
         {initial && (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setExpanded(false)}
-          >
+          <Button type="button" variant="ghost" onClick={() => setExpanded(false)}>
             Cancel
           </Button>
         )}
@@ -314,4 +282,3 @@ export function SettlementComposer({
     </form>
   );
 }
-

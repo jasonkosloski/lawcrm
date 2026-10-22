@@ -37,14 +37,10 @@ export function invoiceEmail(input: {
   const textParts = [intro, balance, attached];
   if (portalUrl) textParts.push(`${portalLine}\n${portalUrl}`);
 
-  const htmlParts = [
-    `<p>${esc(intro)}</p>`,
-    `<p>${esc(balance)}</p>`,
-    `<p>${attached}</p>`,
-  ];
+  const htmlParts = [`<p>${esc(intro)}</p>`, `<p>${esc(balance)}</p>`, `<p>${attached}</p>`];
   if (portalUrl) {
     htmlParts.push(
-      `<p>You can also <a href="${esc(portalUrl)}">view this invoice in your client portal</a>.</p>`
+      `<p>You can also <a href="${esc(portalUrl)}">view this invoice in your client portal</a>.</p>`,
     );
   }
 

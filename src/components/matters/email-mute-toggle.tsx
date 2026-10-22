@@ -57,7 +57,7 @@ export function EmailMuteToggle({
         optimisticMuted
           ? "bg-paper-2 text-ink-2 border-line-2 hover:text-brand-700 hover:border-brand-300"
           : "bg-white text-ink-3 border-line hover:text-brand-700 hover:border-brand-300",
-        pending && "opacity-70"
+        pending && "opacity-70",
       )}
     >
       <Icon size={13} />

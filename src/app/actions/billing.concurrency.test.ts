@@ -102,7 +102,7 @@ async function holdTransaction(work: (tx: Tx) => Promise<unknown>) {
       ready();
       await gate;
     },
-    { timeout: 30_000, maxWait: 10_000 }
+    { timeout: 30_000, maxWait: 10_000 },
   );
   await Promise.race([readyP, done]);
   return {
@@ -157,8 +157,8 @@ async function makeInvoice(status: string, total = 100): Promise<string> {
 describe("billing row locks under real contention", () => {
   test("two payments for the full balance can't both land (invoice FOR UPDATE)", async () => {
     const id = await makeInvoice("sent");
-    const holder = await holdTransaction((tx) =>
-      tx.$queryRaw`SELECT id FROM invoices WHERE id = ${id} FOR UPDATE`
+    const holder = await holdTransaction(
+      (tx) => tx.$queryRaw`SELECT id FROM invoices WHERE id = ${id} FOR UPDATE`,
     );
     const racers = Promise.all([
       recordInvoicePayment(id, billingInitialState, payForm("100")),
@@ -198,8 +198,8 @@ describe("billing row locks under real contention", () => {
       fd.set("source", "trust");
       return fd;
     };
-    const holder = await holdTransaction((tx) =>
-      tx.$queryRaw`SELECT id FROM matters WHERE id = ${matterId} FOR UPDATE`
+    const holder = await holdTransaction(
+      (tx) => tx.$queryRaw`SELECT id FROM matters WHERE id = ${matterId} FOR UPDATE`,
     );
     const racers = Promise.all([
       recordInvoicePayment(a, billingInitialState, trustForm()),
@@ -219,8 +219,8 @@ describe("billing row locks under real contention", () => {
     const id = await makeInvoice("approved");
     await prisma.matter.update({ where: { id: matterId }, data: { trustBalance: 500 } });
     // Hold the invoice row, then queue a send (apply trust) behind it.
-    const holder = await holdTransaction((tx) =>
-      tx.$queryRaw`SELECT id FROM invoices WHERE id = ${id} FOR UPDATE`
+    const holder = await holdTransaction(
+      (tx) => tx.$queryRaw`SELECT id FROM invoices WHERE id = ${id} FOR UPDATE`,
     );
     const fd = new FormData();
     fd.set("method", "email");
@@ -242,8 +242,8 @@ describe("billing row locks under real contention", () => {
       fd.set("description", "Concurrent disbursement");
       return fd;
     };
-    const holder = await holdTransaction((tx) =>
-      tx.$queryRaw`SELECT id FROM matters WHERE id = ${matterId} FOR UPDATE`
+    const holder = await holdTransaction(
+      (tx) => tx.$queryRaw`SELECT id FROM matters WHERE id = ${matterId} FOR UPDATE`,
     );
     const racers = Promise.all([
       addTrustTransaction(matterId, billingInitialState, form()),
@@ -262,8 +262,8 @@ describe("billing row locks under real contention", () => {
   test("two generates on the same matter bill each entry exactly once (matter FOR UPDATE)", async () => {
     await seedTimeEntry({ matterId, userId, amount: 100 });
     await seedExpense({ matterId, amount: 25 });
-    const holder = await holdTransaction((tx) =>
-      tx.$queryRaw`SELECT id FROM matters WHERE id = ${matterId} FOR UPDATE`
+    const holder = await holdTransaction(
+      (tx) => tx.$queryRaw`SELECT id FROM matters WHERE id = ${matterId} FOR UPDATE`,
     );
     const racers = Promise.all([
       generateInvoiceFromWip(matterId, billingInitialState, new FormData()),
@@ -281,8 +281,8 @@ describe("billing row locks under real contention", () => {
 
   test("a generate and a bundle on the same matter can't both claim the entries", async () => {
     await seedTimeEntry({ matterId, userId, amount: 100 });
-    const holder = await holdTransaction((tx) =>
-      tx.$queryRaw`SELECT id FROM matters WHERE id = ${matterId} FOR UPDATE`
+    const holder = await holdTransaction(
+      (tx) => tx.$queryRaw`SELECT id FROM matters WHERE id = ${matterId} FOR UPDATE`,
     );
     const fd = new FormData();
     fd.set("notes", "closing out");
@@ -327,7 +327,7 @@ describe("invoice-number collision retry", () => {
           totalAmount: 5,
           paidAmount: 0,
         },
-      })
+      }),
     );
     const racer = generateInvoiceFromWip(matterId, billingInitialState, new FormData());
     await waitForBlocked(1);
@@ -338,9 +338,7 @@ describe("invoice-number collision retry", () => {
     const mine = await prisma.invoice.findFirstOrThrow({ where: { matterId } });
     expect(mine.invoiceNumber).toBe(`${year}-002`);
     // The retry linked the entry exactly once.
-    expect(
-      await prisma.timeEntry.count({ where: { matterId, invoiceId: mine.id } })
-    ).toBe(1);
+    expect(await prisma.timeEntry.count({ where: { matterId, invoiceId: mine.id } })).toBe(1);
   });
 
   test("survives more than one consecutive collision (bounded retry loop)", async () => {
@@ -365,7 +363,7 @@ describe("invoice-number collision retry", () => {
             totalAmount: 5,
             paidAmount: 0,
           },
-        })
+        }),
       );
     // Two uncommitted numbers: attempt 1 picks 001 and blocks; once 001
     // commits, attempt 2 picks 002 (003 is invisible) and blocks again.

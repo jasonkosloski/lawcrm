@@ -107,11 +107,7 @@ import {
   getMatterTasks,
   getMatterTimeSummary,
 } from "@/lib/queries/matter-detail";
-import type {
-  DeadlineRow,
-  NoteRow,
-  TaskRow,
-} from "@/lib/queries/matter-detail";
+import type { DeadlineRow, NoteRow, TaskRow } from "@/lib/queries/matter-detail";
 import { getNoteAccess } from "@/lib/note-access";
 import { NotesTabBody } from "@/components/matters/notes/notes-tab-body";
 import { NO_NOTE_ACCESS } from "@/lib/note-constants";
@@ -176,7 +172,7 @@ const renderPage = async () =>
   render(
     await MatterOverviewPage({
       params: Promise.resolve({ id: "m1" }),
-    } as Parameters<typeof MatterOverviewPage>[0])
+    } as Parameters<typeof MatterOverviewPage>[0]),
   );
 
 beforeEach(() => {
@@ -184,7 +180,11 @@ beforeEach(() => {
   vi.mocked(getMatterDeadlines).mockResolvedValue([]);
   vi.mocked(getMatterTasks).mockResolvedValue([]);
   vi.mocked(getMatterNotes).mockResolvedValue([]);
-  vi.mocked(getNoteAccess).mockResolvedValue({ ...NO_NOTE_ACCESS, userId: "u1", canCreateNote: true });
+  vi.mocked(getNoteAccess).mockResolvedValue({
+    ...NO_NOTE_ACCESS,
+    userId: "u1",
+    canCreateNote: true,
+  });
   vi.mocked(getMatterTimeSummary).mockResolvedValue({
     totalHours: 0,
     billableHours: 0,
@@ -208,9 +208,7 @@ describe("MatterOverviewPage", () => {
       },
     } as unknown as NonNullable<Awaited<ReturnType<typeof getMatterById>>>);
     await renderPage();
-    const props = JSON.parse(
-      screen.getByTestId("agreement-card").getAttribute("data-props")!
-    );
+    const props = JSON.parse(screen.getByTestId("agreement-card").getAttribute("data-props")!);
     expect(props.label).toBe("Retainer");
     expect(props.agreement.signedDate).toBe("2026-10-12");
     expect(props.canEdit).toBe(true);
@@ -222,7 +220,7 @@ describe("MatterOverviewPage", () => {
     const { currentUserHasPermission } = await import("@/lib/permission-check");
     const { prisma } = await import("@/lib/prisma");
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k !== "matters.agreement.edit"
+      async (k: string) => k !== "matters.agreement.edit",
     );
     vi.mocked(prisma.document.findMany).mockClear();
     await renderPage();
@@ -240,7 +238,7 @@ describe("MatterOverviewPage", () => {
 
     vi.mocked(getPortalCardData).mockClear();
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k !== "portal.view"
+      async (k: string) => k !== "portal.view",
     );
     document.body.innerHTML = "";
     await renderPage();

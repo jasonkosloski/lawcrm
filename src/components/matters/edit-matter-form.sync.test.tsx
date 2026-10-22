@@ -28,11 +28,7 @@ vi.mock("@/app/actions/matters", () => ({
 }));
 
 import { parseDateOnly } from "@/lib/format-date";
-import {
-  EditMatterForm,
-  type EditMatterFormOptions,
-  type MatterForEdit,
-} from "./edit-matter-form";
+import { EditMatterForm, type EditMatterFormOptions, type MatterForEdit } from "./edit-matter-form";
 
 const options: EditMatterFormOptions = {
   areas: [
@@ -81,18 +77,12 @@ beforeEach(() => {
 describe("EditMatterForm — stale selects after the page re-renders", () => {
   test("a lead changed by the Team card is shown and posted, not reverted to the old lead", async () => {
     const user = userEvent.setup();
-    const { rerender } = render(
-      <EditMatterForm matter={matter} options={options} canChangeLead />
-    );
+    const { rerender } = render(<EditMatterForm matter={matter} options={options} canChangeLead />);
     expect(screen.getByLabelText(/lead attorney/i)).toHaveValue("alice");
 
     // Team card promoted Bob; revalidation re-renders with the new lead.
     rerender(
-      <EditMatterForm
-        matter={{ ...matter, leadUserId: "bob" }}
-        options={options}
-        canChangeLead
-      />
+      <EditMatterForm matter={{ ...matter, leadUserId: "bob" }} options={options} canChangeLead />,
     );
     expect(screen.getByLabelText(/lead attorney/i)).toHaveValue("bob");
 
@@ -103,30 +93,22 @@ describe("EditMatterForm — stale selects after the page re-renders", () => {
 
   test("a lead the user picked is kept when an unrelated prop re-renders", async () => {
     const user = userEvent.setup();
-    const { rerender } = render(
-      <EditMatterForm matter={matter} options={options} canChangeLead />
-    );
+    const { rerender } = render(<EditMatterForm matter={matter} options={options} canChangeLead />);
     await user.selectOptions(screen.getByLabelText(/lead attorney/i), "bob");
     rerender(
       <EditMatterForm
         matter={{ ...matter, name: "Alvarez v. City (renamed)" }}
         options={options}
         canChangeLead
-      />
+      />,
     );
     expect(screen.getByLabelText(/lead attorney/i)).toHaveValue("bob");
   });
 
   test("a client re-linked elsewhere is reflected", () => {
-    const { rerender } = render(
-      <EditMatterForm matter={matter} options={options} canChangeLead />
-    );
+    const { rerender } = render(<EditMatterForm matter={matter} options={options} canChangeLead />);
     rerender(
-      <EditMatterForm
-        matter={{ ...matter, clientId: "c2" }}
-        options={options}
-        canChangeLead
-      />
+      <EditMatterForm matter={{ ...matter, clientId: "c2" }} options={options} canChangeLead />,
     );
     expect(screen.getByLabelText(/^client/i)).toHaveValue("c2");
   });
@@ -138,18 +120,12 @@ describe("EditMatterForm — stale selects after the page re-renders", () => {
       errors: { description: ["Too long"] },
       values: { leadUserId: "alice" },
     };
-    const { rerender } = render(
-      <EditMatterForm matter={matter} options={options} canChangeLead />
-    );
+    const { rerender } = render(<EditMatterForm matter={matter} options={options} canChangeLead />);
     await user.click(screen.getByRole("button", { name: /save changes/i }));
     await screen.findByText("Too long");
 
     rerender(
-      <EditMatterForm
-        matter={{ ...matter, leadUserId: "bob" }}
-        options={options}
-        canChangeLead
-      />
+      <EditMatterForm matter={{ ...matter, leadUserId: "bob" }} options={options} canChangeLead />,
     );
     expect(screen.getByLabelText(/lead attorney/i)).toHaveValue("bob");
   });
@@ -172,7 +148,7 @@ describe("EditMatterForm — date-only values", () => {
         }}
         options={options}
         canChangeLead
-      />
+      />,
     );
     expect(screen.getByLabelText(/deadline date/i)).toHaveValue("2027-01-15");
   });
@@ -192,8 +168,8 @@ describe("EditMatterForm — accessibility", () => {
 
     const summary = screen.getByLabelText(/summary/i);
     expect(summary).toHaveAttribute("aria-invalid", "true");
-    expect(
-      document.getElementById(summary.getAttribute("aria-describedby")!)
-    ).toHaveTextContent("Summary is too long");
+    expect(document.getElementById(summary.getAttribute("aria-describedby")!)).toHaveTextContent(
+      "Summary is too long",
+    );
   });
 });

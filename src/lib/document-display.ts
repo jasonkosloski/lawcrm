@@ -5,10 +5,7 @@
  * surfaces can't drift when a category or status is added.
  */
 
-import {
-  DOCUMENT_CATEGORY_LABEL,
-  type DocumentCategory,
-} from "@/lib/document-form";
+import { DOCUMENT_CATEGORY_LABEL, type DocumentCategory } from "@/lib/document-form";
 
 /** Category label for a stored key; an unknown key (a category added
  *  to the column but not yet to the form list) shows as-is rather

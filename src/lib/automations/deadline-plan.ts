@@ -28,12 +28,7 @@ import {
 } from "@/lib/format-date";
 import { addUtcMonths } from "@/lib/sol";
 
-export const DEADLINE_RULE_ANCHORS = [
-  "incident_date",
-  "matter_opened",
-  "prompt",
-  "rule",
-] as const;
+export const DEADLINE_RULE_ANCHORS = ["incident_date", "matter_opened", "prompt", "rule"] as const;
 export type DeadlineRuleAnchor = (typeof DEADLINE_RULE_ANCHORS)[number];
 
 export const DEADLINE_RULE_ANCHOR_LABEL: Record<DeadlineRuleAnchor, string> = {
@@ -131,7 +126,7 @@ export function packOffset(input: {
  *  whole number of its unit (shouldn't happen) falls back to days. */
 export function unpackOffset(
   offsetDays: number,
-  unit: string
+  unit: string,
 ): { amount: number; unit: OffsetUnit; direction: "after" | "before" } {
   const u: OffsetUnit = (OFFSET_UNITS as readonly string[]).includes(unit)
     ? (unit as OffsetUnit)
@@ -150,7 +145,7 @@ export function unpackOffset(
 export function applyOffsetToKey(
   anchorKey: string,
   offsetDays: number,
-  unit: string | undefined
+  unit: string | undefined,
 ): string {
   const { amount, unit: u, direction } = unpackOffset(offsetDays, unit ?? "days");
   if (u === "days") return addDaysToKey(anchorKey, offsetDays);
@@ -160,11 +155,7 @@ export function applyOffsetToKey(
 
 /** Human description in the unit it was entered, e.g.
  *  "182 days after Incident date", "2 years after Incident date", "30 days before Trial", "On Matter opened". */
-export function describeOffset(
-  offsetDays: number,
-  unit: string,
-  anchorText: string
-): string {
+export function describeOffset(offsetDays: number, unit: string, anchorText: string): string {
   if (offsetDays === 0) return `On ${anchorText}`;
   const { amount, unit: u, direction } = unpackOffset(offsetDays, unit);
   const label = amount === 1 ? u.slice(0, -1) : u;
@@ -210,7 +201,7 @@ export function ruleSummary(rule: {
 export function wouldCreateCycle(
   ruleId: string | null,
   anchorRuleId: string,
-  anchorOf: ReadonlyMap<string, string | null>
+  anchorOf: ReadonlyMap<string, string | null>,
 ): boolean {
   if (ruleId !== null && anchorRuleId === ruleId) return true;
   const seen = new Set<string>();
@@ -250,12 +241,7 @@ export type PlannedDeadline = {
 
 export type UnplannedRule = {
   rule: PlannableRule;
-  reason:
-    | "no_incident_date"
-    | "needs_date"
-    | "anchor_rule_missing"
-    | "cycle"
-    | "out_of_range";
+  reason: "no_incident_date" | "needs_date" | "anchor_rule_missing" | "cycle" | "out_of_range";
 };
 
 /**
@@ -268,7 +254,7 @@ export type UnplannedRule = {
  */
 export function planDeadlineRules(
   rules: readonly PlannableRule[],
-  ctx: PlanContext
+  ctx: PlanContext,
 ): { planned: PlannedDeadline[]; unplanned: UnplannedRule[] } {
   const planned: PlannedDeadline[] = [];
   const unplanned: UnplannedRule[] = [];
@@ -281,9 +267,7 @@ export function planDeadlineRules(
     if (explicit && isDayKey(explicit)) return explicit;
     switch (rule.anchor) {
       case "incident_date":
-        return ctx.incidentDate
-          ? dayKeyFromUtcDate(ctx.incidentDate)
-          : "no_incident_date";
+        return ctx.incidentDate ? dayKeyFromUtcDate(ctx.incidentDate) : "no_incident_date";
       case "matter_opened":
         return dateKeyInTz(ctx.matterOpenedAt, ctx.tz);
       case "prompt":
@@ -338,10 +322,7 @@ export function planDeadlineRules(
 }
 
 /** Plain-English reason for an unplanned rule (UI + task text). */
-export function unplannedReasonText(
-  u: UnplannedRule,
-  anchorRuleTitle?: string | null
-): string {
+export function unplannedReasonText(u: UnplannedRule, anchorRuleTitle?: string | null): string {
   switch (u.reason) {
     case "no_incident_date":
       return "the matter has no incident date yet";

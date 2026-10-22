@@ -60,9 +60,7 @@ const revalidateTimerWidget = () => revalidatePath("/", "layout");
 /** Guard that a caller-supplied matter id points at a real matter.
  *  Returns the error string (or null) so each action can wrap it in
  *  its own result shape. */
-async function matterMissingError(
-  matterId: string | null | undefined
-): Promise<string | null> {
+async function matterMissingError(matterId: string | null | undefined): Promise<string | null> {
   if (!matterId) return null;
   const matter = await prisma.matter.findUnique({
     where: { id: matterId },
@@ -163,12 +161,8 @@ export async function updateTimer(input: {
   const updated = await prisma.timerSession.updateMany({
     where: { userId },
     data: {
-      ...(input.matterId !== undefined
-        ? { matterId: parsed.data.matterId || null }
-        : {}),
-      ...(input.activity !== undefined
-        ? { activity: parsed.data.activity || null }
-        : {}),
+      ...(input.matterId !== undefined ? { matterId: parsed.data.matterId || null } : {}),
+      ...(input.activity !== undefined ? { activity: parsed.data.activity || null } : {}),
     },
   });
   if (updated.count === 0) return { ok: false, error: "No running timer" };
@@ -220,7 +214,7 @@ const stopTimerSchema = z.object({
  */
 export async function stopTimer(
   _prev: TimeEntryFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<TimeEntryFormState> {
   await requirePermission("time_entries.create");
   const raw = Object.fromEntries(formData.entries()) as Record<string, string>;
@@ -318,9 +312,7 @@ function staleTimerState(raw: Record<string, string>): TimeEntryFormState {
   return {
     status: "error",
     errors: {
-      activity: [
-        "No running timer — it may have been stopped or discarded in another tab.",
-      ],
+      activity: ["No running timer — it may have been stopped or discarded in another tab."],
     },
     values: raw,
   };

@@ -62,10 +62,7 @@ const REPLY: ReplyDefaults = {
   cc: [],
 };
 const REPLY_ALL: ReplyDefaults = {
-  to: [
-    { name: "Alice", email: "alice@example.com" },
-    { email: "bob@example.com" },
-  ],
+  to: [{ name: "Alice", email: "alice@example.com" }, { email: "bob@example.com" }],
   cc: [{ email: "carol@example.com" }],
 };
 
@@ -87,7 +84,7 @@ function renderComposer(over?: {
       matters={[{ id: "m1", name: "Smith v. Jones" } as never]}
       leads={[]}
       signature={over?.signature}
-    />
+    />,
   );
 }
 
@@ -102,17 +99,13 @@ describe("ReplyComposer — collapsed state", () => {
   test("shows Reply + Reply all (when reply-all adds recipients) and the from account", () => {
     renderComposer();
     expect(screen.getByRole("button", { name: /^reply$/i })).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /reply all/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /reply all/i })).toBeInTheDocument();
     expect(screen.getByText(/from me@firm\.com/i)).toBeInTheDocument();
   });
 
   test("hides Reply all when it would add nobody", () => {
     renderComposer({ replyAll: REPLY });
-    expect(
-      screen.queryByRole("button", { name: /reply all/i })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reply all/i })).not.toBeInTheDocument();
   });
 });
 
@@ -142,7 +135,7 @@ describe("ReplyComposer — prefill + wiring", () => {
         cc: [],
         recipientsEdited: false,
         attachmentDocumentIds: [],
-      })
+      }),
     );
     await waitFor(() => expect(refresh).toHaveBeenCalled());
   });
@@ -163,10 +156,9 @@ describe("ReplyComposer — prefill + wiring", () => {
         "t1",
         expect.objectContaining({
           bodyHtml: richHtml, // raw — sanitizing is the action's job
-          bodyText:
-            "Thanks so much!\n\n1. Filed\n2. Served — see the order (https://court.gov/x)",
-        })
-      )
+          bodyText: "Thanks so much!\n\n1. Filed\n2. Served — see the order (https://court.gov/x)",
+        }),
+      ),
     );
   });
 
@@ -183,10 +175,7 @@ describe("ReplyComposer — prefill + wiring", () => {
     await user.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() =>
-      expect(mockedReply).toHaveBeenCalledWith(
-        "t1",
-        expect.objectContaining({ replyAll: true })
-      )
+      expect(mockedReply).toHaveBeenCalledWith("t1", expect.objectContaining({ replyAll: true })),
     );
     const payload = mockedReply.mock.calls[0][1];
     // Unedited → the exact displayed reply-all list, flagged unedited.
@@ -217,8 +206,8 @@ describe("ReplyComposer — prefill + wiring", () => {
           to: ["dave@example.com", "erin@example.com"],
           cc: [],
           recipientsEdited: true,
-        })
-      )
+        }),
+      ),
     );
   });
 
@@ -293,12 +282,10 @@ describe("ReplyComposer — recipient integrity (F043/F064)", () => {
         canFile
         matters={[]}
         leads={[]}
-      />
+      />,
     );
     await user.click(screen.getByRole("button", { name: /^send$/i }));
-    expect(
-      await screen.findByText(/add at least one recipient/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/add at least one recipient/i)).toBeInTheDocument();
     expect(mockedReply).not.toHaveBeenCalled();
     expect(document.querySelector('[name="to"]')).not.toBeNull();
   });
@@ -345,9 +332,7 @@ describe("ReplyComposer — draft preservation", () => {
 
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     // Collapsed again…
-    expect(
-      await screen.findByRole("button", { name: /^reply$/i })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^reply$/i })).toBeInTheDocument();
     // …and reopening shows a clean body.
     await user.click(screen.getByRole("button", { name: /^reply$/i }));
     expect(bodyField().value).toBe("");
@@ -362,9 +347,7 @@ describe("ReplyComposer — draft preservation", () => {
     await user.type(bodyField(), "Careful reply");
     await user.click(screen.getByRole("button", { name: /^send$/i }));
 
-    expect(
-      await screen.findByText(/couldn't confirm the send/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/couldn't confirm the send/i)).toBeInTheDocument();
     expect(bodyField().value).toBe("Careful reply");
     expect(refresh).not.toHaveBeenCalled();
   });
@@ -375,7 +358,7 @@ describe("ReplyComposer — draft preservation", () => {
     mockedReply.mockReturnValue(
       new Promise((resolve) => {
         settle = resolve;
-      })
+      }),
     );
     renderComposer();
 
@@ -442,8 +425,8 @@ describe("ReplyComposer - unfiled thread", () => {
     await waitFor(() =>
       expect(mockedReply).toHaveBeenCalledWith(
         "t1",
-        expect.objectContaining({ scope: { kind: "matter", matterId: "m1" } })
-      )
+        expect.objectContaining({ scope: { kind: "matter", matterId: "m1" } }),
+      ),
     );
     expect(notifySuccess).toHaveBeenCalledWith("Filed.");
   });
@@ -453,7 +436,7 @@ describe("ReplyComposer - unfiled thread", () => {
     renderComposer({ needsRecord: true, canFile: false });
     await user.click(screen.getByRole("button", { name: /^reply$/i }));
     expect(
-      screen.getByText("Ask someone who can file email to file this thread first.")
+      screen.getByText("Ask someone who can file email to file this thread first."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^send$/i })).not.toBeInTheDocument();
   });

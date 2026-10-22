@@ -27,7 +27,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  NativeSelect,
+  NativeSelectOptGroup,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
 import type { RecordScope } from "@/lib/record-scope";
 import { templateCategoryLabel } from "@/lib/template-constants";
@@ -154,9 +158,7 @@ export function GenerateFromTemplateDialog({
   }
 
   const warnings =
-    preview?.ok && (preview.missing.length > 0 || preview.unresolved.length > 0)
-      ? preview
-      : null;
+    preview?.ok && (preview.missing.length > 0 || preview.unresolved.length > 0) ? preview : null;
 
   return (
     <>
@@ -175,27 +177,20 @@ export function GenerateFromTemplateDialog({
           <DialogHeader>
             <DialogTitle>Generate from template</DialogTitle>
             <DialogDescription>
-              Merge fields fill in from this {noun}, its client, and your
-              firm. Review the preview, then save it to the Documents tab
-              or copy the text.
+              Merge fields fill in from this {noun}, its client, and your firm. Review the preview,
+              then save it to the Documents tab or copy the text.
             </DialogDescription>
           </DialogHeader>
 
           {templates.length === 0 ? (
             <div className="px-3 py-6 rounded-md border border-line bg-paper-2/40 text-xs text-ink-3 text-center">
               No active templates yet. Add some under{" "}
-              <span className="font-medium text-ink-2">
-                Settings → Document templates
-              </span>
-              .
+              <span className="font-medium text-ink-2">Settings → Document templates</span>.
             </div>
           ) : (
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1">
-                <label
-                  htmlFor="generate-template"
-                  className="text-xs font-medium text-ink-2"
-                >
+                <label htmlFor="generate-template" className="text-xs font-medium text-ink-2">
                   Template
                 </label>
                 <NativeSelect
@@ -206,10 +201,7 @@ export function GenerateFromTemplateDialog({
                 >
                   <NativeSelectOption value="">Pick a template…</NativeSelectOption>
                   {[...grouped.entries()].map(([category, rows]) => (
-                    <NativeSelectOptGroup
-                      key={category}
-                      label={templateCategoryLabel(category)}
-                    >
+                    <NativeSelectOptGroup key={category} label={templateCategoryLabel(category)}>
                       {rows.map((t) => (
                         <NativeSelectOption key={t.id} value={t.id}>
                           {t.name}
@@ -227,7 +219,9 @@ export function GenerateFromTemplateDialog({
                 </div>
               )}
 
-              {!previewPending && preview && !preview.ok && <FormErrorBanner message={preview.error} />}
+              {!previewPending && preview && !preview.ok && (
+                <FormErrorBanner message={preview.error} />
+              )}
 
               {!previewPending && preview?.ok && (
                 <>
@@ -237,17 +231,14 @@ export function GenerateFromTemplateDialog({
                       <div className="flex flex-col gap-0.5">
                         {warnings.missing.length > 0 && (
                           <span>
-                            Not on file for this {noun}:{" "}
-                            {warnings.missing.join(", ")} — visible
+                            Not on file for this {noun}: {warnings.missing.join(", ")} — visible
                             placeholders are left in the text.
                           </span>
                         )}
                         {warnings.unresolved.length > 0 && (
                           <span>
                             Unknown fields (left as-is):{" "}
-                            {warnings.unresolved
-                              .map((k) => `{{${k}}}`)
-                              .join(", ")}
+                            {warnings.unresolved.map((k) => `{{${k}}}`).join(", ")}
                           </span>
                         )}
                       </div>
@@ -264,10 +255,7 @@ export function GenerateFromTemplateDialog({
               {copyError && (
                 <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn">
                   <TriangleAlert size={12} className="shrink-0 mt-px" />
-                  <span>
-                    Couldn&apos;t copy — select the preview text and copy it
-                    manually.
-                  </span>
+                  <span>Couldn&apos;t copy — select the preview text and copy it manually.</span>
                 </div>
               )}
 
@@ -278,9 +266,8 @@ export function GenerateFromTemplateDialog({
                 >
                   <Check size={12} className="shrink-0 mt-px" />
                   <span>
-                    Saved as <span className="font-medium">{savedName}</span>{" "}
-                    in All documents (the {noun}&apos;s root list — switch
-                    folders to see it).
+                    Saved as <span className="font-medium">{savedName}</span> in All documents (the{" "}
+                    {noun}&apos;s root list — switch folders to see it).
                   </span>
                 </div>
               )}

@@ -11,10 +11,7 @@
 
 import { z } from "zod";
 import type { Tx } from "@/lib/prisma";
-import {
-  normalizeContactPhones,
-  type ContactPhoneEntry,
-} from "@/lib/contact-form";
+import { normalizeContactPhones, type ContactPhoneEntry } from "@/lib/contact-form";
 
 export const MAX_PHONES_PER_CONTACT = 20;
 export const MAX_PHONE_LABEL = 40;
@@ -28,13 +25,11 @@ export const phoneListSchema = z
       label: z.string().trim().max(MAX_PHONE_LABEL).default(""),
       number: z.string().trim().max(MAX_PHONE_NUMBER),
       isPrimary: z.boolean().default(false),
-    })
+    }),
   )
   .max(MAX_PHONES_PER_CONTACT);
 
-export type ParsedPhones =
-  | { ok: true; phones: ContactPhoneEntry[] }
-  | { ok: false; error: string };
+export type ParsedPhones = { ok: true; phones: ContactPhoneEntry[] } | { ok: false; error: string };
 
 /** Parse a JSON-stringified phones list (the party edit form posts
  *  one) into a normalized list. Malformed JSON or an invalid entry is
@@ -66,7 +61,7 @@ export function parsePhonesJson(raw: string): ParsedPhones {
 export async function replaceContactPhones(
   tx: Tx,
   contactId: string,
-  entries: ContactPhoneEntry[]
+  entries: ContactPhoneEntry[],
 ): Promise<void> {
   const phones = normalizeContactPhones(entries);
   await tx.contactPhone.deleteMany({ where: { contactId } });
@@ -93,6 +88,6 @@ export async function replaceContactPhones(
  *  primaries or whitespace. */
 export function phonesSignature(entries: ContactPhoneEntry[]): string {
   return JSON.stringify(
-    normalizeContactPhones(entries).map((p) => [p.label, p.number, p.isPrimary])
+    normalizeContactPhones(entries).map((p) => [p.label, p.number, p.isPrimary]),
   );
 }

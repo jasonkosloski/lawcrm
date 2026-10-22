@@ -47,9 +47,7 @@ export function AssigneeSelect({
   error?: string;
 }) {
   const inactiveOwner =
-    currentOwner && !assignees.some((a) => a.id === currentOwner.id)
-      ? currentOwner
-      : null;
+    currentOwner && !assignees.some((a) => a.id === currentOwner.id) ? currentOwner : null;
   const selected =
     assignees.find((a) => a.id === value) ??
     (inactiveOwner && inactiveOwner.id === value ? inactiveOwner : null);
@@ -62,7 +60,7 @@ export function AssigneeSelect({
             "inline-flex items-center justify-center w-6 h-6 rounded-full text-2xs font-mono font-medium shrink-0 border",
             selected
               ? "bg-brand-50 text-brand-700 border-brand-100"
-              : "bg-paper-2 text-ink-4 border-line"
+              : "bg-paper-2 text-ink-4 border-line",
           )}
           title={selected ? selected.name : "Unassigned"}
         >

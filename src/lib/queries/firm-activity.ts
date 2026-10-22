@@ -14,10 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { addDaysToKey, instantInTz } from "@/lib/format-date";
 import { getCurrentUserId } from "@/lib/current-user";
 import { optionalRecordAccessClause } from "@/lib/matter-access";
-import {
-  activityMoneyFilters,
-  resolveActivityMoneyAccess,
-} from "@/lib/activity-money-filters";
+import { activityMoneyFilters, resolveActivityMoneyAccess } from "@/lib/activity-money-filters";
 
 export type FirmActivityRow = {
   id: string;
@@ -67,19 +64,13 @@ function startOfDayInstant(key: string, tz: string): Date | null {
   if (!m) return null;
   const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
   const probe = new Date(Date.UTC(y, mo - 1, d));
-  if (
-    probe.getUTCFullYear() !== y ||
-    probe.getUTCMonth() !== mo - 1 ||
-    probe.getUTCDate() !== d
-  ) {
+  if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== mo - 1 || probe.getUTCDate() !== d) {
     return null;
   }
   return instantInTz(y, mo, d, 0, 0, tz);
 }
 
-export async function getFirmActivity(
-  filter: FirmActivityFilter = {}
-): Promise<FirmActivityRow[]> {
+export async function getFirmActivity(filter: FirmActivityFilter = {}): Promise<FirmActivityRow[]> {
   const viewerId = filter.viewerId ?? (await getCurrentUserId());
   // Ethical walls: rows on a hidden matter are not listed (firm-scope
   // rows with no matter stay).
@@ -149,7 +140,7 @@ export async function getFirmActivity(
  *  row (the fastest-growing table in the app) just to fill a
  *  dropdown. */
 export async function listFirmActivityAuthors(
-  viewerIdArg?: string
+  viewerIdArg?: string,
 ): Promise<Array<{ id: string; name: string; initials: string | null }>> {
   const viewerId = viewerIdArg ?? (await getCurrentUserId());
   const grouped = await prisma.activityLog.groupBy({
@@ -159,9 +150,7 @@ export async function listFirmActivityAuthors(
       AND: (await optionalRecordAccessClause(viewerId)) as Prisma.ActivityLogWhereInput[],
     },
   });
-  const userIds = grouped
-    .map((g) => g.userId)
-    .filter((id): id is string => id !== null);
+  const userIds = grouped.map((g) => g.userId).filter((id): id is string => id !== null);
   if (userIds.length === 0) return [];
   const users = await prisma.user.findMany({
     where: { id: { in: userIds } },

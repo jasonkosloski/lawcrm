@@ -48,7 +48,7 @@ const renderCard = (over: Partial<React.ComponentProps<typeof PortalCard>> = {})
       portalEnabled
       tz="America/Denver"
       {...over}
-    />
+    />,
   );
 
 beforeEach(() => {
@@ -98,11 +98,7 @@ describe("PortalCard", () => {
     await user.click(screen.getByRole("button", { name: "Send invite" }));
 
     await waitFor(() =>
-      expect(invitePortalUser).toHaveBeenCalledWith(
-        "m1",
-        "c2",
-        "bob.new@example.com"
-      )
+      expect(invitePortalUser).toHaveBeenCalledWith("m1", "c2", "bob.new@example.com"),
     );
   });
 
@@ -115,9 +111,7 @@ describe("PortalCard", () => {
     renderCard();
     await user.click(screen.getByRole("button", { name: "Invite" }));
     await user.click(await screen.findByRole("button", { name: "Send invite" }));
-    expect(
-      await screen.findByText("Another portal user already uses this email.")
-    ).toBeTruthy();
+    expect(await screen.findByText("Another portal user already uses this email.")).toBeTruthy();
   });
 
   test("Revoke asks for confirmation before calling revokePortalAccess", async () => {
@@ -178,20 +172,14 @@ describe("PortalCard", () => {
 
     test("disabled without portal.share_billing", () => {
       renderCard({ ...billing, canShareBilling: false });
-      expect(
-        screen.getByRole("switch", { name: /Show billing in the portal/ })
-      ).toBeDisabled();
+      expect(screen.getByRole("switch", { name: /Show billing in the portal/ })).toBeDisabled();
     });
 
     test("toggling calls the action", async () => {
       vi.mocked(setPortalBilling).mockResolvedValue({ ok: true });
       renderCard(billing);
-      await userEvent.click(
-        screen.getByRole("switch", { name: /Show billing in the portal/ })
-      );
-      await waitFor(() =>
-        expect(setPortalBilling).toHaveBeenCalledWith("m1", true)
-      );
+      await userEvent.click(screen.getByRole("switch", { name: /Show billing in the portal/ }));
+      await waitFor(() => expect(setPortalBilling).toHaveBeenCalledWith("m1", true));
     });
 
     test("a thrown action reverts the switch and shows Couldn't save.", async () => {
@@ -228,16 +216,12 @@ describe("PortalCard", () => {
       expect(screen.getByText(/Amy, Zed/)).toBeTruthy();
       unmount();
       renderCard({ ...billing, portalBillingEnabled: true });
-      expect(
-        screen.getByText("No billed contact has portal access yet.")
-      ).toBeTruthy();
+      expect(screen.getByText("No billed contact has portal access yet.")).toBeTruthy();
     });
 
     test("when off, no contact list", () => {
       renderCard(billing);
-      expect(
-        screen.queryByText("No billed contact has portal access yet.")
-      ).toBeNull();
+      expect(screen.queryByText("No billed contact has portal access yet.")).toBeNull();
     });
   });
 });

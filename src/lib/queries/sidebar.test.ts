@@ -8,15 +8,7 @@
  * TimeEntry.date column.
  */
 
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/current-user-tz", () => ({
@@ -45,7 +37,7 @@ let seq = 0;
 
 async function seedThreads(
   ownerId: string,
-  opts: { unread: number; archivedUnread?: number; read?: number }
+  opts: { unread: number; archivedUnread?: number; read?: number },
 ) {
   const account = await prisma.emailAccount.create({
     data: { userId: ownerId, emailAddress: `box-${++seq}@firm.test` },

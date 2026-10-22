@@ -68,20 +68,14 @@ export default async function PracticeAreaDetailPage({
             style={{ background: area.color }}
           />
           <h1 className="text-lg font-semibold text-ink">{area.name}</h1>
-          {!area.isActive && (
-            <span className="text-2xs text-ink-4 font-mono">archived</span>
-          )}
+          {!area.isActive && <span className="text-2xs text-ink-4 font-mono">archived</span>}
         </div>
-        {area.label && (
-          <p className="text-xs text-ink-4 mt-0.5 ml-6">{area.label}</p>
-        )}
+        {area.label && <p className="text-xs text-ink-4 mt-0.5 ml-6">{area.label}</p>}
       </div>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">
-            Area settings
-          </CardTitle>
+          <CardTitle className="text-sm font-semibold">Area settings</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
           <EditPracticeAreaForm
@@ -108,9 +102,7 @@ export default async function PracticeAreaDetailPage({
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold">
-              Case lifecycle stages
-            </CardTitle>
+            <CardTitle className="text-sm font-semibold">Case lifecycle stages</CardTitle>
             <span className="text-2xs text-ink-4 font-mono">
               {area.stages.filter((s) => s.isActive).length} active
             </span>

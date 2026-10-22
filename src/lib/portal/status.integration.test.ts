@@ -23,13 +23,30 @@ let matterA: string;
 let matterB: string;
 let userId: string;
 
-async function mkUpdate(matterId: string, stageLabel: string, postedAt: Date, extra: { editedAt?: Date } = {}) {
+async function mkUpdate(
+  matterId: string,
+  stageLabel: string,
+  postedAt: Date,
+  extra: { editedAt?: Date } = {},
+) {
   return prisma.portalStatusUpdate.create({
-    data: { matterId, stageLabel, body: `body ${stageLabel}`, postedById: userId, postedAt, ...extra },
+    data: {
+      matterId,
+      stageLabel,
+      body: `body ${stageLabel}`,
+      postedById: userId,
+      postedAt,
+      ...extra,
+    },
   });
 }
 
-async function share(eventId: string, matterId: string, clientTitle = "Client title", clientNote: string | null = null) {
+async function share(
+  eventId: string,
+  matterId: string,
+  clientTitle = "Client title",
+  clientNote: string | null = null,
+) {
   return prisma.portalSharedEvent.create({
     data: { eventId, matterId, clientTitle, clientNote, sharedById: userId },
   });
@@ -42,11 +59,16 @@ beforeEach(async () => {
   ({ userId } = await seedUser({ firmId }));
   const { areaId, stageId } = await seedPracticeArea();
   const { contactId } = await seedContact({ email: "jane@example.com" });
-  identityId = (await prisma.portalIdentity.create({ data: { contactId, email: "jane@example.com" } })).id;
-  const mk = (name: string) => seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name });
+  identityId = (
+    await prisma.portalIdentity.create({ data: { contactId, email: "jane@example.com" } })
+  ).id;
+  const mk = (name: string) =>
+    seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name });
   matterA = (await mk("A")).matterId;
   matterB = (await mk("B")).matterId;
-  await prisma.portalMatterAccess.create({ data: { identityId, matterId: matterA, invitedById: userId } });
+  await prisma.portalMatterAccess.create({
+    data: { identityId, matterId: matterA, invitedById: userId },
+  });
 });
 
 afterEach(() => {
@@ -56,7 +78,9 @@ afterEach(() => {
 describe("getPortalMatterStatus", () => {
   test("returns updates newest first with edited flag", async () => {
     await mkUpdate(matterA, "Intake", new Date("2026-01-01T00:00:00Z"));
-    await mkUpdate(matterA, "Discovery", new Date("2026-02-01T00:00:00Z"), { editedAt: new Date("2026-02-02T00:00:00Z") });
+    await mkUpdate(matterA, "Discovery", new Date("2026-02-01T00:00:00Z"), {
+      editedAt: new Date("2026-02-02T00:00:00Z"),
+    });
     const r = await getPortalMatterStatus(identityId, matterA);
     expect(r.updates.map((u) => u.stageLabel)).toEqual(["Discovery", "Intake"]);
     expect(r.updates.map((u) => u.edited)).toEqual([true, false]);
@@ -64,7 +88,10 @@ describe("getPortalMatterStatus", () => {
 
   test("returns nothing when access revoked", async () => {
     await mkUpdate(matterA, "Intake", new Date());
-    await prisma.portalMatterAccess.updateMany({ where: { identityId }, data: { revokedAt: new Date() } });
+    await prisma.portalMatterAccess.updateMany({
+      where: { identityId },
+      data: { revokedAt: new Date() },
+    });
     expect(await getPortalMatterStatus(identityId, matterA)).toEqual(EMPTY);
   });
 
@@ -76,13 +103,21 @@ describe("getPortalMatterStatus", () => {
 
   test("returns nothing when identity disabled", async () => {
     await mkUpdate(matterA, "Intake", new Date());
-    await prisma.portalIdentity.update({ where: { id: identityId }, data: { disabledAt: new Date() } });
+    await prisma.portalIdentity.update({
+      where: { id: identityId },
+      data: { disabledAt: new Date() },
+    });
     expect(await getPortalMatterStatus(identityId, matterA)).toEqual(EMPTY);
   });
 
   test("hides a shared event re-filed to another matter on both matters", async () => {
-    await prisma.portalMatterAccess.create({ data: { identityId, matterId: matterB, invitedById: userId } });
-    const { eventId } = await seedCalendarEvent({ matterId: matterA, startTime: new Date("2999-01-01T15:00:00Z") });
+    await prisma.portalMatterAccess.create({
+      data: { identityId, matterId: matterB, invitedById: userId },
+    });
+    const { eventId } = await seedCalendarEvent({
+      matterId: matterA,
+      startTime: new Date("2999-01-01T15:00:00Z"),
+    });
     await share(eventId, matterA);
     expect((await getPortalMatterStatus(identityId, matterA)).upcoming).toHaveLength(1);
     await prisma.calendarEvent.update({ where: { id: eventId }, data: { matterId: matterB } });
@@ -91,7 +126,10 @@ describe("getPortalMatterStatus", () => {
   });
 
   test("hides a shared event whose matter is cleared", async () => {
-    const { eventId } = await seedCalendarEvent({ matterId: matterA, startTime: new Date("2999-01-01T15:00:00Z") });
+    const { eventId } = await seedCalendarEvent({
+      matterId: matterA,
+      startTime: new Date("2999-01-01T15:00:00Z"),
+    });
     await share(eventId, matterA);
     expect((await getPortalMatterStatus(identityId, matterA)).upcoming).toHaveLength(1);
     await prisma.calendarEvent.update({ where: { id: eventId }, data: { matterId: null } });
@@ -99,11 +137,22 @@ describe("getPortalMatterStatus", () => {
   });
 
   test("never exposes the internal event title or description", async () => {
-    const { eventId } = await seedCalendarEvent({ matterId: matterA, title: "INTERNAL-TITLE-XYZ", startTime: new Date("2999-01-01T15:00:00Z") });
-    await prisma.calendarEvent.update({ where: { id: eventId }, data: { description: "INTERNAL-DESC-XYZ", location: "Courtroom 4" } });
+    const { eventId } = await seedCalendarEvent({
+      matterId: matterA,
+      title: "INTERNAL-TITLE-XYZ",
+      startTime: new Date("2999-01-01T15:00:00Z"),
+    });
+    await prisma.calendarEvent.update({
+      where: { id: eventId },
+      data: { description: "INTERNAL-DESC-XYZ", location: "Courtroom 4" },
+    });
     await share(eventId, matterA, "Hearing", "Bring ID");
     const r = await getPortalMatterStatus(identityId, matterA);
-    expect(r.upcoming[0]).toMatchObject({ title: "Hearing", note: "Bring ID", location: "Courtroom 4" });
+    expect(r.upcoming[0]).toMatchObject({
+      title: "Hearing",
+      note: "Bring ID",
+      location: "Courtroom 4",
+    });
     const json = JSON.stringify(r);
     expect(json).not.toContain("INTERNAL-TITLE-XYZ");
     expect(json).not.toContain("INTERNAL-DESC-XYZ");
@@ -119,7 +168,10 @@ describe("getPortalMatterStatus", () => {
     await mk("2000-01-01T15:00:00Z");
     await mk("2001-01-01T15:00:00Z");
     const r = await getPortalMatterStatus(identityId, matterA);
-    expect(r.upcoming.map((e) => e.title)).toEqual(["2999-01-01T15:00:00Z", "2999-03-01T15:00:00Z"]);
+    expect(r.upcoming.map((e) => e.title)).toEqual([
+      "2999-01-01T15:00:00Z",
+      "2999-03-01T15:00:00Z",
+    ]);
     expect(r.past.map((e) => e.title)).toEqual(["2001-01-01T15:00:00Z", "2000-01-01T15:00:00Z"]);
   });
 
@@ -127,10 +179,20 @@ describe("getPortalMatterStatus", () => {
     // 23:30 Denver on 2026-10-20 (MDT) is already 2026-10-21 in UTC.
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-21T05:30:00Z") });
     const day = new Date("2026-10-20T00:00:00Z");
-    const allDay = await seedCalendarEvent({ matterId: matterA, isAllDay: true, startTime: day, endTime: day });
+    const allDay = await seedCalendarEvent({
+      matterId: matterA,
+      isAllDay: true,
+      startTime: day,
+      endTime: day,
+    });
     await share(allDay.eventId, matterA, "all-day");
     const yesterday = new Date("2026-10-19T00:00:00Z");
-    const old = await seedCalendarEvent({ matterId: matterA, isAllDay: true, startTime: yesterday, endTime: yesterday });
+    const old = await seedCalendarEvent({
+      matterId: matterA,
+      isAllDay: true,
+      startTime: yesterday,
+      endTime: yesterday,
+    });
     await share(old.eventId, matterA, "yesterday");
     const timed = await seedCalendarEvent({
       matterId: matterA,
@@ -168,7 +230,10 @@ describe("latestStageLabels", () => {
     });
 
     test("access revoked", async () => {
-      await prisma.portalMatterAccess.updateMany({ where: { identityId }, data: { revokedAt: new Date() } });
+      await prisma.portalMatterAccess.updateMany({
+        where: { identityId },
+        data: { revokedAt: new Date() },
+      });
       expect((await latestStageLabels(identityId, [matterA])).size).toBe(0);
     });
 
@@ -178,7 +243,10 @@ describe("latestStageLabels", () => {
     });
 
     test("identity disabled", async () => {
-      await prisma.portalIdentity.update({ where: { id: identityId }, data: { disabledAt: new Date() } });
+      await prisma.portalIdentity.update({
+        where: { id: identityId },
+        data: { disabledAt: new Date() },
+      });
       expect((await latestStageLabels(identityId, [matterA])).size).toBe(0);
     });
   });

@@ -24,10 +24,7 @@ import { useActionState, useTransition } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { updateProfileAction } from "@/app/actions/profile";
-import {
-  profileInitialState,
-  type ProfileFormState,
-} from "@/lib/profile-form";
+import { profileInitialState, type ProfileFormState } from "@/lib/profile-form";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { inputClass, labelClass } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
@@ -63,10 +60,10 @@ const TIMEZONE_OPTIONS = [
 ];
 
 export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
-  const [state, formAction, isPending] = useActionState<
-    ProfileFormState,
-    FormData
-  >(updateProfileAction, profileInitialState);
+  const [state, formAction, isPending] = useActionState<ProfileFormState, FormData>(
+    updateProfileAction,
+    profileInitialState,
+  );
 
   const [, startSubmit] = useTransition();
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -85,8 +82,7 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
   const zoneOptions = TIMEZONE_OPTIONS.some((tz) => tz.value === currentZone)
     ? TIMEZONE_OPTIONS
     : [...TIMEZONE_OPTIONS, { value: currentZone, label: currentZone }];
-  const visibility =
-    vals.defaultEventVisibility ?? profile.defaultEventVisibility;
+  const visibility = vals.defaultEventVisibility ?? profile.defaultEventVisibility;
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
@@ -202,7 +198,8 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
               <span>
                 <span className="font-medium">Private by default</span>
                 <span className="block text-3xs text-ink-4 leading-relaxed">
-                  Others see only an &ldquo;Unavailable&rdquo; block during your event time. Matter team and invited attendees still see full detail.
+                  Others see only an &ldquo;Unavailable&rdquo; block during your event time. Matter
+                  team and invited attendees still see full detail.
                 </span>
               </span>
             </label>
@@ -217,7 +214,8 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
               <span>
                 <span className="font-medium">Show details to everyone in the firm</span>
                 <span className="block text-3xs text-ink-4 leading-relaxed">
-                  Every event you create is visible firm-wide with full detail, including events already on your calendar. Switching back to private hides them again.
+                  Every event you create is visible firm-wide with full detail, including events
+                  already on your calendar. Switching back to private hides them again.
                 </span>
               </span>
             </label>
@@ -226,10 +224,7 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
       </div>
 
       <div className="flex items-center gap-3 pt-2 border-t border-line">
-        <Button
-          type="submit"
-          disabled={isPending}
-        >
+        <Button type="submit" disabled={isPending}>
           {isPending ? "Saving…" : "Save changes"}
         </Button>
         {state.status === "ok" && (
@@ -267,17 +262,13 @@ function Field({
   const marker = required ? <span className="text-warn ml-1">*</span> : null;
   const footer = (
     <>
-      {hint && !error && (
-        <span className="text-3xs text-ink-4 leading-relaxed">{hint}</span>
-      )}
+      {hint && !error && <span className="text-3xs text-ink-4 leading-relaxed">{hint}</span>}
       {error && <span className="text-2xs text-warn">{error}</span>}
     </>
   );
   if (group) {
     return (
-      <fieldset
-        className={cn("flex flex-col gap-1 border-0 p-0 m-0 min-w-0", className)}
-      >
+      <fieldset className={cn("flex flex-col gap-1 border-0 p-0 m-0 min-w-0", className)}>
         <legend className={cn(labelClass, "p-0 mb-1")}>
           {label}
           {marker}
@@ -298,4 +289,3 @@ function Field({
     </div>
   );
 }
-

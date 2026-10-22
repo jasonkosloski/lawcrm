@@ -41,7 +41,7 @@ export function reassignSpeakerRange(
   ordered: RangeSegment[],
   a: WordPoint,
   b: WordPoint,
-  speaker: string
+  speaker: string,
 ): RangeReassignment | null {
   let p0 = ordered.findIndex((s) => s.id === a.segmentId);
   let p1 = ordered.findIndex((s) => s.id === b.segmentId);
@@ -51,7 +51,8 @@ export function reassignSpeakerRange(
   if (p0 > p1 || (p0 === p1 && w0 > w1)) {
     [p0, p1, w0, w1] = [p1, p0, w1, w0];
   }
-  const inRange = (p: number, w: number) => Number.isInteger(w) && w >= 0 && w < ordered[p]!.words.length;
+  const inRange = (p: number, w: number) =>
+    Number.isInteger(w) && w >= 0 && w < ordered[p]!.words.length;
   if (!inRange(p0, w0) || !inRange(p1, w1)) return null;
 
   const turns: { speaker: string; words: Word[] }[] = [];
@@ -69,7 +70,8 @@ export function reassignSpeakerRange(
   }
   if (!changed) return { kind: "noop" };
   turns.push({ speaker, words: selected });
-  if (w1 < last.words.length - 1) turns.push({ speaker: last.speaker, words: last.words.slice(w1 + 1) });
+  if (w1 < last.words.length - 1)
+    turns.push({ speaker: last.speaker, words: last.words.slice(w1 + 1) });
 
   // Pull in same-speaker neighbours so labels don't repeat back to back.
   let from = p0;
@@ -99,7 +101,7 @@ export function reassignSpeakerRange(
       endSeconds: words[words.length - 1]!.e,
       text: wordsToText(words),
       words,
-    }))
+    })),
   );
   return { kind: "replace", from, to, segments };
 }

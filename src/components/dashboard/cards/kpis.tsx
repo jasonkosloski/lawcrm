@@ -13,10 +13,7 @@ export function KpisCard({ kpis }: { kpis: DashboardKpis }) {
     {
       label: "Unread email",
       value: kpis.unreadEmail.toString(),
-      detail:
-        kpis.flaggedEmail > 0
-          ? `${kpis.flaggedEmail} starred unread`
-          : "None starred",
+      detail: kpis.flaggedEmail > 0 ? `${kpis.flaggedEmail} starred unread` : "None starred",
       href: "/communication?filter=unread",
     },
     {

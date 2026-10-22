@@ -65,9 +65,7 @@ export function MatterDraftsList({
 
   return (
     <section aria-label="Matter drafts" className="mb-5">
-      <h2 className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-2">
-        Drafts
-      </h2>
+      <h2 className="text-2xs font-mono uppercase tracking-wider text-ink-4 mb-2">Drafts</h2>
       <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-white">
         {drafts.map((d) => (
           <li key={d.id} className="flex items-center gap-3 px-3 py-2 text-xs">
@@ -132,18 +130,10 @@ export function MatterDraftsList({
           </DialogHeader>
           {error && <div className="text-xs text-warn">{error}</div>}
           <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={pending}
-              onClick={() => setConfirming(null)}
-            >
+            <Button variant="outline" disabled={pending} onClick={() => setConfirming(null)}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              disabled={pending}
-              onClick={confirmDelete}
-            >
+            <Button variant="destructive" disabled={pending} onClick={confirmDelete}>
               {pending ? "Deleting…" : "Delete draft"}
             </Button>
           </DialogFooter>

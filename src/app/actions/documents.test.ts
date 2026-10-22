@@ -47,7 +47,7 @@ let matterId: string;
 /** Grant exactly these permission keys to the "current user". */
 function grant(...keys: string[]) {
   vi.mocked(currentUserHasPermission).mockImplementation(async (key) =>
-    keys.includes(key as string)
+    keys.includes(key as string),
   );
 }
 
@@ -104,9 +104,7 @@ describe("deleteDocument authorization", () => {
     expect(res.error).toMatch(/uploader/i);
     expect(await prisma.document.count({ where: { id } })).toBe(1);
     expect(deleteFile).not.toHaveBeenCalled();
-    expect(await prisma.activityLog.count({ where: { type: "document" } })).toBe(
-      0
-    );
+    expect(await prisma.activityLog.count({ where: { type: "document" } })).toBe(0);
   });
 
   test("another user WITH documents.delete_any can delete", async () => {
@@ -173,10 +171,7 @@ describe("deleteDocument audit + storage ordering", () => {
     expect(log.matterId).toBe(matterId);
     // Layout-level: the Documents tab AND every viewer page under it
     // (each shows the matter's file tree).
-    expect(revalidatePath).toHaveBeenCalledWith(
-      `/matters/${matterId}/documents`,
-      "layout"
-    );
+    expect(revalidatePath).toHaveBeenCalledWith(`/matters/${matterId}/documents`, "layout");
   });
 
   test("a storage failure still returns ok and still writes the audit row", async () => {
@@ -191,7 +186,7 @@ describe("deleteDocument audit + storage ordering", () => {
     expect(
       await prisma.activityLog.count({
         where: { title: "Document deleted", matterId },
-      })
+      }),
     ).toBe(1);
     expect(revalidatePath).toHaveBeenCalled();
   });
@@ -233,9 +228,7 @@ describe("deleteDocument flagged moments", () => {
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/2 flagged moments/);
     expect(await prisma.document.count({ where: { id } })).toBe(1);
-    expect(await prisma.flaggedMoment.count({ where: { documentId: id } })).toBe(
-      2
-    );
+    expect(await prisma.flaggedMoment.count({ where: { documentId: id } })).toBe(2);
     expect(deleteFile).not.toHaveBeenCalled();
   });
 

@@ -31,10 +31,9 @@ export default async function RecordsTypesPage() {
       <div>
         <h1 className="text-lg font-semibold text-ink">Records request types</h1>
         <p className="text-xs text-ink-4 mt-1 leading-relaxed">
-          Configure the kinds of records requests your firm sends. Each type
-          can carry a statutory response period, how often to chase, and a
-          default request-letter template. Archive a type to remove it from
-          pickers while keeping history intact.
+          Configure the kinds of records requests your firm sends. Each type can carry a statutory
+          response period, how often to chase, and a default request-letter template. Archive a type
+          to remove it from pickers while keeping history intact.
         </p>
       </div>
       <RequestTypeEditor types={types} templates={templates} />

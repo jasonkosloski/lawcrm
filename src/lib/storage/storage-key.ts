@@ -59,15 +59,10 @@ const MAX_EXTENSION_LENGTH = 17; // dot + 16 chars
  *  driver has always done — keys generated anywhere are
  *  byte-identical for the same inputs. */
 export function sanitizeStorageName(originalName: string): string {
-  const cleaned = originalName
-    .replace(/[/\\\x00-\x1f]/g, "_")
-    .replace(/^\.+/, "");
+  const cleaned = originalName.replace(/[/\\\x00-\x1f]/g, "_").replace(/^\.+/, "");
   if (cleaned.length <= MAX_NAME_LENGTH) return cleaned;
   const dot = cleaned.lastIndexOf(".");
-  const ext =
-    dot > 0 && cleaned.length - dot <= MAX_EXTENSION_LENGTH
-      ? cleaned.slice(dot)
-      : "";
+  const ext = dot > 0 && cleaned.length - dot <= MAX_EXTENSION_LENGTH ? cleaned.slice(dot) : "";
   return cleaned.slice(0, MAX_NAME_LENGTH - ext.length) + ext;
 }
 
@@ -90,8 +85,7 @@ export function makeStorageKey(originalName: string): string {
  *  separators or control characters. Rejecting anything else keeps
  *  the blob store's namespace exactly as opaque as local keys —
  *  no nested "folders", no crafted names. */
-const STORAGE_KEY_RE =
-  /^[A-Za-z0-9_-]{16}__(?!\.)[^/\\\x00-\x1f]{1,120}$/;
+const STORAGE_KEY_RE = /^[A-Za-z0-9_-]{16}__(?!\.)[^/\\\x00-\x1f]{1,120}$/;
 
 export function isValidStorageKey(key: string): boolean {
   return STORAGE_KEY_RE.test(key);

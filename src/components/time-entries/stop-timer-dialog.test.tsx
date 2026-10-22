@@ -126,7 +126,7 @@ describe("StopTimerDialog", () => {
     await user.click(await screen.findByRole("button", { name: /log time/i }));
 
     expect(
-      await screen.findByText(/No running timer - it may have been discarded/)
+      await screen.findByText(/No running timer - it may have been discarded/),
     ).toBeInTheDocument();
     expect(onStopped).not.toHaveBeenCalled();
   });
@@ -145,15 +145,11 @@ describe("StopTimerDialog", () => {
     await user.click(screen.getByRole("button", { name: /log time/i }));
     await screen.findByText("Hours required");
     await user.click(screen.getByRole("button", { name: /keep running/i }));
-    await waitFor(() =>
-      expect(screen.queryByPlaceholderText("Activity")).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByPlaceholderText("Activity")).not.toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
 
-    expect(await screen.findByPlaceholderText("Activity")).toHaveValue(
-      "Deposition prep"
-    );
+    expect(await screen.findByPlaceholderText("Activity")).toHaveValue("Deposition prep");
     expect(screen.queryByText("Hours required")).not.toBeInTheDocument();
   });
 });

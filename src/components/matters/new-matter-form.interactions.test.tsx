@@ -28,10 +28,7 @@ vi.mock("@/app/actions/matters", () => ({
 }));
 
 import { createMatter } from "@/app/actions/matters";
-import {
-  NewMatterForm,
-  type NewMatterFormOptions,
-} from "./new-matter-form";
+import { NewMatterForm, type NewMatterFormOptions } from "./new-matter-form";
 
 import type { BillingType } from "@/lib/billing-type";
 const ALL_BT: BillingType[] = ["hourly", "flat", "contingent", "court_appointed", "pro_bono"];
@@ -90,9 +87,7 @@ const options: NewMatterFormOptions = {
       city: null,
     },
   ],
-  users: [
-    { id: "u1", name: "Jason Kosloski", jobTitle: "Attorney", initials: "JK" },
-  ],
+  users: [{ id: "u1", name: "Jason Kosloski", jobTitle: "Attorney", initials: "JK" }],
   currentUserId: "u1",
   canManageTeam: false,
   venues: [
@@ -129,7 +124,7 @@ describe("NewMatterForm — auto name", () => {
     await user.click(screen.getByPlaceholderText(/search or add a venue/i));
     await user.click(screen.getByText(/Denver District Court/));
     expect(screen.getByLabelText(/matter name/i)).toHaveValue(
-      "Newperson, Zed - 2026-CV-1 - Denver District Court"
+      "Newperson, Zed - 2026-CV-1 - Denver District Court",
     );
     expect(screen.getByText("auto")).toBeTruthy();
 
@@ -137,12 +132,12 @@ describe("NewMatterForm — auto name", () => {
     await user.type(screen.getByLabelText(/matter name/i), "!");
     await user.type(screen.getByLabelText(/case number/i), "x");
     expect(screen.getByLabelText(/matter name/i)).toHaveValue(
-      "Newperson, Zed - 2026-CV-1 - Denver District Court!"
+      "Newperson, Zed - 2026-CV-1 - Denver District Court!",
     );
     // Reset to auto recomputes from the current fields.
     await user.click(screen.getByRole("button", { name: /reset to auto/i }));
     expect(screen.getByLabelText(/matter name/i)).toHaveValue(
-      "Newperson, Zed - 2026-CV-1x - Denver District Court"
+      "Newperson, Zed - 2026-CV-1x - Denver District Court",
     );
   });
 
@@ -174,12 +169,8 @@ describe("NewMatterForm — auto name", () => {
     const user = userEvent.setup();
     render(<NewMatterForm options={options} />);
     await user.type(screen.getByPlaceholderText(/client name/i), "Colorado");
-    await user.click(
-      screen.getByRole("option", { name: /colorado freedom fund/i })
-    );
-    expect(screen.getByLabelText(/matter name/i)).toHaveValue(
-      "Colorado Freedom Fund"
-    );
+    await user.click(screen.getByRole("option", { name: /colorado freedom fund/i }));
+    expect(screen.getByLabelText(/matter name/i)).toHaveValue("Colorado Freedom Fund");
   });
 });
 
@@ -209,9 +200,10 @@ describe("NewMatterForm — client picker", () => {
     expect(input).toHaveAttribute("aria-expanded", "true");
 
     await user.keyboard("{ArrowDown}{ArrowDown}");
-    expect(
-      screen.getByRole("option", { name: /maria lopez/i })
-    ).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("option", { name: /maria lopez/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     await user.keyboard("{Enter}");
     expect(mockedAction).not.toHaveBeenCalled();
     expect(hiddenClientId()).toBe("c2");
@@ -220,10 +212,7 @@ describe("NewMatterForm — client picker", () => {
     await user.click(screen.getByRole("button", { name: /unlink client/i }));
     await user.type(screen.getByPlaceholderText(/client name/i), "Maria");
     await user.keyboard("{Escape}");
-    expect(screen.getByPlaceholderText(/client name/i)).toHaveAttribute(
-      "aria-expanded",
-      "false"
-    );
+    expect(screen.getByPlaceholderText(/client name/i)).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
@@ -291,13 +280,9 @@ describe("NewMatterForm — accessibility", () => {
     const input = screen.getByLabelText(/case number/i);
     expect(input).toHaveAttribute("aria-invalid", "true");
     const describedBy = input.getAttribute("aria-describedby")!;
-    expect(document.getElementById(describedBy)).toHaveTextContent(
-      "Case number already in use."
-    );
+    expect(document.getElementById(describedBy)).toHaveTextContent("Case number already in use.");
     // A field without an error is not marked invalid.
-    expect(screen.getByLabelText(/court/i)).not.toHaveAttribute(
-      "aria-invalid"
-    );
+    expect(screen.getByLabelText(/court/i)).not.toHaveAttribute("aria-invalid");
   });
 });
 
@@ -313,9 +298,7 @@ describe("NewMatterForm — per-area required fields", () => {
 
     await user.click(screen.getByRole("button", { name: /create matter/i }));
     expect(mockedAction).not.toHaveBeenCalled();
-    expect(
-      screen.getAllByText("Required for this practice area.")
-    ).toHaveLength(2);
+    expect(screen.getAllByText("Required for this practice area.")).toHaveLength(2);
     expect(screen.getByLabelText(/case number/i)).toHaveFocus();
 
     // Filling both lets it through.
@@ -343,7 +326,7 @@ describe("NewMatterForm — per-area required fields", () => {
           ...options,
           areas: [area("a", ["client", "caseNumber"]), area("b", ["client", "opposingParty"])],
         }}
-      />
+      />,
     );
     // Matter name is natively required; fill it so the JS check runs.
     await user.type(screen.getByLabelText(/matter name/i), "Test matter");

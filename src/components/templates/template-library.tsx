@@ -32,10 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { confirmAction, notifyError } from "@/lib/feedback";
-import {
-  TEMPLATE_CATEGORIES,
-  templateCategoryLabel,
-} from "@/lib/template-constants";
+import { TEMPLATE_CATEGORIES, templateCategoryLabel } from "@/lib/template-constants";
 import {
   deleteDocumentTemplate,
   setDocumentTemplateActive,
@@ -75,11 +72,9 @@ export function TemplateLibrary({
 
   // Curated category order first, then whatever else exists in data.
   const categories = [
-    ...TEMPLATE_CATEGORIES.filter((c) =>
-      active.some((t) => t.category === c)
-    ),
+    ...TEMPLATE_CATEGORIES.filter((c) => active.some((t) => t.category === c)),
     ...[...new Set(active.map((t) => t.category))].filter(
-      (c) => !(TEMPLATE_CATEGORIES as readonly string[]).includes(c)
+      (c) => !(TEMPLATE_CATEGORIES as readonly string[]).includes(c),
     ),
   ];
 
@@ -96,11 +91,7 @@ export function TemplateLibrary({
     <div className="flex flex-col gap-6">
       {canCreate && (
         <div>
-          <Button
-            type="button"
-            onClick={openCreate}
-            className="gap-2 text-xs"
-          >
+          <Button type="button" onClick={openCreate} className="gap-2 text-xs">
             <Plus size={13} />
             New template
           </Button>
@@ -128,12 +119,8 @@ export function TemplateLibrary({
         return (
           <section key={category} className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <h2 className="text-2xs font-medium text-ink-3">
-                {templateCategoryLabel(category)}
-              </h2>
-              <span className="text-2xs font-mono text-ink-4">
-                {rows.length}
-              </span>
+              <h2 className="text-2xs font-medium text-ink-3">{templateCategoryLabel(category)}</h2>
+              <span className="text-2xs font-mono text-ink-4">{rows.length}</span>
             </div>
             <div className="flex flex-col gap-1.5">
               {rows.map((t) => (
@@ -152,9 +139,7 @@ export function TemplateLibrary({
 
       {archived.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h2 className="text-2xs font-medium text-ink-3">
-            Archived ({archived.length})
-          </h2>
+          <h2 className="text-2xs font-medium text-ink-3">Archived ({archived.length})</h2>
           <div className="flex flex-col gap-1.5">
             {archived.map((t) => (
               <TemplateRow
@@ -170,11 +155,7 @@ export function TemplateLibrary({
         </section>
       )}
 
-      <TemplateEditorDialog
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        template={editing}
-      />
+      <TemplateEditorDialog open={editorOpen} onOpenChange={setEditorOpen} template={editing} />
     </div>
   );
 }
@@ -196,10 +177,7 @@ function TemplateRow({
 
   const onToggleArchive = () => {
     startTransition(async () => {
-      const res = await setDocumentTemplateActive(
-        template.id,
-        !template.isActive
-      );
+      const res = await setDocumentTemplateActive(template.id, !template.isActive);
       if (!res.ok) notifyError(res.error ?? "Couldn't update template.");
     });
   };
@@ -228,25 +206,19 @@ function TemplateRow({
     <div
       className={cn(
         "flex items-center gap-3 px-3 py-2.5 rounded-md border border-line bg-white",
-        muted && "opacity-70"
+        muted && "opacity-70",
       )}
     >
       <FileText size={14} className="text-ink-4 shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-ink truncate">
-            {template.name}
-          </span>
+          <span className="text-xs font-medium text-ink truncate">{template.name}</span>
           {!template.isActive && (
-            <span className="text-2xs text-ink-4 font-mono shrink-0">
-              archived
-            </span>
+            <span className="text-2xs text-ink-4 font-mono shrink-0">archived</span>
           )}
         </div>
         {template.description && (
-          <div className="text-2xs text-ink-4 truncate">
-            {template.description}
-          </div>
+          <div className="text-2xs text-ink-4 truncate">{template.description}</div>
         )}
       </div>
 

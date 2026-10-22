@@ -41,29 +41,18 @@ const amountInput = () => screen.getByLabelText(/^amount/i) as HTMLInputElement;
 
 describe("ApplyTrustDialog", () => {
   test("defaults the amount to MIN(trust balance, invoice balance)", () => {
-    const { unmount } = render(
-      <ApplyTrustDialog {...baseProps} open onOpenChange={vi.fn()} />
-    );
+    const { unmount } = render(<ApplyTrustDialog {...baseProps} open onOpenChange={vi.fn()} />);
     expect(amountInput().value).toBe("1200.00");
     unmount();
 
-    render(
-      <ApplyTrustDialog
-        {...baseProps}
-        invoiceBalance={300}
-        open
-        onOpenChange={vi.fn()}
-      />
-    );
+    render(<ApplyTrustDialog {...baseProps} invoiceBalance={300} open onOpenChange={vi.fn()} />);
     expect(amountInput().value).toBe("300.00");
   });
 
   test("posts source=trust and the amount, then closes on success", async () => {
     const user = setupUser();
     const onOpenChange = vi.fn();
-    render(
-      <ApplyTrustDialog {...baseProps} open onOpenChange={onOpenChange} />
-    );
+    render(<ApplyTrustDialog {...baseProps} open onOpenChange={onOpenChange} />);
     await user.click(screen.getByRole("button", { name: /apply \$/i }));
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
@@ -87,9 +76,7 @@ describe("ApplyTrustDialog", () => {
     render(<ApplyTrustDialog {...baseProps} open onOpenChange={vi.fn()} />);
     await user.clear(amountInput());
     await user.type(amountInput(), "$250");
-    expect(
-      screen.getByRole("button", { name: "Apply $250.00 from trust" })
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Apply $250.00 from trust" })).toBeEnabled();
   });
 
   test("exceeding only the invoice balance is flagged separately", async () => {
@@ -101,7 +88,7 @@ describe("ApplyTrustDialog", () => {
         trustBalance={900}
         open
         onOpenChange={vi.fn()}
-      />
+      />,
     );
     await user.clear(amountInput());
     await user.type(amountInput(), "150");
@@ -116,11 +103,9 @@ describe("ApplyTrustDialog", () => {
         trustBalance={900}
         open
         onOpenChange={vi.fn()}
-      />
+      />,
     );
-    expect(
-      screen.getByRole("button", { name: "Apply $400.00 · mark paid" })
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Apply $400.00 · mark paid" })).toBeEnabled();
   });
 
   test("unparseable text is called out and blocks submit", async () => {
@@ -139,9 +124,7 @@ describe("ApplyTrustDialog", () => {
       error: "Not enough trust funds.",
     }));
     const onOpenChange = vi.fn();
-    render(
-      <ApplyTrustDialog {...baseProps} open onOpenChange={onOpenChange} />
-    );
+    render(<ApplyTrustDialog {...baseProps} open onOpenChange={onOpenChange} />);
     await user.clear(amountInput());
     await user.type(amountInput(), "750");
     await user.click(screen.getByRole("button", { name: /apply \$/i }));
@@ -158,7 +141,7 @@ describe("ApplyTrustDialog", () => {
       () =>
         new Promise((resolve) => {
           release = () => resolve({ status: "error" as const, error: "x" });
-        })
+        }),
     );
     render(<ApplyTrustDialog {...baseProps} open onOpenChange={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /apply \$/i }));
@@ -184,9 +167,7 @@ describe("ApplyTrustDialog", () => {
     await user.clear(amountInput());
     await user.type(amountInput(), "5");
     await user.click(screen.getByRole("button", { name: /^cancel$/i }));
-    await waitFor(() =>
-      expect(screen.queryByLabelText(/^amount/i)).not.toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.queryByLabelText(/^amount/i)).not.toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /reopen dialog/i }));
     await screen.findByLabelText(/^amount/i);
     expect(amountInput().value).toBe("1200.00");
@@ -200,7 +181,7 @@ describe("ApplyTrustDialog", () => {
       render(
         <UserTimeZoneProvider timeZone="America/Denver">
           <ApplyTrustDialog {...baseProps} open onOpenChange={vi.fn()} />
-        </UserTimeZoneProvider>
+        </UserTimeZoneProvider>,
       );
       expect(screen.getByLabelText(/^date/i)).toHaveValue("2026-04-27");
     } finally {

@@ -10,11 +10,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserPermissions } from "@/lib/permission-check";
-import {
-  listAutoApplies,
-  listDeadlineRules,
-  listTaskLists,
-} from "@/lib/queries/automations";
+import { listAutoApplies, listDeadlineRules, listTaskLists } from "@/lib/queries/automations";
 import { AutomationsLibrary } from "@/components/automations/automations-library";
 import { requireUser } from "@/lib/current-user";
 
@@ -40,9 +36,8 @@ export default async function AutomationsSettingsPage() {
       <div>
         <h1 className="text-lg font-semibold text-ink">Automations</h1>
         <p className="text-xs text-ink-4 mt-1 leading-relaxed max-w-2xl">
-          Deadline rules and task lists the firm reuses across matters.
-          Apply them by hand from any matter, or have them added
-          automatically when a new matter is created. Changes here only
+          Deadline rules and task lists the firm reuses across matters. Apply them by hand from any
+          matter, or have them added automatically when a new matter is created. Changes here only
           affect future applications — nothing already on a matter moves.
         </p>
       </div>

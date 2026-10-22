@@ -28,13 +28,9 @@ describe("EventsSection", () => {
     );
     expect(screen.getByText("Coming up")).toBeTruthy();
     expect(screen.getByText("Deposition prep")).toBeTruthy();
-    expect(
-      screen.getByText(/Tue, Nov 3, 2026, 9:00 AM to 10:30 AM/),
-    ).toBeTruthy();
+    expect(screen.getByText(/Tue, Nov 3, 2026, 9:00 AM to 10:30 AM/)).toBeTruthy();
     expect(screen.getByText("Our office")).toBeTruthy();
-    expect(screen.getByText(/Bring ID/).className).toContain(
-      "whitespace-pre-line",
-    );
+    expect(screen.getByText(/Bring ID/).className).toContain("whitespace-pre-line");
   });
 
   test("all-day event shows the date only and never shifts the day", () => {
@@ -88,10 +84,7 @@ describe("EventsSection", () => {
 
   test("past events sit in a collapsed Past group; text is literal", () => {
     const { container } = render(
-      <EventsSection
-        upcoming={[]}
-        past={[ev({ id: "p", title: "<i>Old</i>" })]}
-      />,
+      <EventsSection upcoming={[]} past={[ev({ id: "p", title: "<i>Old</i>" })]} />,
     );
     expect(screen.getByText("Past")).toBeTruthy();
     expect(screen.getByText("<i>Old</i>")).toBeTruthy();

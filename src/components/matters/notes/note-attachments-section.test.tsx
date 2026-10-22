@@ -37,11 +37,7 @@ vi.mock("@/lib/feedback", () => ({
   notifySuccess: vi.fn(),
 }));
 vi.mock("next/link", () => ({
-  default: ({
-    href,
-    children,
-    ...rest
-  }: React.ComponentProps<"a"> & { href: string }) => (
+  default: ({ href, children, ...rest }: React.ComponentProps<"a"> & { href: string }) => (
     <a href={href} {...rest}>
       {children}
     </a>
@@ -66,14 +62,9 @@ import type {
   NoteAttachedTask,
   NoteAttachedTimeEntry,
 } from "@/lib/queries/matter-detail";
-import {
-  aggregateByUser,
-  NoteAttachmentsSection,
-} from "./note-attachments-section";
+import { aggregateByUser, NoteAttachmentsSection } from "./note-attachments-section";
 
-const entry = (
-  over: Partial<NoteAttachedTimeEntry> = {}
-): NoteAttachedTimeEntry => ({
+const entry = (over: Partial<NoteAttachedTimeEntry> = {}): NoteAttachedTimeEntry => ({
   id: "te1",
   userId: "u-js",
   date: new Date("2026-07-01T12:00:00Z"),
@@ -98,9 +89,7 @@ const task = (over: Partial<NoteAttachedTask> = {}): NoteAttachedTask => ({
   ...over,
 });
 
-const deadline = (
-  over: Partial<NoteAttachedDeadline> = {}
-): NoteAttachedDeadline => ({
+const deadline = (over: Partial<NoteAttachedDeadline> = {}): NoteAttachedDeadline => ({
   id: "d1",
   title: "Answer due",
   status: "open",
@@ -141,7 +130,7 @@ function renderSection(over: {
         timeEntries={over.timeEntries ?? []}
         access={over.access ?? FULL_ACCESS}
       />
-    </UserTimeZoneProvider>
+    </UserTimeZoneProvider>,
   );
 }
 
@@ -185,10 +174,7 @@ describe("aggregateByUser — per-user rollup identity", () => {
   });
 
   test("entries from the same user still merge", () => {
-    const rows = aggregateByUser([
-      entry({ id: "a", hours: 1.5 }),
-      entry({ id: "b", hours: 0.5 }),
-    ]);
+    const rows = aggregateByUser([entry({ id: "a", hours: 1.5 }), entry({ id: "b", hours: 0.5 })]);
 
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
@@ -237,9 +223,7 @@ describe("chip deletes surface action failures", () => {
     renderSection({ tasks: [task()] });
     await user.click(screen.getByRole("button", { name: "Delete task" }));
 
-    await waitFor(() =>
-      expect(notifyError).toHaveBeenCalledWith("Task not found")
-    );
+    await waitFor(() => expect(notifyError).toHaveBeenCalledWith("Task not found"));
   });
 
   test("deadline chip: failed delete toasts the action's error", async () => {
@@ -252,9 +236,7 @@ describe("chip deletes surface action failures", () => {
     renderSection({ deadlines: [deadline()] });
     await user.click(screen.getByRole("button", { name: "Delete deadline" }));
 
-    await waitFor(() =>
-      expect(notifyError).toHaveBeenCalledWith("Deadline not found")
-    );
+    await waitFor(() => expect(notifyError).toHaveBeenCalledWith("Deadline not found"));
   });
 
   test("task chip: successful delete stays silent", async () => {
@@ -374,12 +356,7 @@ describe("controls follow the viewer's access", () => {
 
   test("full access renders every Add button", () => {
     renderSection({});
-    for (const name of [
-      /add task/i,
-      /add deadline/i,
-      /log time/i,
-      /add multiple/i,
-    ]) {
+    for (const name of [/add task/i, /add deadline/i, /log time/i, /add multiple/i]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
   });
@@ -398,11 +375,7 @@ describe("controls follow the viewer's access", () => {
     });
     await user.click(screen.getByRole("button", { name: /expand time/i }));
     const items = screen.getAllByRole("listitem");
-    expect(
-      within(items[0]).queryByRole("button", { name: "Delete time entry" })
-    ).not.toBeNull();
-    expect(
-      within(items[1]).queryByRole("button", { name: "Delete time entry" })
-    ).toBeNull();
+    expect(within(items[0]).queryByRole("button", { name: "Delete time entry" })).not.toBeNull();
+    expect(within(items[1]).queryByRole("button", { name: "Delete time entry" })).toBeNull();
   });
 });

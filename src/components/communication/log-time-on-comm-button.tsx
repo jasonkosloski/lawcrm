@@ -63,7 +63,7 @@ export function LogTimeOnCommButton({
           className={cn(
             "inline-flex items-center justify-center w-6 h-6 rounded-md border border-line bg-white/70 text-ink-3 transition-colors",
             "hover:border-brand-300 hover:bg-brand-soft hover:text-brand-700",
-            "disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-line disabled:hover:bg-white/70 disabled:hover:text-ink-3"
+            "disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-line disabled:hover:bg-white/70 disabled:hover:text-ink-3",
           )}
         >
           <Clock size={11} />

@@ -4,18 +4,18 @@ _If the folder tree or data-flow section stops matching the code, fix it here._
 
 ## Tech Stack
 
-| Layer | Technology | Why |
-|---|---|---|
-| Framework | Next.js 16 (App Router) | Full-stack React, server components, server actions, file-based routing |
-| UI Components | shadcn/ui + Tailwind CSS v4 | Copy-paste components, full control, no runtime dependency |
-| Data loading | React Server Components + Prisma | Pages query the DB directly on the server; no client fetch layer |
-| Mutations | Server actions (`src/app/actions/`) | Permission-gated, audit-logged, `revalidatePath` for cache invalidation |
-| ORM | Prisma 7 | Type-safe queries, migration system, great DX |
-| Database | PostgreSQL everywhere | Prisma Postgres (Vercel integration) — separate `lawcrm-dev` database for local dev, production database for prod; tests use a dockerized Postgres (`docker-compose.test.yml`, port 5433) |
-| Auth | Clerk (staff, Google sign-in) | `clerkMiddleware` + `getStaffAuth()`; see [features/auth.md](./features/auth.md) |
-| File storage | Driver facade: local disk (dev) / Vercel Blob (prod) | `src/lib/file-storage.ts` + `src/lib/storage/`; prod uploads go client-direct, serving 302s to the blob CDN — ADR-015 |
-| Testing | Vitest + happy-dom | See [TESTING.md](./TESTING.md) |
-| Fonts | Inter / JetBrains Mono / Fraunces | Per design handoff — UI / metadata / display |
+| Layer         | Technology                                           | Why                                                                                                                                                                                       |
+| ------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework     | Next.js 16 (App Router)                              | Full-stack React, server components, server actions, file-based routing                                                                                                                   |
+| UI Components | shadcn/ui + Tailwind CSS v4                          | Copy-paste components, full control, no runtime dependency                                                                                                                                |
+| Data loading  | React Server Components + Prisma                     | Pages query the DB directly on the server; no client fetch layer                                                                                                                          |
+| Mutations     | Server actions (`src/app/actions/`)                  | Permission-gated, audit-logged, `revalidatePath` for cache invalidation                                                                                                                   |
+| ORM           | Prisma 7                                             | Type-safe queries, migration system, great DX                                                                                                                                             |
+| Database      | PostgreSQL everywhere                                | Prisma Postgres (Vercel integration) — separate `lawcrm-dev` database for local dev, production database for prod; tests use a dockerized Postgres (`docker-compose.test.yml`, port 5433) |
+| Auth          | Clerk (staff, Google sign-in)                        | `clerkMiddleware` + `getStaffAuth()`; see [features/auth.md](./features/auth.md)                                                                                                          |
+| File storage  | Driver facade: local disk (dev) / Vercel Blob (prod) | `src/lib/file-storage.ts` + `src/lib/storage/`; prod uploads go client-direct, serving 302s to the blob CDN — ADR-015                                                                     |
+| Testing       | Vitest + happy-dom                                   | See [TESTING.md](./TESTING.md)                                                                                                                                                            |
+| Fonts         | Inter / JetBrains Mono / Fraunces                    | Per design handoff — UI / metadata / display                                                                                                                                              |
 
 ## Folder Structure
 
@@ -77,6 +77,7 @@ src/
 ## Data Flow Patterns
 
 ### Reads — server components + direct Prisma (default)
+
 Pages and layouts are server components. They query Prisma directly and render HTML.
 
 ```
@@ -84,6 +85,7 @@ Page (server) → prisma.matter.findMany() → render HTML
 ```
 
 ### Mutations — server actions (the only sanctioned pattern)
+
 Every create/update/delete is a server action in `src/app/actions/`. The canonical shape:
 
 ```
@@ -99,6 +101,7 @@ Do **not** add API routes for mutations, and do not use React Query mutations �
 that pattern appears in older docs but was never how this codebase evolved.
 
 ### Interactivity
+
 Client components receive data as props from their server-component parent and
 call server actions directly. Optimistic UI, where needed, is local component
 state (e.g. `useOptimistic`), not a client cache.
@@ -112,6 +115,7 @@ revalidate the layout. Forms and dialogs that must keep input after a server
 error follow the React 19 patterns in [UI_PATTERNS.md](./UI_PATTERNS.md).
 
 ### Request-scoped helpers
+
 - `getSession()` (`src/lib/session.ts`) is the single request-cached `auth()`
   read; `requireUser()` / `getCurrentUserId()` (`src/lib/current-user.ts`) sit
   on it. Sidebar display data comes from `getSidebarData()`.

@@ -66,14 +66,8 @@ import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { dateOnlyKey, toWallClockInput } from "@/lib/format-date";
-import {
-  deleteEventFromGoogle,
-  pushEventToGoogle,
-} from "@/lib/google/google-calendar-push";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { deleteEventFromGoogle, pushEventToGoogle } from "@/lib/google/google-calendar-push";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import {
   createCalendarEventInitialState,
   updateCalendarEventInitialState,
@@ -171,7 +165,7 @@ afterEach(() => {
 const buildForm = (
   overrides: Partial<Record<string, string>> & {
     __skipDefaultUser?: string;
-  } = {}
+  } = {},
 ) => {
   const fd = new FormData();
   fd.set("title", overrides.title ?? "Updated title");
@@ -185,9 +179,7 @@ const buildForm = (
   if (overrides.__skipDefaultUser !== "1") {
     try {
       const parsed = JSON.parse(attendees) as Array<Record<string, unknown>>;
-      const hasUser = parsed.some(
-        (a) => a.kind === "user" && a.userId === userId
-      );
+      const hasUser = parsed.some((a) => a.kind === "user" && a.userId === userId);
       if (!hasUser) {
         attendees = JSON.stringify([
           { kind: "user", userId, name: "Test User", email: "" },
@@ -221,7 +213,7 @@ describe("updateCalendarEvent — isAllDay", () => {
     const res = await updateCalendarEvent(
       eventId,
       updateCalendarEventInitialState,
-      buildForm({ isAllDay: "on" })
+      buildForm({ isAllDay: "on" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUnique({ where: { id: eventId } });
@@ -229,11 +221,7 @@ describe("updateCalendarEvent — isAllDay", () => {
   });
 
   test("unchecked (no isAllDay key) keeps it false", async () => {
-    const res = await updateCalendarEvent(
-      eventId,
-      updateCalendarEventInitialState,
-      buildForm()
-    );
+    const res = await updateCalendarEvent(eventId, updateCalendarEventInitialState, buildForm());
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUnique({ where: { id: eventId } });
     expect(row!.isAllDay).toBe(false);
@@ -247,7 +235,7 @@ describe("updateCalendarEvent — isAllDay", () => {
         isAllDay: "on",
         startTime: "2026-05-15",
         endTime: "2026-05-15",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUnique({ where: { id: eventId } });
@@ -267,7 +255,7 @@ describe("updateCalendarEvent — isAllDay", () => {
         isAllDay: "on",
         startTime: "2026-02-30",
         endTime: "2026-03-01",
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.startTime?.[0]).toMatch(/start date/i);
@@ -281,7 +269,7 @@ describe("updateCalendarEvent — isAllDay", () => {
         isAllDay: "on",
         startTime: "2026-05-15T09:00",
         endTime: "2026-05-15T10:00",
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.startTime?.[0]).toMatch(/start date/i);
@@ -295,12 +283,10 @@ describe("updateCalendarEvent — isAllDay", () => {
         isAllDay: "on",
         startTime: "2026-05-15",
         endTime: "2026-05-14",
-      })
+      }),
     );
     expect(res.status).toBe("error");
-    expect(
-      res.errors?.endTime?.some((m) => /on or after start date/i.test(m))
-    ).toBe(true);
+    expect(res.errors?.endTime?.some((m) => /on or after start date/i.test(m))).toBe(true);
   });
 
   test("all-day same-day (start === end) is allowed", async () => {
@@ -311,7 +297,7 @@ describe("updateCalendarEvent — isAllDay", () => {
         isAllDay: "on",
         startTime: "2026-05-15",
         endTime: "2026-05-15",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
   });
@@ -341,7 +327,7 @@ describe("updateCalendarEvent — attendees replace-all", () => {
             email: "",
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     // The buildForm helper prepends the seeded user to satisfy
@@ -376,7 +362,7 @@ describe("updateCalendarEvent — attendees replace-all", () => {
       // seeded user to satisfy the min-firm-attendee rule.
       // After save the only attendee is that single user; the
       // pre-existing "Old A" / "Old B" rows were deleted.
-      buildForm({ attendees: "[]" })
+      buildForm({ attendees: "[]" }),
     );
     expect(res.status).toBe("ok");
     const remaining = await prisma.calendarAttendee.findMany({
@@ -395,7 +381,7 @@ describe("updateCalendarEvent — attendees replace-all", () => {
       updateCalendarEventInitialState,
       buildForm({
         attendees: JSON.stringify([{ name: "New", email: "new@example.com" }]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     // buildForm auto-prepends the seeded firm user — assert on the
@@ -411,7 +397,7 @@ describe("updateCalendarEvent — attendees replace-all", () => {
     const res = await updateCalendarEvent(
       eventId,
       updateCalendarEventInitialState,
-      buildForm({ attendees: "not-json" })
+      buildForm({ attendees: "not-json" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/malformed/i);
@@ -423,7 +409,7 @@ describe("updateCalendarEvent — attendees replace-all", () => {
       updateCalendarEventInitialState,
       buildForm({
         attendees: JSON.stringify([{ name: "  ", email: "a@b.com" }]),
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toBeTruthy();
@@ -453,7 +439,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
             email: userRow!.email,
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const rows = await prisma.calendarAttendee.findMany({
@@ -483,7 +469,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
             email: c.email,
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     // Filter past the auto-prepended seeded user so we assert on the
@@ -502,10 +488,8 @@ describe("updateCalendarEvent — typed attendee picker", () => {
       eventId,
       updateCalendarEventInitialState,
       buildForm({
-        attendees: JSON.stringify([
-          { kind: "new", name: "Stranger Person", email: "s@p.com" },
-        ]),
-      })
+        attendees: JSON.stringify([{ kind: "new", name: "Stranger Person", email: "s@p.com" }]),
+      }),
     );
     expect(res.status).toBe("ok");
     const afterCount = await prisma.contact.count();
@@ -540,16 +524,14 @@ describe("updateCalendarEvent — typed attendee picker", () => {
             email: "x@y.com",
           },
         ]),
-      })
+      }),
     );
     // Stale ids reject pre-transaction — the alternative (silent
     // skip) writes an attendee row with BOTH FKs null and can
     // dodge the min-firm-attendee invariant.
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/no longer an active firm user/i);
-    expect(
-      await prisma.calendarAttendee.count({ where: { eventId } })
-    ).toBe(0);
+    expect(await prisma.calendarAttendee.count({ where: { eventId } })).toBe(0);
     const row = await prisma.calendarEvent.findUnique({ where: { id: eventId } });
     expect(row!.title).toBe("Strategy session"); // untouched
   });
@@ -577,7 +559,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
             email: "gone@x.com",
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/no longer an active firm user/i);
@@ -593,10 +575,8 @@ describe("updateCalendarEvent — typed attendee picker", () => {
       eventId,
       updateCalendarEventInitialState,
       buildForm({
-        attendees: JSON.stringify([
-          { kind: "user", userId: "", name: "Ghost", email: "" },
-        ]),
-      })
+        attendees: JSON.stringify([{ kind: "user", userId: "", name: "Ghost", email: "" }]),
+      }),
     );
     expect(res.status).toBe("error");
     expect(await prisma.contact.count()).toBe(beforeCount);
@@ -616,7 +596,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
             email: "",
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/no longer matches an active contact/i);
@@ -634,7 +614,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
           // the schema's default("new").
           { name: "Legacy Person", email: "l@p.com" },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     expect(await prisma.contact.count()).toBe(beforeCount + 1);
@@ -646,10 +626,8 @@ describe("updateCalendarEvent — typed attendee picker", () => {
       eventId,
       updateCalendarEventInitialState,
       buildForm({
-        attendees: JSON.stringify([
-          { kind: "new", name: "No Email Person", email: "" },
-        ]),
-      })
+        attendees: JSON.stringify([{ kind: "new", name: "No Email Person", email: "" }]),
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/email/i);
@@ -663,10 +641,8 @@ describe("updateCalendarEvent — typed attendee picker", () => {
       eventId,
       updateCalendarEventInitialState,
       buildForm({
-        attendees: JSON.stringify([
-          { kind: "new", name: "Garbage Email", email: "not-an-email" },
-        ]),
-      })
+        attendees: JSON.stringify([{ kind: "new", name: "Garbage Email", email: "not-an-email" }]),
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/valid email/i);
@@ -696,7 +672,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
             email: "duplicate@example.com",
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/already exists/i);
@@ -725,7 +701,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
             email: "mixed.case@example.com",
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/already exists/i);
@@ -740,7 +716,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
           { kind: "new", name: "First", email: "same@example.com" },
           { kind: "new", name: "Second", email: "same@example.com" },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/share the email/i);
@@ -758,7 +734,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
             email: "scoped@example.com",
           },
         ]),
-      })
+      }),
     );
     const created = await prisma.contact.findFirst({
       where: { name: "Firm Scoped" },
@@ -772,10 +748,8 @@ describe("updateCalendarEvent — typed attendee picker", () => {
       eventId,
       updateCalendarEventInitialState,
       buildForm({
-        attendees: JSON.stringify([
-          { kind: "user", userId, name: u.name, email: u.email },
-        ]),
-      })
+        attendees: JSON.stringify([{ kind: "user", userId, name: u.name, email: u.email }]),
+      }),
     );
     const row = await prisma.calendarAttendee.findFirstOrThrow({
       where: { eventId },
@@ -795,7 +769,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
         attendees: JSON.stringify([
           { kind: "contact", contactId: c.id, name: c.name, email: c.email },
         ]),
-      })
+      }),
     );
     // Skip the auto-prepended seeded user; assert on the contact row.
     const row = await prisma.calendarAttendee.findFirstOrThrow({
@@ -809,10 +783,8 @@ describe("updateCalendarEvent — typed attendee picker", () => {
       eventId,
       updateCalendarEventInitialState,
       buildForm({
-        attendees: JSON.stringify([
-          { kind: "new", name: "Brand New", email: "brand@new.com" },
-        ]),
-      })
+        attendees: JSON.stringify([{ kind: "new", name: "Brand New", email: "brand@new.com" }]),
+      }),
     );
     // Skip the auto-prepended seeded user; assert on the new-contact row.
     const row = await prisma.calendarAttendee.findFirstOrThrow({
@@ -849,10 +821,8 @@ describe("updateCalendarEvent — typed attendee picker", () => {
       updateCalendarEventInitialState,
       buildForm({
         __skipDefaultUser: "1",
-        attendees: JSON.stringify([
-          { kind: "new", name: "External Only", email: "ext@x.com" },
-        ]),
-      })
+        attendees: JSON.stringify([{ kind: "new", name: "External Only", email: "ext@x.com" }]),
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/at least one firm attendee/i);
@@ -863,7 +833,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
     const res = await updateCalendarEvent(
       eventId,
       updateCalendarEventInitialState,
-      buildForm({ __skipDefaultUser: "1", attendees: "[]" })
+      buildForm({ __skipDefaultUser: "1", attendees: "[]" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/at least one firm attendee/i);
@@ -874,7 +844,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
     const res = await updateCalendarEvent(
       eventId,
       updateCalendarEventInitialState,
-      buildForm({ __skipDefaultUser: "1", attendees: "[]", title: "Renamed" })
+      buildForm({ __skipDefaultUser: "1", attendees: "[]", title: "Renamed" }),
     );
     expect(res.status).toBe("ok");
     const rows = await prisma.calendarAttendee.findMany({ where: { eventId } });
@@ -889,10 +859,8 @@ describe("updateCalendarEvent — typed attendee picker", () => {
       updateCalendarEventInitialState,
       buildForm({
         __skipDefaultUser: "1",
-        attendees: JSON.stringify([
-          { kind: "new", name: "External Only", email: "ext@x.com" },
-        ]),
-      })
+        attendees: JSON.stringify([{ kind: "new", name: "External Only", email: "ext@x.com" }]),
+      }),
     );
     expect(res.status).toBe("ok");
     const rows = await prisma.calendarAttendee.findMany({ where: { eventId } });
@@ -932,14 +900,12 @@ describe("updateCalendarEvent — typed attendee picker", () => {
             email: "gone@x.com",
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const rows = await prisma.calendarAttendee.findMany({ where: { eventId } });
     // Historical attendance is preserved alongside the active editor.
-    expect(rows.map((r) => r.userId).sort()).toEqual(
-      [departed.userId, userId].sort()
-    );
+    expect(rows.map((r) => r.userId).sort()).toEqual([departed.userId, userId].sort());
   });
 
   test("a deactivated user already on the event does not satisfy the firm-attendee rule", async () => {
@@ -974,7 +940,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
             email: "gone@x.com",
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/at least one firm attendee/i);
@@ -1003,7 +969,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
             email: "gone@x.com",
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/no longer an active firm user/i);
@@ -1038,7 +1004,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
             email: "w@x.com",
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
   });
@@ -1052,7 +1018,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
     const res = await updateCalendarEvent(
       eventId,
       updateCalendarEventInitialState,
-      buildForm({ attendees: JSON.stringify(many) })
+      buildForm({ attendees: JSON.stringify(many) }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/at most 100/i);
@@ -1071,7 +1037,7 @@ describe("updateCalendarEvent — typed attendee picker", () => {
           // override should still pass.
           { kind: "user", userId, name: u.name, email: "" },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
   });
@@ -1082,7 +1048,7 @@ describe("updateCalendarEvent — guards", () => {
     const res = await updateCalendarEvent(
       "no-such-event",
       updateCalendarEventInitialState,
-      buildForm()
+      buildForm(),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.title?.[0]).toMatch(/no longer exists/i);
@@ -1095,12 +1061,10 @@ describe("updateCalendarEvent — guards", () => {
       buildForm({
         startTime: "2026-05-01T12:00",
         endTime: "2026-05-01T11:00",
-      })
+      }),
     );
     expect(res.status).toBe("error");
-    expect(
-      res.errors?.endTime?.some((m) => /after start/i.test(m))
-    ).toBe(true);
+    expect(res.errors?.endTime?.some((m) => /after start/i.test(m))).toBe(true);
   });
 });
 
@@ -1156,9 +1120,7 @@ describe("moveCalendarEvent — drag-and-drop reschedule", () => {
     expect(res.ok).toBe(true);
     const row = await prisma.calendarEvent.findUnique({ where: { id: eventId } });
     expect(row!.isAllDay).toBe(false);
-    expect(row!.endTime.getTime() - row!.startTime.getTime()).toBe(
-      2 * 60 * 60 * 1000
-    );
+    expect(row!.endTime.getTime() - row!.startTime.getTime()).toBe(2 * 60 * 60 * 1000);
   });
 
   test("rejects when the event is missing", async () => {
@@ -1212,9 +1174,7 @@ describe("moveCalendarEvent — drag-and-drop reschedule", () => {
       },
       select: { id: true },
     });
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     vi.mocked(currentUserHasPermission).mockResolvedValue(false);
     const res = await moveCalendarEvent(personal.id, moveInput);
     expect(res.ok).toBe(true);
@@ -1240,11 +1200,9 @@ describe("moveCalendarEvent — drag-and-drop reschedule", () => {
       },
       select: { id: true },
     });
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key: string) => key === "events.edit"
+      async (key: string) => key === "events.edit",
     );
     const res = await moveCalendarEvent(personal.id, moveInput);
     expect(res.ok).toBe(false);
@@ -1271,11 +1229,9 @@ describe("moveCalendarEvent — drag-and-drop reschedule", () => {
       },
       select: { id: true },
     });
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key: string) => key === "events.edit_non_matter"
+      async (key: string) => key === "events.edit_non_matter",
     );
     const res = await moveCalendarEvent(personal.id, moveInput);
     expect(res.ok).toBe(true);
@@ -1284,9 +1240,7 @@ describe("moveCalendarEvent — drag-and-drop reschedule", () => {
   test("non-creator without events.edit cannot move a matter event", async () => {
     // The seeded matter event has no createdById → no creator
     // bypass; without events.edit the matter branch rejects.
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     vi.mocked(currentUserHasPermission).mockResolvedValue(false);
     const res = await moveCalendarEvent(eventId, moveInput);
     expect(res.ok).toBe(false);
@@ -1317,10 +1271,7 @@ describe("createCalendarEvent", () => {
   };
 
   test("no matterId → matterless event, createdById stamped", async () => {
-    const res = await createCalendarEvent(
-      createCalendarEventInitialState,
-      buildForm()
-    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, buildForm());
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUniqueOrThrow({
       where: { id: res.eventId! },
@@ -1333,7 +1284,7 @@ describe("createCalendarEvent", () => {
   test("with matterId → matter-scoped event, createdById still stamped", async () => {
     const res = await createCalendarEvent(
       createCalendarEventInitialState,
-      buildForm({ matterId, title: "Strategy session" })
+      buildForm({ matterId, title: "Strategy session" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUniqueOrThrow({
@@ -1346,7 +1297,7 @@ describe("createCalendarEvent", () => {
   test("empty matterId string is treated as no matter", async () => {
     const res = await createCalendarEvent(
       createCalendarEventInitialState,
-      buildForm({ matterId: "" })
+      buildForm({ matterId: "" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUniqueOrThrow({
@@ -1358,7 +1309,7 @@ describe("createCalendarEvent", () => {
   test("rejects empty title", async () => {
     const res = await createCalendarEvent(
       createCalendarEventInitialState,
-      buildForm({ title: "   " })
+      buildForm({ title: "   " }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.title?.length).toBeGreaterThan(0);
@@ -1370,12 +1321,10 @@ describe("createCalendarEvent", () => {
       buildForm({
         startTime: "2026-06-01T15:00",
         endTime: "2026-06-01T14:00",
-      })
+      }),
     );
     expect(res.status).toBe("error");
-    expect(
-      res.errors?.endTime?.some((m) => /after start/i.test(m))
-    ).toBe(true);
+    expect(res.errors?.endTime?.some((m) => /after start/i.test(m))).toBe(true);
   });
 
   test("all-day uses date-only inputs and stores UTC midnight", async () => {
@@ -1385,7 +1334,7 @@ describe("createCalendarEvent", () => {
         isAllDay: "on",
         startTime: "2026-06-15",
         endTime: "2026-06-15",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUniqueOrThrow({
@@ -1399,10 +1348,7 @@ describe("createCalendarEvent", () => {
   test("gates on events.create", async () => {
     const mocked = vi.mocked(requirePermission);
     mocked.mockClear();
-    await createCalendarEvent(
-      createCalendarEventInitialState,
-      buildForm()
-    );
+    await createCalendarEvent(createCalendarEventInitialState, buildForm());
     expect(mocked).toHaveBeenCalledWith("events.create");
   });
 
@@ -1410,10 +1356,7 @@ describe("createCalendarEvent", () => {
     // Backwards-compat path — older clients that don't post the
     // hidden `visibility` field still need to create events that
     // default-deny to non-attendees.
-    const res = await createCalendarEvent(
-      createCalendarEventInitialState,
-      buildForm()
-    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, buildForm());
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUniqueOrThrow({
       where: { id: res.eventId! },
@@ -1424,10 +1367,7 @@ describe("createCalendarEvent", () => {
   test("visibility='show_details' from the form is persisted", async () => {
     const fd = buildForm();
     fd.set("visibility", "show_details");
-    const res = await createCalendarEvent(
-      createCalendarEventInitialState,
-      fd
-    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, fd);
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUniqueOrThrow({
       where: { id: res.eventId! },
@@ -1438,10 +1378,7 @@ describe("createCalendarEvent", () => {
   test("visibility rejects unknown enum values (tampered form)", async () => {
     const fd = buildForm();
     fd.set("visibility", "everyone"); // not a valid value
-    const res = await createCalendarEvent(
-      createCalendarEventInitialState,
-      fd
-    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, fd);
     expect(res.status).toBe("error");
     expect(res.errors?.visibility?.length).toBeGreaterThan(0);
   });
@@ -1450,10 +1387,7 @@ describe("createCalendarEvent", () => {
     const fd = buildForm({ matterId });
     fd.set("title", "Secret therapy intake");
     fd.set("visibility", "private");
-    const res = await createCalendarEvent(
-      createCalendarEventInitialState,
-      fd
-    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, fd);
     expect(res.status).toBe("ok");
     const evt = await prisma.calendarEvent.findFirstOrThrow({
       where: { title: "Secret therapy intake" },
@@ -1467,10 +1401,7 @@ describe("createCalendarEvent", () => {
   // ── Attendees at create time (full-page form) ─────────────────────────
 
   test("no attendees field → creator auto-added (quick-composer compat)", async () => {
-    const res = await createCalendarEvent(
-      createCalendarEventInitialState,
-      buildForm()
-    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, buildForm());
     expect(res.status).toBe("ok");
     const rows = await prisma.calendarAttendee.findMany({
       where: { eventId: res.eventId! },
@@ -1489,9 +1420,7 @@ describe("createCalendarEvent", () => {
     const fd = buildForm();
     fd.set(
       "attendees",
-      JSON.stringify([
-        { kind: "user", userId: other.userId, name: "Colleague", email: "" },
-      ])
+      JSON.stringify([{ kind: "user", userId: other.userId, name: "Colleague", email: "" }]),
     );
     const res = await createCalendarEvent(createCalendarEventInitialState, fd);
     expect(res.status).toBe("ok");
@@ -1508,12 +1437,7 @@ describe("createCalendarEvent", () => {
   test("creator included in the posted list is not duplicated", async () => {
     const u = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const fd = buildForm();
-    fd.set(
-      "attendees",
-      JSON.stringify([
-        { kind: "user", userId, name: u.name, email: u.email },
-      ])
-    );
+    fd.set("attendees", JSON.stringify([{ kind: "user", userId, name: u.name, email: u.email }]));
     const res = await createCalendarEvent(createCalendarEventInitialState, fd);
     expect(res.status).toBe("ok");
     const rows = await prisma.calendarAttendee.findMany({
@@ -1531,9 +1455,7 @@ describe("createCalendarEvent", () => {
     const fd = buildForm();
     fd.set(
       "attendees",
-      JSON.stringify([
-        { kind: "contact", contactId: c.id, name: c.name, email: c.email },
-      ])
+      JSON.stringify([{ kind: "contact", contactId: c.id, name: c.name, email: c.email }]),
     );
     const res = await createCalendarEvent(createCalendarEventInitialState, fd);
     expect(res.status).toBe("ok");
@@ -1551,9 +1473,7 @@ describe("createCalendarEvent", () => {
     const fd = buildForm();
     fd.set(
       "attendees",
-      JSON.stringify([
-        { kind: "new", name: "Fresh Face", email: "fresh@face.com" },
-      ])
+      JSON.stringify([{ kind: "new", name: "Fresh Face", email: "fresh@face.com" }]),
     );
     const res = await createCalendarEvent(createCalendarEventInitialState, fd);
     expect(res.status).toBe("ok");
@@ -1583,10 +1503,7 @@ describe("createCalendarEvent", () => {
     const beforeEvents = await prisma.calendarEvent.count();
     const beforeContacts = await prisma.contact.count();
     const fd = buildForm();
-    fd.set(
-      "attendees",
-      JSON.stringify([{ kind: "new", name: "No Email", email: "" }])
-    );
+    fd.set("attendees", JSON.stringify([{ kind: "new", name: "No Email", email: "" }]));
     const res = await createCalendarEvent(createCalendarEventInitialState, fd);
     expect(res.status).toBe("error");
     expect(res.errors?.attendees?.[0]).toMatch(/email/i);
@@ -1599,9 +1516,7 @@ describe("createCalendarEvent", () => {
     const fd = buildForm();
     fd.set(
       "attendees",
-      JSON.stringify([
-        { kind: "contact", contactId: "no-such-contact", name: "Ghost", email: "" },
-      ])
+      JSON.stringify([{ kind: "contact", contactId: "no-such-contact", name: "Ghost", email: "" }]),
     );
     const res = await createCalendarEvent(createCalendarEventInitialState, fd);
     expect(res.status).toBe("error");
@@ -1621,9 +1536,7 @@ describe("createCalendarEvent", () => {
     const fd = buildForm();
     fd.set(
       "attendees",
-      JSON.stringify([
-        { kind: "new", name: "Duplicate", email: "taken@example.com" },
-      ])
+      JSON.stringify([{ kind: "new", name: "Duplicate", email: "taken@example.com" }]),
     );
     const res = await createCalendarEvent(createCalendarEventInitialState, fd);
     expect(res.status).toBe("error");
@@ -1660,12 +1573,7 @@ describe("updateCalendarEvent — edit gate (visibility model)", () => {
     fd.set("endTime", "2026-05-01T10:00");
     // Auto-include the seeded user so the min-firm-attendee gate
     // doesn't trip first — we want the edit gate to be the failure.
-    fd.set(
-      "attendees",
-      JSON.stringify([
-        { kind: "user", userId, name: "Test User", email: "" },
-      ])
-    );
+    fd.set("attendees", JSON.stringify([{ kind: "user", userId, name: "Test User", email: "" }]));
     return fd;
   };
 
@@ -1682,15 +1590,13 @@ describe("updateCalendarEvent — edit gate (visibility model)", () => {
       },
       select: { id: true },
     });
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     const mockedHas = vi.mocked(currentUserHasPermission);
     mockedHas.mockResolvedValue(false);
     const res = await updateCalendarEvent(
       personal.id,
       updateCalendarEventInitialState,
-      buildEditForm({ title: "Therapy renamed" })
+      buildEditForm({ title: "Therapy renamed" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUniqueOrThrow({
@@ -1719,17 +1625,13 @@ describe("updateCalendarEvent — edit gate (visibility model)", () => {
       },
       select: { id: true },
     });
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     const mockedHas = vi.mocked(currentUserHasPermission);
-    mockedHas.mockImplementation(async (key: string) =>
-      key === "events.edit"
-    );
+    mockedHas.mockImplementation(async (key: string) => key === "events.edit");
     const res = await updateCalendarEvent(
       personal.id,
       updateCalendarEventInitialState,
-      buildEditForm({ title: "Hijacked" })
+      buildEditForm({ title: "Hijacked" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.title?.[0]).toMatch(/permission/i);
@@ -1755,17 +1657,13 @@ describe("updateCalendarEvent — edit gate (visibility model)", () => {
       },
       select: { id: true },
     });
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     const mockedHas = vi.mocked(currentUserHasPermission);
-    mockedHas.mockImplementation(async (key: string) =>
-      key === "events.edit_non_matter"
-    );
+    mockedHas.mockImplementation(async (key: string) => key === "events.edit_non_matter");
     const res = await updateCalendarEvent(
       personal.id,
       updateCalendarEventInitialState,
-      buildEditForm({ title: "Approved edit" })
+      buildEditForm({ title: "Approved edit" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUniqueOrThrow({
@@ -1791,17 +1689,13 @@ describe("updateCalendarEvent — edit gate (visibility model)", () => {
       },
       select: { id: true },
     });
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     const mockedHas = vi.mocked(currentUserHasPermission);
-    mockedHas.mockImplementation(async (key: string) =>
-      key === "events.edit"
-    );
+    mockedHas.mockImplementation(async (key: string) => key === "events.edit");
     const res = await updateCalendarEvent(
       matterEvt.id,
       updateCalendarEventInitialState,
-      buildEditForm({ title: "Updated meeting" })
+      buildEditForm({ title: "Updated meeting" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUniqueOrThrow({
@@ -1827,16 +1721,14 @@ describe("updateCalendarEvent — edit gate (visibility model)", () => {
       },
       select: { id: true },
     });
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     const mockedHas = vi.mocked(currentUserHasPermission);
     // No perms at all.
     mockedHas.mockResolvedValue(false);
     const res = await updateCalendarEvent(
       matterEvt.id,
       updateCalendarEventInitialState,
-      buildEditForm({ title: "Hijacked" })
+      buildEditForm({ title: "Hijacked" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.title?.[0]).toMatch(/permission/i);
@@ -1875,45 +1767,33 @@ describe("deleteCalendarEvent — delete gate", () => {
 
   test("creator can delete their own personal event without any perms", async () => {
     const personal = await seedPersonalEvent(userId);
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     vi.mocked(currentUserHasPermission).mockResolvedValue(false);
     const res = await deleteCalendarEvent(personal.id);
     expect(res.ok).toBe(true);
-    expect(
-      await prisma.calendarEvent.findUnique({ where: { id: personal.id } })
-    ).toBeNull();
+    expect(await prisma.calendarEvent.findUnique({ where: { id: personal.id } })).toBeNull();
   });
 
   test("non-creator with events.delete can delete a matter event", async () => {
     // Seeded matter event has no createdById → no creator bypass.
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key: string) => key === "events.delete"
+      async (key: string) => key === "events.delete",
     );
     const res = await deleteCalendarEvent(eventId);
     expect(res.ok).toBe(true);
     expect(res.matterId).toBe(matterId);
-    expect(
-      await prisma.calendarEvent.findUnique({ where: { id: eventId } })
-    ).toBeNull();
+    expect(await prisma.calendarEvent.findUnique({ where: { id: eventId } })).toBeNull();
   });
 
   test("non-creator without events.delete cannot delete a matter event", async () => {
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     vi.mocked(currentUserHasPermission).mockResolvedValue(false);
     const res = await deleteCalendarEvent(eventId);
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/permission/i);
     // Hard delete never fired — the row is still there.
-    expect(
-      await prisma.calendarEvent.findUnique({ where: { id: eventId } })
-    ).not.toBeNull();
+    expect(await prisma.calendarEvent.findUnique({ where: { id: eventId } })).not.toBeNull();
   });
 
   test("events.delete alone cannot delete another user's personal event", async () => {
@@ -1923,18 +1803,14 @@ describe("deleteCalendarEvent — delete gate", () => {
       email: "deltarget@x.com",
     });
     const personal = await seedPersonalEvent(other.userId);
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key: string) => key === "events.delete"
+      async (key: string) => key === "events.delete",
     );
     const res = await deleteCalendarEvent(personal.id);
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/permission/i);
-    expect(
-      await prisma.calendarEvent.findUnique({ where: { id: personal.id } })
-    ).not.toBeNull();
+    expect(await prisma.calendarEvent.findUnique({ where: { id: personal.id } })).not.toBeNull();
   });
 
   test("events.delete + events.edit_non_matter deletes another user's personal event", async () => {
@@ -1944,24 +1820,17 @@ describe("deleteCalendarEvent — delete gate", () => {
       email: "deltarget2@x.com",
     });
     const personal = await seedPersonalEvent(other.userId);
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (key: string) =>
-        key === "events.delete" || key === "events.edit_non_matter"
+      async (key: string) => key === "events.delete" || key === "events.edit_non_matter",
     );
     const res = await deleteCalendarEvent(personal.id);
     expect(res.ok).toBe(true);
-    expect(
-      await prisma.calendarEvent.findUnique({ where: { id: personal.id } })
-    ).toBeNull();
+    expect(await prisma.calendarEvent.findUnique({ where: { id: personal.id } })).toBeNull();
   });
 
   test("missing event id surfaces a not-found error", async () => {
-    const { currentUserHasPermission } = await import(
-      "@/lib/permission-check"
-    );
+    const { currentUserHasPermission } = await import("@/lib/permission-check");
     vi.mocked(currentUserHasPermission).mockResolvedValue(true);
     const res = await deleteCalendarEvent("no-such-event");
     expect(res.ok).toBe(false);
@@ -1988,10 +1857,7 @@ describe("Google Calendar push hooks", () => {
   };
 
   test("createCalendarEvent fires pushEventToGoogle with the new event id (quick-composer shape: no attendees field)", async () => {
-    const res = await createCalendarEvent(
-      createCalendarEventInitialState,
-      buildCreateForm()
-    );
+    const res = await createCalendarEvent(createCalendarEventInitialState, buildCreateForm());
     expect(res.status).toBe("ok");
     expect(mockedPush).toHaveBeenCalledTimes(1);
     expect(mockedPush).toHaveBeenCalledWith(res.eventId);
@@ -1999,16 +1865,8 @@ describe("Google Calendar push hooks", () => {
 
   test("createCalendarEvent full-form path (attendees posted) also fires the push", async () => {
     const fd = buildCreateForm();
-    fd.set(
-      "attendees",
-      JSON.stringify([
-        { kind: "user", userId, name: "Test User", email: "" },
-      ])
-    );
-    const res = await createCalendarEvent(
-      createCalendarEventInitialState,
-      fd
-    );
+    fd.set("attendees", JSON.stringify([{ kind: "user", userId, name: "Test User", email: "" }]));
+    const res = await createCalendarEvent(createCalendarEventInitialState, fd);
     expect(res.status).toBe("ok");
     expect(mockedPush).toHaveBeenCalledWith(res.eventId);
   });
@@ -2022,11 +1880,7 @@ describe("Google Calendar push hooks", () => {
   });
 
   test("updateCalendarEvent fires pushEventToGoogle after the commit", async () => {
-    const res = await updateCalendarEvent(
-      eventId,
-      updateCalendarEventInitialState,
-      buildForm()
-    );
+    const res = await updateCalendarEvent(eventId, updateCalendarEventInitialState, buildForm());
     expect(res.status).toBe("ok");
     expect(mockedPush).toHaveBeenCalledTimes(1);
     expect(mockedPush).toHaveBeenCalledWith(eventId);
@@ -2039,7 +1893,7 @@ describe("Google Calendar push hooks", () => {
       buildForm({
         startTime: "2026-06-01T14:00",
         endTime: "2026-06-01T13:00",
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(mockedPush).not.toHaveBeenCalled();
@@ -2063,8 +1917,7 @@ describe("Google Calendar push hooks", () => {
     // exists at sweep time.
     let eventExistedAtSweepTime: boolean | null = null;
     mockedDelete.mockImplementationOnce(async (id: string) => {
-      eventExistedAtSweepTime =
-        (await prisma.calendarEvent.findUnique({ where: { id } })) !== null;
+      eventExistedAtSweepTime = (await prisma.calendarEvent.findUnique({ where: { id } })) !== null;
     });
 
     const res = await deleteCalendarEvent(eventId);
@@ -2072,9 +1925,7 @@ describe("Google Calendar push hooks", () => {
     expect(mockedDelete).toHaveBeenCalledTimes(1);
     expect(mockedDelete).toHaveBeenCalledWith(eventId);
     expect(eventExistedAtSweepTime).toBe(true);
-    expect(
-      await prisma.calendarEvent.findUnique({ where: { id: eventId } })
-    ).toBeNull();
+    expect(await prisma.calendarEvent.findUnique({ where: { id: eventId } })).toBeNull();
     // Delete never pushes an update.
     expect(mockedPush).not.toHaveBeenCalled();
   });
@@ -2106,7 +1957,7 @@ describe("timed event times are the user's wall clock, not the server's", () => 
   test("create: 9:00 AM posted by a Denver user is stored as 15:00Z (MDT)", async () => {
     const res = await createCalendarEvent(
       createCalendarEventInitialState,
-      createForm({ startTime: "2026-06-10T09:00", endTime: "2026-06-10T10:30" })
+      createForm({ startTime: "2026-06-10T09:00", endTime: "2026-06-10T10:30" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUniqueOrThrow({
@@ -2119,7 +1970,7 @@ describe("timed event times are the user's wall clock, not the server's", () => 
   test("create: winter time uses MST (UTC-7)", async () => {
     const res = await createCalendarEvent(
       createCalendarEventInitialState,
-      createForm({ startTime: "2026-12-10T09:00", endTime: "2026-12-10T10:00" })
+      createForm({ startTime: "2026-12-10T09:00", endTime: "2026-12-10T10:00" }),
     );
     const row = await prisma.calendarEvent.findUniqueOrThrow({
       where: { id: res.eventId! },
@@ -2131,7 +1982,7 @@ describe("timed event times are the user's wall clock, not the server's", () => 
     mockedGetTz.mockResolvedValue("Asia/Tokyo");
     const res = await createCalendarEvent(
       createCalendarEventInitialState,
-      createForm({ startTime: "2026-06-10T09:00", endTime: "2026-06-10T10:00" })
+      createForm({ startTime: "2026-06-10T09:00", endTime: "2026-06-10T10:00" }),
     );
     const row = await prisma.calendarEvent.findUniqueOrThrow({
       where: { id: res.eventId! },
@@ -2145,7 +1996,7 @@ describe("timed event times are the user's wall clock, not the server's", () => 
       createForm({
         startTime: "2026-06-10T15:00:00.000Z",
         endTime: "2026-06-10T16:00:00.000Z",
-      })
+      }),
     );
     const row = await prisma.calendarEvent.findUniqueOrThrow({
       where: { id: res.eventId! },
@@ -2156,7 +2007,7 @@ describe("timed event times are the user's wall clock, not the server's", () => 
   test("create: an impossible wall-clock time is a field error", async () => {
     const res = await createCalendarEvent(
       createCalendarEventInitialState,
-      createForm({ startTime: "2026-06-31T09:00", endTime: "2026-07-01T10:00" })
+      createForm({ startTime: "2026-06-31T09:00", endTime: "2026-07-01T10:00" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.startTime?.[0]).toMatch(/invalid start time/i);
@@ -2171,7 +2022,7 @@ describe("timed event times are the user's wall clock, not the server's", () => 
           isAllDay: "on",
           startTime: "2026-07-06",
           endTime: "2026-07-10",
-        })
+        }),
       );
       expect(res.status).toBe("ok");
       const row = await prisma.calendarEvent.findUniqueOrThrow({
@@ -2186,7 +2037,7 @@ describe("timed event times are the user's wall clock, not the server's", () => 
     const res = await updateCalendarEvent(
       eventId,
       updateCalendarEventInitialState,
-      buildForm({ startTime: "2026-06-10T09:00", endTime: "2026-06-10T10:00" })
+      buildForm({ startTime: "2026-06-10T09:00", endTime: "2026-06-10T10:00" }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUniqueOrThrow({
@@ -2218,7 +2069,7 @@ describe("timed event times are the user's wall clock, not the server's", () => 
           title: `Edit ${i}`,
           startTime: toWallClockInput(before.startTime, DENVER),
           endTime: toWallClockInput(before.endTime, DENVER),
-        })
+        }),
       );
       expect(res.status).toBe("ok");
     }
@@ -2250,7 +2101,7 @@ describe("timed event times are the user's wall clock, not the server's", () => 
           title: `Edit ${i}`,
           startTime: dateOnlyKey(before.startTime),
           endTime: dateOnlyKey(before.endTime),
-        })
+        }),
       );
       expect(res.status).toBe("ok");
     }
@@ -2381,7 +2232,7 @@ describe("attendee snapshots come from the linked row, not the payload", () => {
             email: "x@evil.com",
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.calendarAttendee.findFirstOrThrow({
@@ -2399,10 +2250,8 @@ describe("attendee snapshots come from the linked row, not the payload", () => {
       eventId,
       updateCalendarEventInitialState,
       buildForm({
-        attendees: JSON.stringify([
-          { kind: "contact", contactId: c.id, name: "Spoof", email: "" },
-        ]),
-      })
+        attendees: JSON.stringify([{ kind: "contact", contactId: c.id, name: "Spoof", email: "" }]),
+      }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.calendarAttendee.findFirstOrThrow({
@@ -2431,7 +2280,7 @@ describe("attendee snapshots come from the linked row, not the payload", () => {
             email: "x@evil.com",
           },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const row = await prisma.calendarAttendee.findFirstOrThrow({
@@ -2452,7 +2301,7 @@ describe("video link (zoomUrl) accepts only web addresses", () => {
     const res = await updateCalendarEvent(
       eventId,
       updateCalendarEventInitialState,
-      buildForm({ zoomUrl: bad })
+      buildForm({ zoomUrl: bad }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.zoomUrl?.[0]).toMatch(/web address/i);
@@ -2465,7 +2314,7 @@ describe("video link (zoomUrl) accepts only web addresses", () => {
         startTime: "2026-06-10T09:00",
         endTime: "2026-06-10T10:00",
         zoomUrl: "javascript:alert(1)",
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.zoomUrl?.[0]).toMatch(/web address/i);
@@ -2475,24 +2324,22 @@ describe("video link (zoomUrl) accepts only web addresses", () => {
     const ok = await updateCalendarEvent(
       eventId,
       updateCalendarEventInitialState,
-      buildForm({ zoomUrl: "https://zoom.us/j/123" })
+      buildForm({ zoomUrl: "https://zoom.us/j/123" }),
     );
     expect(ok.status).toBe("ok");
-    expect(
-      (await prisma.calendarEvent.findUniqueOrThrow({ where: { id: eventId } }))
-        .zoomUrl
-    ).toBe("https://zoom.us/j/123");
+    expect((await prisma.calendarEvent.findUniqueOrThrow({ where: { id: eventId } })).zoomUrl).toBe(
+      "https://zoom.us/j/123",
+    );
 
     const bare = await updateCalendarEvent(
       eventId,
       updateCalendarEventInitialState,
-      buildForm({ zoomUrl: "zoom.us/j/456" })
+      buildForm({ zoomUrl: "zoom.us/j/456" }),
     );
     expect(bare.status).toBe("ok");
-    expect(
-      (await prisma.calendarEvent.findUniqueOrThrow({ where: { id: eventId } }))
-        .zoomUrl
-    ).toBe("https://zoom.us/j/456");
+    expect((await prisma.calendarEvent.findUniqueOrThrow({ where: { id: eventId } })).zoomUrl).toBe(
+      "https://zoom.us/j/456",
+    );
   });
 });
 
@@ -2504,11 +2351,7 @@ describe("updateCalendarEvent leaves type/visibility alone when the poster omits
     });
     const fd = buildForm();
     fd.delete("type"); // legacy poster: no type, no visibility
-    const res = await updateCalendarEvent(
-      eventId,
-      updateCalendarEventInitialState,
-      fd
-    );
+    const res = await updateCalendarEvent(eventId, updateCalendarEventInitialState, fd);
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUniqueOrThrow({
       where: { id: eventId },
@@ -2520,11 +2363,7 @@ describe("updateCalendarEvent leaves type/visibility alone when the poster omits
   test("posted type and visibility are still written", async () => {
     const fd = buildForm({ type: "hearing" });
     fd.set("visibility", "show_details");
-    const res = await updateCalendarEvent(
-      eventId,
-      updateCalendarEventInitialState,
-      fd
-    );
+    const res = await updateCalendarEvent(eventId, updateCalendarEventInitialState, fd);
     expect(res.status).toBe("ok");
     const row = await prisma.calendarEvent.findUniqueOrThrow({
       where: { id: eventId },
@@ -2551,7 +2390,7 @@ describe("calendar mutations write an activity log row (matter events)", () => {
         startTime: "2026-06-10T09:00",
         endTime: "2026-06-10T10:00",
         matterId,
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     const logs = await rowsFor(matterId);
@@ -2576,7 +2415,7 @@ describe("calendar mutations write an activity log row (matter events)", () => {
         title: "Renamed",
         startTime: "2026-06-10T09:00",
         endTime: "2026-06-10T10:00",
-      })
+      }),
     );
     const logs = await rowsFor(matterId);
     expect(logs.map((l) => l.title)).toEqual(["Event updated"]);
@@ -2597,7 +2436,7 @@ describe("calendar mutations write an activity log row (matter events)", () => {
       buildForm({
         startTime: "2026-06-11T13:00",
         endTime: "2026-06-11T14:00",
-      })
+      }),
     );
     const logs = await rowsFor(matterId);
     expect(logs.map((l) => l.title)).toEqual(["Event rescheduled"]);
@@ -2644,7 +2483,7 @@ describe("calendar mutations write an activity log row (matter events)", () => {
         title: "Dentist",
         startTime: "2026-06-10T09:00",
         endTime: "2026-06-10T10:00",
-      })
+      }),
     );
     expect(res.status).toBe("ok");
     await deleteCalendarEvent(res.eventId!);
@@ -2685,9 +2524,7 @@ describe("createCalendarEvent on a matter", () => {
   test("firm default ON: the whole matter team is added (accepted), creator not duplicated", async () => {
     const res = await createCalendarEvent(createCalendarEventInitialState, form());
     expect(res.status).toBe("ok");
-    expect(await attendeeUserIds(res.eventId!)).toEqual(
-      [userId, coCounselId].sort()
-    );
+    expect(await attendeeUserIds(res.eventId!)).toEqual([userId, coCounselId].sort());
     const rows = await prisma.calendarAttendee.findMany({
       where: { eventId: res.eventId! },
     });
@@ -2719,12 +2556,10 @@ describe("createCalendarEvent on a matter", () => {
         attendees: JSON.stringify([
           { kind: "user", userId: coCounselId, name: "Co Counsel", email: "" },
         ]),
-      })
+      }),
     );
     expect(res.status).toBe("ok");
-    expect(await attendeeUserIds(res.eventId!)).toEqual(
-      [userId, coCounselId].sort()
-    );
+    expect(await attendeeUserIds(res.eventId!)).toEqual([userId, coCounselId].sort());
   });
 
   test("removed and deactivated team members are not added", async () => {
@@ -2754,15 +2589,13 @@ describe("createCalendarEvent on a matter", () => {
       data: { isActive: false },
     });
     const res = await createCalendarEvent(createCalendarEventInitialState, form());
-    expect(await attendeeUserIds(res.eventId!)).toEqual(
-      [userId, coCounselId].sort()
-    );
+    expect(await attendeeUserIds(res.eventId!)).toEqual([userId, coCounselId].sort());
   });
 
   test("a matter-less event never pulls in a team", async () => {
     const res = await createCalendarEvent(
       createCalendarEventInitialState,
-      createForm({ startTime: "2026-06-10T09:00", endTime: "2026-06-10T10:00" })
+      createForm({ startTime: "2026-06-10T09:00", endTime: "2026-06-10T10:00" }),
     );
     expect(await attendeeUserIds(res.eventId!)).toEqual([userId]);
   });
@@ -2770,13 +2603,11 @@ describe("createCalendarEvent on a matter", () => {
   test("a stale matter id is a field error, not an FK 500 — and nothing is created", async () => {
     const res = await createCalendarEvent(
       createCalendarEventInitialState,
-      form({ matterId: "no-such-matter" })
+      form({ matterId: "no-such-matter" }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.matterId?.[0]).toMatch(/open matter/i);
-    expect(
-      await prisma.calendarEvent.count({ where: { title: "Zone test" } })
-    ).toBe(0);
+    expect(await prisma.calendarEvent.count({ where: { title: "Zone test" } })).toBe(0);
   });
 
   test("an archived matter is refused", async () => {
@@ -2795,7 +2626,7 @@ describe("session is resolved before any event read", () => {
     mockedGetCurrentUser.mockRejectedValue(new Error("NEXT_REDIRECT"));
     const findSpy = vi.spyOn(prisma.calendarEvent, "findUnique");
     await expect(
-      updateCalendarEvent(eventId, updateCalendarEventInitialState, buildForm())
+      updateCalendarEvent(eventId, updateCalendarEventInitialState, buildForm()),
     ).rejects.toThrow("NEXT_REDIRECT");
     expect(findSpy).not.toHaveBeenCalled();
     findSpy.mockRestore();

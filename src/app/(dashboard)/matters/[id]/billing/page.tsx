@@ -56,8 +56,7 @@ export default async function MatterBillingPage({
   await assertMatterAccess(id);
   const sp = await searchParams;
   const rawInvoice = firstParam(sp.invoice);
-  const requestedInvoiceId =
-    typeof rawInvoice === "string" ? rawInvoice : null;
+  const requestedInvoiceId = typeof rawInvoice === "string" ? rawInvoice : null;
 
   const {
     billing,
@@ -172,9 +171,7 @@ export default async function MatterBillingPage({
             // Line items are editable only while the invoice is a
             // `draft` (approval signs off on a specific total), and
             // only for users holding billing.generate_invoice.
-            editable={
-              selectedInvoice.status === "draft" && permissions.generateInvoice
-            }
+            editable={selectedInvoice.status === "draft" && permissions.generateInvoice}
             currentUserId={currentUserId}
             canEditAnyTimeEntry={canEditAnyTimeEntry}
           />

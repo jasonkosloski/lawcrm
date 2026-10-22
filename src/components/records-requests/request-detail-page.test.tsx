@@ -59,14 +59,14 @@ describe("RequestDetailPage", () => {
   test("a foreign or missing id 404s", async () => {
     vi.mocked(getRecordsRequestDetail).mockResolvedValue(null);
     await expect(
-      RequestDetailPage({ scope: SCOPE, requestId: "x", writable: true })
+      RequestDetailPage({ scope: SCOPE, requestId: "x", writable: true }),
     ).rejects.toThrow("NOT_FOUND");
     expect(getRecordsRequestDetail).toHaveBeenCalledWith(SCOPE, "x", { includeFees: true });
   });
 
   test("matter fees need matters.expense.view; a lead always includes them", async () => {
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k !== "matters.expense.view"
+      async (k: string) => k !== "matters.expense.view",
     );
     await render(SCOPE);
     expect(getRecordsRequestDetail).toHaveBeenLastCalledWith(SCOPE, "a", { includeFees: false });
@@ -76,7 +76,7 @@ describe("RequestDetailPage", () => {
 
   test("the fee flag: lead needs only records.edit, matter also expense.create", async () => {
     vi.mocked(currentUserHasPermission).mockImplementation(
-      async (k: string) => k !== "matters.expense.create"
+      async (k: string) => k !== "matters.expense.create",
     );
     expect((await render(LEAD)).props.can.fee).toBe(true);
     expect((await render(SCOPE)).props.can.fee).toBe(false);

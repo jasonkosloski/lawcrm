@@ -9,9 +9,7 @@ import { canViewEventDetails } from "@/lib/calendar-visibility";
 import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import { dateOnlyKey, todayKey } from "@/lib/format-date";
 import type { EventNote, EventTimeEntry } from "@/lib/queries/calendar";
-import {
-  resolveTz,
-} from "./shared";
+import { resolveTz } from "./shared";
 
 // ── Events ───────────────────────────────────────────────────────────────
 
@@ -46,7 +44,7 @@ export type MatterEventRow = {
 
 export async function getMatterEvents(
   matterId: string,
-  options: { tz?: string } = {}
+  options: { tz?: string } = {},
 ): Promise<MatterEventRow[]> {
   return getEventRows({ matterId }, options);
 }
@@ -56,19 +54,16 @@ export async function getMatterEvents(
  *  creator, attendees and `show_details` events show in full. */
 export async function getLeadEvents(
   leadId: string,
-  options: { tz?: string } = {}
+  options: { tz?: string } = {},
 ): Promise<MatterEventRow[]> {
   return getEventRows({ leadId }, options);
 }
 
 async function getEventRows(
   where: Prisma.CalendarEventWhereInput,
-  options: { tz?: string }
+  options: { tz?: string },
 ): Promise<MatterEventRow[]> {
-  const [viewerId, tz] = await Promise.all([
-    getCurrentUserId(),
-    resolveTz(options.tz),
-  ]);
+  const [viewerId, tz] = await Promise.all([getCurrentUserId(), resolveTz(options.tz)]);
   const today = todayKey(tz);
   const rows = await prisma.calendarEvent.findMany({
     where,
@@ -109,12 +104,9 @@ async function getEventRows(
       viewerId,
       createdById: e.createdById,
       eventVisibility: e.visibility,
-      creatorDefaultEventVisibility:
-        e.createdBy?.defaultEventVisibility ?? null,
+      creatorDefaultEventVisibility: e.createdBy?.defaultEventVisibility ?? null,
       matterId: e.matterId,
-      attendeeUserIds: e.attendees
-        .map((a) => a.userId)
-        .filter((id): id is string => !!id),
+      attendeeUserIds: e.attendees.map((a) => a.userId).filter((id): id is string => !!id),
       matterTeamUserIds: e.matter?.teamMembers.map((m) => m.userId) ?? [],
     });
 

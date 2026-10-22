@@ -42,8 +42,7 @@ export function checkDestructiveDbAllowed(env: Env): SeedGuardResult {
   if (urls.length === 0) {
     return {
       ok: false,
-      reason:
-        "No DATABASE_URL is configured. Set it in .env before running this tool.",
+      reason: "No DATABASE_URL is configured. Set it in .env before running this tool.",
     };
   }
 

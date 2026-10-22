@@ -37,9 +37,7 @@ export function useDraftAutosave({
   paused: boolean;
 }) {
   const [status, setStatus] = useState<AutosaveStatus>("idle");
-  const [savedAt, setSavedAt] = useState<Date | null>(
-    updatedAt ? new Date(updatedAt) : null
-  );
+  const [savedAt, setSavedAt] = useState<Date | null>(updatedAt ? new Date(updatedAt) : null);
   const [current, setCurrent] = useState({ draftId, updatedAt });
 
   const idRef = useRef(draftId);
@@ -101,13 +99,13 @@ export function useDraftAutosave({
       const p = queueRef.current.then(() => doSave(force));
       queueRef.current = p.then(
         () => undefined,
-        () => undefined
+        () => undefined,
       );
       return p.finally(() => {
         savingRef.current -= 1;
       });
     },
-    [doSave]
+    [doSave],
   );
 
   useEffect(() => {

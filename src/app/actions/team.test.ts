@@ -36,19 +36,14 @@ vi.mock("@/lib/clerk-admin", () => ({
 }));
 vi.mock("@/lib/permission-check", () => ({
   requirePermission: vi.fn().mockResolvedValue("test-user"),
-  requirePermissionResult: vi
-    .fn()
-    .mockResolvedValue({ ok: true, userId: "test-user" }),
+  requirePermissionResult: vi.fn().mockResolvedValue({ ok: true, userId: "test-user" }),
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 
 import { getCurrentUserId } from "@/lib/current-user";
 import { isCurrentUserAdmin } from "@/lib/firm";
 import { prisma } from "@/lib/prisma";
-import {
-  inviteFirmMember,
-  updateFirmMember,
-} from "@/app/actions/team";
+import { inviteFirmMember, updateFirmMember } from "@/app/actions/team";
 import { teamInitialState } from "@/lib/team-form";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
@@ -75,11 +70,7 @@ beforeEach(async () => {
 /** Update form. Pass `active: false` to omit the isActive checkbox
  *  (unchecked checkboxes don't post), and `roleIds` for the repeated
  *  multi-select entries. */
-function updateForm(opts: {
-  name?: string;
-  roleIds?: string[];
-  active?: boolean;
-}): FormData {
+function updateForm(opts: { name?: string; roleIds?: string[]; active?: boolean }): FormData {
   const fd = new FormData();
   fd.set("name", opts.name ?? "Edited Name");
   fd.set("initials", "EN");
@@ -138,7 +129,7 @@ describe("updateFirmMember — last-active-admin invariant", () => {
     const res = await updateFirmMember(
       admin.userId,
       teamInitialState,
-      updateForm({ name: "Should Not Persist", roleIds: [defaultRoleId] })
+      updateForm({ name: "Should Not Persist", roleIds: [defaultRoleId] }),
     );
 
     expect(res.status).toBe("error");
@@ -172,7 +163,7 @@ describe("updateFirmMember — last-active-admin invariant", () => {
     const res = await updateFirmMember(
       admin.userId,
       teamInitialState,
-      updateForm({ roleIds: [adminRoleId, defaultRoleId], active: false })
+      updateForm({ roleIds: [adminRoleId, defaultRoleId], active: false }),
     );
 
     expect(res.status).toBe("error");
@@ -200,7 +191,7 @@ describe("updateFirmMember — last-active-admin invariant", () => {
     const res = await updateFirmMember(
       adminB.userId,
       teamInitialState,
-      updateForm({ name: "Admin B", roleIds: [defaultRoleId] })
+      updateForm({ name: "Admin B", roleIds: [defaultRoleId] }),
     );
 
     expect(res.status).toBe("ok");
@@ -236,19 +227,18 @@ describe("updateFirmMember — last-active-admin invariant", () => {
       updateFirmMember(
         adminA.userId,
         teamInitialState,
-        updateForm({ name: "Admin A", roleIds: [defaultRoleId] })
+        updateForm({ name: "Admin A", roleIds: [defaultRoleId] }),
       ),
       updateFirmMember(
         adminB.userId,
         teamInitialState,
-        updateForm({ name: "Admin B", roleIds: [defaultRoleId] })
+        updateForm({ name: "Admin B", roleIds: [defaultRoleId] }),
       ),
     ]);
 
     // At most one demotion may succeed, and the firm must keep at
     // least one active admin no matter how the two interleave.
-    expect([resA.status, resB.status].filter((s) => s === "ok").length)
-      .toBeLessThanOrEqual(1);
+    expect([resA.status, resB.status].filter((s) => s === "ok").length).toBeLessThanOrEqual(1);
     expect(await activeAdminCount()).toBeGreaterThanOrEqual(1);
   });
 });
@@ -287,7 +277,7 @@ describe("audit trail — team mutations write activity-log entries", () => {
     const res = await updateFirmMember(
       member.userId,
       teamInitialState,
-      updateForm({ name: "Member", roleIds: [adminRoleId, defaultRoleId] })
+      updateForm({ name: "Member", roleIds: [adminRoleId, defaultRoleId] }),
     );
     expect(res.status).toBe("ok");
 
@@ -346,28 +336,24 @@ describe("escalation guard — non-Admin directory manager", () => {
   });
 
   const rolesOf = async (userId: string) =>
-    (
-      await prisma.userRole.findMany({ where: { userId }, select: { roleId: true } })
-    ).map((r) => r.roleId);
+    (await prisma.userRole.findMany({ where: { userId }, select: { roleId: true } })).map(
+      (r) => r.roleId,
+    );
 
   test("cannot invite a user with the Admin role", async () => {
     const res = await inviteFirmMember(teamInitialState, withRoles(inviteForm(), [adminRoleId]));
     expect(res.status).toBe("error");
     expect(res.errors?.roleId?.[0]).toMatch(/Only an Admin/);
-    expect(
-      await prisma.user.findUnique({ where: { email: "new.hire@example.com" } })
-    ).toBeNull();
+    expect(await prisma.user.findUnique({ where: { email: "new.hire@example.com" } })).toBeNull();
   });
 
   test("cannot invite a user with a role that carries admin-only permissions", async () => {
     const res = await inviteFirmMember(
       teamInitialState,
-      withRoles(inviteForm(), [privilegedRoleId])
+      withRoles(inviteForm(), [privilegedRoleId]),
     );
     expect(res.status).toBe("error");
-    expect(
-      await prisma.user.findUnique({ where: { email: "new.hire@example.com" } })
-    ).toBeNull();
+    expect(await prisma.user.findUnique({ where: { email: "new.hire@example.com" } })).toBeNull();
   });
 
   test("can still invite with ordinary roles", async () => {
@@ -375,10 +361,7 @@ describe("escalation guard — non-Admin directory manager", () => {
       data: { firmId, name: "Paralegal", isSystem: false },
       select: { id: true },
     });
-    const res = await inviteFirmMember(
-      teamInitialState,
-      withRoles(inviteForm(), [ordinary.id])
-    );
+    const res = await inviteFirmMember(teamInitialState, withRoles(inviteForm(), [ordinary.id]));
     expect(res.status).toBe("ok");
   });
 
@@ -386,7 +369,7 @@ describe("escalation guard — non-Admin directory manager", () => {
     const res = await updateFirmMember(
       delegateId,
       teamInitialState,
-      updateForm({ name: "Office Manager", roleIds: [defaultRoleId, adminRoleId] })
+      updateForm({ name: "Office Manager", roleIds: [defaultRoleId, adminRoleId] }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.roleId?.[0]).toMatch(/Only an Admin/);
@@ -398,7 +381,7 @@ describe("escalation guard — non-Admin directory manager", () => {
       const res = await updateFirmMember(
         memberId,
         teamInitialState,
-        updateForm({ name: "Plain Member", roleIds: [defaultRoleId, roleId] })
+        updateForm({ name: "Plain Member", roleIds: [defaultRoleId, roleId] }),
       );
       expect(res.status).toBe("error");
     }
@@ -409,7 +392,7 @@ describe("escalation guard — non-Admin directory manager", () => {
     const res = await updateFirmMember(
       adminUserId,
       teamInitialState,
-      updateForm({ name: "Managing Partner", roleIds: [defaultRoleId] })
+      updateForm({ name: "Managing Partner", roleIds: [defaultRoleId] }),
     );
     expect(res.status).toBe("error");
     expect(await rolesOf(adminUserId)).toContain(adminRoleId);
@@ -423,7 +406,7 @@ describe("escalation guard — non-Admin directory manager", () => {
         name: "Managing Partner",
         roleIds: [adminRoleId, defaultRoleId],
         active: false,
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?._form?.[0]).toMatch(/Only an Admin/);
@@ -447,7 +430,7 @@ describe("escalation guard — non-Admin directory manager", () => {
         name: "Access Holder",
         roleIds: [defaultRoleId, privilegedRoleId],
         active: false,
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?.isActive?.[0]).toMatch(/Only an Admin/);
@@ -460,7 +443,7 @@ describe("escalation guard — non-Admin directory manager", () => {
       updateForm({
         name: "Renamed Partner",
         roleIds: [adminRoleId, defaultRoleId],
-      })
+      }),
     );
     expect(res.status).toBe("error");
     expect(res.errors?._form?.[0]).toMatch(/Only an Admin/);
@@ -479,7 +462,7 @@ describe("escalation guard — non-Admin directory manager", () => {
     const res = await updateFirmMember(
       memberId,
       teamInitialState,
-      updateForm({ name: "Plain Member", roleIds: [defaultRoleId, ordinary.id] })
+      updateForm({ name: "Plain Member", roleIds: [defaultRoleId, ordinary.id] }),
     );
     expect(res.status).toBe("ok");
     expect((await rolesOf(memberId)).sort()).toEqual([defaultRoleId, ordinary.id].sort());
@@ -490,12 +473,12 @@ describe("escalation guard — non-Admin directory manager", () => {
     const promote = await updateFirmMember(
       memberId,
       teamInitialState,
-      updateForm({ name: "Plain Member", roleIds: [defaultRoleId, adminRoleId] })
+      updateForm({ name: "Plain Member", roleIds: [defaultRoleId, adminRoleId] }),
     );
     expect(promote.status).toBe("ok");
     const invited = await inviteFirmMember(
       teamInitialState,
-      withRoles(inviteForm(), [adminRoleId])
+      withRoles(inviteForm(), [adminRoleId]),
     );
     expect(invited.status).toBe("ok");
   });

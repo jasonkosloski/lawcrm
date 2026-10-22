@@ -13,9 +13,7 @@ import { assertLeadAccess } from "@/lib/lead-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 
-export default async function LeadRecordsPage({
-  params,
-}: PageProps<"/intake/[id]/records">) {
+export default async function LeadRecordsPage({ params }: PageProps<"/intake/[id]/records">) {
   await requireUser();
   const { id } = await params;
   await assertLeadAccess(id);
@@ -34,8 +32,8 @@ export default async function LeadRecordsPage({
       {isConverted && (
         <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-paper-2 px-3 py-2.5">
           <p className="text-xs text-ink-3">
-            This lead converted — its records requests were carried forward to
-            the matter. Add new requests there.
+            This lead converted — its records requests were carried forward to the matter. Add new
+            requests there.
           </p>
           {lead.convertedMatterId && (
             <Link
@@ -48,10 +46,7 @@ export default async function LeadRecordsPage({
           )}
         </div>
       )}
-      <RecordsTab
-        scope={{ kind: "lead", leadId: id }}
-        writable={!isConverted}
-      />
+      <RecordsTab scope={{ kind: "lead", leadId: id }} writable={!isConverted} />
     </div>
   );
 }

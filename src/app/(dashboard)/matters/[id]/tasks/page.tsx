@@ -10,10 +10,7 @@ import { CheckSquare } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { TaskComposer } from "@/components/matters/captures/task-composer";
 import { ApplyTaskListDialog } from "@/components/automations/apply-task-list-dialog";
-import {
-  TaskListByStatus,
-  type TaskRowPerms,
-} from "@/components/tasks/task-list-by-status";
+import { TaskListByStatus, type TaskRowPerms } from "@/components/tasks/task-list-by-status";
 import { listTaskLists } from "@/lib/queries/automations";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { getCaptureAccess } from "@/lib/capture-access";
@@ -24,9 +21,7 @@ import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
 import { assertMatterAccess } from "@/lib/matter-access";
 
-export default async function MatterTasksPage({
-  params,
-}: PageProps<"/matters/[id]">) {
+export default async function MatterTasksPage({ params }: PageProps<"/matters/[id]">) {
   await requireUser();
   const { id } = await params;
   await assertMatterAccess(id);
@@ -69,9 +64,7 @@ export default async function MatterTasksPage({
     getCaptureAccess(),
   ]);
   const taskLists = canCreate ? allTaskLists : [];
-  const updatedAtById = new Map(
-    versions.map((v) => [v.id, v.updatedAt.toISOString()])
-  );
+  const updatedAtById = new Map(versions.map((v) => [v.id, v.updatedAt.toISOString()]));
   const perms: TaskRowPerms = {
     canEdit,
     canDelete,

@@ -52,10 +52,10 @@ describe("visibilityChangeForMove", () => {
 
   test("shared to shared and plain to plain are unchanged", () => {
     expect(
-      visibilityChangeForMove([{ clientShare: null, folderId: "shared" }], "sub", folders)
+      visibilityChangeForMove([{ clientShare: null, folderId: "shared" }], "sub", folders),
     ).toEqual({ becomesVisible: 0, becomesHidden: 0 });
     expect(
-      visibilityChangeForMove([{ clientShare: null, folderId: "plain" }], null, folders)
+      visibilityChangeForMove([{ clientShare: null, folderId: "plain" }], null, folders),
     ).toEqual({ becomesVisible: 0, becomesHidden: 0 });
   });
 

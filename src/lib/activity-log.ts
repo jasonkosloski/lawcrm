@@ -81,10 +81,7 @@ const toRow = (input: ActivityInput) => ({
  *     await logActivityTx(tx, { ... });
  *   });
  */
-export async function logActivityTx(
-  tx: Tx,
-  input: ActivityInput
-): Promise<void> {
+export async function logActivityTx(tx: Tx, input: ActivityInput): Promise<void> {
   await tx.activityLog.create({ data: toRow(input) });
 }
 

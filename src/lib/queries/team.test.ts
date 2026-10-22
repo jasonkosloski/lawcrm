@@ -55,14 +55,8 @@ describe("listAssigneeOptions", () => {
     });
 
     const options = await listAssigneeOptions();
-    expect(options.map((o) => o.name)).toEqual([
-      "Ada Lovelace",
-      "Grace Hopper",
-      "Zoe Viewer",
-    ]);
-    expect(options[0]).toEqual(
-      expect.objectContaining({ name: "Ada Lovelace", initials: "AL" })
-    );
+    expect(options.map((o) => o.name)).toEqual(["Ada Lovelace", "Grace Hopper", "Zoe Viewer"]);
+    expect(options[0]).toEqual(expect.objectContaining({ name: "Ada Lovelace", initials: "AL" }));
     expect(options[0]!.id).toBeTruthy();
   });
 

@@ -1,15 +1,9 @@
 import { describe, expect, it } from "vitest";
-import {
-  describeDatabaseUrl,
-  formatPreflight,
-  summarizePreflight,
-} from "./clerk-preflight";
+import { describeDatabaseUrl, formatPreflight, summarizePreflight } from "./clerk-preflight";
 
 describe("describeDatabaseUrl", () => {
   it("returns host and a 6-char user prefix, never the password", () => {
-    const d = describeDatabaseUrl(
-      "postgresql://abcdefghij:s3cretpw@db.example.com:5432/app"
-    );
+    const d = describeDatabaseUrl("postgresql://abcdefghij:s3cretpw@db.example.com:5432/app");
     expect(d).toEqual({ host: "db.example.com:5432", userPrefix: "abcdef" });
     expect(JSON.stringify(d)).not.toContain("s3cretpw");
   });
@@ -33,7 +27,7 @@ describe("summarizePreflight / formatPreflight", () => {
   it("prints the host first and no password", () => {
     const out = formatPreflight(
       describeDatabaseUrl("postgresql://abcdefghij:pw123@h.example:5432/d"),
-      summarizePreflight(users)
+      summarizePreflight(users),
     );
     expect(out.split("\n")[0]).toContain("h.example:5432");
     expect(out).toContain("Contractor <x@gmail.com>");

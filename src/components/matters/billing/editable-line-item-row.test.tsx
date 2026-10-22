@@ -55,7 +55,7 @@ const renderRow = () =>
       <tbody>
         <EditableLineItemRow {...baseProps} />
       </tbody>
-    </table>
+    </table>,
   );
 
 describe("EditableLineItemRow — commit trims outer whitespace", () => {
@@ -70,18 +70,14 @@ describe("EditableLineItemRow — commit trims outer whitespace", () => {
 
     expect(mockedAction).not.toHaveBeenCalled();
     // Back in view mode with the unchanged committed value.
-    expect(
-      screen.getByRole("button", { name: "Research" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Research" })).toBeInTheDocument();
   });
 
   test("real change is sent trimmed; internal whitespace survives", async () => {
     const user = userEvent.setup();
     renderRow();
 
-    await user.click(
-      screen.getByRole("button", { name: "Reviewed discovery responses" })
-    );
+    await user.click(screen.getByRole("button", { name: "Reviewed discovery responses" }));
     // Outer padding + a deliberate double space inside. Enter
     // (without Shift) commits the narrative textarea.
     await user.keyboard("  Drafted  motion in limine  {Enter}");
@@ -97,9 +93,7 @@ describe("EditableLineItemRow — commit trims outer whitespace", () => {
     expect(fd.get("rate")).toBe("300");
 
     // Optimistic view mode shows the trimmed value.
-    expect(
-      screen.getByRole("button", { name: "Drafted motion in limine" })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Drafted motion in limine" })).toBeInTheDocument();
   });
 });
 
@@ -113,9 +107,7 @@ describe("EditableLineItemRow — date-only values stay on the stored calendar d
   test("a narrative-only edit posts the unchanged stored date, never a drifted one", async () => {
     const user = userEvent.setup();
     renderRow();
-    await user.click(
-      screen.getByRole("button", { name: "Reviewed discovery responses" })
-    );
+    await user.click(screen.getByRole("button", { name: "Reviewed discovery responses" }));
     await user.keyboard("Fixed a typo{Enter}");
 
     expect(mockedAction).toHaveBeenCalledOnce();
@@ -130,9 +122,7 @@ describe("EditableLineItemRow — date-only values stay on the stored calendar d
     const user = userEvent.setup();
     renderRow();
     await user.click(screen.getByRole("button", { name: "Apr 15" }));
-    const input = document.querySelector(
-      'input[type="date"]'
-    ) as HTMLInputElement;
+    const input = document.querySelector('input[type="date"]') as HTMLInputElement;
     expect(input.value).toBe("2026-04-15");
   });
 
@@ -142,7 +132,7 @@ describe("EditableLineItemRow — date-only values stay on the stored calendar d
         <tbody>
           <EditableLineItemRow {...baseProps} />
         </tbody>
-      </table>
+      </table>,
     );
     rerender(
       <table>
@@ -156,7 +146,7 @@ describe("EditableLineItemRow — date-only values stay on the stored calendar d
             }}
           />
         </tbody>
-      </table>
+      </table>,
     );
     expect(screen.getByRole("button", { name: "May 2" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Drafting" })).toBeInTheDocument();

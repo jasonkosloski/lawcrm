@@ -8,6 +8,7 @@
 **Decision:** Pinning is per-user. A new `UserMatterPin` join table (`@@id([userId, matterId])`) stores pins. The global `Matter.isPinned` column has been dropped. A `toggleMatterPin` server action flips the current user's pin for a given matter and `revalidatePath('/', 'layout')` so the sidebar refreshes.
 
 **Trade-offs:**
+
 - (+) Matches real usage patterns — each user curates their own pin list
 - (+) Foreshadows the Phase 8 "role-based customizable sidebar" work
 - (+) FK integrity via relations to both `User` and `Matter`

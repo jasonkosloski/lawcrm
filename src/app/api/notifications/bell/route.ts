@@ -24,10 +24,7 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 export async function GET(): Promise<Response> {
   const session = await getSession();
   if (!session?.user?.id) {
-    return Response.json(
-      { error: "Unauthorized" },
-      { status: 401, headers: NO_STORE }
-    );
+    return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });
   }
 
   try {
@@ -37,7 +34,7 @@ export async function GET(): Promise<Response> {
     console.error("[notifications/bell] failed", err);
     return Response.json(
       { error: "Could not load notifications." },
-      { status: 500, headers: NO_STORE }
+      { status: 500, headers: NO_STORE },
     );
   }
 }

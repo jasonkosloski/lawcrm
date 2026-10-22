@@ -34,13 +34,7 @@ vi.mock("@/components/intake/lead-time-composer", () => ({
   LeadTimeComposer: () => <div data-testid="lead-time-composer" />,
 }));
 vi.mock("@/components/time-entries/time-entry-row-actions", () => ({
-  TimeEntryRowMenu: ({
-    canEdit,
-    canDelete,
-  }: {
-    canEdit?: boolean;
-    canDelete?: boolean;
-  }) => (
+  TimeEntryRowMenu: ({ canEdit, canDelete }: { canEdit?: boolean; canDelete?: boolean }) => (
     <div
       data-testid="time-entry-menu"
       data-can-edit={String(canEdit)}
@@ -80,9 +74,7 @@ const row = (over: Partial<LeadTimeEntryRow> = {}): LeadTimeEntryRow => ({
 });
 
 const grantAllExcept = (...denied: string[]) =>
-  mockedHasPermission.mockImplementation(async (key: string) =>
-    !denied.includes(key)
-  );
+  mockedHasPermission.mockImplementation(async (key: string) => !denied.includes(key));
 
 const arrange = (entries: LeadTimeEntryRow[] = [], stage = "new") => {
   mockedEntries.mockResolvedValue(entries);

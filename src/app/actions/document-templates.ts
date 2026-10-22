@@ -32,24 +32,21 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { assertScopeAccess, assertScopeWritable, revalidateDocumentScope } from "@/lib/scope-access";
+import {
+  assertScopeAccess,
+  assertScopeWritable,
+  revalidateDocumentScope,
+} from "@/lib/scope-access";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentFirm } from "@/lib/firm";
-import {
-  currentUserHasPermission,
-  requirePermission,
-} from "@/lib/permission-check";
+import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { deleteFile, storeFile } from "@/lib/file-storage";
 import { toUserMessage } from "@/lib/user-facing-error";
 import { formatDate } from "@/lib/format-date";
 import { resolveRecordsRoleFolder } from "@/lib/records-requests/folder";
-import {
-  composeCityStateZip,
-  mergeTemplate,
-  type MergeContext,
-} from "@/lib/template-merge";
+import { composeCityStateZip, mergeTemplate, type MergeContext } from "@/lib/template-merge";
 import {
   MAX_TEMPLATE_BODY,
   MAX_TEMPLATE_DESCRIPTION,
@@ -67,12 +64,7 @@ const templateSchema = z.object({
   // the curated list so the picker + grouping stay coherent. When
   // firm-defined categories land, loosen here only.
   category: z.string().min(1, "Category is required.").max(60),
-  description: z
-    .string()
-    .trim()
-    .max(MAX_TEMPLATE_DESCRIPTION)
-    .optional()
-    .or(z.literal("")),
+  description: z.string().trim().max(MAX_TEMPLATE_DESCRIPTION).optional().or(z.literal("")),
   body: z
     .string()
     .min(1, "Template body is required.")
@@ -84,10 +76,8 @@ function parseTemplateForm(
   /** An existing row's category stays valid when unchanged even if
    *  it isn't in the curated list (imported / pre-validation rows),
    *  so fixing a typo in the body doesn't force a re-categorize. */
-  keepCategory?: string
-):
-  | { ok: true; data: z.infer<typeof templateSchema> }
-  | { ok: false; error: string } {
+  keepCategory?: string,
+): { ok: true; data: z.infer<typeof templateSchema> } | { ok: false; error: string } {
   const parsed = templateSchema.safeParse({
     name: (formData.get("name") as string | null) ?? "",
     category: (formData.get("category") as string | null) ?? "general",
@@ -97,14 +87,10 @@ function parseTemplateForm(
   if (!parsed.success) {
     return {
       ok: false,
-      error:
-        parsed.error.issues[0]?.message ?? "Invalid template — check the fields.",
+      error: parsed.error.issues[0]?.message ?? "Invalid template — check the fields.",
     };
   }
-  if (
-    !isTemplateCategory(parsed.data.category) &&
-    parsed.data.category !== keepCategory
-  ) {
+  if (!isTemplateCategory(parsed.data.category) && parsed.data.category !== keepCategory) {
     return { ok: false, error: "Unknown category." };
   }
   return { ok: true, data: parsed.data };
@@ -115,7 +101,7 @@ function parseTemplateForm(
 async function logTemplateChange(
   userId: string,
   title: string,
-  detail: string | null
+  detail: string | null,
 ): Promise<void> {
   await logActivity({
     matterId: null,
@@ -131,7 +117,7 @@ async function logTemplateChange(
 
 export async function createDocumentTemplate(
   _prev: TemplateFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<TemplateFormState> {
   const userId = await requirePermission("documents.template.create");
   const parsed = parseTemplateForm(formData);
@@ -151,7 +137,7 @@ export async function createDocumentTemplate(
   await logTemplateChange(
     userId,
     `Template "${parsed.data.name}" created`,
-    `Category: ${templateCategoryLabel(parsed.data.category)} (id ${created.id})`
+    `Category: ${templateCategoryLabel(parsed.data.category)} (id ${created.id})`,
   );
 
   revalidatePath("/settings/templates");
@@ -161,7 +147,7 @@ export async function createDocumentTemplate(
 export async function updateDocumentTemplate(
   templateId: string,
   _prev: TemplateFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<TemplateFormState> {
   const userId = await requirePermission("documents.template.edit");
 
@@ -196,9 +182,7 @@ export async function updateDocumentTemplate(
   // only record THAT it changed (the audit trail answers who/when).
   const newDescription = parsed.data.description?.trim() || null;
   const changes = [
-    existing.name !== parsed.data.name
-      ? `name "${existing.name}" -> "${parsed.data.name}"`
-      : null,
+    existing.name !== parsed.data.name ? `name "${existing.name}" -> "${parsed.data.name}"` : null,
     existing.category !== parsed.data.category
       ? `category ${existing.category} -> ${parsed.data.category}`
       : null,
@@ -208,7 +192,7 @@ export async function updateDocumentTemplate(
   await logTemplateChange(
     userId,
     `Template "${parsed.data.name}" updated`,
-    changes.length > 0 ? changes.join("; ") : "No field changes"
+    changes.length > 0 ? changes.join("; ") : "No field changes",
   );
 
   revalidatePath("/settings/templates");
@@ -220,7 +204,7 @@ export async function updateDocumentTemplate(
  *  Gated as an EDIT: same firm-wide blast radius, no data loss. */
 export async function setDocumentTemplateActive(
   templateId: string,
-  isActive: boolean
+  isActive: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("documents.template.edit");
   const existing = await prisma.documentTemplate.findUnique({
@@ -237,7 +221,7 @@ export async function setDocumentTemplateActive(
     await logTemplateChange(
       userId,
       `Template "${existing.name}" ${isActive ? "restored" : "archived"}`,
-      null
+      null,
     );
   }
   revalidatePath("/settings/templates");
@@ -248,7 +232,7 @@ export async function setDocumentTemplateActive(
  *  untouched (they're plain Document rows with their own file).
  *  Prefer archive unless the template was a mistake. */
 export async function deleteDocumentTemplate(
-  templateId: string
+  templateId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requirePermission("documents.template.delete");
   const existing = await prisma.documentTemplate.findUnique({
@@ -261,7 +245,7 @@ export async function deleteDocumentTemplate(
   await logTemplateChange(
     userId,
     `Template "${existing.name}" deleted`,
-    `Category: ${templateCategoryLabel(existing.category)} (id ${existing.id})`
+    `Category: ${templateCategoryLabel(existing.category)} (id ${existing.id})`,
   );
   revalidatePath("/settings/templates");
   return { ok: true };
@@ -277,9 +261,7 @@ function composeContactAddress(c: {
   zip: string | null;
 }): string | null {
   return (
-    [c.address, composeCityStateZip(c.city, c.state, c.zip)]
-      .filter(Boolean)
-      .join(", ") || null
+    [c.address, composeCityStateZip(c.city, c.state, c.zip)].filter(Boolean).join(", ") || null
   );
 }
 
@@ -311,9 +293,7 @@ const recordsRequestSelect = {
   },
 } as const;
 
-type LoadedRecordsRequest = NonNullable<
-  Awaited<ReturnType<typeof loadRecordsRequest>>
->;
+type LoadedRecordsRequest = NonNullable<Awaited<ReturnType<typeof loadRecordsRequest>>>;
 
 /** The request, only if it belongs to `scope` (never trust a bare id). */
 function loadRecordsRequest(scope: RecordScope, id: string) {
@@ -330,7 +310,7 @@ function loadRecordsRequest(scope: RecordScope, id: string) {
  *  are shared. Null when the record is gone. */
 async function resolveMergeContext(
   scope: RecordScope,
-  request: LoadedRecordsRequest | null = null
+  request: LoadedRecordsRequest | null = null,
 ): Promise<{
   ctx: MergeContext;
   matterName: string;
@@ -494,7 +474,7 @@ export type TemplatePreviewResult =
 export async function previewDocumentFromTemplate(
   templateId: string,
   scope: RecordScope,
-  opts?: { recordsRequestId?: string }
+  opts?: { recordsRequestId?: string },
 ): Promise<TemplatePreviewResult> {
   await assertScopeAccess(scope);
   if (!(await currentUserHasPermission("documents.upload"))) {
@@ -504,10 +484,7 @@ export async function previewDocumentFromTemplate(
     };
   }
   // The merged text exposes custodian + request details.
-  if (
-    opts?.recordsRequestId &&
-    !(await currentUserHasPermission("records.view"))
-  ) {
+  if (opts?.recordsRequestId && !(await currentUserHasPermission("records.view"))) {
     return {
       ok: false,
       error: "You don't have permission to view records requests.",
@@ -563,7 +540,7 @@ export type GenerateDocumentResult =
 export async function generateDocumentFromTemplate(
   templateId: string,
   scope: RecordScope,
-  opts?: { recordsRequestId?: string }
+  opts?: { recordsRequestId?: string },
 ): Promise<GenerateDocumentResult> {
   const userId = await requirePermission("documents.upload");
   // Tagging a document to a records request is a records edit.
@@ -596,7 +573,7 @@ export async function generateDocumentFromTemplate(
   const documentName = `${template.name} — ${formatDate(
     resolved.ctx.today,
     "medium",
-    resolved.ctx.timeZone
+    resolved.ctx.timeZone,
   )}.md`;
 
   // Node's global File — same shape uploadDocument receives from the
@@ -606,16 +583,14 @@ export async function generateDocumentFromTemplate(
   // an inline error instead of the route error boundary.
   let stored: Awaited<ReturnType<typeof storeFile>>;
   try {
-    stored = await storeFile(
-      new File([merged.text], documentName, { type: "text/markdown" })
-    );
+    stored = await storeFile(new File([merged.text], documentName, { type: "text/markdown" }));
   } catch (err) {
     return {
       ok: false,
       error: toUserMessage(
         err,
         "Couldn't save the document — storage is unavailable. Try again.",
-        "generateDocumentFromTemplate.storeFile"
+        "generateDocumentFromTemplate.storeFile",
       ),
     };
   }
@@ -643,7 +618,7 @@ export async function generateDocumentFromTemplate(
               custodianName: request.custodian.name,
               typeName: request.type?.name ?? request.adHocTypeName ?? "Records",
             },
-            "request_letter"
+            "request_letter",
           );
           return tx.document.create({
             data: {
@@ -664,7 +639,7 @@ export async function generateDocumentFromTemplate(
       error: toUserMessage(
         err,
         "Couldn't save the document. Try again.",
-        "generateDocumentFromTemplate.create"
+        "generateDocumentFromTemplate.create",
       ),
     };
   }

@@ -24,7 +24,7 @@ const PICKER_LIMIT = 50;
  *  optionally filtered by name. */
 export async function listAttachableDocuments(
   scope: RecordScope,
-  query = ""
+  query = "",
 ): Promise<AttachableDocument[]> {
   await requirePermission("communication.send_email");
   await assertScopeAccess(scope);
@@ -45,7 +45,7 @@ export async function listAttachableDocuments(
  *  completion callback has written it (null until then). */
 export async function findUploadedDocument(
   scope: RecordScope,
-  fileUrl: string
+  fileUrl: string,
 ): Promise<AttachableDocument | null> {
   await requirePermission("communication.send_email");
   await assertScopeAccess(scope);

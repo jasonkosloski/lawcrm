@@ -109,9 +109,7 @@ describe("mergeVisibility — applies stored values", () => {
 describe("mergeVisibility — defensive against bad types", () => {
   test("non-boolean values for a known key fall through to default", () => {
     // Old blobs from a buggier version, or hand-edited DB rows.
-    expect(
-      mergeVisibility({ visible: { kpis: "false" } }).kpis
-    ).toBe(true);
+    expect(mergeVisibility({ visible: { kpis: "false" } }).kpis).toBe(true);
     expect(mergeVisibility({ visible: { kpis: 0 } }).kpis).toBe(true);
     expect(mergeVisibility({ visible: { kpis: null } }).kpis).toBe(true);
   });
@@ -218,8 +216,7 @@ describe("mergeOrder — defensive against bad entries", () => {
 // ── v3 layout model ───────────────────────────────────────────────────
 
 const ALL = [...DASHBOARD_CARD_KEYS].sort();
-const keysIn = (l: DashboardLayout) =>
-  [...l.band, ...l.columns.flat(), ...l.hidden].sort();
+const keysIn = (l: DashboardLayout) => [...l.band, ...l.columns.flat(), ...l.hidden].sort();
 
 describe("mergeLayout", () => {
   test("null / garbage → DEFAULT_LAYOUT", () => {
@@ -296,7 +293,7 @@ describe("mergeLayout", () => {
     });
     expect(l.columns[1].slice(0, 2)).toEqual(["tasks", "pulse"]);
     expect(
-      mergeLayout({ v: 3, split: "4/4/4", band: [], columns: [], hidden: [] }).columns
+      mergeLayout({ v: 3, split: "4/4/4", band: [], columns: [], hidden: [] }).columns,
     ).toHaveLength(3);
   });
 });
@@ -369,8 +366,8 @@ describe("layoutsEqual", () => {
   test("structural compare", () => {
     expect(layoutsEqual(DEFAULT_LAYOUT, mergeLayout(null))).toBe(true);
     expect(layoutsEqual(DEFAULT_LAYOUT, setSplit(DEFAULT_LAYOUT, "6/6"))).toBe(false);
-    expect(
-      layoutsEqual(DEFAULT_LAYOUT, moveCard(DEFAULT_LAYOUT, "kpis", { zone: "hidden" }))
-    ).toBe(false);
+    expect(layoutsEqual(DEFAULT_LAYOUT, moveCard(DEFAULT_LAYOUT, "kpis", { zone: "hidden" }))).toBe(
+      false,
+    );
   });
 });

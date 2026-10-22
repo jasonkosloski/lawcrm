@@ -20,10 +20,7 @@ import { logActivity } from "@/lib/activity-log";
 
 type Result = { ok: true } | { ok: false; error: string };
 
-export async function setPortalBilling(
-  matterId: string,
-  enabled: boolean
-): Promise<Result> {
+export async function setPortalBilling(matterId: string, enabled: boolean): Promise<Result> {
   const gate = await requirePermissionResult("portal.share_billing");
   if (!gate.ok) return { ok: false, error: gate.error };
   if (!(await currentUserHasPermission("billing.view"))) {
@@ -41,9 +38,7 @@ export async function setPortalBilling(
       matterId,
       userId: gate.userId,
       type: "note",
-      title: enabled
-        ? "Showed billing in the client portal"
-        : "Hid billing from the client portal",
+      title: enabled ? "Showed billing in the client portal" : "Hid billing from the client portal",
     });
   }
   revalidatePath(`/matters/${matterId}`);

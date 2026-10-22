@@ -34,41 +34,41 @@ Request letters come from the document-template system and received records go t
 
 ### `RecordsRequestType` (firm-configured)
 
-| Field | Type | Notes |
-|---|---|---|
-| id | cuid | |
-| name | String | "Medical (HIPAA)", "CORA", … |
-| responseAmount | Int? | null = no statutory period for this type |
-| responseUnit | enum `RecordsPeriodUnit` (CALENDAR_DAYS \| BUSINESS_DAYS)? | required when amount is set |
-| followUpDays | Int | chase interval, default 7, 1–90 |
-| defaultTemplateId | String? | FK DocumentTemplate, SetNull |
-| isActive | Boolean | archive hides it from pickers |
-| sortOrder, createdAt, updatedAt | | |
+| Field                           | Type                                                       | Notes                                    |
+| ------------------------------- | ---------------------------------------------------------- | ---------------------------------------- |
+| id                              | cuid                                                       |                                          |
+| name                            | String                                                     | "Medical (HIPAA)", "CORA", …             |
+| responseAmount                  | Int?                                                       | null = no statutory period for this type |
+| responseUnit                    | enum `RecordsPeriodUnit` (CALENDAR_DAYS \| BUSINESS_DAYS)? | required when amount is set              |
+| followUpDays                    | Int                                                        | chase interval, default 7, 1–90          |
+| defaultTemplateId               | String?                                                    | FK DocumentTemplate, SetNull             |
+| isActive                        | Boolean                                                    | archive hides it from pickers            |
+| sortOrder, createdAt, updatedAt |                                                            |                                          |
 
 Seeded starter types (editable or deletable): Medical (HIPAA) 30 calendar; CORA 3 business; Police report 3 business; Employment 30 calendar. The seed values are starting points, not legal advice.
 
 ### `RecordsRequest`
 
-| Field | Type | Notes |
-|---|---|---|
-| id | cuid | |
-| matterId / leadId | String? | **exactly one** (`scopeOf`). Lead conversion re-homes |
-| custodianContactId | String | FK Contact, Restrict (a contact with requests can't be hard-deleted; merge re-points) |
-| typeId | String? | FK RecordsRequestType, SetNull. Null = ad hoc |
-| adHocTypeName | String? | required when typeId is null |
-| subject | String | e.g. "Records for Jane Doe" |
-| description | String? | what is being asked for |
-| dateRangeStart / dateRangeEnd | DateTime? | date-only (ADR-012) |
-| status | String | see lifecycle |
-| sentAt | DateTime? | date-only |
-| responseDueDate | DateTime? | date-only; computed on send from the type, manual for ad hoc; always editable |
-| nextFollowUpDate | DateTime? | date-only |
-| receivedAt | DateTime? | date-only; set on Complete |
-| ownerId | String? | FK User, SetNull. Follow-up tasks are assigned to them |
-| feeEstimate / feeAmount | Decimal(14,2)? | ADR-036 money |
-| feePaidAt | DateTime? | date-only |
-| expenseId | String? @unique | FK Expense, SetNull |
-| createdById, createdAt, updatedAt | | |
+| Field                             | Type            | Notes                                                                                 |
+| --------------------------------- | --------------- | ------------------------------------------------------------------------------------- |
+| id                                | cuid            |                                                                                       |
+| matterId / leadId                 | String?         | **exactly one** (`scopeOf`). Lead conversion re-homes                                 |
+| custodianContactId                | String          | FK Contact, Restrict (a contact with requests can't be hard-deleted; merge re-points) |
+| typeId                            | String?         | FK RecordsRequestType, SetNull. Null = ad hoc                                         |
+| adHocTypeName                     | String?         | required when typeId is null                                                          |
+| subject                           | String          | e.g. "Records for Jane Doe"                                                           |
+| description                       | String?         | what is being asked for                                                               |
+| dateRangeStart / dateRangeEnd     | DateTime?       | date-only (ADR-012)                                                                   |
+| status                            | String          | see lifecycle                                                                         |
+| sentAt                            | DateTime?       | date-only                                                                             |
+| responseDueDate                   | DateTime?       | date-only; computed on send from the type, manual for ad hoc; always editable         |
+| nextFollowUpDate                  | DateTime?       | date-only                                                                             |
+| receivedAt                        | DateTime?       | date-only; set on Complete                                                            |
+| ownerId                           | String?         | FK User, SetNull. Follow-up tasks are assigned to them                                |
+| feeEstimate / feeAmount           | Decimal(14,2)?  | ADR-036 money                                                                         |
+| feePaidAt                         | DateTime?       | date-only                                                                             |
+| expenseId                         | String? @unique | FK Expense, SetNull                                                                   |
+| createdById, createdAt, updatedAt |                 |                                                                                       |
 
 Indexes: matterId, leadId, status, ownerId, (status, nextFollowUpDate), (status, responseDueDate).
 

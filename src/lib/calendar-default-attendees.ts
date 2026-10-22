@@ -22,7 +22,7 @@ import { getEffectiveCalendarDefaults } from "@/lib/calendar-defaults";
  *  settings queries. Call BEFORE opening the transaction. */
 export async function resolveAutoAddTeam(
   matterId: string,
-  captures: ReadonlyArray<{ kind: string }>
+  captures: ReadonlyArray<{ kind: string }>,
 ): Promise<boolean> {
   if (!captures.some((c) => c.kind === "event")) return false;
   return (await getEffectiveCalendarDefaults(matterId)).autoAddTeamToNewEvents;
@@ -37,7 +37,7 @@ export async function addDefaultEventAttendees(
     matterId: string | null;
     userId: string;
     autoAddTeam: boolean;
-  }
+  },
 ): Promise<void> {
   const { eventId, matterId, userId, autoAddTeam } = args;
   // Auto-add matter team members as attendees when the effective

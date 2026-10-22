@@ -14,10 +14,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import type {
-  CalendarDeadlineRow,
-  CalendarEventRow,
-} from "@/lib/queries/calendar";
+import type { CalendarDeadlineRow, CalendarEventRow } from "@/lib/queries/calendar";
 import { parseDateOnly } from "@/lib/format-date";
 
 // calendar-agenda.tsx is a server component — its import graph pulls
@@ -27,11 +24,7 @@ vi.mock("@/lib/queries/calendar", () => ({
   getCalendarItems: vi.fn(async () => []),
 }));
 
-import {
-  agendaRange,
-  agendaTimeLabel,
-  buildAgendaGroups,
-} from "./calendar-agenda";
+import { agendaRange, agendaTimeLabel, buildAgendaGroups } from "./calendar-agenda";
 
 describe("agendaTimeLabel", () => {
   // 2026-07-06T21:30:00Z — 3:30 PM in Denver (MDT, UTC-6),
@@ -42,9 +35,7 @@ describe("agendaTimeLabel", () => {
     expect(agendaTimeLabel(instant, false, "America/Denver")).toBe("3:30pm");
     // Same instant, different user TZ → different label. Pins that
     // the TZ arg is actually threaded through to Intl.
-    expect(agendaTimeLabel(instant, false, "America/New_York")).toBe(
-      "5:30pm"
-    );
+    expect(agendaTimeLabel(instant, false, "America/New_York")).toBe("5:30pm");
   });
 
   it("stays on the user's calendar day across UTC midnight", () => {
@@ -53,9 +44,7 @@ describe("agendaTimeLabel", () => {
     // agree (the old server-TZ format would have said "2:00am" on a
     // UTC production server).
     const lateEvening = new Date("2026-07-07T02:00:00.000Z");
-    expect(agendaTimeLabel(lateEvening, false, "America/Denver")).toBe(
-      "8:00pm"
-    );
+    expect(agendaTimeLabel(lateEvening, false, "America/Denver")).toBe("8:00pm");
   });
 
   it("returns 'All day' for all-day events regardless of TZ", () => {
@@ -76,7 +65,7 @@ const TZ = "America/Denver";
 
 const deadline = (
   dueKey: string,
-  over: Partial<CalendarDeadlineRow> = {}
+  over: Partial<CalendarDeadlineRow> = {},
 ): CalendarDeadlineRow => ({
   id: `d-${dueKey}-${over.deadlineKind ?? "manual"}`,
   kind: "deadline",
@@ -127,11 +116,7 @@ describe("buildAgendaGroups", () => {
       startTime: new Date("2026-04-28T03:30:00.000Z"),
       endTime: new Date("2026-04-28T04:30:00.000Z"),
     });
-    const groups = buildAgendaGroups(
-      [lateEvent, deadline("2026-04-27")],
-      TZ,
-      TODAY
-    );
+    const groups = buildAgendaGroups([lateEvent, deadline("2026-04-27")], TZ, TODAY);
     expect(groups).toHaveLength(1);
     expect(groups[0]!.dayKey).toBe("2026-04-27");
     // Deadline first, then the event.
@@ -155,11 +140,7 @@ describe("buildAgendaGroups", () => {
     });
     const manual = deadline("2026-04-27", { deadlineKind: "manual" });
     const critical = deadline("2026-04-27", { deadlineKind: "critical" });
-    const groups = buildAgendaGroups(
-      [late, manual, early, allDay, critical],
-      TZ,
-      TODAY
-    );
+    const groups = buildAgendaGroups([late, manual, early, allDay, critical], TZ, TODAY);
     expect(groups[0]!.items.map((i) => i.id)).toEqual([
       critical.id,
       manual.id,
@@ -190,7 +171,7 @@ describe("buildAgendaGroups", () => {
         deadline("2026-04-20"),
       ],
       TZ,
-      TODAY
+      TODAY,
     );
     expect(groups.map((g) => g.dayKey)).toEqual(["2026-04-27", "2026-05-05"]);
   });

@@ -43,7 +43,7 @@ vi.mock("@/lib/file-storage", () => ({
   // inline/attachment + media/document choices are observable.
   signedBlobUrl: vi.fn(
     async (url: string, opts: { download?: boolean; media?: boolean } = {}) =>
-      `${url}?signed=1${opts.media ? "&ttl=media" : ""}${opts.download ? "&download=1" : ""}`
+      `${url}?signed=1${opts.media ? "&ttl=media" : ""}${opts.download ? "&download=1" : ""}`,
   ),
 }));
 
@@ -70,7 +70,13 @@ afterEach(() => {
  *  start/end) so 206 slice assertions are meaningful. */
 async function download(
   contentType: string | null,
-  opts?: { bytes?: string; range?: string; query?: string; matterId?: string | null; leadId?: string | null }
+  opts?: {
+    bytes?: string;
+    range?: string;
+    query?: string;
+    matterId?: string | null;
+    leadId?: string | null;
+  },
 ): Promise<Response> {
   const bytes = Buffer.from(opts?.bytes ?? "data");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -89,9 +95,7 @@ async function download(
   } as any);
   mockedStat.mockResolvedValue({ size: bytes.length });
   mockedOpen.mockImplementation((_key, range) =>
-    Readable.from([
-      range ? bytes.subarray(range.start, range.end + 1) : bytes,
-    ])
+    Readable.from([range ? bytes.subarray(range.start, range.end + 1) : bytes]),
   );
 
   const req = new Request(`http://localhost/api/documents/d1/download${opts?.query ?? ""}`, {
@@ -157,7 +161,7 @@ describe("GET /api/documents/[id]/download — XSS-hardened headers", () => {
   test("streams the file bytes and preserves the original name", async () => {
     const res = await download("application/pdf");
     expect(res.headers.get("Content-Disposition")).toContain(
-      `filename*=UTF-8''${encodeURIComponent("exhibit A.bin")}`
+      `filename*=UTF-8''${encodeURIComponent("exhibit A.bin")}`,
     );
     expect(await res.text()).toBe("data");
   });
@@ -273,14 +277,13 @@ describe("GET /api/documents/[id]/download — Range requests", () => {
 });
 
 describe("GET /api/documents/[id]/download — blob-stored documents (302)", () => {
-  const BLOB_URL =
-    "https://abc123.private.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__clip.mp4";
+  const BLOB_URL = "https://abc123.private.blob.vercel-storage.com/AAAAAAAAAAAAAAAA__clip.mp4";
 
   /** Same happy wiring as `download()` but with a blob-URL fileUrl —
    *  the shape that selects the redirect branch (ADR-015). */
   async function downloadBlob(
     contentType: string | null,
-    opts?: { missing?: boolean; query?: string }
+    opts?: { missing?: boolean; query?: string },
   ): Promise<Response> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockedAuth.mockResolvedValue({ user: { id: "u1" } } as any);
@@ -298,9 +301,7 @@ describe("GET /api/documents/[id]/download — blob-stored documents (302)", () 
     } as any);
     mockedStat.mockResolvedValue(opts?.missing ? null : { size: 100 });
 
-    const req = new Request(
-      `http://localhost/api/documents/d1/download${opts?.query ?? ""}`
-    );
+    const req = new Request(`http://localhost/api/documents/d1/download${opts?.query ?? ""}`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return GET(req as any, { params: Promise.resolve({ id: "d1" }) });
   }
@@ -357,9 +358,7 @@ describe("GET /api/documents/[id]/download — local streaming lifecycle", () =>
       highWaterMark: 1024,
       read() {
         state.pulled += 1;
-        this.push(
-          state.pulled > totalChunks ? null : Buffer.alloc(1024, "a")
-        );
+        this.push(state.pulled > totalChunks ? null : Buffer.alloc(1024, "a"));
       },
     });
     return { state, stream };

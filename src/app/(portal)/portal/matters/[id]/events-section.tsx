@@ -15,18 +15,12 @@ export function whenLabel(e: PortalSharedEventView): string {
     const start = formatDate(e.startTime, "full_short", "UTC");
     const sameDay =
       e.endTime.getTime() <= e.startTime.getTime() ||
-      formatDate(e.endTime, "iso", "UTC") ===
-        formatDate(e.startTime, "iso", "UTC");
-    return sameDay
-      ? start
-      : `${start} to ${formatDate(e.endTime, "full_short", "UTC")}`;
+      formatDate(e.endTime, "iso", "UTC") === formatDate(e.startTime, "iso", "UTC");
+    return sameDay ? start : `${start} to ${formatDate(e.endTime, "full_short", "UTC")}`;
   }
   const date = formatDate(e.startTime, "full_short", PORTAL_TIME_ZONE);
   const start = formatDate(e.startTime, "time", PORTAL_TIME_ZONE);
-  if (
-    dateKeyInTz(e.startTime, PORTAL_TIME_ZONE) ===
-    dateKeyInTz(e.endTime, PORTAL_TIME_ZONE)
-  ) {
+  if (dateKeyInTz(e.startTime, PORTAL_TIME_ZONE) === dateKeyInTz(e.endTime, PORTAL_TIME_ZONE)) {
     const end = formatDate(e.endTime, "time", PORTAL_TIME_ZONE);
     return end === start ? `${date}, ${start}` : `${date}, ${start} to ${end}`;
   }
@@ -38,9 +32,7 @@ export function whenLabel(e: PortalSharedEventView): string {
 function EventItem({ e }: { e: PortalSharedEventView }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="font-display text-base font-medium text-ink">
-        {e.title}
-      </span>
+      <span className="font-display text-base font-medium text-ink">{e.title}</span>
       <span className="inline-flex items-center gap-1.5 text-sm text-ink-3">
         <CalendarDays className="size-4 shrink-0" aria-hidden="true" />
         {whenLabel(e)}
@@ -51,9 +43,7 @@ function EventItem({ e }: { e: PortalSharedEventView }) {
           {e.location}
         </span>
       ) : null}
-      {e.note ? (
-        <p className="text-sm whitespace-pre-line text-ink-2">{e.note}</p>
-      ) : null}
+      {e.note ? <p className="text-sm whitespace-pre-line text-ink-2">{e.note}</p> : null}
     </div>
   );
 }
@@ -74,10 +64,7 @@ export function EventsSection({
       {upcoming.length > 0 ? (
         <ul className="flex flex-col gap-3">
           {upcoming.map((e) => (
-            <li
-              key={e.id}
-              className="rounded-xl bg-white p-5 shadow-xs ring-1 ring-line"
-            >
+            <li key={e.id} className="rounded-xl bg-white p-5 shadow-xs ring-1 ring-line">
               <EventItem e={e} />
             </li>
           ))}

@@ -16,15 +16,7 @@
  *      payments).
  */
 
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/current-user-tz", () => ({
   getCurrentUserTimeZone: vi.fn(),
@@ -205,8 +197,20 @@ describe("daysUntilDue", () => {
   test("is null for draft and approved invoices (never billed, so never 'late')", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     const past = new Date("2026-05-01T12:00:00Z");
-    const draft = await seedInvoice({ matterId, invoiceNumber: "2026-001", totalAmount: 10, status: "draft", dueDate: past });
-    const approved = await seedInvoice({ matterId, invoiceNumber: "2026-002", totalAmount: 10, status: "approved", dueDate: past });
+    const draft = await seedInvoice({
+      matterId,
+      invoiceNumber: "2026-001",
+      totalAmount: 10,
+      status: "draft",
+      dueDate: past,
+    });
+    const approved = await seedInvoice({
+      matterId,
+      invoiceNumber: "2026-002",
+      totalAmount: 10,
+      status: "approved",
+      dueDate: past,
+    });
     const billing = await getMatterBilling(matterId);
     for (const id of [draft, approved]) {
       expect(billing.invoices.find((i) => i.id === id)!.daysUntilDue).toBeNull();
@@ -216,8 +220,21 @@ describe("daysUntilDue", () => {
 
   test("is null for paid and void invoices", async () => {
     const past = new Date("2026-05-01T12:00:00Z");
-    const paid = await seedInvoice({ matterId, invoiceNumber: "2026-001", totalAmount: 10, paidAmount: 10, status: "paid", dueDate: past });
-    const voided = await seedInvoice({ matterId, invoiceNumber: "2026-002", totalAmount: 10, status: "void", dueDate: past });
+    const paid = await seedInvoice({
+      matterId,
+      invoiceNumber: "2026-001",
+      totalAmount: 10,
+      paidAmount: 10,
+      status: "paid",
+      dueDate: past,
+    });
+    const voided = await seedInvoice({
+      matterId,
+      invoiceNumber: "2026-002",
+      totalAmount: 10,
+      status: "void",
+      dueDate: past,
+    });
     expect((await getInvoiceById(paid))!.daysUntilDue).toBeNull();
     expect((await getInvoiceById(voided))!.daysUntilDue).toBeNull();
   });
@@ -225,9 +242,28 @@ describe("daysUntilDue", () => {
   test("sent / partial count whole days in the viewer's zone: due today is 0, yesterday is -1", async () => {
     // It is the evening of July 1 in Denver (already July 2 in UTC).
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
-    const dueToday = await seedInvoice({ matterId, invoiceNumber: "2026-001", totalAmount: 10, status: "sent", dueDate: new Date("2026-07-01T17:00:00Z") });
-    const dueYesterday = await seedInvoice({ matterId, invoiceNumber: "2026-002", totalAmount: 10, status: "partial", paidAmount: 1, dueDate: new Date("2026-06-30T17:00:00Z") });
-    const dueIn5 = await seedInvoice({ matterId, invoiceNumber: "2026-003", totalAmount: 10, status: "sent", dueDate: new Date("2026-07-06T17:00:00Z") });
+    const dueToday = await seedInvoice({
+      matterId,
+      invoiceNumber: "2026-001",
+      totalAmount: 10,
+      status: "sent",
+      dueDate: new Date("2026-07-01T17:00:00Z"),
+    });
+    const dueYesterday = await seedInvoice({
+      matterId,
+      invoiceNumber: "2026-002",
+      totalAmount: 10,
+      status: "partial",
+      paidAmount: 1,
+      dueDate: new Date("2026-06-30T17:00:00Z"),
+    });
+    const dueIn5 = await seedInvoice({
+      matterId,
+      invoiceNumber: "2026-003",
+      totalAmount: 10,
+      status: "sent",
+      dueDate: new Date("2026-07-06T17:00:00Z"),
+    });
     const billing = await getMatterBilling(matterId);
     const days = (id: string) => billing.invoices.find((i) => i.id === id)!.daysUntilDue;
     expect(days(dueToday)).toBe(0);
@@ -240,7 +276,13 @@ describe("daysUntilDue", () => {
   test("the count does not shift across a DST change", async () => {
     // Due Mar 20 (after the Mar 8 spring-forward), viewed Mar 5.
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-03-05T19:00:00Z") });
-    const id = await seedInvoice({ matterId, invoiceNumber: "2026-001", totalAmount: 10, status: "sent", dueDate: new Date("2026-03-20T19:00:00Z") });
+    const id = await seedInvoice({
+      matterId,
+      invoiceNumber: "2026-001",
+      totalAmount: 10,
+      status: "sent",
+      dueDate: new Date("2026-03-20T19:00:00Z"),
+    });
     expect((await getInvoiceById(id))!.daysUntilDue).toBe(15);
   });
 });
@@ -335,9 +377,7 @@ describe("getMatterBilling — received payments aggregate + capped rows", () =>
     expect(billing.receivedPayments.totalReceived).toBe(220);
     expect(billing.receivedPayments.rows).toHaveLength(20);
     // Newest first — the capped window keeps the most recent rows.
-    expect(billing.receivedPayments.rows[0].date.getTime()).toBe(
-      Date.UTC(2026, 0, 22)
-    );
+    expect(billing.receivedPayments.rows[0].date.getTime()).toBe(Date.UTC(2026, 0, 22));
   });
 
   test("payments on other matters are excluded", async () => {

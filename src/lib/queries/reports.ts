@@ -40,19 +40,12 @@ import {
   instantInTz,
   todayKey,
 } from "@/lib/format-date";
-import {
-  LEAD_OPEN_STAGES,
-  LEAD_STAGE_LABEL,
-} from "@/lib/constants/lead-stage";
+import { LEAD_OPEN_STAGES, LEAD_STAGE_LABEL } from "@/lib/constants/lead-stage";
 
 /** The viewer's current calendar date as [year, month, day] in their
  *  zone. Mirrors the private helper in queries/dashboard.ts. */
 const todayYmdInTz = (tz: string): [number, number, number] =>
-  dateKeyInTz(new Date(), tz).split("-").map(Number) as [
-    number,
-    number,
-    number,
-  ];
+  dateKeyInTz(new Date(), tz).split("-").map(Number) as [number, number, number];
 
 /** UTC midnight of the 1st of the viewer's month, shifted back
  *  `monthsBack` months (negative goes forward). Date.UTC normalizes
@@ -70,11 +63,12 @@ const startOfMonthInTz = (tz: string, monthsBack = 0): Date => {
  *  conversion context, not the stage bars. Derived from the
  *  centralized stage constants so a new stage shows up here without
  *  a second edit. */
-const LEAD_PIPELINE_STAGES: readonly { stage: string; label: string }[] =
-  LEAD_OPEN_STAGES.map((stage) => ({
+const LEAD_PIPELINE_STAGES: readonly { stage: string; label: string }[] = LEAD_OPEN_STAGES.map(
+  (stage) => ({
     stage,
     label: LEAD_STAGE_LABEL[stage],
-  }));
+  }),
+);
 
 export type PipelineReport = {
   /** Active intake queue, one row per pipeline stage (funnel order).
@@ -114,41 +108,40 @@ export async function getPipelineReport(tz: string): Promise<PipelineReport> {
   const quarterStartMonth = Math.floor((m - 1) / 3) * 3 + 1;
   const quarterStart = instantInTz(y, quarterStartMonth, 1, 0, 0, tz);
 
-  const [leadGroups, convertedCandidates, matterGroups, areas] =
-    await Promise.all([
-      // Firm-wide counts on purpose: reports.view aggregates ignore
-      // the lead wall, as they ignore the matter wall (ADR-039/049).
-      // No restricted lead is named here.
-      prisma.lead.groupBy({ by: ["stage"], _count: true }),
-      // updatedAt >= conversion time, so this is a superset of the
-      // leads converted this quarter; the matter's createdAt narrows
-      // it below.
-      prisma.lead.findMany({
-        where: { stage: "converted", updatedAt: { gte: quarterStart } },
-        select: { convertedMatterId: true },
-      }),
-      prisma.matter.groupBy({
-        by: ["practiceAreaId", "stageId"],
-        where: { ...mw, isArchived: false, stage: { isTerminal: false } },
-        _count: true,
-      }),
-      // Retired (inactive) areas still hold open matters — keep them
-      // so the report's open-matter total matches the sidebar; areas
-      // with no open matters are filtered out below.
-      prisma.practiceArea.findMany({
-        orderBy: [{ order: "asc" }, { name: "asc" }],
-        select: {
-          id: true,
-          name: true,
-          label: true,
-          color: true,
-          stages: {
-            orderBy: { order: "asc" },
-            select: { id: true, name: true },
-          },
+  const [leadGroups, convertedCandidates, matterGroups, areas] = await Promise.all([
+    // Firm-wide counts on purpose: reports.view aggregates ignore
+    // the lead wall, as they ignore the matter wall (ADR-039/049).
+    // No restricted lead is named here.
+    prisma.lead.groupBy({ by: ["stage"], _count: true }),
+    // updatedAt >= conversion time, so this is a superset of the
+    // leads converted this quarter; the matter's createdAt narrows
+    // it below.
+    prisma.lead.findMany({
+      where: { stage: "converted", updatedAt: { gte: quarterStart } },
+      select: { convertedMatterId: true },
+    }),
+    prisma.matter.groupBy({
+      by: ["practiceAreaId", "stageId"],
+      where: { ...mw, isArchived: false, stage: { isTerminal: false } },
+      _count: true,
+    }),
+    // Retired (inactive) areas still hold open matters — keep them
+    // so the report's open-matter total matches the sidebar; areas
+    // with no open matters are filtered out below.
+    prisma.practiceArea.findMany({
+      orderBy: [{ order: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        label: true,
+        color: true,
+        stages: {
+          orderBy: { order: "asc" },
+          select: { id: true, name: true },
         },
-      }),
-    ]);
+      },
+    }),
+  ]);
 
   const linkedMatterIds = convertedCandidates
     .map((l) => l.convertedMatterId)
@@ -173,7 +166,7 @@ export async function getPipelineReport(tz: string): Promise<PipelineReport> {
   }));
 
   const countByAreaStage = new Map(
-    matterGroups.map((g) => [`${g.practiceAreaId}:${g.stageId}`, g._count])
+    matterGroups.map((g) => [`${g.practiceAreaId}:${g.stageId}`, g._count]),
   );
 
   const areaRows = areas
@@ -244,9 +237,7 @@ const businessDaysElapsedInMonth = (tz: string): number => {
   return count;
 };
 
-export async function getUtilizationReport(
-  tz: string
-): Promise<UtilizationReport> {
+export async function getUtilizationReport(tz: string): Promise<UtilizationReport> {
   const userId = await getCurrentUserId();
 
   const [viewer, activeUsers, hourGroups] = await Promise.all([
@@ -379,7 +370,7 @@ export async function getArAgingReport(tz: string): Promise<ArAgingReport> {
   // rows are restricted to matters the viewer can access.
   const accessible = await filterAccessibleMatterIds(
     await getCurrentUserId(),
-    invoices.map((i) => i.matter.id)
+    invoices.map((i) => i.matter.id),
   );
 
   // Bucket sums stay Decimal until the return — the whole point of
@@ -470,9 +461,7 @@ export type RealizationMonth = {
  * underlying hours were worked — standard cash-basis realization,
  * so a strong collections month can exceed 100%.
  */
-export async function getRealizationReport(
-  tz: string
-): Promise<RealizationMonth[]> {
+export async function getRealizationReport(tz: string): Promise<RealizationMonth[]> {
   const monthsBack = [2, 1, 0];
 
   const months = await Promise.all(
@@ -518,8 +507,8 @@ export async function getRealizationReport(
       const billedHours = billedAgg._sum.hours ?? 0;
       const billedAmount = roundMoney(
         (billedAgg._sum.amount ?? new Prisma.Decimal(0)).plus(
-          billedExpenseAgg._sum.amount ?? new Prisma.Decimal(0)
-        )
+          billedExpenseAgg._sum.amount ?? new Prisma.Decimal(0),
+        ),
       ).toNumber();
       const collectedAmount = collectedAgg._sum.amount?.toNumber() ?? 0;
 
@@ -534,12 +523,10 @@ export async function getRealizationReport(
         billedHours,
         billedAmount,
         collectedAmount,
-        billedPctOfWorked:
-          workedHours > 0 ? (billedHours / workedHours) * 100 : 0,
-        collectedPctOfBilled:
-          billedAmount > 0 ? (collectedAmount / billedAmount) * 100 : 0,
+        billedPctOfWorked: workedHours > 0 ? (billedHours / workedHours) * 100 : 0,
+        collectedPctOfBilled: billedAmount > 0 ? (collectedAmount / billedAmount) * 100 : 0,
       };
-    })
+    }),
   );
 
   return months;

@@ -14,9 +14,7 @@ import { checkDestructiveDbAllowed } from "@/lib/seed-guard";
  * (localhost, or a known dev DB via ALLOW_SEED=1), so a dev server
  * pointed at real data can never offer the backdoor.
  */
-export function isDevSignInAllowed(
-  env: Record<string, string | undefined> = process.env
-): boolean {
+export function isDevSignInAllowed(env: Record<string, string | undefined> = process.env): boolean {
   return (
     env.DEV_SIGN_IN === "1" &&
     env.NODE_ENV !== "production" &&

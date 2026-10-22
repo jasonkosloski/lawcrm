@@ -115,18 +115,10 @@ export async function getMatterParties(matterId: string): Promise<PartyRow[]> {
     // back field-by-field would resurrect stale mirrored text (the
     // legacy columns are written once, at save time).
     const repFromContact = r.representationContact;
-    const repName = repFromContact
-      ? repFromContact.name
-      : r.representationName;
-    const repFirm = repFromContact
-      ? repFromContact.organization
-      : r.representationFirm;
-    const repEmail = repFromContact
-      ? repFromContact.email
-      : r.representationEmail;
-    const repPhone = repFromContact
-      ? repFromContact.phone
-      : r.representationPhone;
+    const repName = repFromContact ? repFromContact.name : r.representationName;
+    const repFirm = repFromContact ? repFromContact.organization : r.representationFirm;
+    const repEmail = repFromContact ? repFromContact.email : r.representationEmail;
+    const repPhone = repFromContact ? repFromContact.phone : r.representationPhone;
 
     return {
       id: r.id,
@@ -147,8 +139,7 @@ export async function getMatterParties(matterId: string): Promise<PartyRow[]> {
       representationFirm: repFirm,
       representationEmail: repEmail,
       representationPhone: repPhone,
-      isPrimaryClient:
-        r.category === "client" && r.contact.id === primaryClientId,
+      isPrimaryClient: r.category === "client" && r.contact.id === primaryClientId,
     };
   });
 }

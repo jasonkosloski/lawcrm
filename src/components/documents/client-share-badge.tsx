@@ -11,15 +11,9 @@ export type ShareReason = ReturnType<typeof shareReason>;
 export function ClientShareBadge({ reason }: { reason: ShareReason }) {
   if (!reason) return null;
   const title =
-    reason.kind === "file"
-      ? "Shared with client"
-      : `Shared via folder ${reason.folderName}`;
+    reason.kind === "file" ? "Shared with client" : `Shared via folder ${reason.folderName}`;
   return (
-    <Badge
-      title={title}
-      variant="neutral"
-      className="ml-2 align-middle"
-    >
+    <Badge title={title} variant="neutral" className="ml-2 align-middle">
       Shared
     </Badge>
   );

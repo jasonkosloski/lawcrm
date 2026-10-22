@@ -16,22 +16,13 @@
  *     non-JSON 200) map to fetch_failed instead of leaking as raw errors
  */
 
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/lib/google/gmail-client")>();
+  const actual = await importOriginal<typeof import("@/lib/google/gmail-client")>();
   return { ...actual, gmailFetch: vi.fn() };
 });
 
@@ -90,8 +81,7 @@ async function seedParked(opts?: {
     data: {
       userId,
       emailAddress: "box@example.com",
-      refreshToken:
-        opts?.refreshToken === undefined ? "enc-refresh" : opts.refreshToken,
+      refreshToken: opts?.refreshToken === undefined ? "enc-refresh" : opts.refreshToken,
       syncStatus: opts?.syncStatus ?? "connected",
     },
     select: { id: true },
@@ -130,10 +120,9 @@ async function seedParked(opts?: {
 }
 
 function payload(bytes: string): Response {
-  return new Response(
-    JSON.stringify({ data: Buffer.from(bytes).toString("base64url") }),
-    { status: 200 }
-  );
+  return new Response(JSON.stringify({ data: Buffer.from(bytes).toString("base64url") }), {
+    status: 200,
+  });
 }
 
 describe("ensureAttachmentBytes - cache race", () => {
@@ -144,21 +133,17 @@ describe("ensureAttachmentBytes - cache race", () => {
     // A concurrent request cached first: its copy exists in storage and
     // the row already points at it by the time our conditional flip runs.
     const winner = await storage.storeFile(new File(["WINNER"], "scan.pdf"));
-    const realUpdateMany = prisma.emailAttachment.updateMany.bind(
-      prisma.emailAttachment
-    );
-    const spy = vi
-      .spyOn(prisma.emailAttachment, "updateMany")
-      .mockImplementationOnce((async () => {
-        await prisma.emailAttachment.update({
-          where: { id: attachmentId },
-          data: { fileUrl: winner.key, fileSize: winner.size },
-        });
-        return realUpdateMany({
-          where: { id: attachmentId, fileUrl: "gmail:aid-1" },
-          data: { fileUrl: "never" },
-        });
-      }) as never);
+    const realUpdateMany = prisma.emailAttachment.updateMany.bind(prisma.emailAttachment);
+    const spy = vi.spyOn(prisma.emailAttachment, "updateMany").mockImplementationOnce((async () => {
+      await prisma.emailAttachment.update({
+        where: { id: attachmentId },
+        data: { fileUrl: winner.key, fileSize: winner.size },
+      });
+      return realUpdateMany({
+        where: { id: attachmentId, fileUrl: "gmail:aid-1" },
+        data: { fileUrl: "never" },
+      });
+    }) as never);
 
     const { key } = await lib.ensureAttachmentBytes(attachmentId);
     spy.mockRestore();
@@ -175,13 +160,12 @@ describe("ensureAttachmentBytes - cache race", () => {
   test("a loser whose winner is still parked is a retryable fetch_failed", async () => {
     const { attachmentId } = await seedParked();
     mockedGmailFetch.mockResolvedValue(payload("BYTES"));
-    const spy = vi
-      .spyOn(prisma.emailAttachment, "updateMany")
-      .mockResolvedValueOnce({ count: 0 });
+    const spy = vi.spyOn(prisma.emailAttachment, "updateMany").mockResolvedValueOnce({ count: 0 });
 
-    await expect(lib.ensureAttachmentBytes(attachmentId)).rejects.toMatchObject(
-      { name: "AttachmentBytesError", code: "fetch_failed" }
-    );
+    await expect(lib.ensureAttachmentBytes(attachmentId)).rejects.toMatchObject({
+      name: "AttachmentBytesError",
+      code: "fetch_failed",
+    });
     spy.mockRestore();
     expect(storedFileCount()).toBe(0); // our copy was cleaned up
   });
@@ -194,9 +178,9 @@ describe("ensureAttachmentBytes - disconnected mailbox (F669)", () => {
       syncStatus: "disconnected",
     });
 
-    await expect(lib.ensureAttachmentBytes(attachmentId)).rejects.toMatchObject(
-      { code: "disconnected" }
-    );
+    await expect(lib.ensureAttachmentBytes(attachmentId)).rejects.toMatchObject({
+      code: "disconnected",
+    });
 
     expect(mockedGmailFetch).not.toHaveBeenCalled();
     const account = await prisma.emailAccount.findUniqueOrThrow({
@@ -210,9 +194,9 @@ describe("ensureAttachmentBytes - disconnected mailbox (F669)", () => {
   test("a real revocation (GmailAuthError with a token on file) still maps to 'disconnected'", async () => {
     const { attachmentId, accountId } = await seedParked();
     mockedGmailFetch.mockRejectedValue(new GmailAuthError("revoked", accountId));
-    await expect(lib.ensureAttachmentBytes(attachmentId)).rejects.toMatchObject(
-      { code: "disconnected" }
-    );
+    await expect(lib.ensureAttachmentBytes(attachmentId)).rejects.toMatchObject({
+      code: "disconnected",
+    });
   });
 });
 
@@ -224,9 +208,10 @@ describe("ensureAttachmentBytes - transient failures (F670)", () => {
     const { attachmentId } = await seedParked();
     mockedGmailFetch.mockRejectedValue(make());
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    await expect(lib.ensureAttachmentBytes(attachmentId)).rejects.toMatchObject(
-      { name: "AttachmentBytesError", code: "fetch_failed" }
-    );
+    await expect(lib.ensureAttachmentBytes(attachmentId)).rejects.toMatchObject({
+      name: "AttachmentBytesError",
+      code: "fetch_failed",
+    });
     errSpy.mockRestore();
     // Parked id survives for a retry.
     const row = await prisma.emailAttachment.findUniqueOrThrow({
@@ -239,17 +224,15 @@ describe("ensureAttachmentBytes - transient failures (F670)", () => {
     const { attachmentId } = await seedParked();
     mockedGmailFetch.mockResolvedValue(new Response("<html>gateway</html>"));
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    await expect(lib.ensureAttachmentBytes(attachmentId)).rejects.toMatchObject(
-      { code: "fetch_failed" }
-    );
+    await expect(lib.ensureAttachmentBytes(attachmentId)).rejects.toMatchObject({
+      code: "fetch_failed",
+    });
     errSpy.mockRestore();
   });
 
   test("an unrecognised error is still rethrown (a programming error must not be masked)", async () => {
     const { attachmentId } = await seedParked();
     mockedGmailFetch.mockRejectedValue(new RangeError("bug"));
-    await expect(lib.ensureAttachmentBytes(attachmentId)).rejects.toThrow(
-      "bug"
-    );
+    await expect(lib.ensureAttachmentBytes(attachmentId)).rejects.toThrow("bug");
   });
 });

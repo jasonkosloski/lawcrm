@@ -14,10 +14,7 @@
  */
 
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
-import {
-  getDocumentFlaggedMoments,
-  getMatterFlaggedMoments,
-} from "@/lib/queries/evidence";
+import { getDocumentFlaggedMoments, getMatterFlaggedMoments } from "@/lib/queries/evidence";
 import {
   resetDb,
   seedDocument,
@@ -93,10 +90,7 @@ describe("getMatterFlaggedMoments", () => {
     });
 
     const groups = await getMatterFlaggedMoments(matterId);
-    expect(groups.map((g) => g.documentName)).toEqual([
-      "Alpha 911 call.mp3",
-      "Zeta dashcam.mp4",
-    ]);
+    expect(groups.map((g) => g.documentName)).toEqual(["Alpha 911 call.mp3", "Zeta dashcam.mp4"]);
     expect(groups[0].renderer).toBe("audio");
     expect(groups[1].renderer).toBe("video");
     expect(groups[1].moments.map((m) => m.timeSeconds)).toEqual([12, 300]);
@@ -150,8 +144,7 @@ describe("getMatterFlaggedMoments", () => {
     const docx = await seedDocument({
       matterId,
       name: "Transcript.docx",
-      contentType:
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     });
     // Seed page flags out of order + an anchorless one, prove
     // ordering: pages asc, anchorless last.
@@ -181,9 +174,7 @@ describe("getMatterFlaggedMoments", () => {
     expect(groups.map((g) => g.renderer)).toEqual(["pdf", "docx"]);
 
     const pdfGroup = groups[0];
-    expect(
-      pdfGroup.moments.map((m) => ({ page: m.pageNumber, time: m.timeSeconds }))
-    ).toEqual([
+    expect(pdfGroup.moments.map((m) => ({ page: m.pageNumber, time: m.timeSeconds }))).toEqual([
       { page: 3, time: null },
       { page: 12, time: null },
       { page: null, time: null }, // anchorless sinks to the end

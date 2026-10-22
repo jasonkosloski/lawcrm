@@ -31,10 +31,7 @@ import { formatPhone } from "@/lib/format-phone";
 import { BackToListButton } from "./back-to-list-button";
 import { MarkThreadRead } from "./mark-thread-read";
 import { isMissedCall } from "@/lib/call-log-form";
-import type {
-  MessengerItemRow,
-  MessengerThreadDetail,
-} from "@/lib/queries/messenger";
+import type { MessengerItemRow, MessengerThreadDetail } from "@/lib/queries/messenger";
 import { InboxActionButtons } from "./inbox-action-buttons";
 import { FollowUpButton } from "./follow-up-button";
 import { setMessengerThreadFollowUp } from "@/app/actions/follow-ups";
@@ -42,15 +39,8 @@ import { LogTimeOnCommButton } from "./log-time-on-comm-button";
 import { CommTimeLoggedIndicator } from "./comm-time-logged-indicator";
 import { ManualCallActions } from "./manual-call-actions";
 import type { CallMatterOption } from "./log-call-button";
-import {
-  asCallOutcome,
-  formatCallDuration,
-  type EditableCallLog,
-} from "@/lib/call-log-form";
-import {
-  getCommActionPermissions,
-  type CommActionPermissions,
-} from "./comm-action-permissions";
+import { asCallOutcome, formatCallDuration, type EditableCallLog } from "@/lib/call-log-form";
+import { getCommActionPermissions, type CommActionPermissions } from "./comm-action-permissions";
 import { contactInitials } from "./contact-initials";
 
 /** Voicemail length, second precision ("1m 2s"). Only called for a
@@ -103,14 +93,11 @@ export async function MessengerThreadReader({
       <div className="hidden lg:flex flex-1 items-center justify-center bg-paper-2/30">
         <div className="text-center max-w-sm px-6">
           <MessageSquare size={20} strokeWidth={1.75} className="text-ink-4 mx-auto mb-3" />
-          <div className="text-sm font-semibold text-ink mb-1">
-            Select a conversation
-          </div>
+          <div className="text-sm font-semibold text-ink mb-1">Select a conversation</div>
           <div className="text-2xs text-ink-3 leading-relaxed">
-            Pick a thread from the left to read its messages, calls, and
-            voicemails. Inbound texts and calls from the firm number will
-            appear here once Quo is connected; use Log call to record
-            calls today.
+            Pick a thread from the left to read its messages, calls, and voicemails. Inbound texts
+            and calls from the firm number will appear here once Quo is connected; use Log call to
+            record calls today.
           </div>
         </div>
       </div>
@@ -147,14 +134,10 @@ export async function MessengerThreadReader({
             {contactInitials(thread.contact?.name)}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-sm font-semibold text-ink truncate">
-              {headline}
-            </span>
+            <span className="text-sm font-semibold text-ink truncate">{headline}</span>
             <span className="text-2xs font-mono text-ink-4 truncate">
               {subhead}
-              {thread.contact?.organization
-                ? ` · ${thread.contact.organization}`
-                : ""}
+              {thread.contact?.organization ? ` · ${thread.contact.organization}` : ""}
             </span>
           </div>
         </div>
@@ -189,9 +172,7 @@ export async function MessengerThreadReader({
           bubble width. */}
       <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-4 flex flex-col gap-2.5">
         {thread.items.length === 0 ? (
-          <div className="m-auto text-2xs text-ink-4">
-            No messages in this thread yet.
-          </div>
+          <div className="m-auto text-2xs text-ink-4">No messages in this thread yet.</div>
         ) : (
           thread.items.map((it, i) => {
             // Day divider whenever the viewer's calendar day changes
@@ -199,15 +180,11 @@ export async function MessengerThreadReader({
             // shows only a time of day.
             const dayKey = dateKeyInTz(it.occurredAt, zone);
             const prev = thread.items[i - 1];
-            const showDivider =
-              !prev || dateKeyInTz(prev.occurredAt, zone) !== dayKey;
+            const showDivider = !prev || dateKeyInTz(prev.occurredAt, zone) !== dayKey;
             return (
               <Fragment key={it.id}>
                 {showDivider && (
-                  <div
-                    role="separator"
-                    className="self-center text-3xs text-ink-4 py-0.5"
-                  >
+                  <div role="separator" className="self-center text-3xs text-ink-4 py-0.5">
                     {formatDate(it.occurredAt, "full_short", zone)}
                   </div>
                 )}
@@ -233,8 +210,8 @@ export async function MessengerThreadReader({
       {/* Composer placeholder */}
       <footer className="border-t border-line px-5 py-3 shrink-0 bg-paper-2/30">
         <div className="text-2xs text-ink-4 italic">
-          Composer ships with the Quo integration. Inbound messages flow in
-          via webhook; outbound send + file-to-matter picker land in v1.
+          Composer ships with the Quo integration. Inbound messages flow in via webhook; outbound
+          send + file-to-matter picker land in v1.
         </div>
       </footer>
     </div>
@@ -278,13 +255,7 @@ function Item({
       />
     );
   return (
-    <SmsBubble
-      item={item}
-      contactLabel={contactLabel}
-      isFiled={isFiled}
-      perms={perms}
-      tz={tz}
-    />
+    <SmsBubble item={item} contactLabel={contactLabel} isFiled={isFiled} perms={perms} tz={tz} />
   );
 }
 
@@ -299,15 +270,7 @@ function isUnansweredOutbound(item: MessengerItemRow): boolean {
 
 /** Row timestamp: time of day (the day divider carries the date),
  *  with the full date + time on hover. */
-function Stamp({
-  at,
-  tz,
-  className,
-}: {
-  at: Date;
-  tz: string | null;
-  className: string;
-}) {
+function Stamp({ at, tz, className }: { at: Date; tz: string | null; className: string }) {
   return (
     <span className={className} title={formatDate(at, "datetime_long", tz)}>
       {formatDate(at, "time", tz)}
@@ -318,12 +281,8 @@ function Stamp({
 /** Build the source label passed into the LogTimeOnCommButton dialog
  *  for SMS / call / voicemail items. Includes contact name + a short
  *  preview so the dialog title makes sense at a glance. */
-function commLabel(
-  contactLabel: string,
-  item: MessengerItemRow
-): string {
-  if (item.kind === "voicemail")
-    return `Voicemail from ${contactLabel}`;
+function commLabel(contactLabel: string, item: MessengerItemRow): string {
+  if (item.kind === "voicemail") return `Voicemail from ${contactLabel}`;
   if (item.kind === "call") {
     const dir = item.direction === "inbound" ? "Inbound" : "Outbound";
     const missed = isMissedCall(item.direction, item.callStatus);
@@ -356,20 +315,16 @@ function SmsBubble({
     <div
       className={cn(
         "group/msg flex items-end gap-2 max-w-[80%]",
-        outbound ? "self-end flex-row-reverse" : "self-start"
+        outbound ? "self-end flex-row-reverse" : "self-start",
       )}
     >
       <div
         className={cn(
           "rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm",
-          outbound
-            ? "bg-brand-700 text-white rounded-br-sm"
-            : "bg-paper-2 text-ink rounded-bl-sm"
+          outbound ? "bg-brand-700 text-white rounded-br-sm" : "bg-paper-2 text-ink rounded-bl-sm",
         )}
       >
-        {item.body && (
-          <div className="whitespace-pre-wrap break-words">{item.body}</div>
-        )}
+        {item.body && <div className="whitespace-pre-wrap break-words">{item.body}</div>}
         {item.mediaUrls.length > 0 && (
           <div className="mt-1.5 flex flex-col gap-1">
             {item.mediaUrls.map((m, i) => (
@@ -378,10 +333,7 @@ function SmsBubble({
                 href={m.url}
                 target="_blank"
                 rel="noreferrer noopener"
-                className={cn(
-                  "text-2xs underline",
-                  outbound ? "text-white/80" : "text-brand-700"
-                )}
+                className={cn("text-2xs underline", outbound ? "text-white/80" : "text-brand-700")}
               >
                 Attachment {i + 1}
               </a>
@@ -390,11 +342,7 @@ function SmsBubble({
         )}
       </div>
       <div className="flex flex-col gap-1 pb-1">
-        <Stamp
-          at={item.occurredAt}
-          tz={tz}
-          className="text-3xs font-mono text-ink-4"
-        />
+        <Stamp at={item.occurredAt} tz={tz} className="text-3xs font-mono text-ink-4" />
         {/* Time-logged indicator — always visible when there's time,
             so the bubble shows a hint of "0.4h logged" without hover. */}
         {item.timeEntries.length > 0 && (
@@ -442,8 +390,7 @@ function CallEvent({
   tz: string | null;
 }) {
   // Edit/delete only on manual logs — provider items are immutable.
-  const showCallActions =
-    item.isManual && (callAbility.canEdit || callAbility.canDelete);
+  const showCallActions = item.isManual && (callAbility.canEdit || callAbility.canDelete);
   const editable: EditableCallLog = {
     id: item.id,
     contactLabel,
@@ -459,11 +406,7 @@ function CallEvent({
   // inbound + missed/no_answer/declined. An outbound no-answer is the
   // firm's own unanswered call - labelled as such, not "Missed".
   const missed = isMissedCall(item.direction, item.callStatus);
-  const Icon = missed
-    ? PhoneMissed
-    : item.direction === "inbound"
-      ? PhoneIncoming
-      : PhoneOutgoing;
+  const Icon = missed ? PhoneMissed : item.direction === "inbound" ? PhoneIncoming : PhoneOutgoing;
   const dirLabel = item.direction === "inbound" ? "Inbound" : "Outbound";
   const duration = formatCallDuration(item.callDurationSec);
   const label = missed
@@ -476,14 +419,8 @@ function CallEvent({
       <div className="group/call flex items-center gap-2">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-line bg-paper-2/50 text-2xs text-ink-3">
           <Icon size={11} className={missed ? "text-warn" : "text-ink-3"} />
-          <span className={missed ? "text-warn font-medium" : "text-ink-3"}>
-            {label}
-          </span>
-          <Stamp
-            at={item.occurredAt}
-            tz={tz}
-            className="font-mono text-ink-4"
-          />
+          <span className={missed ? "text-warn font-medium" : "text-ink-3"}>{label}</span>
+          <Stamp at={item.occurredAt} tz={tz} className="font-mono text-ink-4" />
         </div>
         {/* Time-logged indicator stays visible (without hover) once
             time exists — matches voicemail / SMS behavior. */}
@@ -550,9 +487,7 @@ function VoicemailCard({
     <div className="self-start max-w-[80%] rounded-lg border border-line bg-paper-2/40 px-3 py-2 flex flex-col gap-2">
       <div className="flex items-center gap-2">
         <Voicemail size={12} className="text-ink-4" />
-        <span className="text-2xs font-medium text-ink-3">
-          Voicemail
-        </span>
+        <span className="text-2xs font-medium text-ink-3">Voicemail</span>
         {/* Explicit > 0 guard — a bare `&&` on a 0-second voicemail
             (provider edge case) renders a literal "0" text node. */}
         {item.callDurationSec != null && item.callDurationSec > 0 && (
@@ -560,24 +495,13 @@ function VoicemailCard({
             {formatDuration(item.callDurationSec)}
           </span>
         )}
-        <Stamp
-          at={item.occurredAt}
-          tz={tz}
-          className="ml-auto text-3xs font-mono text-ink-4"
-        />
+        <Stamp at={item.occurredAt} tz={tz} className="ml-auto text-3xs font-mono text-ink-4" />
       </div>
       {item.transcript && (
-        <p className="text-xs text-ink leading-relaxed whitespace-pre-wrap">
-          {item.transcript}
-        </p>
+        <p className="text-xs text-ink leading-relaxed whitespace-pre-wrap">{item.transcript}</p>
       )}
       {item.recordingUrl && (
-        <audio
-          controls
-          src={item.recordingUrl}
-          className="w-full h-8"
-          preload="none"
-        />
+        <audio controls src={item.recordingUrl} className="w-full h-8" preload="none" />
       )}
       <div className="pt-1.5 border-t border-line/60 flex items-center gap-1.5 flex-wrap">
         <InboxActionButtons
@@ -602,9 +526,7 @@ function VoicemailCard({
             }}
           />
         )}
-        {item.timeEntries.length > 0 && (
-          <CommTimeLoggedIndicator entries={item.timeEntries} />
-        )}
+        {item.timeEntries.length > 0 && <CommTimeLoggedIndicator entries={item.timeEntries} />}
       </div>
     </div>
   );

@@ -77,11 +77,7 @@ afterEach(() => {
 describe("SettlementApprovals — read-only modes", () => {
   test("renders nothing when approvals list is empty", () => {
     const { container } = render(
-      <SettlementApprovals
-        approvals={[]}
-        canApprove
-        settlementLocked={false}
-      />
+      <SettlementApprovals approvals={[]} canApprove settlementLocked={false} />,
     );
     expect(container.firstChild).toBeNull();
   });
@@ -92,33 +88,17 @@ describe("SettlementApprovals — read-only modes", () => {
         approvals={SAMPLE_APPROVALS}
         canApprove={false}
         settlementLocked={false}
-      />
+      />,
     );
-    expect(
-      screen.queryByRole("button", { name: /^approve$/i })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /^reject$/i })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /^reset$/i })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^approve$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^reject$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^reset$/i })).not.toBeInTheDocument();
   });
 
   test("settlementLocked hides every action button even when canApprove", () => {
-    render(
-      <SettlementApprovals
-        approvals={SAMPLE_APPROVALS}
-        canApprove
-        settlementLocked
-      />
-    );
-    expect(
-      screen.queryByRole("button", { name: /^approve$/i })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /^reject$/i })
-    ).not.toBeInTheDocument();
+    render(<SettlementApprovals approvals={SAMPLE_APPROVALS} canApprove settlementLocked />);
+    expect(screen.queryByRole("button", { name: /^approve$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^reject$/i })).not.toBeInTheDocument();
   });
 
   test("approver attribution shows on approved steps", () => {
@@ -127,7 +107,7 @@ describe("SettlementApprovals — read-only modes", () => {
         approvals={SAMPLE_APPROVALS}
         canApprove={false}
         settlementLocked={false}
-      />
+      />,
     );
     expect(screen.getByText(/Approved by Jason Kosloski/)).toBeInTheDocument();
   });
@@ -138,22 +118,16 @@ describe("SettlementApprovals — read-only modes", () => {
         approvals={SAMPLE_APPROVALS}
         canApprove={false}
         settlementLocked={false}
-      />
+      />,
     );
-    expect(
-      screen.getByText("Need updated medical bills.")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Need updated medical bills.")).toBeInTheDocument();
   });
 });
 
 describe("SettlementApprovals — counter header", () => {
   test("counts approvals + rejections accurately", () => {
     render(
-      <SettlementApprovals
-        approvals={SAMPLE_APPROVALS}
-        canApprove
-        settlementLocked={false}
-      />
+      <SettlementApprovals approvals={SAMPLE_APPROVALS} canApprove settlementLocked={false} />,
     );
     // 1 approved out of 4, 1 rejected. Both surface in the header.
     expect(screen.getByText(/1\/4 approved/)).toBeInTheDocument();
@@ -163,13 +137,10 @@ describe("SettlementApprovals — counter header", () => {
   test("rejected count omitted when none are rejected", () => {
     render(
       <SettlementApprovals
-        approvals={[
-          { ...SAMPLE_APPROVALS[0], status: "approved" },
-          { ...SAMPLE_APPROVALS[1] },
-        ]}
+        approvals={[{ ...SAMPLE_APPROVALS[0], status: "approved" }, { ...SAMPLE_APPROVALS[1] }]}
         canApprove
         settlementLocked={false}
-      />
+      />,
     );
     expect(screen.getByText(/2\/2 approved/)).toBeInTheDocument();
     expect(screen.queryByText(/rejected/)).not.toBeInTheDocument();
@@ -180,11 +151,7 @@ describe("SettlementApprovals — actions fire correctly", () => {
   test("Approve fires the action with status='approved' and the approval id", async () => {
     const user = userEvent.setup();
     render(
-      <SettlementApprovals
-        approvals={SAMPLE_APPROVALS}
-        canApprove
-        settlementLocked={false}
-      />
+      <SettlementApprovals approvals={SAMPLE_APPROVALS} canApprove settlementLocked={false} />,
     );
     // Pending steps have Approve buttons; click the first one.
     const approveButtons = screen.getAllByRole("button", {
@@ -200,11 +167,7 @@ describe("SettlementApprovals — actions fire correctly", () => {
   test("Reject fires the action with status='rejected'", async () => {
     const user = userEvent.setup();
     render(
-      <SettlementApprovals
-        approvals={SAMPLE_APPROVALS}
-        canApprove
-        settlementLocked={false}
-      />
+      <SettlementApprovals approvals={SAMPLE_APPROVALS} canApprove settlementLocked={false} />,
     );
     const rejectButtons = screen.getAllByRole("button", {
       name: /^reject$/i,
@@ -216,11 +179,7 @@ describe("SettlementApprovals — actions fire correctly", () => {
   test("Reset fires the action with status='pending' for approved/rejected steps", async () => {
     const user = userEvent.setup();
     render(
-      <SettlementApprovals
-        approvals={SAMPLE_APPROVALS}
-        canApprove
-        settlementLocked={false}
-      />
+      <SettlementApprovals approvals={SAMPLE_APPROVALS} canApprove settlementLocked={false} />,
     );
     const resetButtons = screen.getAllByRole("button", {
       name: /^reset$/i,
@@ -235,11 +194,7 @@ describe("SettlementApprovals — actions fire correctly", () => {
   test("optional note typed inline gets passed to the action", async () => {
     const user = userEvent.setup();
     render(
-      <SettlementApprovals
-        approvals={SAMPLE_APPROVALS}
-        canApprove
-        settlementLocked={false}
-      />
+      <SettlementApprovals approvals={SAMPLE_APPROVALS} canApprove settlementLocked={false} />,
     );
     // Find the inline note input attached to the first pending
     // step (a1). It has placeholder "Optional note".
@@ -250,11 +205,7 @@ describe("SettlementApprovals — actions fire correctly", () => {
       name: /^approve$/i,
     });
     await user.click(approveButtons[0]);
-    expect(mockedAction).toHaveBeenCalledWith(
-      "a1",
-      "approved",
-      "Verified by phone"
-    );
+    expect(mockedAction).toHaveBeenCalledWith("a1", "approved", "Verified by phone");
   });
 });
 
@@ -266,18 +217,10 @@ describe("SettlementApprovals — error surface", () => {
     });
     const user = userEvent.setup();
     render(
-      <SettlementApprovals
-        approvals={SAMPLE_APPROVALS}
-        canApprove
-        settlementLocked={false}
-      />
+      <SettlementApprovals approvals={SAMPLE_APPROVALS} canApprove settlementLocked={false} />,
     );
-    await user.click(
-      screen.getAllByRole("button", { name: /^approve$/i })[0]
-    );
-    expect(
-      await screen.findByText(/Settlement is already disbursed/)
-    ).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /^approve$/i })[0]);
+    expect(await screen.findByText(/Settlement is already disbursed/)).toBeInTheDocument();
   });
 });
 
@@ -293,7 +236,7 @@ describe("SettlementApprovals — approval time uses the profile zone", () => {
           canApprove={false}
           settlementLocked={false}
         />
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
 
   test("Denver profile zone shows 6:00 AM", () => {

@@ -13,12 +13,8 @@ describe("LoginScreen", () => {
     render(<LoginScreen action={<button type="button">Sign in now</button>} />);
 
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "LitGox"
-    );
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("LitGox");
     const section = screen.getByRole("region", { name: "Sign in" });
-    expect(section).toContainElement(
-      screen.getByRole("button", { name: "Sign in now" })
-    );
+    expect(section).toContainElement(screen.getByRole("button", { name: "Sign in now" }));
   });
 });

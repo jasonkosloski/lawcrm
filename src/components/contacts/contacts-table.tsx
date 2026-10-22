@@ -42,11 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  BULK_CONTACT_LIMIT,
-  CONTACT_TYPES,
-  CONTACT_TYPE_LABEL,
-} from "@/lib/contact-constants";
+import { BULK_CONTACT_LIMIT, CONTACT_TYPES, CONTACT_TYPE_LABEL } from "@/lib/contact-constants";
 import { CSV_BOM } from "@/lib/csv";
 import { confirmAction, notifyError } from "@/lib/feedback";
 // Type-only import — erased at build time, so it doesn't pull the
@@ -94,10 +90,7 @@ export function ContactsTable({
   // Effective selection = checked ∩ visible. Ids that dropped out of
   // the row set (filter changed, row deactivated elsewhere) don't
   // count and are never sent to an action.
-  const selected = useMemo(
-    () => rows.filter((r) => selectedIds.has(r.id)),
-    [rows, selectedIds]
-  );
+  const selected = useMemo(() => rows.filter((r) => selectedIds.has(r.id)), [rows, selectedIds]);
   const allSelected = rows.length > 0 && selected.length === rows.length;
   const overLimit = selected.length > BULK_CONTACT_LIMIT;
 
@@ -182,9 +175,7 @@ export function ContactsTable({
     <div className="flex flex-col gap-2">
       {selected.length > 0 && (
         <div className="flex items-center gap-3 rounded-md border border-brand-200 bg-brand-50 px-3 py-1.5">
-          <span className="text-xs font-medium text-ink">
-            {selected.length} selected
-          </span>
+          <span className="text-xs font-medium text-ink">{selected.length} selected</span>
           <button
             type="button"
             onClick={clearSelection}
@@ -196,8 +187,8 @@ export function ContactsTable({
           <div className="ml-auto flex items-center gap-2">
             {overLimit ? (
               <span className="text-2xs text-warn">
-                Bulk actions run on up to {BULK_CONTACT_LIMIT} contacts at a
-                time — trim the selection.
+                Bulk actions run on up to {BULK_CONTACT_LIMIT} contacts at a time — trim the
+                selection.
               </span>
             ) : (
               <>
@@ -220,23 +211,13 @@ export function ContactsTable({
                   </NativeSelect>
                 )}
                 {canExport && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={runExport}
-                    disabled={pending}
-                  >
+                  <Button size="sm" variant="outline" onClick={runExport} disabled={pending}>
                     <Download />
                     Export CSV
                   </Button>
                 )}
                 {canDelete && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={runDeactivate}
-                    disabled={pending}
-                  >
+                  <Button size="sm" variant="outline" onClick={runDeactivate} disabled={pending}>
                     <UserX />
                     Deactivate
                   </Button>
@@ -277,9 +258,7 @@ export function ContactsTable({
                   <Checkbox
                     aria-label={`Select ${c.name}`}
                     checked={selectedIds.has(c.id)}
-                    onCheckedChange={(checked) =>
-                      toggleRow(c.id, checked === true)
-                    }
+                    onCheckedChange={(checked) => toggleRow(c.id, checked === true)}
                   />
                 </TableCell>
                 <TableCell>
@@ -290,29 +269,17 @@ export function ContactsTable({
                     {c.name}
                   </Link>
                   {c.conflictStatus === "flagged" && (
-                    <span className="ml-2 text-2xs font-medium text-warn">
-                      conflict
-                    </span>
+                    <span className="ml-2 text-2xs font-medium text-warn">conflict</span>
                   )}
                 </TableCell>
                 <TableCell className="text-2xs text-ink-3">
-                  {CONTACT_TYPE_LABEL[
-                    c.type as keyof typeof CONTACT_TYPE_LABEL
-                  ] ?? c.type}
+                  {CONTACT_TYPE_LABEL[c.type as keyof typeof CONTACT_TYPE_LABEL] ?? c.type}
                 </TableCell>
-                <TableCell className="text-xs text-ink-3">
-                  {c.organization ?? "—"}
-                </TableCell>
+                <TableCell className="text-xs text-ink-3">{c.organization ?? "—"}</TableCell>
                 <TableCell className="text-2xs font-mono">
-                  {c.email ? (
-                    <EmailLink email={c.email} />
-                  ) : (
-                    <span className="text-ink-4">—</span>
-                  )}
+                  {c.email ? <EmailLink email={c.email} /> : <span className="text-ink-4">—</span>}
                 </TableCell>
-                <TableCell className="text-2xs font-mono text-ink-3">
-                  {c.phone ?? "—"}
-                </TableCell>
+                <TableCell className="text-2xs font-mono text-ink-3">{c.phone ?? "—"}</TableCell>
                 <TableCell className="pr-4 text-right text-xs font-mono text-ink-3">
                   {c.matterCount > 0 ? c.matterCount : "—"}
                 </TableCell>

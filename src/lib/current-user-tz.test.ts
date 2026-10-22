@@ -16,10 +16,7 @@ vi.mock("@/lib/prisma", () => ({
 
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
-import {
-  DEFAULT_TIME_ZONE,
-  getCurrentUserTimeZone,
-} from "@/lib/current-user-tz";
+import { DEFAULT_TIME_ZONE, getCurrentUserTimeZone } from "@/lib/current-user-tz";
 
 const mockedId = vi.mocked(getCurrentUserId);
 const mockedFind = vi.mocked(prisma.user.findUnique);

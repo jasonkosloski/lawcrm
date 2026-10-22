@@ -53,7 +53,10 @@ describe("POST portal /api/documents/upload/blob", () => {
   });
 
   test("success returns handleUpload's JSON", async () => {
-    vi.mocked(handleUpload).mockResolvedValue({ type: "blob.generate-client-token", clientToken: "tok" });
+    vi.mocked(handleUpload).mockResolvedValue({
+      type: "blob.generate-client-token",
+      clientToken: "tok",
+    });
     const res = await POST(post(JSON.stringify({ type: "blob.generate-client-token" })));
     expect(await res.json()).toEqual({ type: "blob.generate-client-token", clientToken: "tok" });
   });

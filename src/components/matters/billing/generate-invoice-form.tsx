@@ -19,10 +19,7 @@ import { useCallback, useId, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { FilePlus2 } from "lucide-react";
 import { generateInvoiceFromWip } from "@/app/actions/billing";
-import {
-  billingInitialState,
-  type BillingFormState,
-} from "@/lib/billing-form";
+import { billingInitialState, type BillingFormState } from "@/lib/billing-form";
 import { bundleCountLabel, bundleTotal } from "./bundle-summary";
 import { formatMoney } from "@/lib/format-money";
 import { inputClass, FormErrorBanner } from "@/components/ui/field";
@@ -58,15 +55,16 @@ export function GenerateInvoiceForm({
       if (res.status === "ok") setExpanded(false);
       return res;
     },
-    [matterId]
+    [matterId],
   );
   // Wrapped useActionState: masks state left over from a previous
   // expand, so a failed attempt's error banner doesn't reappear when
   // the form is re-expanded. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    BillingFormState,
-    FormData
-  >(action, billingInitialState, expanded);
+  const [state, formAction, isPending] = useDialogActionState<BillingFormState, FormData>(
+    action,
+    billingInitialState,
+    expanded,
+  );
   // Dispatch via onSubmit + startTransition instead of
   // <form action={formAction}>: React 19 resets every form-action
   // form after the action settles — error or not — which wipes the
@@ -85,8 +83,8 @@ export function GenerateInvoiceForm({
   if (entryCount + expenseCount === 0) {
     return (
       <div className="text-2xs text-ink-4 italic">
-        No unbilled time or expenses on this matter — log billable time
-        or an expense on the Time tab to generate an invoice.
+        No unbilled time or expenses on this matter — log billable time or an expense on the Time
+        tab to generate an invoice.
       </div>
     );
   }
@@ -96,11 +94,7 @@ export function GenerateInvoiceForm({
 
   if (!expanded) {
     return (
-      <Button
-        type="button"
-        onClick={() => setExpanded(true)}
-        className="gap-2 text-xs"
-      >
+      <Button type="button" onClick={() => setExpanded(true)} className="gap-2 text-xs">
         <FilePlus2 size={13} />
         Generate invoice — {formatMoney(total)} · {counts}
       </Button>
@@ -113,16 +107,13 @@ export function GenerateInvoiceForm({
       className="flex flex-col gap-3 p-3 rounded-md border border-line bg-paper-2/40"
     >
       <div className="text-xs text-ink">
-        Bundle <strong>{counts}</strong> totaling{" "}
-        <strong>{formatMoney(total)}</strong> into a draft invoice.
+        Bundle <strong>{counts}</strong> totaling <strong>{formatMoney(total)}</strong> into a draft
+        invoice.
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor={`${ids}-dueDays`}
-            className="text-2xs font-medium text-ink-3"
-          >
+          <label htmlFor={`${ids}-dueDays`} className="text-2xs font-medium text-ink-3">
             Due in (days)
           </label>
           <input
@@ -136,10 +127,7 @@ export function GenerateInvoiceForm({
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label
-            htmlFor={`${ids}-notes`}
-            className="text-2xs font-medium text-ink-3"
-          >
+          <label htmlFor={`${ids}-notes`} className="text-2xs font-medium text-ink-3">
             Notes to client (optional, printed on invoice)
           </label>
           <input
@@ -163,11 +151,7 @@ export function GenerateInvoiceForm({
         >
           Cancel
         </button>
-        <Button
-          size="sm"
-          type="submit"
-          disabled={isPending}
-        >
+        <Button size="sm" type="submit" disabled={isPending}>
           {isPending ? "Generating…" : "Generate draft invoice"}
         </Button>
       </div>

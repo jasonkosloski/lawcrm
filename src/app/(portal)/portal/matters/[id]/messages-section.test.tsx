@@ -61,12 +61,7 @@ describe("MessagesSection", () => {
   });
 
   test("text is literal and keeps line breaks", () => {
-    render(
-      <MessagesSection
-        {...base}
-        messages={[msg({ body: "<b>x</b>\nsecond line" })]}
-      />,
-    );
+    render(<MessagesSection {...base} messages={[msg({ body: "<b>x</b>\nsecond line" })]} />);
     const el = screen.getByText(/<b>x<\/b>/);
     expect(el.className).toContain("whitespace-pre-line");
     expect(el.querySelector("b")).toBeNull();
@@ -74,9 +69,7 @@ describe("MessagesSection", () => {
 
   test("empty state, with the composer", () => {
     render(<MessagesSection {...base} messages={[]} />);
-    expect(
-      screen.getByText("No messages yet. Ask your legal team a question here."),
-    ).toBeTruthy();
+    expect(screen.getByText("No messages yet. Ask your legal team a question here.")).toBeTruthy();
     expect(screen.getByRole("textbox")).toBeTruthy();
     expect(markRead).not.toHaveBeenCalled();
   });
@@ -92,9 +85,7 @@ describe("MessagesSection", () => {
       />,
     );
     expect(
-      screen.getByText(
-        "This matter is closed. Contact the firm at 555-0100 or a@firm.test.",
-      ),
+      screen.getByText("This matter is closed. Contact the firm at 555-0100 or a@firm.test."),
     ).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
   });
@@ -112,12 +103,8 @@ describe("MessagesSection", () => {
   });
 
   test("marks read once on view when there are messages", () => {
-    const { rerender } = render(
-      <MessagesSection {...base} messages={[msg({})]} />,
-    );
-    rerender(
-      <MessagesSection {...base} messages={[msg({}), msg({ id: "m2" })]} />,
-    );
+    const { rerender } = render(<MessagesSection {...base} messages={[msg({})]} />);
+    rerender(<MessagesSection {...base} messages={[msg({}), msg({ id: "m2" })]} />);
     expect(markRead).toHaveBeenCalledTimes(1);
     expect(markRead).toHaveBeenCalledWith("mat1");
   });
@@ -159,9 +146,7 @@ describe("MessagesSection", () => {
     fireEvent.change(box, { target: { value: "Again" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toBe(
-      "You're sending messages too quickly. Try again later.",
-    );
+    expect(alert.textContent).toBe("You're sending messages too quickly. Try again later.");
     expect(box.value).toBe("Again");
     expect(refresh).not.toHaveBeenCalled();
   });

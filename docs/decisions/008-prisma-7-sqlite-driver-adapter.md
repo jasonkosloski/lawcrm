@@ -10,6 +10,7 @@
 **Rationale:** `better-sqlite3` is synchronous, fast, and what Prisma recommends for dev. For production we'll swap to `@prisma/adapter-pg` with a Postgres connection string (see ADR-001).
 
 **Trade-offs:**
+
 - (+) Matches Prisma 7's required pattern — avoids a runtime crash that's easy to miss in dev
 - (+) Adapter pattern makes prod swap mechanical
 - (-) Adds two dependencies (`@prisma/adapter-better-sqlite3`, `better-sqlite3`) with native compile step

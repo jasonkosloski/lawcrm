@@ -29,15 +29,11 @@ import { Button } from "./button";
 describe("Button — render passthrough + nativeButton inference", () => {
   test("renders a <button> by default", () => {
     render(<Button>Press me</Button>);
-    expect(screen.getByRole("button", { name: /press me/i }).tagName).toBe(
-      "BUTTON"
-    );
+    expect(screen.getByRole("button", { name: /press me/i }).tagName).toBe("BUTTON");
   });
 
   test("renders the custom element passed via render", () => {
-    render(
-      <Button render={<a href="/somewhere" />}>Go</Button>
-    );
+    render(<Button render={<a href="/somewhere" />}>Go</Button>);
     const el = screen.getByRole("link", { name: /go/i });
     expect(el.tagName).toBe("A");
     expect(el).toHaveAttribute("href", "/somewhere");
@@ -48,14 +44,10 @@ describe("Button — render passthrough + nativeButton inference", () => {
       <>
         <Button render={<a href="/plain" />}>Plain</Button>
         <Button render={<Link href="/next" />}>Next link</Button>
-      </>
+      </>,
     );
-    expect(screen.getByRole("link", { name: "Plain" })).not.toHaveAttribute(
-      "role"
-    );
-    expect(screen.getByRole("link", { name: "Next link" })).not.toHaveAttribute(
-      "role"
-    );
+    expect(screen.getByRole("link", { name: "Plain" })).not.toHaveAttribute("role");
+    expect(screen.getByRole("link", { name: "Next link" })).not.toHaveAttribute("role");
     expect(screen.queryByRole("button")).toBeNull();
   });
 
@@ -68,7 +60,7 @@ describe("Button — render passthrough + nativeButton inference", () => {
     const { container } = render(
       <Button variant="outline" render={<a href="/x" />}>
         Outline link
-      </Button>
+      </Button>,
     );
     // The cva root class is on the rendered element.
     const el = container.querySelector("a");
@@ -82,7 +74,7 @@ describe("Button — render passthrough + nativeButton inference", () => {
     render(
       <Button nativeButton render={<button type="submit" />}>
         Submit
-      </Button>
+      </Button>,
     );
     const btn = screen.getByRole("button", { name: /submit/i });
     expect(btn.tagName).toBe("BUTTON");
@@ -93,7 +85,7 @@ describe("Button — render passthrough + nativeButton inference", () => {
     const { container } = render(
       <Button size="sm" render={<a href="/x" />}>
         Small
-      </Button>
+      </Button>,
     );
     const el = container.querySelector("a");
     expect(el!.className).toMatch(/h-8/);

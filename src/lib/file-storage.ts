@@ -79,20 +79,14 @@ export function activeStorageDriver(): StorageDriver {
   const explicit = process.env.STORAGE_DRIVER;
   if (explicit !== undefined && explicit !== "") {
     if (explicit !== "local" && explicit !== "vercel-blob") {
-      throw new Error(
-        `Unknown STORAGE_DRIVER "${explicit}" — expected "local" or "vercel-blob".`
-      );
+      throw new Error(`Unknown STORAGE_DRIVER "${explicit}" — expected "local" or "vercel-blob".`);
     }
     if (explicit === "vercel-blob" && !process.env.BLOB_READ_WRITE_TOKEN) {
-      throw new Error(
-        'STORAGE_DRIVER="vercel-blob" requires BLOB_READ_WRITE_TOKEN to be set.'
-      );
+      throw new Error('STORAGE_DRIVER="vercel-blob" requires BLOB_READ_WRITE_TOKEN to be set.');
     }
     return refuseLocalOnVercel(explicit);
   }
-  return refuseLocalOnVercel(
-    process.env.BLOB_READ_WRITE_TOKEN ? "vercel-blob" : "local"
-  );
+  return refuseLocalOnVercel(process.env.BLOB_READ_WRITE_TOKEN ? "vercel-blob" : "local");
 }
 
 /** Vercel's disk is ephemeral: a `local` write there "succeeds" and
@@ -100,9 +94,7 @@ export function activeStorageDriver(): StorageDriver {
  *  token must fail the upload, not lose it. */
 function refuseLocalOnVercel(driver: StorageDriver): StorageDriver {
   if (driver === "local" && process.env.VERCEL) {
-    throw new Error(
-      "Local file storage is not allowed on Vercel — set BLOB_READ_WRITE_TOKEN."
-    );
+    throw new Error("Local file storage is not allowed on Vercel — set BLOB_READ_WRITE_TOKEN.");
   }
   return driver;
 }
@@ -111,9 +103,7 @@ function refuseLocalOnVercel(driver: StorageDriver): StorageDriver {
  *  (`key` round-trips into `Document.fileUrl`). Small files only
  *  under the blob driver — see the module docstring. */
 export async function storeFile(file: File): Promise<StoredFile> {
-  return activeStorageDriver() === "vercel-blob"
-    ? storeFileBlob(file)
-    : storeFileLocal(file);
+  return activeStorageDriver() === "vercel-blob" ? storeFileBlob(file) : storeFileLocal(file);
 }
 
 /** Stream an incoming file to storage without buffering — the
@@ -122,11 +112,11 @@ export async function storeFile(file: File): Promise<StoredFile> {
 export async function storeStream(
   source: Readable,
   originalName: string,
-  maxBytes: number
+  maxBytes: number,
 ): Promise<{ key: string; size: number }> {
   if (activeStorageDriver() !== "local") {
     throw new Error(
-      "storeStream is local-driver-only — under vercel-blob, large uploads go client-direct (POST /api/documents/upload/blob)."
+      "storeStream is local-driver-only — under vercel-blob, large uploads go client-direct (POST /api/documents/upload/blob).",
     );
   }
   return storeStreamLocal(source, originalName, maxBytes);
@@ -136,12 +126,10 @@ export async function storeStream(
  *  documents are served by 302ing to their URL, never proxied). */
 export function openReadStream(
   key: string,
-  range?: { start: number; end: number }
+  range?: { start: number; end: number },
 ): NodeJS.ReadableStream {
   if (isBlobKey(key)) {
-    throw new Error(
-      "openReadStream cannot stream a blob URL — redirect to it instead."
-    );
+    throw new Error("openReadStream cannot stream a blob URL — redirect to it instead.");
   }
   return openReadStreamLocal(key, range);
 }
@@ -152,17 +140,12 @@ export function openReadStream(
  * never read). `null` when the file is gone. Preview / attachment
  * scale only — never GB-scale media.
  */
-export async function readStoredFile(
-  key: string,
-  maxBytes?: number
-): Promise<Buffer | null> {
+export async function readStoredFile(key: string, maxBytes?: number): Promise<Buffer | null> {
   if (isBlobKey(key)) return readBlobBytes(key, maxBytes);
   const stat = await statFileLocal(key);
   if (!stat) return null;
   const range =
-    maxBytes !== undefined && stat.size > maxBytes
-      ? { start: 0, end: maxBytes - 1 }
-      : undefined;
+    maxBytes !== undefined && stat.size > maxBytes ? { start: 0, end: maxBytes - 1 } : undefined;
   const chunks: Buffer[] = [];
   for await (const chunk of openReadStreamLocal(key, range)) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -179,8 +162,6 @@ export async function deleteFile(key: string): Promise<void> {
 
 /** Existence + size probe (download route: missing file → 410).
  *  Key-shape dispatch, same rationale as `deleteFile`. */
-export async function statFile(
-  key: string
-): Promise<{ size: number } | null> {
+export async function statFile(key: string): Promise<{ size: number } | null> {
   return isBlobKey(key) ? statFileBlob(key) : statFileLocal(key);
 }

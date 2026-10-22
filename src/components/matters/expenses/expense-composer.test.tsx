@@ -34,7 +34,7 @@ beforeEach(() => {
     [
       { id: "doc1", name: "Filing fee receipt.pdf" },
       { id: "doc2", name: "Court costs.pdf" },
-    ].filter((d) => d.name.toLowerCase().includes(query.toLowerCase()))
+    ].filter((d) => d.name.toLowerCase().includes(query.toLowerCase())),
   );
 });
 
@@ -45,9 +45,7 @@ afterEach(() => {
 describe("ExpenseComposer — collapsed mode", () => {
   test("renders just the 'Log expense' button initially", () => {
     const { container } = render(<ExpenseComposer matterId="m1" />);
-    expect(
-      screen.getByRole("button", { name: /log expense/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /log expense/i })).toBeInTheDocument();
     // Form fields hidden until expanded.
     expect(container.querySelector('[name="amount"]')).toBeNull();
   });
@@ -57,9 +55,7 @@ describe("ExpenseComposer — collapsed mode", () => {
     const { container } = render(<ExpenseComposer matterId="m1" />);
     await user.click(screen.getByRole("button", { name: /log expense/i }));
     expect(container.querySelector('[name="amount"]')).toBeInTheDocument();
-    expect(
-      container.querySelector('[name="description"]')
-    ).toBeInTheDocument();
+    expect(container.querySelector('[name="description"]')).toBeInTheDocument();
     expect(container.querySelector('[name="category"]')).toBeInTheDocument();
   });
 
@@ -82,9 +78,7 @@ describe("ExpenseComposer — receipt picker", () => {
     const user = userEvent.setup();
     const { container } = render(<ExpenseComposer matterId="m1" />);
     await user.click(screen.getByRole("button", { name: /log expense/i }));
-    const field = container.querySelector(
-      '[name="receiptDocumentId"]'
-    ) as HTMLInputElement;
+    const field = container.querySelector('[name="receiptDocumentId"]') as HTMLInputElement;
     expect(field.value).toBe("");
     expect(screen.getByLabelText(/^receipt/i)).toHaveTextContent(/no receipt/i);
   });
@@ -100,16 +94,16 @@ describe("ExpenseComposer — receipt picker", () => {
     await waitFor(() => expect(mockedSearch).toHaveBeenCalledWith("m1", "court"));
     await user.click(await screen.findByRole("button", { name: /court costs/i }));
 
-    expect(
-      (container.querySelector('[name="receiptDocumentId"]') as HTMLInputElement).value
-    ).toBe("doc2");
+    expect((container.querySelector('[name="receiptDocumentId"]') as HTMLInputElement).value).toBe(
+      "doc2",
+    );
     expect(screen.getByLabelText(/^receipt/i)).toHaveTextContent("Court costs.pdf");
 
     // Remove clears it again.
     await user.click(screen.getByRole("button", { name: /remove receipt/i }));
-    expect(
-      (container.querySelector('[name="receiptDocumentId"]') as HTMLInputElement).value
-    ).toBe("");
+    expect((container.querySelector('[name="receiptDocumentId"]') as HTMLInputElement).value).toBe(
+      "",
+    );
   });
 
   test("an empty matter explains where receipts come from", async () => {
@@ -140,13 +134,9 @@ describe("ExpenseComposer — validation surface", () => {
     const amount = container.querySelector('[name="amount"]')!;
     await user.type(amount, "0");
 
-    await user.click(
-      screen.getByRole("button", { name: /^log expense$/i })
-    );
+    await user.click(screen.getByRole("button", { name: /^log expense$/i }));
 
-    expect(
-      await screen.findByText(/Amount must be greater than 0/)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Amount must be greater than 0/)).toBeInTheDocument();
   });
 
   test("top-level error message renders when state.error is set", async () => {
@@ -157,14 +147,9 @@ describe("ExpenseComposer — validation surface", () => {
     const user = userEvent.setup();
     const { container } = render(<ExpenseComposer matterId="m1" />);
     await user.click(screen.getByRole("button", { name: /log expense/i }));
-    await user.type(
-      container.querySelector('[name="description"]')!,
-      "Filing fee"
-    );
+    await user.type(container.querySelector('[name="description"]')!, "Filing fee");
     await user.type(container.querySelector('[name="amount"]')!, "100");
-    await user.click(
-      screen.getByRole("button", { name: /^log expense$/i })
-    );
+    await user.click(screen.getByRole("button", { name: /^log expense$/i }));
 
     expect(await screen.findByText("Matter not found.")).toBeInTheDocument();
   });
@@ -201,12 +186,10 @@ describe("ExpenseComposer — default date is today in the profile zone (ADR-012
     render(
       <UserTimeZoneProvider timeZone="America/Denver">
         <ExpenseComposer matterId="m1" />
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
     await user.click(screen.getByRole("button", { name: /log expense/i }));
-    expect((screen.getByLabelText(/^date/i) as HTMLInputElement).value).toBe(
-      "2026-04-27"
-    );
+    expect((screen.getByLabelText(/^date/i) as HTMLInputElement).value).toBe("2026-04-27");
   });
 
   test("the same instant is Apr 28 for a UTC profile", async () => {
@@ -216,12 +199,10 @@ describe("ExpenseComposer — default date is today in the profile zone (ADR-012
     render(
       <UserTimeZoneProvider timeZone="UTC">
         <ExpenseComposer matterId="m1" />
-      </UserTimeZoneProvider>
+      </UserTimeZoneProvider>,
     );
     await user.click(screen.getByRole("button", { name: /log expense/i }));
-    expect((screen.getByLabelText(/^date/i) as HTMLInputElement).value).toBe(
-      "2026-04-28"
-    );
+    expect((screen.getByLabelText(/^date/i) as HTMLInputElement).value).toBe("2026-04-28");
   });
 });
 
@@ -234,9 +215,7 @@ describe("ExpenseComposer — success path", () => {
       await user.type(container.querySelector('[name="description"]')!, desc);
       await user.type(container.querySelector('[name="amount"]')!, "10");
       await user.click(screen.getByRole("button", { name: /^log expense$/i }));
-      await waitFor(() =>
-        expect(container.querySelector('[name="amount"]')).toBeNull()
-      );
+      await waitFor(() => expect(container.querySelector('[name="amount"]')).toBeNull());
     }
     expect(mockedAction).toHaveBeenCalledTimes(2);
   });
@@ -246,14 +225,9 @@ describe("ExpenseComposer — success path", () => {
     const user = userEvent.setup();
     const { container } = render(<ExpenseComposer matterId="m1" />);
     await user.click(screen.getByRole("button", { name: /log expense/i }));
-    await user.type(
-      container.querySelector('[name="description"]')!,
-      "Filing fee"
-    );
+    await user.type(container.querySelector('[name="description"]')!, "Filing fee");
     await user.type(container.querySelector('[name="amount"]')!, "350.00");
-    await user.click(
-      screen.getByRole("button", { name: /^log expense$/i })
-    );
+    await user.click(screen.getByRole("button", { name: /^log expense$/i }));
 
     // After the success effect fires, the composer collapses back
     // to the button form. Wait on the FIELD disappearing — the
@@ -261,18 +235,11 @@ describe("ExpenseComposer — success path", () => {
     // accessible name "Log expense", so findByRole(button) resolves
     // on the still-mounted submit button and races the effect
     // (observed flaky under pre-commit load).
-    await waitFor(() =>
-      expect(container.querySelector('[name="amount"]')).toBeNull()
-    );
+    await waitFor(() => expect(container.querySelector('[name="amount"]')).toBeNull());
 
     // Reset: reopening shows an empty form, not the last entry.
     await user.click(screen.getByRole("button", { name: /log expense/i }));
-    expect(
-      (container.querySelector('[name="description"]') as HTMLInputElement)
-        .value
-    ).toBe("");
-    expect(
-      (container.querySelector('[name="amount"]') as HTMLInputElement).value
-    ).toBe("");
+    expect((container.querySelector('[name="description"]') as HTMLInputElement).value).toBe("");
+    expect((container.querySelector('[name="amount"]') as HTMLInputElement).value).toBe("");
   });
 });

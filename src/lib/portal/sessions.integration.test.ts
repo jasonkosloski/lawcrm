@@ -88,9 +88,7 @@ describe("portal sessions", () => {
     });
     expect(await resolveSession(raw)).not.toBeNull();
     const row = await prisma.portalSession.findFirstOrThrow();
-    expect(
-      Math.abs(row.expiresAt.getTime() - (createdAt.getTime() + 30 * DAY))
-    ).toBeLessThan(5000);
+    expect(Math.abs(row.expiresAt.getTime() - (createdAt.getTime() + 30 * DAY))).toBeLessThan(5000);
   });
 
   test("resolve returns normally when the row vanishes before the slide", async () => {
@@ -99,15 +97,15 @@ describe("portal sessions", () => {
       data: { lastSeenAt: new Date(Date.now() - 2 * 60_000) },
     });
     const real = prisma.portalSession.findUnique.bind(prisma.portalSession);
-    const spy = vi
-      .spyOn(prisma.portalSession, "findUnique")
-      .mockImplementationOnce(((args: never) => {
-        const p = real(args) as Promise<unknown>;
-        return p.then(async (r) => {
-          await deleteSession(raw);
-          return r;
-        });
-      }) as never);
+    const spy = vi.spyOn(prisma.portalSession, "findUnique").mockImplementationOnce(((
+      args: never,
+    ) => {
+      const p = real(args) as Promise<unknown>;
+      return p.then(async (r) => {
+        await deleteSession(raw);
+        return r;
+      });
+    }) as never);
     try {
       await expect(resolveSession(raw)).resolves.toBeTruthy();
     } finally {

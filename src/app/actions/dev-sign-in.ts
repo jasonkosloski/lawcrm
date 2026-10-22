@@ -15,9 +15,7 @@ import { createDevSignInToken, ensureDevClerkUser } from "@/lib/clerk-admin";
 import { isDevSignInAllowed } from "@/lib/dev-sign-in";
 import { prisma } from "@/lib/prisma";
 
-export type DevSignInResult =
-  | { ok: true; ticket: string }
-  | { ok: false; error: string };
+export type DevSignInResult = { ok: true; ticket: string } | { ok: false; error: string };
 
 export async function devSignInAs(userId: string): Promise<DevSignInResult> {
   if (!isDevSignInAllowed()) notFound();

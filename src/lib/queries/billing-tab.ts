@@ -6,17 +6,10 @@
  * (billing.view + matter access) before calling this.
  */
 
-import {
-  getMatterBilling,
-  getInvoiceById,
-  type InvoiceDetail,
-} from "@/lib/queries/billing";
+import { getMatterBilling, getInvoiceById, type InvoiceDetail } from "@/lib/queries/billing";
 import { getUnbilledExpenseSummary } from "@/lib/queries/billing-expenses";
 import { getMatterSettlement } from "@/lib/queries/settlements";
-import {
-  portalSendAvailability,
-  type PortalSendAvailability,
-} from "@/lib/queries/portal-billing";
+import { portalSendAvailability, type PortalSendAvailability } from "@/lib/queries/portal-billing";
 import { prisma } from "@/lib/prisma";
 import { getCurrentFirm } from "@/lib/firm";
 import { getCurrentUserId } from "@/lib/current-user";
@@ -24,18 +17,13 @@ import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import type { BillingPermissions } from "@/components/matters/billing/tab/shared";
 
-export async function loadBillingTab(
-  id: string,
-  requestedInvoiceId: string | null
-) {
+export async function loadBillingTab(id: string, requestedInvoiceId: string | null) {
   // Gates the entire Settlement card — the waterfall (gross, firm
   // fee, liens, client net) is the most sensitive number set on the
   // matter, so billing-tab access alone isn't enough to see it.
   // Started first so the settlement query below (settlement + liens
   // + approvals) is skipped entirely for viewers who can't see it.
-  const canViewSettlementP = currentUserHasPermission(
-    "matters.settlement.view"
-  );
+  const canViewSettlementP = currentUserHasPermission("matters.settlement.view");
 
   const [
     billing,

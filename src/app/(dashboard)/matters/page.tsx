@@ -30,9 +30,7 @@ import { requireUser } from "@/lib/current-user";
 import { matterAccessWhere } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 
-export default async function MattersListPage({
-  searchParams,
-}: PageProps<"/matters">) {
+export default async function MattersListPage({ searchParams }: PageProps<"/matters">) {
   const userId = await requireUser();
   const sp = await searchParams;
   const parsed = parseMattersParams(sp);
@@ -44,14 +42,8 @@ export default async function MattersListPage({
   const filter = canViewTrust ? parsed.filter : { ...parsed.filter, trust: "any" as const };
   const access = await matterAccessWhere(userId);
 
-  const [
-    matterPage,
-    options,
-    totalCount,
-    firmOpenCount,
-    firmClosedCount,
-    canCreateMatter,
-  ] = await Promise.all([
+  const [matterPage, options, totalCount, firmOpenCount, firmClosedCount, canCreateMatter] =
+    await Promise.all([
       listMatters(filter, sort, undefined, undefined, parsePageParam(sp.page)),
       getMattersFilterOptions(userId),
       // Denominator for "showing N of M" — a DB-side count with the

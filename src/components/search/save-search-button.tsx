@@ -16,14 +16,8 @@ import { useTransition } from "react";
 import { Bookmark, BookmarkCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { notifyError } from "@/lib/feedback";
-import {
-  createSavedSearch,
-  deleteSavedSearch,
-} from "@/app/actions/saved-searches";
-import {
-  SAVED_SEARCH_NAME_MAX,
-  type SearchHitType,
-} from "@/lib/constants/search";
+import { createSavedSearch, deleteSavedSearch } from "@/app/actions/saved-searches";
+import { SAVED_SEARCH_NAME_MAX, type SearchHitType } from "@/lib/constants/search";
 
 export function SaveSearchButton({
   query,
@@ -47,11 +41,7 @@ export function SaveSearchButton({
       try {
         const res = saved
           ? await deleteSavedSearch(savedId)
-          : await createSavedSearch(
-              query.trim().slice(0, SAVED_SEARCH_NAME_MAX),
-              query,
-              type
-            );
+          : await createSavedSearch(query.trim().slice(0, SAVED_SEARCH_NAME_MAX), query, type);
         if (!res.ok) notifyError(res.error);
       } catch (err) {
         console.error("[save-search] action failed", err);
@@ -71,13 +61,11 @@ export function SaveSearchButton({
         "inline-flex items-center gap-1.5 h-10 px-3 shrink-0 rounded-md border text-xs transition-colors disabled:opacity-50",
         saved
           ? "border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100"
-          : "border-line-2 bg-white text-ink-3 hover:text-ink hover:bg-paper-2"
+          : "border-line-2 bg-white text-ink-3 hover:text-ink hover:bg-paper-2",
       )}
     >
       {saved ? <BookmarkCheck size={13} /> : <Bookmark size={13} />}
-      <span className="hidden sm:inline">
-        {saved ? "Saved" : "Save search"}
-      </span>
+      <span className="hidden sm:inline">{saved ? "Saved" : "Save search"}</span>
     </button>
   );
 }

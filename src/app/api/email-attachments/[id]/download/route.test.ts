@@ -24,23 +24,14 @@
  * into a temp dir — same idiom as file-storage.test.ts.
  */
 
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 vi.mock("@/lib/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/lib/google/gmail-client")>();
+  const actual = await importOriginal<typeof import("@/lib/google/gmail-client")>();
   return { ...actual, gmailFetch: vi.fn() };
 });
 
@@ -129,8 +120,7 @@ async function seedAttachment(opts?: {
     data: {
       messageId: message.id,
       filename: opts?.filename ?? "brief.pdf",
-      contentType:
-        opts?.contentType === undefined ? "application/pdf" : opts.contentType,
+      contentType: opts?.contentType === undefined ? "application/pdf" : opts.contentType,
       fileSize: 10,
       fileUrl: opts?.fileUrl === undefined ? "gmail:aid-1" : opts.fileUrl,
     },
@@ -145,9 +135,7 @@ async function seedCachedAttachment(opts: {
   contentType: string | null;
   filename?: string;
 }): Promise<string> {
-  const stored = await storage.storeFile(
-    new File([opts.bytes], opts.filename ?? "cached.bin")
-  );
+  const stored = await storage.storeFile(new File([opts.bytes], opts.filename ?? "cached.bin"));
   return seedAttachment({
     fileUrl: stored.key,
     contentType: opts.contentType,
@@ -161,18 +149,14 @@ function gmailPayload(bytes: string): Response {
       size: bytes.length,
       data: Buffer.from(bytes).toString("base64url"),
     }),
-    { status: 200, headers: { "content-type": "application/json" } }
+    { status: 200, headers: { "content-type": "application/json" } },
   );
 }
 
-async function download(
-  attachmentId: string,
-  headers?: Record<string, string>
-): Promise<Response> {
-  const req = new Request(
-    `http://localhost/api/email-attachments/${attachmentId}/download`,
-    { headers }
-  );
+async function download(attachmentId: string, headers?: Record<string, string>): Promise<Response> {
+  const req = new Request(`http://localhost/api/email-attachments/${attachmentId}/download`, {
+    headers,
+  });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return route.GET(req as any, {
     params: Promise.resolve({ id: attachmentId }),
@@ -229,9 +213,7 @@ describe("fetch-and-cache", () => {
     expect(await first.text()).toBe("PDF-BYTES");
     expect(mockedGmailFetch).toHaveBeenCalledTimes(1);
     // The seam: users/me/messages/{mid}/attachments/{aid}.
-    expect(mockedGmailFetch.mock.calls[0][1]).toBe(
-      "/users/me/messages/mid-1/attachments/aid-1"
-    );
+    expect(mockedGmailFetch.mock.calls[0][1]).toBe("/users/me/messages/mid-1/attachments/aid-1");
 
     const row = await prisma.emailAttachment.findUniqueOrThrow({
       where: { id: attachmentId },
@@ -255,9 +237,7 @@ describe("fetch-and-cache", () => {
 
   test("disconnected account + uncached bytes → 409 with a reconnect message", async () => {
     const attachmentId = await seedAttachment();
-    mockedGmailFetch.mockRejectedValue(
-      new GmailAuthError("reconnect required", "acct-1")
-    );
+    mockedGmailFetch.mockRejectedValue(new GmailAuthError("reconnect required", "acct-1"));
     const res = await download(attachmentId);
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string };

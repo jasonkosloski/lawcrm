@@ -31,10 +31,7 @@ const attachedAtRender = vi.hoisted(() => ({ value: null as boolean | null }));
 
 vi.mock("docx-preview", () => ({
   parseAsync: async (bytes: unknown, options: unknown) => ({ bytes, options }),
-  renderDocument: async (
-    doc: { bytes: unknown; options: unknown },
-    options: unknown
-  ) => {
+  renderDocument: async (doc: { bytes: unknown; options: unknown }, options: unknown) => {
     const scratch = document.createElement("div");
     await renderAsyncMock(doc.bytes, scratch, undefined, options);
     attachedAtRender.value = scratch.isConnected;
@@ -56,28 +53,26 @@ function stubFetchOk() {
       ok: true,
       status: 200,
       arrayBuffer: async () => new ArrayBuffer(8),
-    }))
+    })),
   );
 }
 
 describe("DocxPreviewRenderer — sanitation runs on whatever renderAsync emits", () => {
   test("hostile anchors, active elements, and remote images are neutralized post-render", async () => {
     stubFetchOk();
-    renderAsyncMock.mockImplementation(
-      async (_bytes, container: HTMLElement) => {
-        container.innerHTML =
-          '<div class="docx-wrapper"><section class="docx">' +
-          '<p><a href="javascript:alert(1)">bad link</a></p>' +
-          '<p><a href="https://example.com/x">good link</a></p>' +
-          "<script>alert(2)</script>" +
-          '<iframe srcdoc="<script>alert(3)</script>"></iframe>' +
-          '<img src="https://evil.example/pixel.gif">' +
-          "</section></div>";
-      }
-    );
+    renderAsyncMock.mockImplementation(async (_bytes, container: HTMLElement) => {
+      container.innerHTML =
+        '<div class="docx-wrapper"><section class="docx">' +
+        '<p><a href="javascript:alert(1)">bad link</a></p>' +
+        '<p><a href="https://example.com/x">good link</a></p>' +
+        "<script>alert(2)</script>" +
+        '<iframe srcdoc="<script>alert(3)</script>"></iframe>' +
+        '<img src="https://evil.example/pixel.gif">' +
+        "</section></div>";
+    });
 
     const { container } = render(
-      <DocxPreviewRenderer src="/dl" name="wired.docx" fallback={FALLBACK} />
+      <DocxPreviewRenderer src="/dl" name="wired.docx" fallback={FALLBACK} />,
     );
     await waitFor(() => expect(container.textContent).toContain("bad link"));
 
@@ -97,7 +92,7 @@ describe("DocxPreviewRenderer — sanitation runs on whatever renderAsync emits"
       container.textContent = "ok";
     });
     const { container } = render(
-      <DocxPreviewRenderer src="/dl" name="opts.docx" fallback={FALLBACK} />
+      <DocxPreviewRenderer src="/dl" name="opts.docx" fallback={FALLBACK} />,
     );
     await waitFor(() => expect(container.textContent).toContain("ok"));
     const options = renderAsyncMock.mock.calls[0][3];
@@ -132,7 +127,7 @@ describe("DocxPreviewRenderer — sanitation runs on whatever renderAsync emits"
       characterData: true,
     });
     const { container } = render(
-      <DocxPreviewRenderer src="/dl" name="style.docx" fallback={FALLBACK} />
+      <DocxPreviewRenderer src="/dl" name="style.docx" fallback={FALLBACK} />,
     );
     await waitFor(() => expect(container.textContent).toContain("text"));
     // Flush any queued mutation records.
@@ -153,11 +148,9 @@ describe("DocxPreviewRenderer — sanitation runs on whatever renderAsync emits"
       throw new Error("unsupported structure");
     });
     const { container, getByTestId } = render(
-      <DocxPreviewRenderer src="/dl" name="boom.docx" fallback={FALLBACK} />
+      <DocxPreviewRenderer src="/dl" name="boom.docx" fallback={FALLBACK} />,
     );
-    await waitFor(() =>
-      expect(getByTestId("mammoth-fallback")).toBeInTheDocument()
-    );
+    await waitFor(() => expect(getByTestId("mammoth-fallback")).toBeInTheDocument());
     // No stale docx-preview text for TextReview's TreeWalker to find.
     expect(container.textContent).not.toContain("half a document");
     expect(warn).toHaveBeenCalled();

@@ -105,7 +105,7 @@ describe("note-on-entity action gates", () => {
     // requirePermission redirects (throws) on denial — simulate that.
     mockedRequirePermission.mockRejectedValueOnce(new Error("NEXT_REDIRECT"));
     await expect(
-      addNoteToTask(taskId, noteAttachmentInitialState, buildNoteForm())
+      addNoteToTask(taskId, noteAttachmentInitialState, buildNoteForm()),
     ).rejects.toThrow();
     expect(await prisma.note.count()).toBe(0);
   });
@@ -119,7 +119,7 @@ describe("addNoteToTask — creation", () => {
     const res = await addNoteToTask(
       taskId,
       noteAttachmentInitialState,
-      buildNoteForm("Line one\nLine two")
+      buildNoteForm("Line one\nLine two"),
     );
     expect(res.status).toBe("ok");
     const note = await prisma.note.findFirstOrThrow({
@@ -142,11 +142,7 @@ describe("addNoteToTask — creation", () => {
 describe("addNoteToDeadline — creation", () => {
   test("creates the note with the deadline FK and the author's read marker", async () => {
     const deadlineId = await seedDeadline();
-    const res = await addNoteToDeadline(
-      deadlineId,
-      noteAttachmentInitialState,
-      buildNoteForm()
-    );
+    const res = await addNoteToDeadline(deadlineId, noteAttachmentInitialState, buildNoteForm());
     expect(res.status).toBe("ok");
     const note = await prisma.note.findFirstOrThrow({
       select: { id: true, deadlineId: true, matterId: true, authorId: true },

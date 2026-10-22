@@ -26,8 +26,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/google/gmail-client", async (importOriginal) => {
-  const mod =
-    await importOriginal<typeof import("@/lib/google/gmail-client")>();
+  const mod = await importOriginal<typeof import("@/lib/google/gmail-client")>();
   return { ...mod, gmailFetch: vi.fn() };
 });
 
@@ -61,8 +60,7 @@ const mockedFetch = vi.mocked(gmailFetch);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SCOPES_WITH_CALENDAR = `openid email https://www.googleapis.com/auth/gmail.modify ${CALENDAR_EVENTS_SCOPE}`;
-const SCOPES_WITHOUT_CALENDAR =
-  "openid email https://www.googleapis.com/auth/gmail.modify";
+const SCOPES_WITHOUT_CALENDAR = "openid email https://www.googleapis.com/auth/gmail.modify";
 
 let firmId: string;
 let userId: string;
@@ -89,10 +87,7 @@ async function seedAccount(opts?: {
       refreshToken: "rt-secret",
       syncStatus: opts?.syncStatus ?? "connected",
       syncError: opts?.syncError ?? null,
-      grantedScopes:
-        opts?.grantedScopes === undefined
-          ? SCOPES_WITH_CALENDAR
-          : opts.grantedScopes,
+      grantedScopes: opts?.grantedScopes === undefined ? SCOPES_WITH_CALENDAR : opts.grantedScopes,
       calendarSyncToken: opts?.calendarSyncToken ?? null,
     },
     select: { id: true },
@@ -134,7 +129,7 @@ const listResponse = (
     nextPageToken?: string;
     nextSyncToken?: string;
   },
-  status = 200
+  status = 200,
 ) => new Response(JSON.stringify(body), { status });
 
 /** The URL of the nth events.list call, parsed. */
@@ -174,7 +169,7 @@ describe("full windowed pull", () => {
           gEvent({ id: "g-pub", summary: "Lunch" }),
         ],
         nextSyncToken: "st-1",
-      })
+      }),
     );
     await pullCalendarForAccount(accountId);
     const priv = await prisma.calendarEvent.findFirstOrThrow({ where: { title: "Therapy" } });
@@ -197,7 +192,7 @@ describe("full windowed pull", () => {
           }),
         ],
         nextSyncToken: "st-1",
-      })
+      }),
     );
 
     const res = await pullCalendarForAccount(accountId);
@@ -210,14 +205,8 @@ describe("full windowed pull", () => {
     expect(url.searchParams.get("syncToken")).toBeNull();
     const timeMin = new Date(url.searchParams.get("timeMin")!);
     const timeMax = new Date(url.searchParams.get("timeMax")!);
-    expect(Date.now() - timeMin.getTime()).toBeCloseTo(
-      PULL_WINDOW_PAST_DAYS * DAY_MS,
-      -5
-    );
-    expect(timeMax.getTime() - Date.now()).toBeCloseTo(
-      PULL_WINDOW_FUTURE_DAYS * DAY_MS,
-      -5
-    );
+    expect(Date.now() - timeMin.getTime()).toBeCloseTo(PULL_WINDOW_PAST_DAYS * DAY_MS, -5);
+    expect(timeMax.getTime() - Date.now()).toBeCloseTo(PULL_WINDOW_FUTURE_DAYS * DAY_MS, -5);
 
     // Import shape: personal event owned by the connection's user.
     const event = await prisma.calendarEvent.findFirstOrThrow({
@@ -239,9 +228,7 @@ describe("full windowed pull", () => {
       accountId,
       googleEventId: "g-1",
     });
-    expect(event.googleSyncs[0].googleUpdatedAt?.toISOString()).toBe(
-      "2026-07-06T10:00:00.000Z"
-    );
+    expect(event.googleSyncs[0].googleUpdatedAt?.toISOString()).toBe("2026-07-06T10:00:00.000Z");
 
     // Cursor persisted for the next incremental pass.
     const account = await prisma.emailAccount.findUniqueOrThrow({
@@ -257,13 +244,13 @@ describe("full windowed pull", () => {
         listResponse({
           items: [gEvent({ id: "g-1" })],
           nextPageToken: "page-2",
-        })
+        }),
       )
       .mockResolvedValueOnce(
         listResponse({
           items: [gEvent({ id: "g-2", summary: "Second" })],
           nextSyncToken: "st-final",
-        })
+        }),
       );
 
     const res = await pullCalendarForAccount(accountId);
@@ -274,7 +261,7 @@ describe("full windowed pull", () => {
         await prisma.emailAccount.findUniqueOrThrow({
           where: { id: accountId },
         })
-      ).calendarSyncToken
+      ).calendarSyncToken,
     ).toBe("st-final");
   });
 });
@@ -284,9 +271,7 @@ describe("full windowed pull", () => {
 describe("incremental pull", () => {
   it("sends the stored syncToken (and no window params), persisting the rotated token", async () => {
     const accountId = await seedAccount({ calendarSyncToken: "st-0" });
-    mockedFetch.mockResolvedValueOnce(
-      listResponse({ items: [], nextSyncToken: "st-1" })
-    );
+    mockedFetch.mockResolvedValueOnce(listResponse({ items: [], nextSyncToken: "st-1" }));
 
     const res = await pullCalendarForAccount(accountId);
     expect(res.mode).toBe("incremental");
@@ -299,20 +284,18 @@ describe("incremental pull", () => {
         await prisma.emailAccount.findUniqueOrThrow({
           where: { id: accountId },
         })
-      ).calendarSyncToken
+      ).calendarSyncToken,
     ).toBe("st-1");
   });
 
   it("falls back to a full windowed re-pull on 410 GONE (expired sync token)", async () => {
     const accountId = await seedAccount({ calendarSyncToken: "st-stale" });
-    mockedFetch
-      .mockResolvedValueOnce(new Response("Gone", { status: 410 }))
-      .mockResolvedValueOnce(
-        listResponse({
-          items: [gEvent({ id: "g-1" })],
-          nextSyncToken: "st-fresh",
-        })
-      );
+    mockedFetch.mockResolvedValueOnce(new Response("Gone", { status: 410 })).mockResolvedValueOnce(
+      listResponse({
+        items: [gEvent({ id: "g-1" })],
+        nextSyncToken: "st-fresh",
+      }),
+    );
 
     const res = await pullCalendarForAccount(accountId);
     expect(res).toMatchObject({ ok: true, mode: "full", imported: 1 });
@@ -325,7 +308,7 @@ describe("incremental pull", () => {
         await prisma.emailAccount.findUniqueOrThrow({
           where: { id: accountId },
         })
-      ).calendarSyncToken
+      ).calendarSyncToken,
     ).toBe("st-fresh");
   });
 });
@@ -352,7 +335,7 @@ describe("marked events (lawcrm marker) + LWW", () => {
           }),
         ],
         nextSyncToken: "st",
-      })
+      }),
     );
 
     const res = await pullCalendarForAccount(accountId);
@@ -390,7 +373,7 @@ describe("marked events (lawcrm marker) + LWW", () => {
           }),
         ],
         nextSyncToken: "st",
-      })
+      }),
     );
 
     const res = await pullCalendarForAccount(accountId);
@@ -403,9 +386,7 @@ describe("marked events (lawcrm marker) + LWW", () => {
     const mapping = await prisma.calendarEventSync.findUniqueOrThrow({
       where: { accountId_googleEventId: { accountId, googleEventId: "g-pushed" } },
     });
-    expect(mapping.googleUpdatedAt?.toISOString()).toBe(
-      "2020-01-01T00:00:00.000Z"
-    );
+    expect(mapping.googleUpdatedAt?.toISOString()).toBe("2020-01-01T00:00:00.000Z");
   });
 
   it("skips a marker pointing at a CRM event that no longer exists (no resurrection)", async () => {
@@ -414,7 +395,7 @@ describe("marked events (lawcrm marker) + LWW", () => {
       listResponse({
         items: [gEvent({ id: "g-orphan", marker: "gone-event-id" })],
         nextSyncToken: "st",
-      })
+      }),
     );
 
     const res = await pullCalendarForAccount(accountId);
@@ -459,9 +440,7 @@ describe("cancellation rule", () => {
 
     const res = await pullCalendarForAccount(accountId);
     expect(res).toMatchObject({ deletedEvents: 0, unlinked: 1 });
-    expect(
-      await prisma.calendarEvent.count({ where: { id: eventId } })
-    ).toBe(1);
+    expect(await prisma.calendarEvent.count({ where: { id: eventId } })).toBe(1);
     expect(await prisma.calendarEventSync.count()).toBe(0);
   });
 
@@ -478,9 +457,7 @@ describe("cancellation rule", () => {
 
     const res = await pullCalendarForAccount(accountId);
     expect(res).toMatchObject({ deletedEvents: 0, unlinked: 1 });
-    expect(
-      await prisma.calendarEvent.count({ where: { id: eventId } })
-    ).toBe(1);
+    expect(await prisma.calendarEvent.count({ where: { id: eventId } })).toBe(1);
     expect(await prisma.calendarEventSync.count()).toBe(0);
   });
 
@@ -501,9 +478,7 @@ describe("cancellation rule", () => {
 
     const res = await pullCalendarForAccount(accountId);
     expect(res).toMatchObject({ deletedEvents: 0, unlinked: 1 });
-    expect(
-      await prisma.calendarEvent.count({ where: { id: eventId } })
-    ).toBe(1);
+    expect(await prisma.calendarEvent.count({ where: { id: eventId } })).toBe(1);
   });
 
   it("keeps an event synced to MULTIPLE Google calendars — only this mapping drops", async () => {
@@ -521,9 +496,7 @@ describe("cancellation rule", () => {
 
     const res = await pullCalendarForAccount(accountId);
     expect(res).toMatchObject({ deletedEvents: 0, unlinked: 1 });
-    expect(
-      await prisma.calendarEvent.count({ where: { id: eventId } })
-    ).toBe(1);
+    expect(await prisma.calendarEvent.count({ where: { id: eventId } })).toBe(1);
     // The other account's mapping survives.
     expect(await prisma.calendarEventSync.count()).toBe(1);
   });
@@ -541,9 +514,7 @@ describe("cancellation rule", () => {
 describe("failure semantics", () => {
   it("GmailAuthError flips the account to error and returns ok:false (no throw)", async () => {
     const accountId = await seedAccount();
-    mockedFetch.mockRejectedValueOnce(
-      new GmailAuthError("Reconnect this mailbox.", accountId)
-    );
+    mockedFetch.mockRejectedValueOnce(new GmailAuthError("Reconnect this mailbox.", accountId));
 
     const res = await pullCalendarForAccount(accountId);
     expect(res).toMatchObject({ ok: false, error: "Reconnect this mailbox." });
@@ -558,15 +529,13 @@ describe("failure semantics", () => {
     const accountId = await seedAccount();
     mockedFetch.mockResolvedValueOnce(new Response("boom", { status: 500 }));
 
-    await expect(pullCalendarForAccount(accountId)).rejects.toThrow(
-      CalendarSyncError
-    );
+    await expect(pullCalendarForAccount(accountId)).rejects.toThrow(CalendarSyncError);
     const account = await prisma.emailAccount.findUniqueOrThrow({
       where: { id: accountId },
     });
     expect(account.syncStatus).toBe("connected");
     expect(account.syncError).toBe(
-      `${CALENDAR_SYNC_ERROR_PREFIX}Google Calendar events list failed (500).`
+      `${CALENDAR_SYNC_ERROR_PREFIX}Google Calendar events list failed (500).`,
     );
   });
 
@@ -579,9 +548,7 @@ describe("failure semantics", () => {
       syncError: "Last sync failed: Gmail thread list failed (500).",
     });
     // Fresh Response per call — a shared body can only be read once.
-    mockedFetch.mockImplementation(async () =>
-      listResponse({ items: [], nextSyncToken: "st" })
-    );
+    mockedFetch.mockImplementation(async () => listResponse({ items: [], nextSyncToken: "st" }));
 
     await pullCalendarForAccount(calendarFailed);
     await pullCalendarForAccount(mailFailed);
@@ -591,14 +558,14 @@ describe("failure semantics", () => {
         await prisma.emailAccount.findUniqueOrThrow({
           where: { id: calendarFailed },
         })
-      ).syncError
+      ).syncError,
     ).toBeNull();
     expect(
       (
         await prisma.emailAccount.findUniqueOrThrow({
           where: { id: mailFailed },
         })
-      ).syncError
+      ).syncError,
     ).toBe("Last sync failed: Gmail thread list failed (500).");
   });
 });
@@ -639,9 +606,7 @@ describe("pullCalendarForUserAccounts", () => {
       error: "Reconnect required.",
     });
     // The reconnect-required account produced no Google traffic.
-    expect(
-      mockedFetch.mock.calls.some(([id]) => id === needsReconnect)
-    ).toBe(false);
+    expect(mockedFetch.mock.calls.some(([id]) => id === needsReconnect)).toBe(false);
   });
 });
 
@@ -656,7 +621,7 @@ describe("echo safety", () => {
     // from the project root (vitest's cwd) instead.
     const source = readFileSync(
       path.join(process.cwd(), "src/lib/google/google-calendar-sync.ts"),
-      "utf8"
+      "utf8",
     );
     // Comments may NAME the push module (they document the split);
     // what must never exist is an import/require of it.
@@ -707,7 +672,7 @@ describe("echo guard (F072) — LWW against the mapping's googleUpdatedAt", () =
           }),
         ],
         nextSyncToken: "st",
-      })
+      }),
     );
 
     const res = await pullCalendarForAccount(accountId);
@@ -749,7 +714,7 @@ describe("echo guard (F072) — LWW against the mapping's googleUpdatedAt", () =
           }),
         ],
         nextSyncToken: "st",
-      })
+      }),
     );
 
     const res = await pullCalendarForAccount(accountId);
@@ -790,7 +755,7 @@ describe("marker authorization (F073)", () => {
           }),
         ],
         nextSyncToken: "st",
-      })
+      }),
     );
 
     const res = await pullCalendarForAccount(accountId);
@@ -821,7 +786,7 @@ describe("marker authorization (F073)", () => {
       listResponse({
         items: [{ id: "g-forged", status: "cancelled" }],
         nextSyncToken: "st",
-      })
+      }),
     );
     await pullCalendarForAccount(accountId);
     expect(await prisma.calendarEvent.count({ where: { id: eventId } })).toBe(1);
@@ -841,7 +806,7 @@ describe("marker authorization (F073)", () => {
       listResponse({
         items: [gEvent({ id: "g-new", marker: eventId })],
         nextSyncToken: "st",
-      })
+      }),
     );
     await pullCalendarForAccount(accountId);
     const mapping = await prisma.calendarEventSync.findFirstOrThrow({
@@ -866,7 +831,7 @@ describe("Google-side cancellation of CRM-born typed events (F260)", () => {
       listResponse({
         items: [{ id: "g-x", status: "cancelled" }],
         nextSyncToken: "st",
-      })
+      }),
     );
 
     const res = await pullCalendarForAccount(accountId);
@@ -888,7 +853,7 @@ describe("per-item isolation (F069)", () => {
           gEvent({ id: "g-ok", summary: "Fine" }),
         ],
         nextSyncToken: "st-saved",
-      })
+      }),
     );
 
     const res = await pullCalendarForAccount(accountId);
@@ -904,13 +869,10 @@ describe("per-item isolation (F069)", () => {
     errSpy.mockRestore();
 
     // A clean pass clears the calendar note.
-    mockedFetch.mockResolvedValueOnce(
-      listResponse({ items: [], nextSyncToken: "st-2" })
-    );
+    mockedFetch.mockResolvedValueOnce(listResponse({ items: [], nextSyncToken: "st-2" }));
     await pullCalendarForAccount(accountId);
     expect(
-      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
-        .syncError
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } })).syncError,
     ).toBeNull();
   });
 
@@ -920,16 +882,14 @@ describe("per-item isolation (F069)", () => {
       listResponse({
         items: [gEvent({ id: "g-1", summary: "One" })],
         nextSyncToken: "st-new",
-      })
+      }),
     );
-    const spy = vi
-      .spyOn(prisma.calendarEventSync, "findUnique")
-      .mockRejectedValueOnce(
-        new Prisma.PrismaClientKnownRequestError("deadlock", {
-          code: "P2034",
-          clientVersion: "test",
-        })
-      );
+    const spy = vi.spyOn(prisma.calendarEventSync, "findUnique").mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError("deadlock", {
+        code: "P2034",
+        clientVersion: "test",
+      }),
+    );
     await expect(pullCalendarForAccount(accountId)).rejects.toThrow();
     spy.mockRestore();
     const account = await prisma.emailAccount.findUniqueOrThrow({
@@ -950,15 +910,12 @@ describe("per-item isolation (F069)", () => {
           gEvent({ id: "bad\u0000c" }),
         ],
         nextSyncToken: "st-new",
-      })
+      }),
     );
-    await expect(pullCalendarForAccount(accountId)).rejects.toThrow(
-      /failed to import/
-    );
+    await expect(pullCalendarForAccount(accountId)).rejects.toThrow(/failed to import/);
     errSpy.mockRestore();
     expect(
-      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
-        .calendarSyncToken
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } })).calendarSyncToken,
     ).toBe("st-old");
   });
 
@@ -971,12 +928,11 @@ describe("per-item isolation (F069)", () => {
       listResponse({
         items: [gEvent({ id: "bad\u0000id" })],
         nextSyncToken: "st",
-      })
+      }),
     );
     await pullCalendarForAccount(accountId);
     expect(
-      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } }))
-        .syncError
+      (await prisma.emailAccount.findUniqueOrThrow({ where: { id: accountId } })).syncError,
     ).toBe("Last sync failed: mail thing");
     errSpy.mockRestore();
   });
@@ -985,11 +941,9 @@ describe("per-item isolation (F069)", () => {
     const accountId = await seedAccount();
     mockedFetch.mockResolvedValueOnce(
       listResponse({
-        items: [
-          gEvent({ id: "g-nul", summary: "Dep\u0000o", description: "a\u0000b" }),
-        ],
+        items: [gEvent({ id: "g-nul", summary: "Dep\u0000o", description: "a\u0000b" })],
         nextSyncToken: "st",
-      })
+      }),
     );
     const res = await pullCalendarForAccount(accountId);
     expect(res).toMatchObject({ imported: 1, failed: 0 });
@@ -1022,9 +976,7 @@ describe("deactivated owners (F071/F348)", () => {
 
   it("active members' calendars are still pulled by the cron wrapper", async () => {
     const accountId = await seedAccount();
-    mockedFetch.mockResolvedValueOnce(
-      listResponse({ items: [], nextSyncToken: "st" })
-    );
+    mockedFetch.mockResolvedValueOnce(listResponse({ items: [], nextSyncToken: "st" }));
     const results = await pullCalendarForAllAccounts();
     expect(results.map((r) => r.accountId)).toEqual([accountId]);
   });
@@ -1044,7 +996,7 @@ describe("all-day events are date-only (ADR-012, F695/F941)", () => {
           }),
         ],
         nextSyncToken: "st-d",
-      })
+      }),
     );
     await pullCalendarForAccount(accountId);
     const event = await prisma.calendarEvent.findFirstOrThrow({
@@ -1063,7 +1015,7 @@ describe("concurrent import race (F728)", () => {
       listResponse({
         items: [gEvent({ id: "g-race", summary: "Raced" })],
         nextSyncToken: "st-r",
-      })
+      }),
     );
     // Simulate the winner: the mapping lookup (first findUnique in
     // applyGoogleEvent) misses even though the other pass has since
@@ -1071,9 +1023,7 @@ describe("concurrent import race (F728)", () => {
     await pullCalendarForAccount(accountId);
     expect(await prisma.calendarEvent.count({ where: { title: "Raced" } })).toBe(1);
 
-    const spy = vi
-      .spyOn(prisma.calendarEventSync, "findUnique")
-      .mockResolvedValueOnce(null);
+    const spy = vi.spyOn(prisma.calendarEventSync, "findUnique").mockResolvedValueOnce(null);
     const res = await pullCalendarForAccount(accountId);
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();

@@ -9,9 +9,7 @@ import { requireUser } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
 import { currentUserHasPermission } from "@/lib/permission-check";
 
-export default async function MatterRecordsPage({
-  params,
-}: PageProps<"/matters/[id]/records">) {
+export default async function MatterRecordsPage({ params }: PageProps<"/matters/[id]/records">) {
   // Pages guard themselves: layouts don't re-run on soft navigation (ADR-028).
   await requireUser();
   const { id } = await params;
@@ -19,10 +17,7 @@ export default async function MatterRecordsPage({
   if (!(await currentUserHasPermission("records.view"))) notFound();
   return (
     <div className="p-5">
-      <RecordsTab
-        scope={{ kind: "matter", matterId: id }}
-        writable
-      />
+      <RecordsTab scope={{ kind: "matter", matterId: id }} writable />
     </div>
   );
 }

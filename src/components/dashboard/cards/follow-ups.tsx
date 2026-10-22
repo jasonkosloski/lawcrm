@@ -15,24 +15,17 @@ function FollowUpRow({ item }: { item: FollowUpItem }) {
     <DashboardRow href={href}>
       <span
         className={
-          "h-1.5 w-1.5 shrink-0 rounded-full " +
-          (item.isOverdue ? "bg-danger" : "bg-ink-5")
+          "h-1.5 w-1.5 shrink-0 rounded-full " + (item.isOverdue ? "bg-danger" : "bg-ink-5")
         }
       />
       <div className="min-w-0 flex-1">
         <div className="truncate text-xs text-ink">{item.label}</div>
-        {item.matterName && (
-          <div className="truncate text-2xs text-ink-4">
-            {item.matterName}
-          </div>
-        )}
+        {item.matterName && <div className="truncate text-2xs text-ink-4">{item.matterName}</div>}
       </div>
       {item.isOverdue ? (
         <LatePill tone="danger">{kindLabel} · Late</LatePill>
       ) : (
-        <span className="shrink-0 text-2xs text-ink-4">
-          {kindLabel} · Today
-        </span>
+        <span className="shrink-0 text-2xs text-ink-4">{kindLabel} · Today</span>
       )}
     </DashboardRow>
   );

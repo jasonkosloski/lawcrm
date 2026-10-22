@@ -22,10 +22,7 @@ const NOT_SIGNED_IN = "Not signed in.";
 const CANT_SEND = "You can't send messages on this matter.";
 const TOO_FAST = "You're sending messages too quickly. Try again later.";
 
-export async function sendPortalMessage(
-  matterId: string,
-  body: string,
-): Promise<Result> {
+export async function sendPortalMessage(matterId: string, body: string): Promise<Result> {
   const identity = await getPortalIdentity();
   if (!identity) return { ok: false, error: NOT_SIGNED_IN };
 
@@ -73,11 +70,7 @@ export async function sendPortalMessage(
 }
 
 /** Never throws: the message is already saved. */
-async function notifyTeam(
-  matterId: string,
-  matterName: string,
-  contactId: string,
-): Promise<void> {
+async function notifyTeam(matterId: string, matterName: string, contactId: string): Promise<void> {
   try {
     const [members, contact] = await Promise.all([
       prisma.matterTeamMember.findMany({
@@ -135,10 +128,6 @@ export async function markPortalMessagesRead(matterId: string): Promise<void> {
     select: { lastReadAt: true },
   });
   if (state && state.lastReadAt >= thread.lastMessageAt) return;
-  await advanceReadState(
-    thread.id,
-    { identityId: identity.identityId },
-    thread.lastMessageAt,
-  );
+  await advanceReadState(thread.id, { identityId: identity.identityId }, thread.lastMessageAt);
   revalidatePath("/portal");
 }

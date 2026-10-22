@@ -39,7 +39,11 @@ describe("shapeDocumentRows portal fields", () => {
   test("populated for portal.view holders", async () => {
     hasPermission.mockResolvedValue(true);
     const [r] = await shapeDocumentRows([raw]);
-    expect(r).toMatchObject({ clientShare: "shared", portalUploaderName: "Jane Client", clientNote: "note" });
+    expect(r).toMatchObject({
+      clientShare: "shared",
+      portalUploaderName: "Jane Client",
+      clientNote: "note",
+    });
   });
 
   test("nulled without portal.view", async () => {

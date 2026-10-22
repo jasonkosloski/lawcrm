@@ -38,7 +38,7 @@ function renderSection(over: Partial<React.ComponentProps<typeof EngagementSecti
       originatingFileId="f1"
       onChange={onChange}
       {...over}
-    />
+    />,
   );
   return { ...utils, onChange };
 }
@@ -75,7 +75,7 @@ describe("EngagementSection", () => {
   test("no documents.upload: the explanation replaces the upload button (Review Focus 3)", () => {
     renderSection({ canUpload: false, label: "Retainer" });
     expect(
-      screen.getByText("You need permission to upload documents to attach the Retainer.")
+      screen.getByText("You need permission to upload documents to attach the Retainer."),
     ).toBeTruthy();
     expect(screen.queryByTestId("uploader")).toBeNull();
   });

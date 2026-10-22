@@ -19,11 +19,7 @@ import {
   type CalendarShow,
   type CalendarView,
 } from "@/lib/calendar-utils";
-import {
-  calendarWeekInTz,
-  dateKeyInTz,
-  formatDateOnly,
-} from "@/lib/format-date";
+import { calendarWeekInTz, dateKeyInTz, formatDateOnly } from "@/lib/format-date";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 
 /**
@@ -51,11 +47,7 @@ export function todayFocalInTz(now: Date, tz: string): Date {
  * grid builders don't honor. Those helpers return noon-UTC Dates;
  * `formatDateOnly` reads them in UTC, so no zone shifts the day.
  */
-export function formatRangeLabel(
-  view: CalendarView,
-  focal: Date,
-  tz: string
-): string {
+export function formatRangeLabel(view: CalendarView, focal: Date, tz: string): string {
   if (view === "day") {
     return formatDateOnly(calendarDayInTz(focal, tz).day, "full_long");
   }
@@ -140,9 +132,7 @@ export async function CalendarToolbar({
                 aria-current={active ? "true" : undefined}
                 className={cn(
                   "h-6 px-2.5 rounded-[5px] text-xs font-medium transition-colors inline-flex items-center",
-                  active
-                    ? "bg-white text-ink shadow-sm"
-                    : "text-ink-3 hover:text-ink"
+                  active ? "bg-white text-ink shadow-sm" : "text-ink-3 hover:text-ink",
                 )}
               >
                 {SHOW_LABEL[s]}
@@ -160,9 +150,7 @@ export async function CalendarToolbar({
                 href={buildCalendarHref(view, focal, { view: v }, show)}
                 className={cn(
                   "h-6 px-2.5 rounded-[5px] text-xs font-medium capitalize transition-colors",
-                  active
-                    ? "bg-white text-ink shadow-sm"
-                    : "text-ink-3 hover:text-ink"
+                  active ? "bg-white text-ink shadow-sm" : "text-ink-3 hover:text-ink",
                 )}
               >
                 {v}

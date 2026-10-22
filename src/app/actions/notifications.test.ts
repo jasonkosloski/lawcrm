@@ -20,10 +20,7 @@ vi.mock("@/lib/current-user", () => ({ getCurrentUserId: vi.fn() }));
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
-import {
-  markAllNotificationsRead,
-  markNotificationRead,
-} from "@/app/actions/notifications";
+import { markAllNotificationsRead, markNotificationRead } from "@/app/actions/notifications";
 import {
   getNotificationsBell,
   getNotificationsFeed,
@@ -166,17 +163,11 @@ describe("markAllNotificationsRead — cutoff", () => {
     });
     const bad = await markAllNotificationsRead("not-a-date");
     expect(bad.ok).toBe(false);
-    expect(
-      await prisma.notification.count({ where: { userId, readAt: null } })
-    ).toBe(1);
+    expect(await prisma.notification.count({ where: { userId, readAt: null } })).toBe(1);
 
-    const ok = await markAllNotificationsRead(
-      new Date(Date.now() + 60_000).toISOString()
-    );
+    const ok = await markAllNotificationsRead(new Date(Date.now() + 60_000).toISOString());
     expect(ok.ok).toBe(true);
-    expect(
-      await prisma.notification.count({ where: { userId, readAt: null } })
-    ).toBe(0);
+    expect(await prisma.notification.count({ where: { userId, readAt: null } })).toBe(0);
   });
 
   test("the feed and the bell hand back an asOf that covers what they showed", async () => {
@@ -228,9 +219,7 @@ describe("getNotificationsFeed", () => {
     expect(page1.pageCount).toBe(2);
     expect(page1.rows).toHaveLength(NOTIFICATIONS_PAGE_SIZE);
     expect(page1.rows[0]!.title).toBe("n-0");
-    expect(page1.rows[NOTIFICATIONS_PAGE_SIZE - 1]!.title).toBe(
-      `n-${NOTIFICATIONS_PAGE_SIZE - 1}`
-    );
+    expect(page1.rows[NOTIFICATIONS_PAGE_SIZE - 1]!.title).toBe(`n-${NOTIFICATIONS_PAGE_SIZE - 1}`);
 
     const page2 = await getNotificationsFeed(2);
     expect(page2.rows).toHaveLength(5);
@@ -259,9 +248,7 @@ describe("getNotificationsFeed", () => {
     const feed = await getNotificationsFeed(1);
     expect(feed.total).toBe(2);
     expect(feed.unreadCount).toBe(1);
-    const byTitle = Object.fromEntries(
-      feed.rows.map((r) => [r.title, r.isRead])
-    );
+    const byTitle = Object.fromEntries(feed.rows.map((r) => [r.title, r.isRead]));
     expect(byTitle["unread-one"]).toBe(false);
     expect(byTitle["read-one"]).toBe(true);
     expect(byTitle["not-mine"]).toBeUndefined();

@@ -25,12 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  createVenue,
-  deleteVenue,
-  setVenueActive,
-  updateVenue,
-} from "@/app/actions/venues";
+import { createVenue, deleteVenue, setVenueActive, updateVenue } from "@/app/actions/venues";
 import type { VenueOption } from "@/lib/queries/venues";
 import { inputClass, labelClass } from "@/components/ui/field";
 
@@ -90,9 +85,7 @@ export function VenueEditor({
 
       {venues.length === 0 ? (
         <Card>
-          <CardContent className="px-4 py-6 text-xs text-ink-4">
-            No venues yet.
-          </CardContent>
+          <CardContent className="px-4 py-6 text-xs text-ink-4">No venues yet.</CardContent>
         </Card>
       ) : (
         <Table>
@@ -230,7 +223,8 @@ function VenueForm({
       const res = venue ? await updateVenue(venue.id, input) : await createVenue(input);
       if (res.ok) return onDone();
       if (res.code === "invalid") setErrors(res.errors);
-      else if (res.code === "exists") setFormError(`A venue named "${res.venue.name}" already exists.`);
+      else if (res.code === "exists")
+        setFormError(`A venue named "${res.venue.name}" already exists.`);
       else if (res.code === "archived")
         setFormError(`"${res.venue.name}" exists but is archived. Restore it instead.`);
       else setFormError("This venue no longer exists.");
@@ -250,18 +244,41 @@ function VenueForm({
         <label htmlFor="venue-name" className={labelClass}>
           Name <span className="text-warn">*</span>
         </label>
-        <input id="venue-name" required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} className={inputClass()} />
+        <input
+          id="venue-name"
+          required
+          maxLength={120}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className={inputClass()}
+        />
         {errP("name")}
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
-          <label htmlFor="venue-city" className={labelClass}>City</label>
-          <input id="venue-city" maxLength={80} value={city} onChange={(e) => setCity(e.target.value)} className={inputClass()} />
+          <label htmlFor="venue-city" className={labelClass}>
+            City
+          </label>
+          <input
+            id="venue-city"
+            maxLength={80}
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            className={inputClass()}
+          />
           {errP("city")}
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="venue-county" className={labelClass}>County</label>
-          <input id="venue-county" maxLength={80} value={county} onChange={(e) => setCounty(e.target.value)} className={inputClass()} />
+          <label htmlFor="venue-county" className={labelClass}>
+            County
+          </label>
+          <input
+            id="venue-county"
+            maxLength={80}
+            value={county}
+            onChange={(e) => setCounty(e.target.value)}
+            className={inputClass()}
+          />
           {errP("county")}
         </div>
       </div>
@@ -269,7 +286,14 @@ function VenueForm({
         <label htmlFor="venue-state" className={labelClass}>
           State <span className="text-warn">*</span>
         </label>
-        <input id="venue-state" required maxLength={60} value={state} onChange={(e) => setState(e.target.value)} className={inputClass()} />
+        <input
+          id="venue-state"
+          required
+          maxLength={60}
+          value={state}
+          onChange={(e) => setState(e.target.value)}
+          className={inputClass()}
+        />
         {errP("state")}
       </div>
       {formError && (

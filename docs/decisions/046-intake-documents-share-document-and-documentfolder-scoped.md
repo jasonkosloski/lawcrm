@@ -6,6 +6,7 @@
 **Context:** After intake notes (ADR-044) and tasks/events (ADR-045), intake needed documents (retainers, ID scans, generated letters) before a matter exists, carried onto the matter when the lead converts.
 
 **Decision:**
+
 - **Same tables, exactly-one scope.** `Document.leadId` and `DocumentFolder.leadId` were added and `matterId` made nullable on both. Exactly one of (matterId, leadId) is set on each row, and a folder and its documents share a scope. `RecordScope` helpers in `src/lib/record-scope.ts` (`scopeOf`, `scopeWhere`, `scopeBasePath`) and `src/lib/scope-access.ts` (`assertScopeAccess`, `assertScopeWritable`, `revalidateDocumentScope`) are the single place scope is resolved.
 - **Upload routes accept `leadId`.** The streaming and blob upload routes take `leadId` in place of `matterId`; the viewer, listing and download resolve the row's scope rather than assuming a matter.
 - **No matter wall on lead documents.** A lead has no team, so any signed-in user can view and download lead documents (same as the intake pages); the `documents.*` write keys gate upload, organize and delete. Matter documents keep the matter wall.
@@ -15,6 +16,7 @@
 - **Search lists intake documents** labelled "Intake · {lead}", linking to the intake viewer.
 
 **Trade-offs:**
+
 - (+) One document system; the viewer, flags, email extraction and copies work unchanged
 - (+) Conversion moves rows; no files are copied
 - (-) Every reader of `Document.matterId` has to handle null

@@ -32,12 +32,7 @@ vi.mock("@/app/actions/practice-areas", () => ({
   updateStage: vi.fn(),
 }));
 
-import {
-  createStage,
-  moveStage,
-  setStageActive,
-  updateStage,
-} from "@/app/actions/practice-areas";
+import { createStage, moveStage, setStageActive, updateStage } from "@/app/actions/practice-areas";
 import { StageManager, type StageManagerStage } from "./stage-manager";
 
 const mockedCreate = vi.mocked(createStage);
@@ -45,9 +40,7 @@ const mockedMove = vi.mocked(moveStage);
 const mockedSetActive = vi.mocked(setStageActive);
 const mockedUpdate = vi.mocked(updateStage);
 
-const stage = (
-  over: Partial<StageManagerStage> = {}
-): StageManagerStage => ({
+const stage = (over: Partial<StageManagerStage> = {}): StageManagerStage => ({
   id: "st_1",
   name: "Intake",
   order: 0,
@@ -69,8 +62,7 @@ beforeEach(() => {
   mockedMove.mockResolvedValue({ ok: true });
 });
 
-const nameInput = () =>
-  screen.getByPlaceholderText(/new stage name/i) as HTMLInputElement;
+const nameInput = () => screen.getByPlaceholderText(/new stage name/i) as HTMLInputElement;
 
 describe("AddStageForm — reset after successful add", () => {
   test("clears the inputs once the action reports ok", async () => {
@@ -149,9 +141,7 @@ describe("AddStageForm — reset after successful add", () => {
     await user.type(nameInput(), "Intake");
     await user.click(screen.getByRole("button", { name: /add stage/i }));
 
-    expect(
-      await screen.findByText(/already exists in this area/)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/already exists in this area/)).toBeInTheDocument();
   });
 });
 
@@ -162,9 +152,7 @@ describe("StageRow — icon buttons must not submit the rename form", () => {
 
     await user.click(screen.getByRole("button", { name: "Archive" }));
 
-    await waitFor(() =>
-      expect(mockedSetActive).toHaveBeenCalledWith("st_1", false)
-    );
+    await waitFor(() => expect(mockedSetActive).toHaveBeenCalledWith("st_1", false));
     // A submit-typed button would have fired the row's rename form.
     expect(mockedUpdate).not.toHaveBeenCalled();
   });
@@ -174,37 +162,23 @@ describe("StageRow — icon buttons must not submit the rename form", () => {
     render(
       <StageManager
         practiceAreaId="pa_1"
-        stages={[
-          stage(),
-          stage({ id: "st_2", name: "Discovery", order: 1 }),
-        ]}
-      />
+        stages={[stage(), stage({ id: "st_2", name: "Discovery", order: 1 })]}
+      />,
     );
 
     // First row's "Move down" (second row's is disabled at the end).
-    await user.click(
-      screen.getAllByRole("button", { name: "Move down" })[0]
-    );
+    await user.click(screen.getAllByRole("button", { name: "Move down" })[0]);
 
-    await waitFor(() =>
-      expect(mockedMove).toHaveBeenCalledWith("st_1", "down")
-    );
+    await waitFor(() => expect(mockedMove).toHaveBeenCalledWith("st_1", "down"));
     expect(mockedUpdate).not.toHaveBeenCalled();
   });
 });
 
 describe("accessible names", () => {
   test("row name input, row terminal checkbox and add-form input are labelled", () => {
-    render(
-      <StageManager
-        practiceAreaId="pa_1"
-        stages={[stage({ isTerminal: true })]}
-      />
-    );
+    render(<StageManager practiceAreaId="pa_1" stages={[stage({ isTerminal: true })]} />);
     expect(screen.getByLabelText("Stage name (Intake)")).toBeTruthy();
-    expect(
-      (screen.getByLabelText("Intake is terminal") as HTMLInputElement).checked
-    ).toBe(true);
+    expect((screen.getByLabelText("Intake is terminal") as HTMLInputElement).checked).toBe(true);
     expect(screen.getByLabelText("New stage name")).toBeTruthy();
   });
 });
@@ -226,15 +200,9 @@ describe("stage forms after a server validation error", () => {
     await user.click(terminal);
     await user.click(screen.getByTitle(/save changes/i));
 
-    await waitFor(() =>
-      expect(screen.getByText(/already exists/i)).toBeTruthy()
-    );
-    expect((screen.getByDisplayValue("Dup") as HTMLInputElement).value).toBe(
-      "Dup"
-    );
-    expect((screen.getAllByRole("checkbox")[0] as HTMLInputElement).checked).toBe(
-      true
-    );
+    await waitFor(() => expect(screen.getByText(/already exists/i)).toBeTruthy());
+    expect((screen.getByDisplayValue("Dup") as HTMLInputElement).value).toBe("Dup");
+    expect((screen.getAllByRole("checkbox")[0] as HTMLInputElement).checked).toBe(true);
   });
 
   test("AddStageForm keeps the typed name and terminal checkbox on error", async () => {
@@ -250,9 +218,7 @@ describe("stage forms after a server validation error", () => {
     await user.click(screen.getByLabelText("terminal"));
     await user.click(screen.getByRole("button", { name: /add stage/i }));
 
-    await waitFor(() =>
-      expect(screen.getByText(/already exists/i)).toBeTruthy()
-    );
+    await waitFor(() => expect(screen.getByText(/already exists/i)).toBeTruthy());
     expect(nameInput().value).toBe("Mediation");
     const boxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
     expect(boxes[boxes.length - 1].checked).toBe(true);

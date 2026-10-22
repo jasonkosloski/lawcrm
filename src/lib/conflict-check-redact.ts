@@ -21,9 +21,10 @@ export const RESTRICTED_MATCH_DESCRIPTION =
  * the hit is kept (severity unchanged) while its description is
  * replaced with a generic line and its `matterId` dropped.
  */
-export async function redactConflictResultForViewer<
-  T extends { matches: ConflictMatch[] },
->(viewerId: string, result: T): Promise<T> {
+export async function redactConflictResultForViewer<T extends { matches: ConflictMatch[] }>(
+  viewerId: string,
+  result: T,
+): Promise<T> {
   const ids = result.matches.flatMap((m) => (m.matterId ? [m.matterId] : []));
   if (ids.length === 0) return result;
   const accessible = await filterAccessibleMatterIds(viewerId, ids);

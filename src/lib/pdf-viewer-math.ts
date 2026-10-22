@@ -26,11 +26,7 @@ export function stepZoom(current: number, direction: 1 | -1): number {
 /** Scale (CSS px per PDF point) at which a page fills the available
  *  width, less a gutter. Never below a readable floor; falls back to
  *  1 when the container hasn't been laid out yet (width 0). */
-export function fitWidthScale(
-  containerWidth: number,
-  pageWidthPts: number,
-  gutterPx = 32
-): number {
+export function fitWidthScale(containerWidth: number, pageWidthPts: number, gutterPx = 32): number {
   if (containerWidth <= 0 || pageWidthPts <= 0) return 1;
   return Math.max(0.25, (containerWidth - gutterPx) / pageWidthPts);
 }
@@ -71,7 +67,7 @@ export const MAX_CANVAS_PIXELS = 16_000_000;
 export function canvasOutputScale(
   cssWidth: number,
   cssHeight: number,
-  devicePixelRatio: number
+  devicePixelRatio: number,
 ): number {
   const dpr = devicePixelRatio > 0 ? devicePixelRatio : 1;
   const area = cssWidth * cssHeight;

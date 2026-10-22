@@ -8,6 +8,7 @@
 **Decision:** Define all design tokens as CSS custom properties in `globals.css` and reference them through Tailwind's `@theme inline` directive. This gives us `bg-brand-500`, `text-ink-3`, etc. as utility classes while keeping the source of truth in CSS vars.
 
 **Trade-offs:**
+
 - (+) Single source of truth for colors
 - (+) CSS vars work in inline styles, component libs, and Tailwind
 - (+) Easy to theme or override per-section (e.g., email reader paper tone)

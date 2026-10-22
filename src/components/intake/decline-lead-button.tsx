@@ -24,10 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { TextareaField } from "@/components/matters/captures/primary-fields";
 import { declineLead } from "@/app/actions/leads";
-import {
-  declineLeadInitialState,
-  type DeclineLeadFormState,
-} from "@/lib/lead-conversion-form";
+import { declineLeadInitialState, type DeclineLeadFormState } from "@/lib/lead-conversion-form";
 
 export function DeclineLeadButton({ leadId }: { leadId: string }) {
   const [open, setOpen] = useState(false);
@@ -43,15 +40,16 @@ export function DeclineLeadButton({ leadId }: { leadId: string }) {
       if (res.status === "ok") setOpen(false);
       return res;
     },
-    [leadId]
+    [leadId],
   );
   // Wrapped useActionState: masks state left over from a previous
   // open, so a failed attempt's error banner doesn't reappear when
   // the dialog is reopened. See src/hooks/use-dialog-action-state.ts.
-  const [state, formAction, isPending] = useDialogActionState<
-    DeclineLeadFormState,
-    FormData
-  >(action, declineLeadInitialState, open);
+  const [state, formAction, isPending] = useDialogActionState<DeclineLeadFormState, FormData>(
+    action,
+    declineLeadInitialState,
+    open,
+  );
 
   // A fresh dialog each time: clear the reason in the open handler.
   const handleOpenChange = (next: boolean) => {
@@ -84,9 +82,9 @@ export function DeclineLeadButton({ leadId }: { leadId: string }) {
         <DialogHeader>
           <DialogTitle>Decline lead</DialogTitle>
           <DialogDescription>
-            Mark this lead as declined and remove it from the active intake
-            queue. The reason is internal — it stays on the lead for future
-            reference but isn&apos;t shared with the prospective client.
+            Mark this lead as declined and remove it from the active intake queue. The reason is
+            internal — it stays on the lead for future reference but isn&apos;t shared with the
+            prospective client.
           </DialogDescription>
         </DialogHeader>
 
@@ -107,11 +105,7 @@ export function DeclineLeadButton({ leadId }: { leadId: string }) {
           )}
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setOpen(false)}
-            >
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="destructive" disabled={isPending}>

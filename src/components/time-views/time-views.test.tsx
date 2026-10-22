@@ -62,7 +62,7 @@ describe("TimeDayView", () => {
         asOf={new Date("2026-06-15T18:00:00Z")}
         userTz="America/Denver"
         dailyHoursGoal={8}
-      />
+      />,
     );
     expect(screen.getByText("0.25h")).toBeInTheDocument();
     expect(screen.getByText("0.75h")).toBeInTheDocument();
@@ -78,7 +78,7 @@ describe("TimeDayView", () => {
         asOf={new Date("2026-06-15T17:30:00Z")}
         userTz="America/Denver"
         dailyHoursGoal={8}
-      />
+      />,
     );
     expect(screen.getByText("Timer")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
@@ -94,7 +94,7 @@ describe("TimeDayView", () => {
         asOf={new Date()}
         userTz="America/Denver"
         dailyHoursGoal={8}
-      />
+      />,
     );
     expect(screen.getByText("No timer running.")).toBeInTheDocument();
   });
@@ -108,7 +108,7 @@ describe("TimeDayView", () => {
         asOf={new Date()}
         userTz="America/Denver"
         dailyHoursGoal={8}
-      />
+      />,
     );
     expect(screen.queryByText("Timer")).toBeNull();
     expect(screen.queryByText("No timer running.")).toBeNull();
@@ -125,7 +125,7 @@ describe("TimeDayView", () => {
         asOf={new Date()}
         userTz="America/Denver"
         dailyHoursGoal={8}
-      />
+      />,
     );
     expect(screen.getByText("Written off")).toBeInTheDocument();
   });
@@ -142,7 +142,7 @@ describe("TimeDayView", () => {
         asOf={new Date()}
         userTz="America/Denver"
         dailyHoursGoal={8}
-      />
+      />,
     );
     expect(screen.getByText("via Calendar")).toBeInTheDocument();
   });
@@ -195,15 +195,11 @@ describe("TimeToolbar labels", () => {
   });
 
   test("a week spanning two months shows both ends", () => {
-    expect(formatRangeLabel("week", parseISO("2026-07-01"))).toBe(
-      "Jun 28 – Jul 4, 2026"
-    );
+    expect(formatRangeLabel("week", parseISO("2026-07-01"))).toBe("Jun 28 – Jul 4, 2026");
   });
 
   test("a week spanning a year boundary", () => {
-    expect(formatRangeLabel("week", parseISO("2026-12-31"))).toBe(
-      "Dec 27 – Jan 2, 2027"
-    );
+    expect(formatRangeLabel("week", parseISO("2026-12-31"))).toBe("Dec 27 – Jan 2, 2027");
   });
 
   test("day label spells out the weekday", () => {
@@ -214,15 +210,15 @@ describe("TimeToolbar labels", () => {
     render(<TimeToolbar view="day" focal={focal} userTz="America/Denver" />);
     expect(screen.getByRole("link", { name: "Previous day" })).toHaveAttribute(
       "href",
-      "/time?view=day&d=2026-06-16"
+      "/time?view=day&d=2026-06-16",
     );
     expect(screen.getByRole("link", { name: "Next day" })).toHaveAttribute(
       "href",
-      "/time?view=day&d=2026-06-18"
+      "/time?view=day&d=2026-06-18",
     );
     expect(screen.getByRole("link", { name: "Today" })).toHaveAttribute(
       "href",
-      expect.stringMatching(/^\/time\?view=day&d=\d{4}-\d{2}-\d{2}$/)
+      expect.stringMatching(/^\/time\?view=day&d=\d{4}-\d{2}-\d{2}$/),
     );
   });
 });

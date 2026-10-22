@@ -99,8 +99,7 @@ export default async function MatterEvidencePage({
   const sp = await searchParams;
   const rawCategory = firstParam(sp.category);
   const filter: FlagCategory | null =
-    typeof rawCategory === "string" &&
-    (FLAG_CATEGORIES as readonly string[]).includes(rawCategory)
+    typeof rawCategory === "string" && (FLAG_CATEGORIES as readonly string[]).includes(rawCategory)
       ? (rawCategory as FlagCategory)
       : null;
 
@@ -158,9 +157,7 @@ export default async function MatterEvidencePage({
           framed
           icon={Flag}
           title={
-            filter
-              ? `No ${FLAG_CATEGORY_LABEL[filter].toLowerCase()} flags yet`
-              : "No flags yet"
+            filter ? `No ${FLAG_CATEGORY_LABEL[filter].toLowerCase()} flags yet` : "No flags yet"
           }
           description={
             filter ? (
@@ -174,10 +171,9 @@ export default async function MatterEvidencePage({
                 >
                   Documents tab
                 </Link>{" "}
-                and flag what matters — a moment in a recording, a page
-                in a PDF, a passage in a transcript, or the file as a
-                whole. Every flag lands here, grouped by document, ready
-                to walk in order.
+                and flag what matters — a moment in a recording, a page in a PDF, a passage in a
+                transcript, or the file as a whole. Every flag lands here, grouped by document,
+                ready to walk in order.
               </>
             )
           }
@@ -207,10 +203,7 @@ export default async function MatterEvidencePage({
 
                 <ul className="flex flex-col">
                   {g.moments.map((m) => (
-                    <li
-                      key={m.id}
-                      className="border-b border-line/60 last:border-b-0"
-                    >
+                    <li key={m.id} className="border-b border-line/60 last:border-b-0">
                       <Link
                         href={`/matters/${id}/documents/${g.documentId}?flag=${m.id}`}
                         className="flex flex-col gap-1 px-4 py-2.5 transition-colors hover:bg-paper-2/40"
@@ -229,9 +222,7 @@ export default async function MatterEvidencePage({
                             {m.flaggedByInitials ?? "—"}
                           </span>
                         </div>
-                        <div className="text-xs leading-snug text-ink-2">
-                          {m.description}
-                        </div>
+                        <div className="text-xs leading-snug text-ink-2">{m.description}</div>
                       </Link>
                     </li>
                   ))}
@@ -266,16 +257,11 @@ function FilterPill({
           ? "bg-paper-2 text-ink border-ink-5"
           : count === 0
             ? "bg-paper text-ink-4 border-line opacity-60 cursor-default pointer-events-none"
-            : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700"
+            : "bg-white text-ink-2 border-line hover:border-brand-300 hover:text-brand-700",
       )}
     >
       {label}
-      <span
-        className={cn(
-          "font-mono text-2xs",
-          active ? "text-white/80" : "text-ink-4"
-        )}
-      >
+      <span className={cn("font-mono text-2xs", active ? "text-white/80" : "text-ink-4")}>
         {count}
       </span>
     </Link>

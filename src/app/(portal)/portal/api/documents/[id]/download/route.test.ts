@@ -13,8 +13,7 @@ vi.mock("next/headers", () => ({
     get: (n: string) => (n === "host" ? hostHeader : null),
   }),
   cookies: async () => ({
-    get: (name: string) =>
-      jar.has(name) ? { name, value: jar.get(name)! } : undefined,
+    get: (name: string) => (jar.has(name) ? { name, value: jar.get(name)! } : undefined),
   }),
 }));
 vi.mock("@/lib/file-storage", async () => {
@@ -87,9 +86,16 @@ beforeEach(async () => {
   const { userId } = await seedUser({ firmId });
   const { areaId, stageId } = await seedPracticeArea();
   ({ matterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId }));
-  ({ matterId: otherMatterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId, name: "Other" }));
+  ({ matterId: otherMatterId } = await seedMatter({
+    practiceAreaId: areaId,
+    stageId,
+    leadUserId: userId,
+    name: "Other",
+  }));
   const { contactId } = await seedContact({ email: "jane@example.com" });
-  identityId = (await prisma.portalIdentity.create({ data: { contactId, email: "jane@example.com" } })).id;
+  identityId = (
+    await prisma.portalIdentity.create({ data: { contactId, email: "jane@example.com" } })
+  ).id;
   await prisma.portalMatterAccess.create({ data: { identityId, matterId, invitedById: userId } });
   jar.set(PORTAL_COOKIE, await createSession(identityId));
 });
@@ -101,7 +107,7 @@ describe("portal download route", () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("hello");
     expect(res.headers.get("content-disposition")).toBe(
-      `attachment; filename*=UTF-8''${encodeURIComponent("Plea Deal é.pdf")}`
+      `attachment; filename*=UTF-8''${encodeURIComponent("Plea Deal é.pdf")}`,
     );
     expect(res.headers.get("cache-control")).toContain("no-store");
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
@@ -132,7 +138,7 @@ describe("portal download route", () => {
     expect(res.headers.get("cache-control")).toContain("no-store");
     expect(signedBlobUrl).toHaveBeenCalledWith(
       "https://x.private.blob.vercel-storage.com/a.pdf",
-      expect.objectContaining({ download: true })
+      expect.objectContaining({ download: true }),
     );
   });
 

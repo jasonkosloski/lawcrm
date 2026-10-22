@@ -24,21 +24,11 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { createLeadTimeEntry } from "@/app/actions/time-entries";
-import {
-  timeEntryInitialState,
-  type TimeEntryFormState,
-} from "@/lib/time-entry-constants";
+import { timeEntryInitialState, type TimeEntryFormState } from "@/lib/time-entry-constants";
 import { todayKey } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
-import {
-  DateField,
-  TextField,
-  TextareaField,
-} from "@/components/matters/captures/primary-fields";
-import {
-  DurationFields,
-  UtbmsCodeSelect,
-} from "@/components/time-entries/time-entry-fields";
+import { DateField, TextField, TextareaField } from "@/components/matters/captures/primary-fields";
+import { DurationFields, UtbmsCodeSelect } from "@/components/time-entries/time-entry-fields";
 import { Button } from "@/components/ui/button";
 
 export function LeadTimeComposer({ leadId }: { leadId: string }) {
@@ -80,14 +70,15 @@ export function LeadTimeComposer({ leadId }: { leadId: string }) {
       }
       return res;
     },
-    [leadId, reset]
+    [leadId, reset],
   );
   // Wrapped useActionState: masks a previous attempt's errors when
   // the composer is re-expanded (same hook the matter composers use).
-  const [state, formAction, isPending] = useDialogActionState<
-    TimeEntryFormState,
-    FormData
-  >(action, timeEntryInitialState, expanded);
+  const [state, formAction, isPending] = useDialogActionState<TimeEntryFormState, FormData>(
+    action,
+    timeEntryInitialState,
+    expanded,
+  );
 
   // Manual dispatch: <form action> would reset every field after a
   // validation error, wiping what the user typed. Success resets
@@ -122,12 +113,7 @@ export function LeadTimeComposer({ leadId }: { leadId: string }) {
         ) : (
           <form onSubmit={onSubmit} className="flex flex-col gap-2">
             <div className="grid grid-cols-[auto_auto_1fr] gap-2 items-start">
-              <DateField
-                name="date"
-                value={date}
-                onChange={setDate}
-                error={errs.date?.[0]}
-              />
+              <DateField name="date" value={date} onChange={setDate} error={errs.date?.[0]} />
               <DurationFields
                 hours={hours}
                 onHoursChange={setHours}
@@ -202,11 +188,7 @@ export function LeadTimeComposer({ leadId }: { leadId: string }) {
               >
                 Cancel
               </button>
-              <Button
-                size="xs"
-                type="submit"
-                disabled={isPending || !hasContent}
-              >
+              <Button size="xs" type="submit" disabled={isPending || !hasContent}>
                 {isPending ? "Saving…" : "Save time entry"}
               </Button>
             </div>

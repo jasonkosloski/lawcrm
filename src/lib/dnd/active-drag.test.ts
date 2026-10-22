@@ -9,11 +9,7 @@
  */
 
 import { afterEach, describe, expect, test } from "vitest";
-import {
-  clearActiveDrag,
-  peekActiveDrag,
-  setActiveDrag,
-} from "./active-drag";
+import { clearActiveDrag, peekActiveDrag, setActiveDrag } from "./active-drag";
 
 afterEach(() => {
   clearActiveDrag();
@@ -46,8 +42,6 @@ describe("active-drag registry", () => {
   test("set overwrites a prior active drag", () => {
     setActiveDrag("calendar-event", { id: "first" });
     setActiveDrag("calendar-event", { id: "second" });
-    expect(peekActiveDrag<{ id: string }>("calendar-event")?.id).toBe(
-      "second"
-    );
+    expect(peekActiveDrag<{ id: string }>("calendar-event")?.id).toBe("second");
   });
 });
