@@ -278,10 +278,10 @@ function VenueForm({
         </p>
       )}
       <DialogFooter>
-        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+        <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" size="sm" disabled={saving}>
+        <Button type="submit" disabled={saving}>
           {saving ? "Saving…" : venue ? "Save" : "Create"}
         </Button>
       </DialogFooter>

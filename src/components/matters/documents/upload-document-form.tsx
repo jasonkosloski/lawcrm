@@ -46,6 +46,7 @@ import { makeStorageKey, type StorageDriver } from "@/lib/storage/storage-key";
 import { blobUploadErrorMessage } from "./upload-errors";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 const MAX_MB = Math.round(MAX_DOCUMENT_BYTES / (1024 * 1024));
 
@@ -188,18 +189,15 @@ export function UploadDocumentForm({
 
   if (!expanded) {
     return (
-      <button
+      <Button
+        variant="outline"
         type="button"
         onClick={() => setExpanded(true)}
-        className={cn(
-          "inline-flex items-center gap-2 h-9 px-3 text-xs",
-          "rounded-md border border-dashed border-line bg-white",
-          "hover:border-brand-300 hover:text-brand-700 transition-colors text-ink-3"
-        )}
+        className="gap-2 text-xs border-dashed hover:border-brand-300 hover:text-brand-700"
       >
         <Plus size={13} />
         Upload document
-      </button>
+      </Button>
     );
   }
 
@@ -299,18 +297,14 @@ export function UploadDocumentForm({
         >
           Cancel
         </button>
-        <button
+        <Button
+          size="sm"
           type="submit"
           disabled={pending}
-          className={cn(
-            "inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium",
-            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-            "disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
         >
           <Upload size={12} />
           {pending ? "Uploading…" : "Upload"}
-        </button>
+        </Button>
       </div>
     </form>
   );

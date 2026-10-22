@@ -38,6 +38,7 @@ import {
 import type { NoteScope } from "@/lib/note-scope";
 import { NoteEditor } from "./note-editor";
 import { CaptureStack } from "@/components/matters/captures/capture-stack";
+import { Button } from "@/components/ui/button";
 
 export function NoteComposer({
   scope,
@@ -110,24 +111,21 @@ export function NoteComposer({
           />
 
           {!expanded ? (
-            <button
+            <Button
+              variant="outline"
               type="button"
               onClick={() => {
                 // A failed attempt's errors belong to that attempt.
                 setState(noteInitialState);
                 setExpanded(true);
               }}
-              className={cn(
-                "flex items-center gap-2 h-9 px-3 text-xs text-ink-4",
-                "rounded-md border border-dashed border-line bg-white",
-                "hover:border-brand-300 hover:text-brand-700 transition-colors text-left"
-              )}
+              className="flex gap-2 text-xs text-ink-4 border-dashed hover:border-brand-300 hover:text-brand-700 text-left"
             >
               <Plus size={14} />
               {scope.kind === "matter"
                 ? "Write a note for this matter…"
                 : "Write an intake note…"}
-            </button>
+            </Button>
           ) : (
             <>
               <NoteEditor
@@ -204,20 +202,17 @@ export function NoteComposer({
                   >
                     Cancel
                   </button>
-                  <button
+                  <Button
+                    size="xs"
                     type="submit"
                     disabled={isPending || html.trim().length === 0}
-                    className={cn(
-                      "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white",
-                      "hover:bg-brand-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                    )}
                   >
                     {isPending
                       ? "Saving…"
                       : captures.length > 0
                         ? `Save note + ${captures.length}`
                         : "Save note"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </>

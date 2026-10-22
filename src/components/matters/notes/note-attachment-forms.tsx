@@ -29,6 +29,7 @@ import {
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { FieldError, inputClass, textareaClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 function FormFooter({
   onCancel,
@@ -50,16 +51,13 @@ function FormFooter({
       >
         Cancel
       </button>
-      <button
+      <Button
+        size="xs"
         type="submit"
         disabled={isPending || !hasContent}
-        className={cn(
-          "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white",
-          "hover:bg-brand-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-        )}
       >
         {isPending ? "Saving…" : saveLabel}
-      </button>
+      </Button>
     </div>
   );
 }

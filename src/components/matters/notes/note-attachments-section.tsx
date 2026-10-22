@@ -65,6 +65,7 @@ import {
 } from "@/lib/format-date";
 import { confirmAction, notifyError } from "@/lib/feedback";
 import { useUserTimeZone } from "@/components/user-time-zone";
+import { Button } from "@/components/ui/button";
 
 const formatDate = (d: Date): string => formatDateOnly(d, "short");
 
@@ -220,20 +221,17 @@ function BulkComposer({
         >
           Cancel
         </button>
-        <button
+        <Button
+          size="xs"
           type="submit"
           disabled={isPending || !hasContent}
-          className={cn(
-            "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white",
-            "hover:bg-brand-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
         >
           {isPending
             ? "Saving…"
             : captures.length > 0
               ? `Save ${captures.length} ${captures.length === 1 ? "item" : "items"}`
               : "Save"}
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -731,18 +729,16 @@ function AddPill({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <Button
+      variant="outline"
+      size="xs"
       type="button"
       onClick={onClick}
-      className={cn(
-        "inline-flex items-center gap-1 h-7 px-2 text-2xs text-ink-3",
-        "rounded-md border border-dashed border-line bg-white",
-        "hover:border-brand-300 hover:text-brand-700 hover:bg-brand-soft transition-colors"
-      )}
+      className="text-2xs border-dashed hover:border-brand-300 hover:text-brand-700 hover:bg-brand-soft"
     >
       <Plus size={10} />
       {icon}
       {children}
-    </button>
+    </Button>
   );
 }

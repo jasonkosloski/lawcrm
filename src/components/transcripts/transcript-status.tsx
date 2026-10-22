@@ -8,6 +8,7 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { requestTranscript } from "@/app/actions/transcripts";
 import { confirmAction, notifyError } from "@/lib/feedback";
 import { formatShortTimecode } from "@/lib/transcription/timecode";
+import { Button } from "@/components/ui/button";
 
 /** Request (or re-run) a transcript; asks first when it would drop corrections. */
 export function useRequestTranscript(documentId: string) {
@@ -56,15 +57,17 @@ export function TranscribeButton({
       ? `Transcribe (${formatShortTimecode(durationSeconds)})`
       : "Transcribe";
   return (
-    <button
+    <Button
+      variant="outline"
+      size="sm"
       type="button"
       onClick={run}
       disabled={pending}
-      className="inline-flex h-8 items-center gap-1.5 self-start rounded-md border border-line bg-white px-3 text-xs font-medium text-ink-2 transition-colors hover:border-brand-300 hover:text-brand-700 disabled:opacity-60"
+      className="self-start hover:border-brand-300 hover:text-brand-700"
     >
       {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
       {label}
-    </button>
+    </Button>
   );
 }
 
@@ -72,13 +75,15 @@ export function TranscribeButton({
 export function TranscribeUnavailable() {
   return (
     <div className="flex flex-col items-start gap-1">
-      <button
+      <Button
+        variant="outline"
+        size="sm"
         type="button"
         disabled
-        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line bg-white px-3 text-xs font-medium text-ink-2 opacity-60"
+        className="opacity-60"
       >
         Transcribe
-      </button>
+      </Button>
       <p className="text-2xs text-ink-3">Transcription isn&apos;t set up yet.</p>
     </div>
   );

@@ -210,8 +210,8 @@ export function DeadlineRuleDialog({
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" size="sm" disabled={isPending}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={isPending}>
               {isPending ? "Saving…" : rule ? "Save rule" : "Create rule"}
             </Button>
           </DialogFooter>

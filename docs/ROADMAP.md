@@ -82,7 +82,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [~] **Settings: Integrations**: Westlaw, e-sign, IOLTA bank feed, PACER. → [settings-admin](features/settings-admin.md)
 
 **Tech debt**
-- [ ] **Button size convention + one sweep** → [platform-quality](features/platform-quality.md)
+- [x] **Button size convention + one sweep** → [platform-quality](features/platform-quality.md)
 - [ ] **Opportunistic sweeps**: EmptyState, `plural()`, status-label maps as files are touched. → [platform-quality](features/platform-quality.md)
 
 ## Deferred

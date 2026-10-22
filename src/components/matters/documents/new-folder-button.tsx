@@ -19,9 +19,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 import { createFolder } from "@/app/actions/document-folders";
 import { inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export function NewFolderButton({
   scope,
@@ -37,18 +37,16 @@ export function NewFolderButton({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button
+      <Button
+        variant="outline"
+        size="sm"
         type="button"
         onClick={() => setOpen(true)}
-        className={cn(
-          "inline-flex items-center gap-1.5 h-8 px-3 text-xs",
-          "rounded-md border border-line bg-white",
-          "hover:border-brand-300 hover:text-brand-700 transition-colors text-ink-2"
-        )}
+        className="hover:border-brand-300 hover:text-brand-700"
       >
         <FolderPlus size={13} />
         New folder
-      </button>
+      </Button>
       <NewFolderDialog
         open={open}
         onOpenChange={setOpen}
@@ -135,25 +133,20 @@ export function NewFolderDialog({
               </div>
             )}
             <DialogFooter>
-              <button
+              <Button
+                variant="outline"
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-2xs text-ink-3 hover:text-ink-2 px-2"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
                 disabled={pending || name.trim().length === 0}
-                className={cn(
-                  "inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium",
-                  "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-                  "disabled:opacity-60 disabled:cursor-not-allowed"
-                )}
               >
                 <FolderPlus size={12} />
                 {pending ? "Creating…" : "Create"}
-              </button>
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

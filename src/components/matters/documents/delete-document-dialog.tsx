@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { deleteDocument, type AttachmentChoice } from "@/app/actions/documents";
+import { Button } from "@/components/ui/button";
 
 export function DeleteDocumentDialog({
   open,
@@ -130,18 +131,19 @@ export function DeleteDocumentDialog({
         )}
 
         <DialogFooter>
-          <button type="button" onClick={() => onOpenChange(false)} className="px-2 text-2xs text-ink-3 hover:text-ink-2">
+          <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="destructive"
+            className="bg-danger text-white hover:bg-danger/90"
             type="button"
             onClick={submit}
             disabled={pending}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-danger px-3 text-xs font-medium text-white hover:opacity-90 disabled:opacity-60"
           >
             <Trash2 size={12} />
             {pending ? "Deleting…" : "Delete"}
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

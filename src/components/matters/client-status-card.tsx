@@ -270,12 +270,11 @@ function StatusDialog({
             </div>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Close
             </Button>
             <Button
               type="submit"
-              size="sm"
               disabled={pending || !stageLabel.trim() || !body.trim()}
             >
               {pending ? "Saving…" : existing ? "Save" : "Post update"}

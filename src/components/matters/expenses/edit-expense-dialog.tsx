@@ -77,10 +77,10 @@ export function EditExpenseDialog({
           />
           {state.error && <div className="text-2xs text-warn">{state.error}</div>}
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" size="sm" disabled={isPending}>
+            <Button type="submit" disabled={isPending}>
               {isPending ? "Saving…" : "Save expense"}
             </Button>
           </DialogFooter>

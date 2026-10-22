@@ -50,6 +50,7 @@ import { VIEWER_CONTENT_READY_EVENT } from "@/components/documents-viewer/conten
 import { ReviewPanel } from "./review-panel";
 import type { ComposerAnchor } from "./flag-composer";
 import type { RailMoment } from "./moments-rail";
+import { Button } from "@/components/ui/button";
 
 const HIGHLIGHT_NAME = "evidence-quote";
 const HIGHLIGHT_MS = 2500;
@@ -314,18 +315,20 @@ export function TextReview({
         {children}
 
         {selection && (
-          <button
+          <Button
+            variant="outline"
+            size="xs"
             type="button"
             // Keep the selection alive through the click — mousedown
             // would otherwise collapse it before onClick reads it.
             onMouseDown={(e) => e.preventDefault()}
             onClick={flagSelection}
             style={{ top: selection.top, left: selection.left }}
-            className="absolute z-10 inline-flex h-7 items-center gap-1.5 rounded-md border border-brand-300 bg-white px-2.5 text-xs font-medium text-brand-700 shadow-sm transition-colors hover:bg-brand-soft"
+            className="absolute z-10 border-brand-300 text-brand-700 shadow-sm hover:bg-brand-soft"
           >
             <Flag className="h-3.5 w-3.5" aria-hidden />
             Flag selection
-          </button>
+          </Button>
         )}
       </div>
     </ReviewPanel>

@@ -29,6 +29,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 
 /** Next unused single capital letter, or null when all 26 are taken. */
 export function nextSpeakerLabel(
@@ -175,20 +176,20 @@ function RenameDialog({
             </p>
           )}
           <DialogFooter>
-            <button
+            <Button
+              variant="ghost"
               type="button"
               onClick={onClose}
-              className="h-8 rounded-md px-3 text-sm text-ink-3 hover:text-ink"
+              className="text-sm"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={pending}
-              className="h-8 rounded-md bg-brand-600 px-3 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
             >
               Rename
-            </button>
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

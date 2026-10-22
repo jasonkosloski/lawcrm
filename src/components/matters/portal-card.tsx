@@ -346,12 +346,11 @@ function InviteForm({
         </div>
       )}
       <DialogFooter>
-        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+        <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
         <Button
           type="submit"
-          size="sm"
           disabled={isPending || !contactId || !email.trim()}
         >
           {isPending ? "Sending…" : "Send invite"}

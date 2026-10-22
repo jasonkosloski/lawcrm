@@ -36,6 +36,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export type FollowUpAction = (
   threadId: string,
@@ -173,14 +174,15 @@ export function FollowUpButton({
                 Clear
               </button>
             )}
-            <button
+            <Button
+              size="xs"
               type="button"
               disabled={!picked}
               onClick={() => save(picked || null)}
-              className="ml-auto inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white hover:bg-brand-900 disabled:opacity-50"
+              className="ml-auto"
             >
               Save
-            </button>
+            </Button>
           </div>
         </div>
       </PopoverContent>

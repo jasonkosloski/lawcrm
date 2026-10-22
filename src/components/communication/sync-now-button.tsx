@@ -16,6 +16,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { RefreshCw } from "lucide-react";
 import { cn, plural } from "@/lib/utils";
 import { syncMyEmailAccounts } from "@/app/actions/email-sync";
+import { Button } from "@/components/ui/button";
 
 const NOTE_TTL_MS = 5000;
 
@@ -81,20 +82,18 @@ export function SyncNowButton() {
           {note.text}
         </span>
       )}
-      <button
+      <Button
+        variant="outline"
+        size="xs"
         type="button"
         onClick={run}
         disabled={pending}
         title="Fetch the latest mail from your connected accounts"
-        className={cn(
-          "inline-flex items-center gap-1.5 h-7 px-2 text-2xs font-medium rounded-md border transition-colors",
-          "bg-white text-ink-3 border-line hover:border-brand-300 hover:text-brand-700 hover:bg-brand-soft",
-          pending && "opacity-60 cursor-default"
-        )}
+        className={cn("text-2xs hover:border-brand-300 hover:text-brand-700 hover:bg-brand-soft", pending && "opacity-60 cursor-default")}
       >
         <RefreshCw size={12} className={cn(pending && "animate-spin")} />
         {pending ? "Syncing…" : "Sync now"}
-      </button>
+      </Button>
     </div>
   );
 }

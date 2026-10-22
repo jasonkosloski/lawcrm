@@ -34,6 +34,7 @@ import {
 import { DEFAULT_ROLE_NAME } from "@/lib/role-constants";
 import type { FirmUserRow, RoleChip } from "@/lib/queries/team";
 import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export function MemberEditForm({
   member,
@@ -220,17 +221,13 @@ export function MemberEditForm({
         >
           Cancel
         </button>
-        <button
+        <Button
+          size="sm"
           type="submit"
           disabled={isPending}
-          className={cn(
-            "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium",
-            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-            "disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
         >
           {isPending ? "Saving…" : "Save"}
-        </button>
+        </Button>
       </div>
     </form>
   );

@@ -73,6 +73,7 @@ import {
   type SplitSpan,
 } from "@/lib/dashboard-prefs";
 import { SplitPicker } from "./split-picker";
+import { Button } from "@/components/ui/button";
 
 // Literal class strings so Tailwind generates them; typed against the
 // span values so an unexpected span is a compile error.
@@ -259,14 +260,16 @@ export function DashboardCustomizer({
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">{greeting}</div>
         {!editing && (
-          <button
+          <Button
+            variant="outline"
+            size="xs"
             type="button"
             onClick={() => setEditing(true)}
-            className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-line-2 bg-white px-2.5 text-xs text-ink-3 transition-colors hover:border-brand-300"
+            className="flex border-line-2 hover:border-brand-300"
           >
             <Settings2 size={13} />
             <span>Customize</span>
-          </button>
+          </Button>
         )}
       </div>
 

@@ -12,6 +12,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateTranscriptSegment } from "@/app/actions/transcripts";
+import { Button } from "@/components/ui/button";
 
 export function SegmentEditor({
   segmentId,
@@ -121,14 +122,15 @@ export function SegmentEditor({
       <div className="flex gap-2">
         {theirs ? (
           <>
-            <button
+            <Button
+              variant="outline"
+              size="xs"
               type="button"
               onClick={useTheirs}
               disabled={pending}
-              className="h-7 rounded-md border border-line bg-white px-3 text-xs font-medium text-ink-2 hover:text-ink disabled:opacity-50"
             >
               Use theirs
-            </button>
+            </Button>
             <button
               type="button"
               onClick={keepMine}
@@ -148,14 +150,15 @@ export function SegmentEditor({
             Save
           </button>
         )}
-        <button
+        <Button
+          variant="ghost"
+          size="xs"
           type="button"
           onClick={onClose}
           disabled={pending}
-          className="h-7 rounded-md px-3 text-xs font-medium text-ink-3 hover:text-ink"
         >
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );

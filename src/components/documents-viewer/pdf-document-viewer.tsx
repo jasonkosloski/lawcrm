@@ -53,6 +53,7 @@ import {
   parsePageJump,
   stepZoom,
 } from "@/lib/pdf-viewer-math";
+import { Button } from "@/components/ui/button";
 
 type PdfJs = typeof import("pdfjs-dist");
 
@@ -444,14 +445,16 @@ export function PdfDocumentViewer({
           <button type="button" className={toolButton} disabled={!doc || zoom >= MAX_ZOOM} onClick={() => changeZoom(stepZoom(zoom, 1))} aria-label="Zoom in">
             <Plus className="h-3.5 w-3.5" aria-hidden />
           </button>
-          <button
+          <Button
+            variant="outline"
+            size="xs"
             type="button"
             disabled={!doc || zoom === 1}
             onClick={() => changeZoom(1)}
-            className="h-7 rounded-md border border-line bg-white px-2 text-xs text-ink-3 transition-colors hover:border-brand-300 hover:text-brand-700 disabled:opacity-40"
+            className="hover:border-brand-300 hover:text-brand-700"
           >
             Fit width
-          </button>
+          </Button>
         </div>
         <div className="ml-auto flex items-center gap-1">
           <a href={src} target="_blank" rel="noopener noreferrer" className={toolButton} title="Open in a new tab">

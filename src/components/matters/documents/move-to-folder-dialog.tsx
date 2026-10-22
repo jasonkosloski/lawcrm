@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { FlatFolder } from "@/lib/folder-tree";
+import { Button } from "@/components/ui/button";
 
 export function MoveToFolderDialog({
   open,
@@ -181,26 +182,21 @@ export function MoveToFolderDialog({
         )}
 
         <DialogFooter>
-          <button
+          <Button
+            variant="outline"
             type="button"
             onClick={() => onOpenChange(false)}
-            className="text-2xs text-ink-3 hover:text-ink-2 px-2"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={submit}
             disabled={pending || target === undefined}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium",
-              "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-              "disabled:opacity-60 disabled:cursor-not-allowed"
-            )}
           >
             <FolderInput size={12} />
             {pending ? pendingLabel : submitLabel}
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

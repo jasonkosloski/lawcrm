@@ -15,6 +15,7 @@ import { createCustodianContact } from "@/app/actions/records-requests";
 import { cn } from "@/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 type Picked = { id: string; name: string };
 type Hit = { id: string; name: string; sub: string | null };
@@ -163,14 +164,14 @@ export function CustodianPicker({
                 <NativeSelectOption value="medical_provider">Medical provider</NativeSelectOption>
                 <NativeSelectOption value="government">Government</NativeSelectOption>
               </NativeSelect>
-              <button
+              <Button
+                size="sm"
                 type="button"
                 disabled={pending || !newName.trim()}
                 onClick={create}
-                className="h-8 px-3 rounded-md bg-brand-700 text-white text-xs font-medium hover:bg-brand-900 disabled:opacity-50"
               >
                 {pending ? "Adding…" : "Add custodian"}
-              </button>
+              </Button>
               <button
                 type="button"
                 onClick={() => setCreating(false)}

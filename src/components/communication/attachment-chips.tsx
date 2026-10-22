@@ -55,6 +55,7 @@ import {
 } from "@/app/actions/email-attachments";
 import type { FilingMatterOption } from "@/lib/queries/communication";
 import type { FlatFolder } from "@/lib/folder-tree";
+import { Button } from "@/components/ui/button";
 
 export type AttachmentChipItem = {
   id: string;
@@ -428,26 +429,21 @@ function FileAttachmentDialog({
         )}
 
         <DialogFooter>
-          <button
+          <Button
+            variant="outline"
             type="button"
             onClick={onClose}
-            className="text-2xs text-ink-3 hover:text-ink-2 px-2"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={submit}
             disabled={pending || !matterId || foldersLoading}
-            className={cn(
-              "inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium",
-              "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-              "disabled:opacity-60 disabled:cursor-not-allowed"
-            )}
           >
             <FolderInput size={12} />
             {pending ? "Filing…" : "File to matter"}
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

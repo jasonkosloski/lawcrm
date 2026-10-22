@@ -26,6 +26,7 @@ import {
 import { RoleMultiSelect } from "./member-edit-form";
 import type { RoleChip } from "@/lib/queries/team";
 import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 // No roles checked by default — server adds "default" automatically.
 const NONE_SELECTED = new Set<string>();
@@ -65,18 +66,15 @@ export function InviteMemberComposer({
 
   if (!expanded && invitedEmail === null) {
     return (
-      <button
+      <Button
+        variant="outline"
         type="button"
         onClick={() => setExpanded(true)}
-        className={cn(
-          "inline-flex items-center gap-2 h-9 px-3 text-xs",
-          "rounded-md border border-dashed border-line bg-white",
-          "hover:border-brand-300 hover:text-brand-700 transition-colors text-ink-3"
-        )}
+        className="gap-2 text-xs border-dashed hover:border-brand-300 hover:text-brand-700"
       >
         <Plus size={13} />
         Invite member
-      </button>
+      </Button>
     );
   }
 
@@ -232,17 +230,13 @@ export function InviteMemberComposer({
             >
               Cancel
             </button>
-            <button
+            <Button
+              size="sm"
               type="submit"
               disabled={isPending}
-              className={cn(
-                "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium",
-                "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-                "disabled:opacity-60 disabled:cursor-not-allowed"
-              )}
             >
               {isPending ? "Inviting…" : "Send invite"}
-            </button>
+            </Button>
           </div>
         </form>
       )}

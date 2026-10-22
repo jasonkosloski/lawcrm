@@ -22,7 +22,6 @@
 import { useCallback, useId, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { Archive, TriangleAlert } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { bundleAsInternalRecord } from "@/app/actions/billing";
 import {
   billingInitialState,
@@ -31,6 +30,7 @@ import {
 import { bundleCountLabel, bundleTotal } from "./bundle-summary";
 import { formatMoney } from "@/lib/format-money";
 import { inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export function BundleInternalRecordForm({
   matterId,
@@ -89,18 +89,15 @@ export function BundleInternalRecordForm({
 
   if (!expanded) {
     return (
-      <button
+      <Button
+        variant="outline"
         type="button"
         onClick={() => setExpanded(true)}
-        className={cn(
-          "inline-flex items-center gap-2 h-9 px-3 text-xs font-medium",
-          "rounded-md border border-line bg-white text-ink-2",
-          "hover:border-brand-300 hover:text-brand-700 transition-colors"
-        )}
+        className="gap-2 text-xs hover:border-brand-300 hover:text-brand-700"
       >
         <Archive size={13} />
         Bundle as internal record
-      </button>
+      </Button>
     );
   }
 
@@ -157,18 +154,15 @@ export function BundleInternalRecordForm({
         >
           Cancel
         </button>
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           type="submit"
           disabled={isPending}
-          className={cn(
-            "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium",
-            "border border-line bg-white text-ink",
-            "hover:border-brand-300 hover:text-brand-700 transition-colors",
-            "disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
+          className="hover:border-brand-300 hover:text-brand-700"
         >
           {isPending ? "Bundling…" : "Record without billing"}
-        </button>
+        </Button>
       </div>
     </form>
   );

@@ -9,10 +9,10 @@
 "use client";
 
 import { Menu, Search } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { useCommandPalette } from "@/components/command-palette/command-palette-provider";
 import { NotificationBell } from "./notification-bell";
 import { useMobileNav } from "./mobile-nav-provider";
+import { Button } from "@/components/ui/button";
 
 interface TopBarProps {
   /** Page title displayed in Fraunces display font. */
@@ -71,12 +71,11 @@ export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps)
           {/* Search trigger. Below `sm` it collapses to icon-only
               (the ⌘K hint also hides — keyboard users on mobile
               are rare). */}
-          <button
+          <Button
+            variant="outline"
+            type="submit"
             onClick={openPalette}
-            className={cn(
-              "flex items-center gap-2 h-9 px-2.5 sm:w-52 rounded-md border border-input",
-              "bg-white text-ink-4 text-xs hover:text-ink-2 transition-colors"
-            )}
+            className="flex gap-2 px-2.5 sm:w-52 text-ink-4 text-xs hover:text-ink-2"
             title="Search (⌘K)"
             aria-label="Search"
           >
@@ -85,7 +84,7 @@ export function TopBar({ title, crumbs, actions, below, subtitle }: TopBarProps)
             <span className="hidden sm:inline ml-auto text-2xs text-ink-4">
               ⌘K
             </span>
-          </button>
+          </Button>
 
           {/* Bell sits between Search and per-page actions so it's
               always available without each page passing it. Its state

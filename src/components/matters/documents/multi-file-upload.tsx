@@ -53,7 +53,6 @@ import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "reac
 import { useRouter } from "next/navigation";
 import { TriangleAlert, Upload, X } from "lucide-react";
 import { upload } from "@vercel/blob/client";
-import { cn } from "@/lib/utils";
 import {
   DRAFT_FILE_TOO_LARGE_ERROR,
   DRAFT_MAX_FILE_BYTES,
@@ -68,6 +67,7 @@ import {
   type StorageDriver,
 } from "@/lib/storage/storage-key";
 import { blobUploadErrorMessage } from "./upload-errors";
+import { Button } from "@/components/ui/button";
 
 /** Picker filter: pdf / word / excel (+ppt, text) / images / audio /
  *  video. The server derives the real MIME from the extension and
@@ -423,18 +423,15 @@ export function MultiFileUpload({
           if (files.length > 0) void startUpload(files);
         }}
       />
-      <button
+      <Button
+        size="sm"
         type="button"
         onClick={() => inputRef.current?.click()}
         title={`Upload into ${folderName ?? "All documents"}`}
-        className={cn(
-          "inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium",
-          "bg-brand-700 text-white hover:bg-brand-900 transition-colors"
-        )}
       >
         <Upload size={13} />
         Upload files
-      </button>
+      </Button>
       {error && (
         <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-warn-soft border border-warn-border text-2xs text-warn max-w-xs">
           <TriangleAlert size={12} className="shrink-0 mt-px" />

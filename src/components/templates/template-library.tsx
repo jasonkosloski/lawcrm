@@ -41,6 +41,7 @@ import {
   setDocumentTemplateActive,
 } from "@/app/actions/document-templates";
 import { TemplateEditorDialog } from "@/components/templates/template-editor-dialog";
+import { Button } from "@/components/ui/button";
 
 export type TemplateListItem = {
   id: string;
@@ -95,17 +96,14 @@ export function TemplateLibrary({
     <div className="flex flex-col gap-6">
       {canCreate && (
         <div>
-          <button
+          <Button
             type="button"
             onClick={openCreate}
-            className={cn(
-              "inline-flex items-center gap-2 h-9 px-3 text-xs font-medium",
-              "rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors"
-            )}
+            className="gap-2 text-xs"
           >
             <Plus size={13} />
             New template
-          </button>
+          </Button>
         </div>
       )}
 

@@ -39,6 +39,7 @@ import {
   DurationFields,
   UtbmsCodeSelect,
 } from "@/components/time-entries/time-entry-fields";
+import { Button } from "@/components/ui/button";
 
 export function LeadTimeComposer({ leadId }: { leadId: string }) {
   // "Today" is the viewer's calendar day in their PROFILE zone (the
@@ -105,22 +106,19 @@ export function LeadTimeComposer({ leadId }: { leadId: string }) {
     <Card className={cn(expanded && "border-brand-200")}>
       <CardContent className="p-3">
         {!expanded ? (
-          <button
+          <Button
+            variant="outline"
             type="button"
             onClick={() => {
               // Re-seed the date: the page may have sat open past midnight.
               setDate(todayKey(tz));
               setExpanded(true);
             }}
-            className={cn(
-              "flex items-center gap-2 h-9 px-3 text-xs text-ink-4 w-full",
-              "rounded-md border border-dashed border-line bg-white",
-              "hover:border-brand-300 hover:text-brand-700 transition-colors text-left"
-            )}
+            className="flex gap-2 text-xs text-ink-4 w-full border-dashed hover:border-brand-300 hover:text-brand-700 text-left"
           >
             <Plus size={14} />
             Log intake time
-          </button>
+          </Button>
         ) : (
           <form onSubmit={onSubmit} className="flex flex-col gap-2">
             <div className="grid grid-cols-[auto_auto_1fr] gap-2 items-start">
@@ -204,16 +202,13 @@ export function LeadTimeComposer({ leadId }: { leadId: string }) {
               >
                 Cancel
               </button>
-              <button
+              <Button
+                size="xs"
                 type="submit"
                 disabled={isPending || !hasContent}
-                className={cn(
-                  "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white",
-                  "hover:bg-brand-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                )}
               >
                 {isPending ? "Saving…" : "Save time entry"}
-              </button>
+              </Button>
             </div>
           </form>
         )}

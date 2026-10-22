@@ -19,6 +19,7 @@
 
 import { useEffect } from "react";
 import { Printer, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 /** Longest auto-print waits for web fonts before printing anyway. */
 const AUTOPRINT_FONT_WAIT_MS = 1500;
@@ -50,14 +51,14 @@ export function PrintToolbar({ autoprint }: { autoprint: boolean }) {
   return (
     <div className="print:hidden sticky top-0 z-10 bg-white border-b border-line">
       <div className="max-w-3xl mx-auto px-4 py-2 flex items-center gap-2">
-        <button
+        <Button
+          size="sm"
           type="button"
           onClick={() => window.print()}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium bg-brand-700 text-white hover:bg-brand-900 transition-colors"
         >
           <Printer size={13} />
           Print or save as PDF
-        </button>
+        </Button>
         <div className="text-2xs text-ink-4 ml-auto">
           Use your browser&apos;s print dialog → <strong>Save as PDF</strong>
         </div>

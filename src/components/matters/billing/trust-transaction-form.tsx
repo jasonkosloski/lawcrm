@@ -27,6 +27,7 @@ import { todayKey } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export function TrustTransactionForm({
   matterId,
@@ -83,21 +84,19 @@ export function TrustTransactionForm({
 
   if (!expanded) {
     return (
-      <button
+      <Button
+        variant="outline"
+        size="sm"
         type="button"
         onClick={() => {
           setDefaultDate(todayKey(tz));
           setExpanded(true);
         }}
-        className={cn(
-          "inline-flex items-center gap-2 h-8 px-3 text-xs",
-          "rounded-md border border-dashed border-line bg-white",
-          "hover:border-brand-300 hover:text-brand-700 transition-colors text-ink-3"
-        )}
+        className="gap-2 border-dashed hover:border-brand-300 hover:text-brand-700"
       >
         <Plus size={12} />
         Add transaction
-      </button>
+      </Button>
     );
   }
 
@@ -223,17 +222,13 @@ export function TrustTransactionForm({
         >
           Cancel
         </button>
-        <button
+        <Button
+          size="sm"
           type="submit"
           disabled={isPending}
-          className={cn(
-            "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium",
-            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-            "disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
         >
           {isPending ? "Recording…" : "Record transaction"}
-        </button>
+        </Button>
       </div>
     </form>
   );

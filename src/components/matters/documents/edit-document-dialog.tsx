@@ -30,8 +30,8 @@ import {
 } from "@/lib/document-form";
 import { documentCategoryLabel } from "@/lib/document-display";
 import { MAX_DOCUMENT_NAME_LENGTH } from "@/app/api/documents/upload/upload-config";
-import { cn } from "@/lib/utils";
 import { inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export function EditDocumentDialog({
   open,
@@ -139,24 +139,19 @@ export function EditDocumentDialog({
             </div>
           )}
           <DialogFooter>
-            <button
+            <Button
+              variant="outline"
               type="button"
               onClick={() => onOpenChange(false)}
-              className="text-2xs text-ink-3 hover:text-ink-2 px-2"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={pending || unchanged || newName.trim().length === 0}
-              className={cn(
-                "inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium",
-                "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-                "disabled:opacity-60 disabled:cursor-not-allowed"
-              )}
             >
               {pending ? "Saving…" : "Save"}
-            </button>
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -178,14 +173,16 @@ export function EditDocumentButton({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button
+      <Button
+        variant="outline"
+        size="xs"
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-xs font-medium text-ink-2 transition-colors hover:border-brand-300 hover:text-brand-700"
+        className="hover:border-brand-300 hover:text-brand-700"
       >
         <Pencil className="h-3.5 w-3.5" aria-hidden />
         Edit details
-      </button>
+      </Button>
       <EditDocumentDialog
         open={open}
         onOpenChange={setOpen}

@@ -36,6 +36,7 @@ import {
   type StageFormState,
 } from "@/lib/practice-area-constants";
 import { inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export type StageManagerStage = {
   id: string;
@@ -315,17 +316,15 @@ function AddStageForm({ practiceAreaId }: { practiceAreaId: string }) {
         terminal
       </label>
 
-      <button
+      <Button
+        size="xs"
         type="submit"
         disabled={isPending}
-        className={cn(
-          "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium bg-brand-700 hover:bg-brand-900 text-white",
-          "hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-        )}
+        className="hover:bg-brand-600"
       >
         <Plus size={12} />
         {isPending ? "Adding…" : "Add stage"}
-      </button>
+      </Button>
     </form>
   );
 }

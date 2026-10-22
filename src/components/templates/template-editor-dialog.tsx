@@ -354,13 +354,15 @@ function InsertFieldMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <button
+          <Button
+            variant="outline"
+            size="xs"
             type="button"
-            className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-line bg-white text-2xs font-medium text-ink-3 hover:text-brand-700 hover:border-brand-300 transition-colors"
+            className="text-2xs hover:text-brand-700 hover:border-brand-300"
           >
             Insert field
             <ChevronDown size={11} />
-          </button>
+          </Button>
         }
       />
       <DropdownMenuContent align="end" className="min-w-56 max-h-80 overflow-y-auto">

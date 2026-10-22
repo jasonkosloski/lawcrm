@@ -38,6 +38,7 @@ import {
   collectOtherErrors,
 } from "./party-pickers";
 import { inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 type PhoneDraft = {
   tempId: string;
@@ -596,16 +597,13 @@ export function PartyEditForm({
         >
           Cancel
         </button>
-        <button
+        <Button
+          size="xs"
           type="submit"
           disabled={isPending}
-          className={cn(
-            "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white",
-            "hover:bg-brand-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
         >
           {isPending ? "Saving…" : "Save"}
-        </button>
+        </Button>
       </div>
     </form>
   );

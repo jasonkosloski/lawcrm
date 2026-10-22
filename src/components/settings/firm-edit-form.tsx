@@ -21,7 +21,6 @@
 
 import { useActionState, useTransition } from "react";
 import { CheckCircle2 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { updateFirmAction } from "@/app/actions/firm";
 import {
   firmInitialState,
@@ -32,6 +31,7 @@ import { dateOnlyKey } from "@/lib/format-date";
 import { MatterNameTemplateField } from "./matter-name-template-field";
 import { DEFAULT_MATTER_NAME_TEMPLATE } from "@/lib/matter-name-template";
 import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export function FirmEditForm({
   firm,
@@ -314,17 +314,12 @@ export function FirmEditForm({
       />
 
       <div className="flex items-center gap-3 pt-2 border-t border-line">
-        <button
+        <Button
           type="submit"
           disabled={isPending}
-          className={cn(
-            "inline-flex items-center h-9 px-4 rounded-md text-sm font-medium",
-            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-            "disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
         >
           {isPending ? "Saving…" : "Save changes"}
-        </button>
+        </Button>
         {state.status === "ok" && (
           <span className="inline-flex items-center gap-1.5 text-2xs text-ok">
             <CheckCircle2 size={12} />

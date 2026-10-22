@@ -18,7 +18,6 @@
 import { useCallback, useId, useState, useTransition } from "react";
 import { useDialogActionState } from "@/hooks/use-dialog-action-state";
 import { FilePlus2, TriangleAlert } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { generateInvoiceFromWip } from "@/app/actions/billing";
 import {
   billingInitialState,
@@ -27,6 +26,7 @@ import {
 import { bundleCountLabel, bundleTotal } from "./bundle-summary";
 import { formatMoney } from "@/lib/format-money";
 import { inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export function GenerateInvoiceForm({
   matterId,
@@ -96,17 +96,14 @@ export function GenerateInvoiceForm({
 
   if (!expanded) {
     return (
-      <button
+      <Button
         type="button"
         onClick={() => setExpanded(true)}
-        className={cn(
-          "inline-flex items-center gap-2 h-9 px-3 text-xs font-medium",
-          "rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors"
-        )}
+        className="gap-2 text-xs"
       >
         <FilePlus2 size={13} />
         Generate invoice — {formatMoney(total)} · {counts}
-      </button>
+      </Button>
     );
   }
 
@@ -171,17 +168,13 @@ export function GenerateInvoiceForm({
         >
           Cancel
         </button>
-        <button
+        <Button
+          size="sm"
           type="submit"
           disabled={isPending}
-          className={cn(
-            "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium",
-            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-            "disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
         >
           {isPending ? "Generating…" : "Generate draft invoice"}
-        </button>
+        </Button>
       </div>
     </form>
   );

@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { CaptureStack } from "./capture-stack";
 import type { CaptureKind, NoteCapture } from "@/lib/note-constants";
+import { Button } from "@/components/ui/button";
 
 export function CaptureComposerShell({
   collapsedLabel,
@@ -82,18 +83,15 @@ export function CaptureComposerShell({
     <Card className={cn(expanded && "border-brand-200")}>
       <CardContent className="p-3">
         {!expanded ? (
-          <button
+          <Button
+            variant="outline"
             type="button"
             onClick={onExpand}
-            className={cn(
-              "flex items-center gap-2 h-9 px-3 text-xs text-ink-4 w-full",
-              "rounded-md border border-dashed border-line bg-white",
-              "hover:border-brand-300 hover:text-brand-700 transition-colors text-left"
-            )}
+            className="flex gap-2 text-xs text-ink-4 w-full border-dashed hover:border-brand-300 hover:text-brand-700 text-left"
           >
             <Plus size={14} />
             {collapsedLabel}
-          </button>
+          </Button>
         ) : (
           <form onSubmit={onSubmit} className="flex flex-col gap-3">
             <input
@@ -127,20 +125,17 @@ export function CaptureComposerShell({
               >
                 Cancel
               </button>
-              <button
+              <Button
+                size="xs"
                 type="submit"
                 disabled={isPending || !hasContent}
-                className={cn(
-                  "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white",
-                  "hover:bg-brand-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                )}
               >
                 {isPending
                   ? "Saving…"
                   : captures.length > 0
                     ? `Save ${primaryLabel} + ${captures.length}`
                     : `Save ${primaryLabel}`}
-              </button>
+              </Button>
             </div>
           </form>
         )}

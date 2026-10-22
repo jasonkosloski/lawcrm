@@ -80,6 +80,7 @@ import { DocumentsTable, type RowData } from "./documents-table";
 import { EntryMenuItems, ACTION_ICONS } from "./entry-menu";
 import { FolderBreadcrumbs } from "./folder-breadcrumbs";
 import { WorkspaceContext, type WorkspaceCtx } from "./workspace-context";
+import { Button } from "@/components/ui/button";
 
 export type WorkspaceFolder = FolderRecord & { clientShared: boolean };
 
@@ -690,19 +691,18 @@ export function DocumentsWorkspace({
                 {selectedActions.map((a) => {
                   const Icon = ACTION_ICONS[a.id];
                   return (
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="xs"
                       key={a.id}
                       type="button"
                       onClick={() => run(a.id, selectedTargets)}
                       disabled={busy}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium disabled:opacity-50",
-                        a.destructive ? "text-danger hover:bg-danger-soft" : "text-ink-2 hover:bg-white"
-                      )}
+                      className={cn(a.destructive ? "text-danger hover:bg-danger-soft" : "text-ink-2 hover:bg-white")}
                     >
                       <Icon size={13} />
                       {a.label}
-                    </button>
+                    </Button>
                   );
                 })}
               </div>

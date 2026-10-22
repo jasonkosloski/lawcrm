@@ -37,6 +37,7 @@ import {
   type ComposerAnchor,
 } from "./flag-composer";
 import { MomentsRail, type RailMoment } from "./moments-rail";
+import { Button } from "@/components/ui/button";
 
 export function ReviewPanel({
   documentId,
@@ -85,14 +86,16 @@ export function ReviewPanel({
     <>
       {canCreate && composerAnchor === null && (
         <div>
-          <button
+          <Button
+            variant="outline"
+            size="xs"
             type="button"
             onClick={() => onComposerAnchorChange(captureAnchor())}
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-white px-2.5 text-xs font-medium text-ink-2 transition-colors hover:border-brand-300 hover:text-brand-700"
+            className="hover:border-brand-300 hover:text-brand-700"
           >
             <Flag className="h-3.5 w-3.5" aria-hidden />
             {captureLabel}
-          </button>
+          </Button>
         </div>
       )}
       {canCreate && composerAnchor !== null && (

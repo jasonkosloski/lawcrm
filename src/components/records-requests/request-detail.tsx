@@ -61,7 +61,8 @@ import type { RecordsRequestDetail } from "@/lib/queries/records-requests";
 import { cn } from "@/lib/utils";
 import type { TypeOption, UserOption } from "./new-request-composer";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { inputClass } from "@/components/ui/field";
+import { inputClass, labelClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export type RequestDetailPermissions = {
   /** records.edit */
@@ -76,11 +77,6 @@ export type RequestDetailPermissions = {
 
 const ADHOC = "__adhoc";
 const field = cn(inputClass(), "disabled:opacity-60");
-const label = "text-xs font-medium text-ink-2";
-const primaryBtn =
-  "h-8 px-3 rounded-md bg-brand-700 text-white text-xs font-medium hover:bg-brand-900 disabled:opacity-50";
-const outlineBtn =
-  "h-8 px-3 rounded-md border border-line bg-white text-xs font-medium text-ink-2 hover:border-brand-300 hover:text-brand-700 disabled:opacity-50";
 
 const key = (d: Date | null) => (d ? dateOnlyKey(d) : "");
 
@@ -338,14 +334,16 @@ export function RequestDetail({
                 </li>
               ))}
             </ul>
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               type="button"
               disabled={linkPending || sel.length === 0}
               onClick={() => onLink(role)}
-              className={cn(outlineBtn, "mt-2")}
+              className="hover:border-brand-300 hover:text-brand-700 mt-2"
             >
               Link selected
-            </button>
+            </Button>
             {err && <div className="text-2xs text-warn mt-1">{err}</div>}
           </details>
         )}
@@ -428,7 +426,7 @@ export function RequestDetail({
             {canEdit && isDraft && (
               <form onSubmit={sent.submit} className="flex flex-wrap items-end gap-3">
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="rr-sent-on" className={label}>
+                  <label htmlFor="rr-sent-on" className={labelClass}>
                     Sent on
                   </label>
                   <input id="rr-sent-on" name="sentAt" type="date" className={field} />
@@ -436,7 +434,7 @@ export function RequestDetail({
                 </div>
                 {!detail.typeId && (
                   <div className="flex flex-col gap-1">
-                    <label htmlFor="rr-sent-due" className={label}>
+                    <label htmlFor="rr-sent-due" className={labelClass}>
                       Response due
                     </label>
                     <input
@@ -449,25 +447,27 @@ export function RequestDetail({
                     <FieldError state={sent.state} name="responseDueDate" />
                   </div>
                 )}
-                <button type="submit" disabled={sent.pending} className={primaryBtn}>
+                <Button size="sm" type="submit" disabled={sent.pending}>
                   Mark sent
-                </button>
+                </Button>
                 <FormMessage state={sent.state} />
               </form>
             )}
             {canEdit && !isDraft && nextStatuses.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
-                <span className={label}>{isOpen ? "Move to" : "Reopen as"}</span>
+                <span className={labelClass}>{isOpen ? "Move to" : "Reopen as"}</span>
                 {nextStatuses.map((s) => (
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     key={s}
                     type="button"
                     disabled={statusPending}
                     onClick={() => setStatus(s)}
-                    className={outlineBtn}
+                    className="hover:border-brand-300 hover:text-brand-700"
                   >
                     {RECORDS_STATUS_LABEL[s]}
-                  </button>
+                  </Button>
                 ))}
               </div>
             )}
@@ -539,23 +539,27 @@ export function RequestDetail({
               <div className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-paper-2/40 px-3 py-2">
                 <span className="text-xs text-ink-3">Records came in?</span>
                 {detail.status !== "partial" && (
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     type="button"
                     disabled={statusPending}
                     onClick={() => setStatus("partial")}
-                    className={outlineBtn}
+                    className="hover:border-brand-300 hover:text-brand-700"
                   >
                     Mark partial
-                  </button>
+                  </Button>
                 )}
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   type="button"
                   disabled={statusPending}
                   onClick={() => setStatus("complete")}
-                  className={outlineBtn}
+                  className="hover:border-brand-300 hover:text-brand-700"
                 >
                   Mark complete
-                </button>
+                </Button>
               </div>
             )}
           </Section>
@@ -579,7 +583,7 @@ export function RequestDetail({
             {canEdit && isOpen && !isDraft && (
               <form onSubmit={followUp.submit} className="flex flex-wrap items-end gap-2">
                 <div className="flex flex-col gap-1 flex-1 min-w-48">
-                  <label htmlFor="rr-fu-note" className={label}>Note</label>
+                  <label htmlFor="rr-fu-note" className={labelClass}>Note</label>
                   <input
                     id="rr-fu-note"
                     name="note"
@@ -589,9 +593,9 @@ export function RequestDetail({
                     className={field}
                   />
                 </div>
-                <button type="submit" disabled={followUp.pending} className={outlineBtn}>
+                <Button variant="outline" size="sm" type="submit" disabled={followUp.pending} className="hover:border-brand-300 hover:text-brand-700">
                   Log follow-up
-                </button>
+                </Button>
                 <FormMessage state={followUp.state} />
               </form>
             )}
@@ -610,7 +614,7 @@ export function RequestDetail({
                 <input type="hidden" name="typeId" value={typeChoice === ADHOC ? "" : typeChoice} />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1">
-                    <label htmlFor="rr-e-type" className={label}>Type</label>
+                    <label htmlFor="rr-e-type" className={labelClass}>Type</label>
                     <NativeSelect
                       id="rr-e-type"
                       value={typeChoice}
@@ -628,7 +632,7 @@ export function RequestDetail({
                   </div>
                   {typeChoice === ADHOC && (
                     <div className="flex flex-col gap-1">
-                      <label htmlFor="rr-e-adhoc" className={label}>Type of records</label>
+                      <label htmlFor="rr-e-adhoc" className={labelClass}>Type of records</label>
                       <input
                         id="rr-e-adhoc"
                         name="adHocTypeName"
@@ -641,7 +645,7 @@ export function RequestDetail({
                     </div>
                   )}
                   <div className="flex flex-col gap-1 sm:col-span-2">
-                    <label htmlFor="rr-e-subject" className={label}>Subject</label>
+                    <label htmlFor="rr-e-subject" className={labelClass}>Subject</label>
                     <input
                       id="rr-e-subject"
                       name="subject"
@@ -654,7 +658,7 @@ export function RequestDetail({
                     <FieldError state={edit.state} name="subject" />
                   </div>
                   <div className="flex flex-col gap-1 sm:col-span-2">
-                    <label htmlFor="rr-e-desc" className={label}>Details</label>
+                    <label htmlFor="rr-e-desc" className={labelClass}>Details</label>
                     <textarea
                       id="rr-e-desc"
                       name="description"
@@ -674,7 +678,7 @@ export function RequestDetail({
                     ] as const
                   ).map(([name, text, value]) => (
                     <div key={name} className="flex flex-col gap-1">
-                      <label htmlFor={`rr-e-${name}`} className={label}>{text}</label>
+                      <label htmlFor={`rr-e-${name}`} className={labelClass}>{text}</label>
                       <input
                         id={`rr-e-${name}`}
                         name={name}
@@ -686,7 +690,7 @@ export function RequestDetail({
                     </div>
                   ))}
                   <div className="flex flex-col gap-1">
-                    <label htmlFor="rr-e-owner" className={label}>Owner</label>
+                    <label htmlFor="rr-e-owner" className={labelClass}>Owner</label>
                     <NativeSelect
                       id="rr-e-owner"
                       name="ownerId"
@@ -705,9 +709,9 @@ export function RequestDetail({
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button type="submit" disabled={edit.pending} className={primaryBtn}>
+                  <Button size="sm" type="submit" disabled={edit.pending}>
                     Save changes
-                  </button>
+                  </Button>
                   <FormMessage state={edit.state} />
                 </div>
               </form>
@@ -730,7 +734,7 @@ export function RequestDetail({
                   ] as const
                 ).map(([name, text, value, type]) => (
                   <div key={name} className="flex flex-col gap-1">
-                    <label htmlFor={`rr-f-${name}`} className={label}>{text}</label>
+                    <label htmlFor={`rr-f-${name}`} className={labelClass}>{text}</label>
                     <input
                       id={`rr-f-${name}`}
                       name={name}
@@ -743,13 +747,15 @@ export function RequestDetail({
                     <FieldError state={fee.state} name={name} />
                   </div>
                 ))}
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   type="submit"
                   disabled={fee.pending || detail.expenseLocked}
-                  className={outlineBtn}
+                  className="hover:border-brand-300 hover:text-brand-700"
                 >
                   Save fee
-                </button>
+                </Button>
                 <FormMessage state={fee.state} />
               </form>
               {detail.expenseLocked && (

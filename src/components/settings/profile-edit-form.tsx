@@ -30,6 +30,7 @@ import {
 } from "@/lib/profile-form";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { inputClass, labelClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export type EditableProfile = {
   name: string;
@@ -225,17 +226,12 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
       </div>
 
       <div className="flex items-center gap-3 pt-2 border-t border-line">
-        <button
+        <Button
           type="submit"
           disabled={isPending}
-          className={cn(
-            "inline-flex items-center h-9 px-4 rounded-md text-sm font-medium",
-            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-            "disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
         >
           {isPending ? "Saving…" : "Save changes"}
-        </button>
+        </Button>
         {state.status === "ok" && (
           <span className="inline-flex items-center gap-1.5 text-2xs text-ok">
             <CheckCircle2 size={12} />

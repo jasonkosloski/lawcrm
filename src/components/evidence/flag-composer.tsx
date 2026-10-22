@@ -58,6 +58,7 @@ import {
   type FlagAnchorKind,
 } from "@/lib/flag-anchor";
 import { buildFlagAnchor, type FlagAnchorText } from "./build-flag-anchor";
+import { Button } from "@/components/ui/button";
 
 export type ComposerFlag = {
   id: string;
@@ -417,22 +418,24 @@ export function FlagComposer({
         </div>
       )}
       <div className="mt-2 flex items-center gap-2">
-        <button
+        <Button
+          size="xs"
           type="button"
           onClick={submit}
           disabled={pending}
-          className="inline-flex h-7 items-center rounded-md bg-brand-700 px-3 text-xs font-medium text-white transition-colors hover:bg-brand-900 disabled:opacity-60"
         >
           {pending ? "Saving…" : editing ? "Save changes" : "Add flag"}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="outline"
+          size="xs"
           type="button"
           onClick={onClose}
           disabled={pending}
-          className="inline-flex h-7 items-center rounded-md border border-line bg-white px-3 text-xs text-ink-3 transition-colors hover:border-brand-300 hover:text-brand-700"
+          className="hover:border-brand-300 hover:text-brand-700"
         >
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );

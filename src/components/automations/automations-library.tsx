@@ -50,6 +50,7 @@ import type {
 } from "@/lib/queries/automations";
 import { DeadlineRuleDialog } from "./deadline-rule-dialog";
 import { TaskListDialog } from "./task-list-dialog";
+import { Button } from "@/components/ui/button";
 
 export type AutomationPermissions = {
   ruleCreate: boolean;
@@ -61,11 +62,6 @@ export type AutomationPermissions = {
   defaultsCreate: boolean;
   defaultsDelete: boolean;
 };
-
-const newBtnCls = cn(
-  "inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium",
-  "rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors"
-);
 
 export function AutomationsLibrary({
   rules,
@@ -123,9 +119,9 @@ export function AutomationsLibrary({
           title="Deadline rules"
           hint="Reusable deadlines — “N days after/before” a date. Apply one from any matter's Deadlines tab."
           action={can.ruleCreate && (
-            <button type="button" className={newBtnCls} onClick={() => setRuleDialog({ open: true, rule: null })}>
+            <Button size="xs" type="button" onClick={() => setRuleDialog({ open: true, rule: null })}>
               <Plus size={13} /> New rule
-            </button>
+            </Button>
           )}
         />
         {rules.length === 0 ? (
@@ -162,9 +158,9 @@ export function AutomationsLibrary({
           title="Task lists"
           hint="Reusable checklists. Apply one from any matter's Tasks tab."
           action={can.listCreate && (
-            <button type="button" className={newBtnCls} onClick={() => setListDialog({ open: true, list: null })}>
+            <Button size="xs" type="button" onClick={() => setListDialog({ open: true, list: null })}>
               <Plus size={13} /> New task list
-            </button>
+            </Button>
           )}
         />
         {lists.length === 0 ? (
@@ -303,9 +299,9 @@ function AddDefaultForm({
         <NativeSelectOption value="">Every practice area</NativeSelectOption>
         {practiceAreas.map((a) => <NativeSelectOption key={a.id} value={a.id}>{a.name}</NativeSelectOption>)}
       </NativeSelect>
-      <button type="submit" disabled={isPending} className={newBtnCls}>
+      <Button size="xs" type="submit" disabled={isPending}>
         <Plus size={13} /> Add
-      </button>
+      </Button>
       {err && <span className="text-2xs text-warn w-full">{err}</span>}
     </form>
   );

@@ -73,6 +73,7 @@ import { ResendInvoiceDialog } from "./resend-invoice-dialog";
 import { VoidInvoiceDialog } from "./void-invoice-dialog";
 import { SendInvoiceDialog, type PortalSend } from "./send-invoice-dialog";
 import { formatMoney } from "@/lib/format-money";
+import { Button } from "@/components/ui/button";
 
 export function InvoiceActionBar({
   invoiceId,
@@ -263,12 +264,6 @@ export function InvoiceActionBar({
     });
   };
 
-  const primaryButtonClass = cn(
-    "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
-    "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-    "disabled:opacity-60 disabled:cursor-not-allowed",
-  );
-
   return (
     // The button row is conditional but the dialogs below are always a
     // sibling at the same position, so they keep their action state
@@ -277,64 +272,66 @@ export function InvoiceActionBar({
       {!nothingToDo && (
         <div className="flex items-center gap-1.5">
           {canApprove && (
-            <button
+            <Button
+              size="xs"
               type="button"
               onClick={approve}
               disabled={pending}
-              className={primaryButtonClass}
+              className="text-2xs"
               title="Approve this draft so it can be sent."
             >
               <CheckCircle2 size={11} />
               Approve
-            </button>
+            </Button>
           )}
           {canSend && (
-            <button
+            <Button
+              size="xs"
               type="button"
               onClick={() => setSendOpen(true)}
               disabled={pending}
-              className={primaryButtonClass}
+              className="text-2xs"
               title="Email the invoice to the client, or post it to the client portal."
             >
               <Send size={11} />
               Send invoice…
-            </button>
+            </Button>
           )}
           {canRecordPayment && (
-            <button
+            <Button
+              variant="ghost"
+              size="xs"
               type="button"
               onClick={() => setRecordOpen(true)}
               disabled={pending}
-              className={cn(
-                "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-2xs font-medium",
-                // Promote Apply-trust to primary when it's available —
+              className={cn("text-2xs", // Promote Apply-trust to primary when it's available —
                 // it's the more decisive one-click action. Record payment
                 // becomes secondary in that case.
                 showApplyTrust
                   ? "border border-line bg-white text-ink hover:border-brand-300 hover:text-brand-700"
-                  : "bg-brand-700 text-white hover:bg-brand-900",
-                "transition-colors disabled:opacity-60 disabled:cursor-not-allowed",
-              )}
+                  : "bg-brand-700 text-white hover:bg-brand-900")}
               title="Log a payment received against this invoice (check, ACH, cash, card, trust, etc.)"
             >
               <Receipt size={11} />
               Record payment
-            </button>
+            </Button>
           )}
           {showApplyTrust && (
-            <button
+            <Button
+              size="xs"
               type="button"
               onClick={() => setApplyTrustOpen(true)}
               disabled={pending}
-              className={primaryButtonClass}
+              className="text-2xs"
               title={`Apply funds from the matter trust account (avail ${formatMoney(trustBalance)}) toward this invoice's balance.`}
             >
               <Landmark size={11} />
               Apply trust
-            </button>
+            </Button>
           )}
           {canMarkRecorded && (
-            <button
+            <Button
+              size="xs"
               type="button"
               onClick={() =>
                 transitionTo("paid", {
@@ -345,11 +342,11 @@ export function InvoiceActionBar({
                 })
               }
               disabled={pending}
-              className={primaryButtonClass}
+              className="text-2xs"
             >
               <Check size={11} />
               Mark recorded
-            </button>
+            </Button>
           )}
           {(deleteAllowed || voidAllowed || canResend) && (
             <DropdownMenu>

@@ -25,6 +25,7 @@ import {
 import { LEAD_SOURCES, LEAD_SOURCE_LABEL } from "@/lib/constants/lead-stage";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Field, inputClass, labelClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 const MAX_SUGGESTIONS = 6;
 
@@ -220,13 +221,12 @@ export function NewIntakeForm({ contacts }: { contacts: IntakeContactOption[] })
       )}
 
       <div className="flex items-center gap-3 pt-2 border-t border-line">
-        <button
+        <Button
           type="submit"
           disabled={isPending}
-          className="inline-flex items-center h-9 px-4 rounded-md text-sm font-medium bg-brand-700 text-white hover:bg-brand-900 transition-colors disabled:opacity-60"
         >
           {isPending ? "Saving…" : "Save intake"}
-        </button>
+        </Button>
         <span className="text-2xs text-ink-4">A conflict check runs automatically when you save.</span>
       </div>
     </form>

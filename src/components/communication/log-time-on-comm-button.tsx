@@ -21,6 +21,7 @@ import {
   addTimeEntryToMessengerItem,
 } from "@/app/actions/time-on-entity";
 import { LogTimeOnEntityDialog } from "@/components/time-entries/log-time-on-entity-dialog";
+import { Button } from "@/components/ui/button";
 
 export type CommSource =
   | { kind: "email"; messageId: string; label: string }
@@ -80,21 +81,18 @@ export function LogTimeOnCommButton({
 
   return (
     <>
-      <button
+      <Button
+        variant="outline"
+        size="xs"
         type="button"
         onClick={() => setOpen(true)}
         disabled={!isFiled}
         title={tooltip}
-        className={cn(
-          "inline-flex items-center gap-1 h-7 px-2 text-2xs font-medium rounded-md border transition-colors",
-          "bg-white text-ink-3 border-line",
-          "hover:border-brand-300 hover:text-brand-700 hover:bg-brand-soft",
-          "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-line disabled:hover:text-ink-3 disabled:hover:bg-white"
-        )}
+        className="text-2xs hover:border-brand-300 hover:text-brand-700 hover:bg-brand-soft disabled:hover:border-line disabled:hover:text-ink-3 disabled:hover:bg-white"
       >
         <Clock size={11} />
         Log time
-      </button>
+      </Button>
       <LogTimeOnEntityDialog
         open={open}
         onOpenChange={setOpen}

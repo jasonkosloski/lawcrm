@@ -60,14 +60,16 @@ export function SettlementLienForm({
 
   if (!expanded) {
     return (
-      <button
+      <Button
+        variant="outline"
+        size="xs"
         type="button"
         onClick={() => setExpanded(true)}
-        className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-line bg-white text-2xs text-ink hover:border-brand-300 hover:text-brand-700 transition-colors"
+        className="text-2xs hover:border-brand-300 hover:text-brand-700"
       >
         <Plus size={11} />
         Add lien
-      </button>
+      </Button>
     );
   }
 

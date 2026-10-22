@@ -37,6 +37,7 @@ import {
 import { SAVED_SEARCH_NAME_MAX } from "@/lib/constants/search";
 import type { SavedSearchRow } from "@/lib/queries/saved-searches";
 import { TYPE_META } from "./search-results";
+import { Button } from "@/components/ui/button";
 
 function savedSearchHref(row: SavedSearchRow): string {
   const base = `/search?q=${encodeURIComponent(row.q)}`;
@@ -210,20 +211,19 @@ function RenameDialog({
             className="w-full h-9 px-3 rounded-md border border-line-2 bg-white text-sm text-ink focus:outline-none focus:border-brand-300 transition-colors"
           />
           <DialogFooter>
-            <button
+            <Button
+              variant="outline"
               type="button"
               onClick={() => onOpenChange(false)}
-              className="h-8 px-3 rounded-md border border-line-2 text-xs text-ink-3 hover:bg-paper-2 transition-colors"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={pending}
-              className="h-8 px-3 rounded-md bg-brand-700 text-xs text-white hover:bg-brand-900 disabled:opacity-50 transition-colors"
             >
               Save
-            </button>
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

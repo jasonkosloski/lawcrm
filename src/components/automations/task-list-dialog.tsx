@@ -180,9 +180,9 @@ export function TaskListDialog({
                 </div>
               ))}
             </div>
-            <button type="button" onClick={() => setItems((xs) => [...xs, blankItem()])} className="self-start inline-flex items-center gap-1.5 h-7 px-2 rounded-md text-xs text-brand-700 hover:bg-brand-soft">
+            <Button variant="ghost" size="xs" type="button" onClick={() => setItems((xs) => [...xs, blankItem()])} className="self-start text-brand-700 hover:bg-brand-soft">
               <Plus size={13} /> Add task
-            </button>
+            </Button>
             <span className="text-3xs text-ink-4">
               Due dates count from the day the list is applied. Leave blank for no due date.
             </span>
@@ -195,8 +195,8 @@ export function TaskListDialog({
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" size="sm" disabled={isPending || payload.length === 0}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={isPending || payload.length === 0}>
               {isPending ? "Saving…" : list ? "Save list" : "Create list"}
             </Button>
           </DialogFooter>

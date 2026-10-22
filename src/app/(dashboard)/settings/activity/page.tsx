@@ -36,6 +36,7 @@ import {
 } from "@/lib/constants/activity-filters";
 import { activityIcon } from "@/lib/activity-icons";
 import { inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 // Date rendering routes through the centralized formatter.
 
@@ -193,12 +194,12 @@ export default async function FirmActivityPage({
           />
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            size="sm"
             type="submit"
-            className="h-8 px-3 rounded-md text-xs font-medium bg-brand-700 text-white hover:bg-brand-900"
           >
             Apply
-          </button>
+          </Button>
           {(userId || from || to) && (
             <Link
               href={buildHref({ user: null, from: null, to: null })}

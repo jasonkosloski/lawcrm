@@ -301,10 +301,10 @@ function RequestDialog({
             </div>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Close
             </Button>
-            <Button type="submit" size="sm" disabled={pending || !title.trim()}>
+            <Button type="submit" disabled={pending || !title.trim()}>
               {pending ? "Saving…" : existing ? "Save" : "Request documents"}
             </Button>
           </DialogFooter>
@@ -358,10 +358,10 @@ function SendBackDialog({
           </div>
         )}
         <DialogFooter>
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose}>
             Close
           </Button>
-          <Button size="sm" disabled={pending || !note.trim()} onClick={submit}>
+          <Button disabled={pending || !note.trim()} onClick={submit}>
             {pending ? "Sending…" : "Send to client"}
           </Button>
         </DialogFooter>

@@ -37,6 +37,7 @@ import {
 } from "@/lib/role-form";
 import type { FirmRoleRow } from "@/lib/queries/team";
 import { Field, FormErrorBanner, formErrorMessage, inputClass, textareaClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export function RoleRow({
   role,
@@ -225,17 +226,13 @@ function RoleEditForm({
         >
           Cancel
         </button>
-        <button
+        <Button
+          size="sm"
           type="submit"
           disabled={isPending}
-          className={cn(
-            "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium",
-            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-            "disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
         >
           {isPending ? "Saving…" : "Save"}
-        </button>
+        </Button>
       </div>
     </form>
   );

@@ -39,6 +39,7 @@ import { countQuoteOccurrences, locateQuote } from "@/lib/quote-locate";
 import { ReviewPanel } from "./review-panel";
 import type { ComposerAnchor } from "./flag-composer";
 import type { RailMoment } from "./moments-rail";
+import { Button } from "@/components/ui/button";
 
 const FOCUS_HIGHLIGHT = "pdf-flag-focus";
 const FLAGGED_HIGHLIGHT = "pdf-flagged";
@@ -363,17 +364,19 @@ export function PdfReview({
           onTextLayerChange={onTextLayerChange}
         />
         {selection && (
-          <button
+          <Button
+            variant="outline"
+            size="xs"
             type="button"
             // Keep the selection alive through the click.
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => void flagSelection()}
             style={{ top: selection.top, left: selection.left }}
-            className="absolute z-10 inline-flex h-7 items-center gap-1.5 rounded-md border border-brand-300 bg-white px-2.5 text-xs font-medium text-brand-700 shadow-sm transition-colors hover:bg-brand-soft"
+            className="absolute z-10 border-brand-300 text-brand-700 shadow-sm hover:bg-brand-soft"
           >
             <Flag className="h-3.5 w-3.5" aria-hidden />
             Flag selection
-          </button>
+          </Button>
         )}
       </div>
     </ReviewPanel>

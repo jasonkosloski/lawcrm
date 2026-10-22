@@ -75,6 +75,7 @@ import type { DraftValues } from "@/app/actions/matter-drafts";
 import { agreementGateErrors } from "@/lib/originating-doc";
 import type { StorageDriver } from "@/lib/storage/storage-key";
 import { Field, inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 type ClientOption = {
   id: string;
@@ -1167,24 +1168,23 @@ export function NewMatterForm({
         >
           Cancel
         </Link>
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           type="button"
           onClick={() => void saveDraft()}
           disabled={isPending || autosave.status === "saving"}
-          className="inline-flex items-center h-8 px-3 rounded-md text-xs font-medium text-ink-2 border border-line bg-white hover:border-brand-300 hover:text-brand-700 transition-colors disabled:opacity-60"
+          className="hover:border-brand-300 hover:text-brand-700"
         >
           Save draft
-        </button>
-        <button
+        </Button>
+        <Button
+          size="sm"
           type="submit"
           disabled={isPending}
-          className={cn(
-            "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium bg-brand-700 text-white",
-            "hover:bg-brand-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
         >
           {isPending ? "Creating…" : "Create matter"}
-        </button>
+        </Button>
       </div>
     </form>
   );

@@ -173,10 +173,10 @@ function ShareDialog({
             </div>
           )}
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Close
             </Button>
-            <Button type="submit" size="sm" disabled={pending || !clientTitle.trim()}>
+            <Button type="submit" disabled={pending || !clientTitle.trim()}>
               {pending ? "Saving…" : share ? "Save" : "Share"}
             </Button>
           </DialogFooter>

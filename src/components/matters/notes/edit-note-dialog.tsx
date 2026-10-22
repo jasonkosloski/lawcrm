@@ -105,10 +105,10 @@ export function EditNoteDialog({
             ))}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" size="sm" disabled={isPending}>
+            <Button type="submit" disabled={isPending}>
               {isPending ? "Saving…" : "Save note"}
             </Button>
           </DialogFooter>

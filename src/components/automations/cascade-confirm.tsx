@@ -22,6 +22,7 @@ import { CalendarClock, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateOnly, parseDateOnly } from "@/lib/format-date";
 import type { RecalcChange } from "@/lib/automations/recalc-plan";
+import { Button } from "@/components/ui/button";
 
 const day = (key: string) => formatDateOnly(parseDateOnly(key), "medium");
 
@@ -122,31 +123,34 @@ export function CascadeConfirm({
       </ul>
 
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           type="button"
           onClick={onCancel}
-          className="h-8 px-3 rounded-md text-xs text-ink-3 hover:text-ink"
         >
           Go back
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           type="submit"
           name="cascadeDecision"
           value="skip"
           disabled={isPending}
-          className="h-8 px-3 rounded-md text-xs font-medium border border-line bg-white text-ink-2 hover:border-brand-300 disabled:opacity-60"
+          className="hover:border-brand-300"
         >
           Save, don&apos;t change them
-        </button>
-        <button
+        </Button>
+        <Button
+          size="sm"
           type="submit"
           name="cascadeDecision"
           value="apply"
           disabled={isPending || n === 0}
-          className="h-8 px-3 rounded-md text-xs font-medium bg-brand-700 text-white hover:bg-brand-900 disabled:opacity-60"
         >
           {isPending ? "Saving…" : `Save and update ${n} deadline${n === 1 ? "" : "s"}`}
-        </button>
+        </Button>
       </div>
     </div>
   );

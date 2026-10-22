@@ -117,8 +117,16 @@ Clickable card: `card-hover` (the edge darkens; no lift, no blue glow).
 Primary (default): brand-700 fill, white text, hover brand-900. One per screen.
 Outline: white, border-input, ink-2 text. Secondary actions.
 Ghost: transparent; tertiary and icon buttons.
-Destructive: white with danger text and a danger/30 border.
-Heights: h-9 default, h-8 sm, h-7 xs.
+Destructive: white with danger text and a danger/30 border. The final confirm of
+  a delete (confirm host, delete dialogs) adds a solid bg-danger fill.
+Sizes by context (src/components/ui/button.tsx):
+- default (h-9): dialog footers (DialogFooter, confirm host), page headers,
+  full-page forms.
+- sm (h-8): inline composers and card / toolbar actions.
+- xs (h-7): actions inside rows, lists and dense cards.
+- icon-xs / icon-sm for icon-only buttons.
+Anything button-shaped is a <Button>; don't restate variant or size classes.
+Raw <button> is for rows, chips, tabs, inline text links and icon toggles.
 ```
 
 ### Dropdowns (`NativeSelect`)

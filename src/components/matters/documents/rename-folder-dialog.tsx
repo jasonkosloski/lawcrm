@@ -15,9 +15,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 import { renameFolder } from "@/app/actions/document-folders";
 import { inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export function RenameFolderDialog({
   open,
@@ -86,24 +86,19 @@ export function RenameFolderDialog({
             </div>
           )}
           <DialogFooter>
-            <button
+            <Button
+              variant="outline"
               type="button"
               onClick={() => onOpenChange(false)}
-              className="text-2xs text-ink-3 hover:text-ink-2 px-2"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={pending || newName.trim().length === 0}
-              className={cn(
-                "inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium",
-                "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-                "disabled:opacity-60 disabled:cursor-not-allowed"
-              )}
             >
               {pending ? "Renaming…" : "Rename"}
-            </button>
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

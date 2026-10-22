@@ -48,6 +48,7 @@ import {
   type MatterCreateEntry,
 } from "@/lib/matter-create-types";
 import { useCreateStack, type CreatePanel } from "./create-stack-provider";
+import { Button } from "@/components/ui/button";
 
 // The two real panel bodies pull in Tiptap/ProseMirror + server
 // actions. The dock is mounted on every matter tab and the calendar but
@@ -441,13 +442,15 @@ function PanelBody({
           </div>
 
           <footer className="flex items-center justify-end gap-2 px-4 py-3 border-t border-line shrink-0 bg-paper-2/30">
-            <button
+            <Button
+              variant="outline"
+              size="xs"
               type="button"
               onClick={onClose}
-              className="text-xs px-2.5 h-7 rounded-md border border-line bg-white text-ink-2 hover:border-brand-300 hover:text-brand-700 transition-colors"
+              className="hover:border-brand-300 hover:text-brand-700"
             >
               Cancel
-            </button>
+            </Button>
             {matterId && (
               <Link
                 href={`/matters/${matterId}/${tab.slug}`}

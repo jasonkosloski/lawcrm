@@ -27,6 +27,7 @@ import {
   noteInitialState,
   type NoteFormState,
 } from "@/lib/note-constants";
+import { Button } from "@/components/ui/button";
 
 export function EventNoteComposer({
   matterId,
@@ -75,18 +76,16 @@ export function EventNoteComposer({
 
   if (!expanded) {
     return (
-      <button
+      <Button
+        variant="outline"
+        size="sm"
         type="button"
         onClick={() => setExpanded(true)}
-        className={cn(
-          "flex items-center gap-2 h-8 px-3 text-2xs text-ink-4 w-full",
-          "rounded-md border border-dashed border-line bg-white",
-          "hover:border-brand-300 hover:text-brand-700 transition-colors text-left"
-        )}
+        className="flex gap-2 text-2xs text-ink-4 w-full border-dashed hover:border-brand-300 hover:text-brand-700 text-left"
       >
         <Plus size={12} />
         Add a note about this event…
-      </button>
+      </Button>
     );
   }
 
@@ -159,16 +158,13 @@ export function EventNoteComposer({
           >
             Cancel
           </button>
-          <button
+          <Button
+            size="xs"
             type="submit"
             disabled={isPending || html.trim().length === 0}
-            className={cn(
-              "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white hover:bg-brand-900",
-              "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-            )}
           >
             {isPending ? "Saving…" : "Save note"}
-          </button>
+          </Button>
         </div>
       </div>
     </form>

@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { CustodianPicker } from "./custodian-picker";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { inputClass, textareaClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export type TypeOption = { id: string; name: string };
 export type UserOption = { id: string; name: string };
@@ -73,18 +74,15 @@ export function NewRequestComposer({
 
   if (!expanded) {
     return (
-      <button
+      <Button
+        variant="outline"
         type="button"
         onClick={() => setExpanded(true)}
-        className={cn(
-          "flex items-center gap-2 h-9 px-3 text-xs text-ink-3 w-full",
-          "rounded-md border border-dashed border-line bg-white",
-          "hover:border-brand-300 hover:text-brand-700 transition-colors text-left"
-        )}
+        className="flex gap-2 text-xs w-full border-dashed hover:border-brand-300 hover:text-brand-700 text-left"
       >
         <Plus size={13} />
         New records request
-      </button>
+      </Button>
     );
   }
 
@@ -243,13 +241,13 @@ export function NewRequestComposer({
         >
           Cancel
         </button>
-        <button
+        <Button
+          size="sm"
           type="submit"
           disabled={isPending}
-          className="h-8 px-3 rounded-md bg-brand-700 text-white text-xs font-medium hover:bg-brand-900 disabled:opacity-50"
         >
           {isPending ? "Creating…" : "Create request"}
-        </button>
+        </Button>
       </div>
     </form>
   );

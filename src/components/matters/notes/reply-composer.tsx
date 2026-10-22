@@ -25,7 +25,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { cn } from "@/lib/utils";
 import { createLeadNote, createNote } from "@/app/actions/notes";
 import {
   allowedCaptureKinds,
@@ -37,6 +36,7 @@ import {
 import type { NoteScope } from "@/lib/note-scope";
 import { NoteEditor } from "./note-editor";
 import { CaptureStack } from "@/components/matters/captures/capture-stack";
+import { Button } from "@/components/ui/button";
 
 export function ReplyComposer({
   scope,
@@ -116,20 +116,17 @@ export function ReplyComposer({
         >
           Cancel
         </button>
-        <button
+        <Button
+          size="xs"
           type="submit"
           disabled={isPending || html.trim().length === 0}
-          className={cn(
-            "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white",
-            "hover:bg-brand-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
         >
           {isPending
             ? "Posting…"
             : captures.length > 0
               ? `Reply + ${captures.length}`
               : "Reply"}
-        </button>
+        </Button>
       </div>
     </form>
   );

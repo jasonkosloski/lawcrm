@@ -57,18 +57,20 @@ export function ApplyTaskListDialog({
 
   return (
     <>
-      <button
+      <Button
+        variant="outline"
+        size="xs"
         type="button"
         onClick={() => {
           setListId(lists[0]?.id ?? "");
           setResult(null);
           setOpen(true);
         }}
-        className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium bg-white text-ink-2 border border-line hover:border-brand-300 hover:text-brand-700 transition-colors"
+        className="hover:border-brand-300 hover:text-brand-700"
       >
         <ListChecks size={13} />
         Apply task list
-      </button>
+      </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
@@ -112,11 +114,10 @@ export function ApplyTaskListDialog({
           </div>
 
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+            <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button
-              size="sm"
               disabled={pending || !listId}
               onClick={() => submit(result?.status === "duplicate")}
             >

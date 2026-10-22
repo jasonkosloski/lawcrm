@@ -24,6 +24,7 @@ import { todayKey } from "@/lib/format-date";
 import { useUserTimeZone } from "@/components/user-time-zone";
 import { useEventAttachmentsViewer } from "./event-attachments-context";
 import { inputClass, textareaClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export function EventTimeEntryComposer({
   matterId,
@@ -83,7 +84,9 @@ export function EventTimeEntryComposer({
 
   if (!expanded) {
     return (
-      <button
+      <Button
+        variant="outline"
+        size="sm"
         type="button"
         onClick={() => {
           // Seed the working copy on every open: the modal can be
@@ -92,15 +95,11 @@ export function EventTimeEntryComposer({
           reset();
           setExpanded(true);
         }}
-        className={cn(
-          "flex items-center gap-2 h-8 px-3 text-2xs text-ink-4 w-full",
-          "rounded-md border border-dashed border-line bg-white",
-          "hover:border-brand-300 hover:text-brand-700 transition-colors text-left"
-        )}
+        className="flex gap-2 text-2xs text-ink-4 w-full border-dashed hover:border-brand-300 hover:text-brand-700 text-left"
       >
         <Plus size={12} />
         Log time for this event…
-      </button>
+      </Button>
     );
   }
 
@@ -205,16 +204,13 @@ export function EventTimeEntryComposer({
           >
             Cancel
           </button>
-          <button
+          <Button
+            size="xs"
             type="submit"
             disabled={isPending || !hasContent}
-            className={cn(
-              "inline-flex items-center h-7 px-3 rounded-md text-xs font-medium bg-brand-700 text-white hover:bg-brand-900",
-              "transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-            )}
           >
             {isPending ? "Saving…" : "Log time"}
-          </button>
+          </Button>
         </div>
       </div>
     </form>

@@ -28,6 +28,7 @@ import {
 import { NoteEditor } from "./note-editor";
 import { CaptureStack } from "@/components/matters/captures/capture-stack";
 import { useCreateStack } from "@/components/create-stack/create-stack-provider";
+import { Button } from "@/components/ui/button";
 
 export function NotePanelBody({
   panelId,
@@ -167,24 +168,26 @@ export function NotePanelBody({
       </div>
 
       <footer className="flex items-center justify-end gap-2 px-4 py-3 border-t border-line shrink-0 bg-paper-2/30">
-        <button
+        <Button
+          variant="outline"
+          size="xs"
           type="button"
           onClick={() => close(panelId)}
-          className="text-xs px-2.5 h-7 rounded-md border border-line bg-white text-ink-2 hover:border-brand-300 hover:text-brand-700 transition-colors"
+          className="hover:border-brand-300 hover:text-brand-700"
         >
           Cancel
-        </button>
-        <button
+        </Button>
+        <Button
+          size="xs"
           type="submit"
           disabled={isPending || html.trim().length === 0}
-          className="text-xs px-2.5 h-7 rounded-md bg-brand-700 text-white hover:bg-brand-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {isPending
             ? "Saving…"
             : captures.length > 0
               ? `Save note + ${captures.length}`
               : "Save note"}
-        </button>
+        </Button>
       </footer>
     </form>
   );

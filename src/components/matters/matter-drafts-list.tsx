@@ -98,16 +98,18 @@ export function MatterDraftsList({
               Resume
             </a>
             {d.canDelete && (
-              <button
+              <Button
+                variant="ghost"
+                size="xs"
                 type="button"
                 onClick={() => {
                   setError(null);
                   setConfirming(d);
                 }}
-                className="inline-flex items-center h-7 px-2.5 rounded-md text-warn hover:underline"
+                className="text-warn hover:underline"
               >
                 Delete
-              </button>
+              </Button>
             )}
           </li>
         ))}

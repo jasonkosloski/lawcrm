@@ -84,6 +84,7 @@ import {
   EventVisibilityRow,
   EventAttendeesSection,
 } from "./event-detail-sections";
+import { Button } from "@/components/ui/button";
 
 // Settable event-type labels are centralized; "deadline" is the
 // calendar's pseudo-event for projected deadlines (display-only,
@@ -556,15 +557,17 @@ function EventDetailModalInner({
         {/* Footer */}
         <footer className="flex items-center justify-end gap-2 px-5 py-3 border-t border-line shrink-0 bg-paper-2/30">
           {canEdit && (canDelete ?? canEdit) && (
-            <button
+            <Button
+              variant="outline"
+              size="xs"
               type="button"
               onClick={onDelete}
               disabled={deletePending || deleted}
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 h-7 rounded-md bg-white text-warn border border-line hover:border-warn-border hover:bg-warn-soft transition-colors disabled:opacity-50 mr-auto"
+              className="text-warn hover:border-warn-border hover:bg-warn-soft mr-auto"
             >
               <Trash2 size={13} />
               {deletePending || deleted ? "Deleting…" : "Delete"}
-            </button>
+            </Button>
           )}
           {canEdit && savePending && (
             <span className="text-2xs font-mono text-ink-4 mr-auto">

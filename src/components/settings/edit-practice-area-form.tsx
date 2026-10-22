@@ -25,6 +25,7 @@ import {
 import { BILLING_TYPE_OPTIONS } from "@/lib/billing-type";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Field, inputClass } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export function EditPracticeAreaForm({
   area,
@@ -322,16 +323,14 @@ export function EditPracticeAreaForm({
         {state.status === "ok" && (
           <span className="text-2xs text-ok font-medium">Saved.</span>
         )}
-        <button
+        <Button
+          size="sm"
           type="submit"
           disabled={isPending}
-          className={cn(
-            "inline-flex items-center h-8 px-3 rounded-md text-xs font-medium bg-brand-700 hover:bg-brand-900 text-white",
-            "hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
+          className="hover:bg-brand-600"
         >
           {isPending ? "Saving…" : "Save"}
-        </button>
+        </Button>
       </div>
     </form>
   );

@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/dialog";
 import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import type { RecordScope } from "@/lib/record-scope";
 import { templateCategoryLabel } from "@/lib/template-constants";
 import {
@@ -160,18 +159,15 @@ export function GenerateFromTemplateDialog({
 
   return (
     <>
-      <button
+      <Button
+        variant="outline"
         type="button"
         onClick={openDialog}
-        className={cn(
-          "inline-flex items-center gap-2 h-9 px-3 text-xs",
-          "rounded-md border border-dashed border-line bg-white",
-          "hover:border-brand-300 hover:text-brand-700 transition-colors text-ink-3"
-        )}
+        className="gap-2 text-xs border-dashed hover:border-brand-300 hover:text-brand-700"
       >
         <Sparkles size={13} />
         {triggerLabel}
-      </button>
+      </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-2xl">

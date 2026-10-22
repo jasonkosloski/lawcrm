@@ -83,17 +83,19 @@ export function ApplyDeadlineRuleDialog({
 
   return (
     <>
-      <button
+      <Button
+        variant="outline"
+        size="xs"
         type="button"
         onClick={() => {
           reset();
           setOpen(true);
         }}
-        className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium bg-white text-ink-2 border border-line hover:border-brand-300 hover:text-brand-700 transition-colors"
+        className="hover:border-brand-300 hover:text-brand-700"
       >
         <CalendarPlus size={13} />
         Apply deadline rule
-      </button>
+      </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
@@ -159,16 +161,15 @@ export function ApplyDeadlineRuleDialog({
           </div>
 
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+            <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             {result?.status === "duplicate" ? (
-              <Button size="sm" disabled={pending} onClick={() => submit({ force: true })}>
+              <Button disabled={pending} onClick={() => submit({ force: true })}>
                 {pending ? "Applying…" : "Apply again"}
               </Button>
             ) : (
               <Button
-                size="sm"
                 disabled={pending || !ruleId || (needsDate && !anchorDate)}
                 onClick={() => submit()}
               >

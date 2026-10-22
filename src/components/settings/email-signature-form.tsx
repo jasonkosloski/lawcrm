@@ -12,9 +12,9 @@
 
 import { useState, useTransition } from "react";
 import { CheckCircle2 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { updateEmailSignatureAction } from "@/app/actions/profile";
 import { RichTextEditor } from "@/components/shared/rich-text-editor-lazy";
+import { Button } from "@/components/ui/button";
 
 export function EmailSignatureForm({
   signature,
@@ -62,18 +62,13 @@ export function EmailSignatureForm({
         </p>
       )}
       <div className="mt-3 flex items-center gap-3">
-        <button
+        <Button
           type="button"
           onClick={save}
           disabled={isPending}
-          className={cn(
-            "inline-flex items-center h-9 px-4 rounded-md text-sm font-medium",
-            "bg-brand-700 text-white hover:bg-brand-900 transition-colors",
-            "disabled:opacity-60 disabled:cursor-not-allowed"
-          )}
         >
           {isPending ? "Saving…" : "Save signature"}
-        </button>
+        </Button>
         {status === "ok" && (
           <span className="inline-flex items-center gap-1.5 text-2xs text-ok">
             <CheckCircle2 size={12} />
