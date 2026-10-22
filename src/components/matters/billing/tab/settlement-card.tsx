@@ -13,7 +13,7 @@ import { SettlementComposer } from "@/components/matters/settlement/settlement-c
 import { SettlementLienForm } from "@/components/matters/settlement/settlement-lien-form";
 import { SettlementLienList } from "@/components/matters/settlement/settlement-lien-list";
 import { type MatterSettlement } from "@/lib/queries/settlements";
-import { formatMoney } from "./shared";
+import { formatMoney } from "@/lib/format-money";
 
 export function SettlementCard({
   matterId,

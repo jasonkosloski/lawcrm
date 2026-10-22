@@ -50,9 +50,7 @@ import {
 } from "@/lib/billing-form";
 import { notifyWarning } from "@/lib/feedback";
 import { parseMoneyInput } from "@/lib/parse-money-input";
-
-const formatMoney = (n: number): string =>
-  `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { formatMoney } from "@/lib/format-money";
 
 export type PortalSend = { available: boolean; reason: string | null };
 const NO_PORTAL_SEND: PortalSend = { available: false, reason: null };

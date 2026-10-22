@@ -45,9 +45,7 @@ import {
 import { todayKey } from "@/lib/format-date";
 import { parseMoneyInput } from "@/lib/parse-money-input";
 import { useUserTimeZone } from "@/components/user-time-zone";
-
-const formatMoney = (n: number): string =>
-  `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { formatMoney } from "@/lib/format-money";
 
 export function ApplyTrustDialog({
   open,

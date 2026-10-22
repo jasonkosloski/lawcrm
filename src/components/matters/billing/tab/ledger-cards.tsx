@@ -23,9 +23,9 @@ import {
   INVOICE_PAYMENT_SOURCE_LABEL,
   type InvoicePaymentSource,
 } from "@/lib/billing-form";
+import { formatMoney } from "@/lib/format-money";
 
 import {
-  formatMoney,
   formatDay,
   TRUST_TYPE_LABEL,
   type BillingPermissions,

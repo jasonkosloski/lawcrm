@@ -57,14 +57,7 @@ import {
 } from "@/lib/queries/matter-detail";
 import { requireUser } from "@/lib/current-user";
 import { assertMatterAccess } from "@/lib/matter-access";
-
-const formatMoney = (n: number | null): string => {
-  if (n === null) return "—";
-  return `$${n.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-};
+import { formatMoney } from "@/lib/format-money";
 
 export default async function MatterTimePage({
   params,
@@ -319,7 +312,7 @@ function EntryRow({
         {formatHours(entry.hours)}
       </TableCell>
       <TableCell className="text-right font-mono text-xs text-ink">
-        {entry.billable && !entry.noCharge
+        {entry.billable && !entry.noCharge && entry.amount !== null
           ? formatMoney(entry.amount)
           : "—"}
       </TableCell>

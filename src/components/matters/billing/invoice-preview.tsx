@@ -24,9 +24,7 @@ import type { FirmProfile } from "@/lib/firm";
 import type { InvoiceDetail } from "@/lib/queries/billing";
 import { formatDate, formatDateOnly } from "@/lib/format-date";
 import { EditableLineItemRow } from "./editable-line-item-row";
-
-const formatMoney = (n: number): string =>
-  `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { formatMoney } from "@/lib/format-money";
 
 const STATUS_META: Record<string, string> = {
   draft: "bg-paper-2 text-ink-3 border-line",

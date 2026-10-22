@@ -46,9 +46,7 @@ import {
 import { todayKey } from "@/lib/format-date";
 import { parseMoneyInput } from "@/lib/parse-money-input";
 import { useUserTimeZone } from "@/components/user-time-zone";
-
-const formatMoney = (n: number): string =>
-  `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { formatMoney } from "@/lib/format-money";
 
 // Reference field placeholder hints at what the firm typically
 // captures per channel. Cosmetic — the field accepts anything.
@@ -323,7 +321,7 @@ function RecordPaymentForm({
             {selectableSources.map((s) => (
               <NativeSelectOption key={s} value={s}>
                 {INVOICE_PAYMENT_SOURCE_LABEL[s]}
-                {s === "trust" && ` (avail: $${trustBalance.toFixed(2)})`}
+                {s === "trust" && ` (avail: ${formatMoney(trustBalance)})`}
               </NativeSelectOption>
             ))}
           </NativeSelect>

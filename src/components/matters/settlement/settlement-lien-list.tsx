@@ -36,6 +36,7 @@ import {
   type SettlementLienStatus,
 } from "@/lib/constants/settlement-status";
 import { confirmAction } from "@/lib/feedback";
+import { formatMoney } from "@/lib/format-money";
 
 export type SettlementLienListRow = {
   id: string;
@@ -46,9 +47,6 @@ export type SettlementLienListRow = {
   effectiveAmount: number;
   status: string;
 };
-
-const formatMoney = (n: number): string =>
-  `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const lienStatusLabel = (s: string): string =>
   SETTLEMENT_LIEN_STATUS_LABEL[s as SettlementLienStatus] ?? s;

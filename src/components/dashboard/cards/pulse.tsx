@@ -1,6 +1,7 @@
 import type { FirmPulse } from "@/lib/queries/dashboard";
 import { DashboardCard } from "../dashboard-card";
-import { formatMoney, percentOf } from "./format";
+import { formatMoney } from "@/lib/format-money";
+import { percentOf } from "./format";
 
 /** Null without reports.view - the card renders nothing. */
 export function PulseCard({ pulse }: { pulse: FirmPulse | null }) {
@@ -32,7 +33,7 @@ export function PulseCard({ pulse }: { pulse: FirmPulse | null }) {
         <div className="flex items-center justify-between">
           <span className="text-xs text-ink-3">A/R outstanding</span>
           <span className="text-sm font-medium text-ink tabular-nums">
-            {pulse.arOutstanding > 0 ? formatMoney(pulse.arOutstanding) : "—"}
+            {pulse.arOutstanding > 0 ? formatMoney(pulse.arOutstanding, { cents: false }) : "—"}
           </span>
         </div>
       </div>

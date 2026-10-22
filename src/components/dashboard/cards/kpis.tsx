@@ -1,6 +1,6 @@
 import { StatStrip, type Stat } from "@/components/shared/stat-strip";
 import type { DashboardKpis } from "@/lib/queries/dashboard";
-import { formatMoney } from "./format";
+import { formatMoney } from "@/lib/format-money";
 
 export function KpisCard({ kpis }: { kpis: DashboardKpis }) {
   const stats: Stat[] = [
@@ -30,7 +30,7 @@ export function KpisCard({ kpis }: { kpis: DashboardKpis }) {
       ? [
           {
             label: "Trust balance",
-            value: formatMoney(kpis.trustBalance),
+            value: formatMoney(kpis.trustBalance, { cents: false }),
             detail: `Across ${kpis.trustMatterCount ?? 0} matters`,
           },
         ]

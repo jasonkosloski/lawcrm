@@ -72,6 +72,7 @@ import { RecordPaymentDialog } from "./record-payment-dialog";
 import { ResendInvoiceDialog } from "./resend-invoice-dialog";
 import { VoidInvoiceDialog } from "./void-invoice-dialog";
 import { SendInvoiceDialog, type PortalSend } from "./send-invoice-dialog";
+import { formatMoney } from "@/lib/format-money";
 
 export function InvoiceActionBar({
   invoiceId,
@@ -326,7 +327,7 @@ export function InvoiceActionBar({
               onClick={() => setApplyTrustOpen(true)}
               disabled={pending}
               className={primaryButtonClass}
-              title={`Apply funds from the matter trust account (avail $${trustBalance.toFixed(2)}) toward this invoice's balance.`}
+              title={`Apply funds from the matter trust account (avail ${formatMoney(trustBalance)}) toward this invoice's balance.`}
             >
               <Landmark size={11} />
               Apply trust

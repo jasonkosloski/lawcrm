@@ -14,11 +14,9 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ArAgingReport } from "@/lib/queries/reports";
+import { formatMoney } from "@/lib/format-money";
 
 /** Money with cents — AR is the one place rounding reads sloppy. */
-const formatMoney = (n: number): string =>
-  `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
 export function ArAgingCard({ report }: { report: ArAgingReport }) {
   const scale = Math.max(1, ...report.buckets.map((b) => b.total));
 

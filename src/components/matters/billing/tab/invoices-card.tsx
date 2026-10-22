@@ -21,7 +21,8 @@ import {
 import { type MatterBilling } from "@/lib/queries/billing";
 import { invoiceStatusLabel, type InvoiceKind } from "@/lib/billing-form";
 import { formatDate } from "@/lib/format-date";
-import { formatMoney, STATUS_META } from "./shared";
+import { formatMoney } from "@/lib/format-money";
+import { STATUS_META } from "./shared";
 
 export function InvoicesCard({
   billing,

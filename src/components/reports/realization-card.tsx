@@ -13,9 +13,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { RealizationMonth } from "@/lib/queries/reports";
-
-const formatMoney = (n: number): string =>
-  `$${Math.round(n).toLocaleString("en-US")}`;
+import { formatMoney } from "@/lib/format-money";
 
 export function RealizationCard({ months }: { months: RealizationMonth[] }) {
   return (
@@ -71,7 +69,7 @@ export function RealizationCard({ months }: { months: RealizationMonth[] }) {
                 />
               </div>
               <span className="w-32 shrink-0 text-right text-2xs font-mono text-ink">
-                {formatMoney(m.collectedAmount)}
+                {formatMoney(m.collectedAmount, { cents: false })}
                 <span className="text-ink-4">
                   {" "}
                   · {m.collectedPctOfBilled.toFixed(0)}%

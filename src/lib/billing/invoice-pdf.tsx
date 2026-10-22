@@ -27,9 +27,7 @@ import {
 import type { FirmProfile } from "@/lib/firm";
 import { formatDate, formatDateOnly } from "@/lib/format-date";
 import type { InvoiceDetail } from "@/lib/queries/billing";
-
-const formatMoney = (n: number): string =>
-  `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { formatMoney } from "@/lib/format-money";
 
 export function invoicePdfFilename(invoiceNumber: string): string {
   return `Invoice ${invoiceNumber}.pdf`;

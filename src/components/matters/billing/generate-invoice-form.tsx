@@ -25,9 +25,7 @@ import {
   type BillingFormState,
 } from "@/lib/billing-form";
 import { bundleCountLabel, bundleTotal } from "./bundle-summary";
-
-const formatMoney = (n: number): string =>
-  `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+import { formatMoney } from "@/lib/format-money";
 
 export function GenerateInvoiceForm({
   matterId,

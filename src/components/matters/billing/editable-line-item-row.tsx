@@ -34,11 +34,9 @@ import {
   parseDateOnly,
 } from "@/lib/format-date";
 import { lineItemEditInitialState } from "@/lib/billing-form";
+import { formatMoney } from "@/lib/format-money";
 
 type Field = "date" | "activity" | "narrative" | "hours" | "rate";
-
-const formatMoney = (n: number): string =>
-  `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const formatDateShort = (iso: string): string => {
   // Render `YYYY-MM-DD` back to "Apr 15" for view mode. Time-entry

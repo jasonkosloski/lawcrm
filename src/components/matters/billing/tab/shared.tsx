@@ -5,9 +5,6 @@
 
 import { formatDateOnly } from "@/lib/format-date";
 
-export const formatMoney = (n: number): string =>
-  `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
 // Billing dates on this page are a mix of date-only values (expense /
 // payment / trust-transaction dates: shown on their stored calendar
 // day, no zone) and instants (invoice issue/due, minted with

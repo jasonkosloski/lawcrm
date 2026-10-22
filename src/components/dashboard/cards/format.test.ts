@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMoney, percentOf } from "./format";
-
-describe("formatMoney", () => {
-  it("rounds and adds separators", () => {
-    expect(formatMoney(12345.6)).toBe("$12,346");
-  });
-});
+import { percentOf } from "./format";
 
 describe("percentOf", () => {
   it("is 0 when the goal is 0 or negative", () => {
