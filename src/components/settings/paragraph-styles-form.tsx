@@ -5,7 +5,7 @@
  * custom), the selected style's values on the right with a live sample
  * paragraph in the house font. Everything is edited locally and saved as one
  * list with the house style's stale check (`expectedUpdatedAt`). Built-ins
- * can be edited but not renamed or deleted; Add copies the selected style.
+ * can be edited and renamed but not deleted; Add copies the selected style.
  * The server refuses deleting a style that templates still use and says
  * which. Without `firm.edit_document_style` every control is disabled.
  */
@@ -54,6 +54,8 @@ type Props = {
   initial: ParagraphStyle[];
   /** ISO timestamp of the loaded row (the optimistic-lock token). */
   updatedAt: string;
+  /** Called with the new token after a save. */
+  onUpdatedAt?: (updatedAt: string) => void;
   fontKey: FontKey;
   canEdit: boolean;
 };
@@ -90,12 +92,23 @@ const LINE_FACTOR = { single: 1, "1.15": 1.15, "1.5": 1.5, double: 2 } as const;
 export function ParagraphStylesForm({
   initial,
   updatedAt: initialUpdatedAt,
+  onUpdatedAt,
   fontKey,
   canEdit,
 }: Props) {
   const [styles, setStyles] = useState<ParagraphStyle[]>(initial);
   const [selectedKey, setSelectedKey] = useState(initial[0]?.key ?? "body");
   const [updatedAt, setUpdatedAt] = useState(initialUpdatedAt);
+  // Follow the shared token when a sibling form saves (see DocumentSettings).
+  const [seenProp, setSeenProp] = useState(initialUpdatedAt);
+  if (seenProp !== initialUpdatedAt) {
+    setSeenProp(initialUpdatedAt);
+    setUpdatedAt(initialUpdatedAt);
+  }
+  const commit = (next: string) => {
+    setUpdatedAt(next);
+    onUpdatedAt?.(next);
+  };
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
@@ -147,7 +160,7 @@ export function ParagraphStylesForm({
     startTransition(async () => {
       const res = await saveParagraphStyles({ styles, expectedUpdatedAt: updatedAt });
       if (res.ok) {
-        setUpdatedAt(res.updatedAt);
+        commit(res.updatedAt);
         setSaved(true);
       } else {
         setError(res.error);
@@ -222,7 +235,7 @@ export function ParagraphStylesForm({
                 <input
                   {...c}
                   value={selected.name}
-                  disabled={dis || selected.builtIn}
+                  disabled={dis}
                   maxLength={60}
                   onChange={(e) => update((s) => ({ ...s, name: e.target.value }))}
                   className={ctl()}

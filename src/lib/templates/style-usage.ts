@@ -26,8 +26,10 @@ export function styleKeysIn(doc: unknown): Set<string> {
   return keys;
 }
 
-/** Names of the templates and blocks whose content uses the style key. */
-export async function styleUsage(key: string): Promise<{ templates: string[]; blocks: string[] }> {
+type Usage = { templates: string[]; blocks: string[] };
+
+/** Style key -> names of the templates and blocks using it, from one scan. */
+export async function styleUsageMap(): Promise<Map<string, Usage>> {
   const [templates, blocks] = await Promise.all([
     prisma.documentTemplate.findMany({
       select: { name: true, content: true },
@@ -38,9 +40,22 @@ export async function styleUsage(key: string): Promise<{ templates: string[]; bl
       orderBy: { name: "asc" },
     }),
   ]);
-  const uses = (r: { content: unknown }) => styleKeysIn(r.content).has(key);
-  return {
-    templates: templates.filter(uses).map((t) => t.name),
-    blocks: blocks.filter(uses).map((b) => b.name),
+  const map = new Map<string, Usage>();
+  const add = (kind: keyof Usage, rows: { name: string; content: unknown }[]) => {
+    for (const r of rows) {
+      for (const key of styleKeysIn(r.content)) {
+        const u = map.get(key) ?? { templates: [], blocks: [] };
+        u[kind].push(r.name);
+        map.set(key, u);
+      }
+    }
   };
+  add("templates", templates);
+  add("blocks", blocks);
+  return map;
+}
+
+/** Names of the templates and blocks whose content uses the style key. */
+export async function styleUsage(key: string): Promise<Usage> {
+  return (await styleUsageMap()).get(key) ?? { templates: [], blocks: [] };
 }

@@ -227,6 +227,14 @@ describe("saveParagraphStyles", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/settings/documents");
   });
 
+  test("renaming a built-in persists", async () => {
+    const styles = defaults();
+    styles[0] = { ...styles[0], name: "Main text" };
+    expect((await call(styles)).ok).toBe(true);
+    const body = (await getDocumentStyle()).paragraphStyles.find((p) => p.key === "body");
+    expect(body).toMatchObject({ name: "Main text", builtIn: true });
+  });
+
   test("exact Body line spacing leaves the legacy column unchanged", async () => {
     const styles = defaults();
     styles[0] = {

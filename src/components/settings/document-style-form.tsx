@@ -69,6 +69,8 @@ type Props = {
   initial: DocumentStyleValues;
   /** ISO timestamp of the loaded row (the optimistic-lock token). */
   updatedAt: string;
+  /** Called with the new token after any save or logo change. */
+  onUpdatedAt?: (updatedAt: string) => void;
   hasLogo: boolean;
   blocks: StyleBlockOption[];
   /** Rendered sample letter body. */
@@ -81,6 +83,7 @@ type Props = {
 export function DocumentStyleForm({
   initial,
   updatedAt: initialUpdatedAt,
+  onUpdatedAt,
   hasLogo: initialHasLogo,
   blocks,
   body,
@@ -91,6 +94,16 @@ export function DocumentStyleForm({
   const [updatedAt, setUpdatedAt] = useState(initialUpdatedAt);
   const [hasLogo, setHasLogo] = useState(initialHasLogo);
   const [logoVersion, setLogoVersion] = useState(initialUpdatedAt);
+  // Follow the shared token when a sibling form saves (see DocumentSettings).
+  const [seenProp, setSeenProp] = useState(initialUpdatedAt);
+  if (seenProp !== initialUpdatedAt) {
+    setSeenProp(initialUpdatedAt);
+    setUpdatedAt(initialUpdatedAt);
+  }
+  const commit = (next: string) => {
+    setUpdatedAt(next);
+    onUpdatedAt?.(next);
+  };
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [logoError, setLogoError] = useState<string | null>(null);
@@ -129,7 +142,7 @@ export function DocumentStyleForm({
     startTransition(async () => {
       const res = await saveDocumentStyle({ ...values, expectedUpdatedAt: updatedAt });
       if (res.ok) {
-        setUpdatedAt(res.updatedAt);
+        commit(res.updatedAt);
         setSaved(true);
       } else {
         setError(res.error);
@@ -143,7 +156,7 @@ export function DocumentStyleForm({
     logoPosition: LogoPosition;
     positionChanged: boolean;
   }) => {
-    setUpdatedAt(r.updatedAt);
+    commit(r.updatedAt);
     setLogoVersion(r.updatedAt);
     if (r.positionChanged) {
       // The server moved none -> left; keep a position the user already picked.

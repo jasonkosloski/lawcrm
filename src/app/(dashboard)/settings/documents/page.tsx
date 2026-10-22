@@ -8,8 +8,7 @@
  * re-check it).
  */
 
-import { DocumentStyleForm } from "@/components/settings/document-style-form";
-import { ParagraphStylesForm } from "@/components/settings/paragraph-styles-form";
+import { DocumentSettings } from "@/components/settings/document-settings";
 import { requireUser } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
@@ -57,20 +56,21 @@ export default async function DocumentSettingsPage() {
           {!canEdit && " You can view the style but not change it."}
         </p>
       </div>
-      <DocumentStyleForm
-        initial={values}
+      <DocumentSettings
         updatedAt={updatedAt.toISOString()}
-        hasLogo={logoKey !== null}
-        blocks={blockRows.map(({ id, name, isActive }) => ({ id, name, isActive }))}
-        body={body}
-        blockDocs={blockDocs}
-        canEdit={canEdit}
-      />
-      <ParagraphStylesForm
-        initial={values.paragraphStyles}
-        updatedAt={updatedAt.toISOString()}
-        fontKey={values.fontKey}
-        canEdit={canEdit}
+        houseStyle={{
+          initial: values,
+          hasLogo: logoKey !== null,
+          blocks: blockRows.map(({ id, name, isActive }) => ({ id, name, isActive })),
+          body,
+          blockDocs,
+          canEdit,
+        }}
+        paragraphStyles={{
+          initial: values.paragraphStyles,
+          fontKey: values.fontKey,
+          canEdit,
+        }}
       />
     </div>
   );

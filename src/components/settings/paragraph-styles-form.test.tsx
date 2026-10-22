@@ -57,9 +57,10 @@ describe("ParagraphStylesForm", () => {
     expect((screen.getByLabelText("Alignment") as HTMLSelectElement).value).toBe("center");
   });
 
-  test("renames a custom style; built-ins keep their names", () => {
+  test("renames built-in and custom styles", () => {
     render(<ParagraphStylesForm {...props()} />);
-    expect((screen.getByLabelText("Style name") as HTMLInputElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Style name"), { target: { value: "Main text" } });
+    expect(names()[0]).toBe("Main text");
     fireEvent.click(screen.getByRole("button", { name: "Note" }));
     fireEvent.change(screen.getByLabelText("Style name"), { target: { value: "Aside" } });
     expect(names().at(-1)).toBe("Aside");

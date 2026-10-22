@@ -16,7 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/permission-check";
 import { logTemplateChange } from "@/lib/template-activity";
 import { paragraphStylesSchema, type ParagraphStyle } from "@/lib/templates/paragraph-styles";
-import { styleUsage } from "@/lib/templates/style-usage";
+import { styleUsageMap } from "@/lib/templates/style-usage";
 import { DOCUMENT_STYLE_STALE, getDocumentStyle } from "@/lib/templates/document-style";
 import {
   FONT_KEYS,
@@ -134,11 +134,12 @@ export async function saveParagraphStyles(input: {
   }
   const styles = parsed.data as ParagraphStyle[];
 
-  for (const old of current.paragraphStyles) {
-    if (old.builtIn || submittedKeys.has(old.key)) continue;
-    const usage = await styleUsage(old.key);
-    if (usage.templates.length > 0 || usage.blocks.length > 0) {
-      return { ok: false, error: usageMessage(old.name, usage) };
+  const removed = current.paragraphStyles.filter((s) => !s.builtIn && !submittedKeys.has(s.key));
+  if (removed.length > 0) {
+    const usage = await styleUsageMap();
+    for (const old of removed) {
+      const u = usage.get(old.key);
+      if (u) return { ok: false, error: usageMessage(old.name, u) };
     }
   }
 
