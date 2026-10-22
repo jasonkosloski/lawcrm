@@ -124,7 +124,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
+import { GmailAuthError, gmailFetch, recordGmailAuthError } from "@/lib/google/gmail-client";
 import { sanitizeEmailHtml } from "@/lib/sanitize-html";
 import { stripNul, stripNulOrNull } from "@/lib/google/strip-nul";
 import { isTransientInfraError } from "@/lib/google/transient-error";
@@ -274,7 +274,7 @@ function syncNote(outcome: SyncOutcome): string | null {
   const parts: string[] = [];
   if (outcome.truncated) {
     parts.push(
-      `Catch-up after expired Gmail history hit its per-pass thread safety cap; it will continue on the next sync.`
+      `Catch-up after expired Gmail history hit its per-pass thread safety cap; it will continue on the next sync.`,
     );
   }
   if (outcome.failedThreads > 0) {
@@ -282,7 +282,7 @@ function syncNote(outcome: SyncOutcome): string | null {
     parts.push(
       `${outcome.failedThreads} thread(s) could not be imported and were skipped (${ids}${
         outcome.failedThreads > outcome.failedThreadIds.length ? ", …" : ""
-      }).`
+      }).`,
     );
   }
   return parts.length > 0 ? parts.join(" ") : null;
@@ -297,7 +297,7 @@ export async function syncEmailAccount(
     fullSyncMaxThreads?: number;
     /** Test seam: override INCREMENTAL_MAX_THREADS. */
     incrementalMaxThreads?: number;
-  }
+  },
 ): Promise<AccountSyncResult> {
   const account = await prisma.emailAccount.findUnique({
     where: { id: accountId },
@@ -340,8 +340,7 @@ export async function syncEmailAccount(
       error: "Account owner is deactivated.",
     };
   }
-  const priorStatus =
-    account.syncStatus === "syncing" ? "connected" : account.syncStatus;
+  const priorStatus = account.syncStatus === "syncing" ? "connected" : account.syncStatus;
   // Claim the account atomically. Another pass already syncing it
   // (cron vs "Sync now" vs the page kick) means this one has nothing
   // to add — the second pass would redo the same work and race the
@@ -372,9 +371,7 @@ export async function syncEmailAccount(
     };
   }
 
-  let mode: "incremental" | "full" = account.historyId
-    ? "incremental"
-    : "full";
+  let mode: "incremental" | "full" = account.historyId ? "incremental" : "full";
   try {
     const labelMap = await fetchLabelMap(accountId);
 
@@ -384,7 +381,7 @@ export async function syncEmailAccount(
         accountId,
         account.historyId,
         labelMap,
-        opts?.incrementalMaxThreads
+        opts?.incrementalMaxThreads,
       );
       if (incremental === "history-expired") {
         // Cursor aged out at Google — transparent full resync. With a
@@ -398,7 +395,7 @@ export async function syncEmailAccount(
           labelMap,
           account.lastSyncAt ?? undefined,
           opts?.catchUpMaxThreads,
-          opts?.fullSyncMaxThreads
+          opts?.fullSyncMaxThreads,
         );
       } else {
         outcome = incremental;
@@ -409,7 +406,7 @@ export async function syncEmailAccount(
         labelMap,
         undefined,
         undefined,
-        opts?.fullSyncMaxThreads
+        opts?.fullSyncMaxThreads,
       );
     }
 
@@ -454,10 +451,7 @@ export async function syncEmailAccount(
       // Reconnect required — gmail-client usually already flipped the
       // account; make it unconditional (belt + braces) and STOP. Never
       // relabel a deliberately disconnected mailbox.
-      await prisma.emailAccount.updateMany({
-        where: { id: accountId, syncStatus: { not: "disconnected" } },
-        data: { syncStatus: "error", syncError: err.message },
-      });
+      await recordGmailAuthError(accountId, err.message, "gmail-sync");
       return {
         accountId,
         emailAddress: account.emailAddress,
@@ -469,8 +463,7 @@ export async function syncEmailAccount(
     }
     // Transient — restore status, record the failure for
     // /settings/integrations (cleared on next success), rethrow.
-    const message =
-      err instanceof Error && err.message ? err.message : "Sync failed.";
+    const message = err instanceof Error && err.message ? err.message : "Sync failed.";
     await prisma.emailAccount.updateMany({
       where: { id: accountId, syncStatus: { not: "disconnected" } },
       data: { syncStatus: priorStatus, syncError: `Last sync failed: ${message}` },
@@ -502,7 +495,7 @@ async function runIncrementalSync(
   accountId: string,
   startHistoryId: string,
   labelMap: Map<string, string>,
-  maxThreads: number = INCREMENTAL_MAX_THREADS
+  maxThreads: number = INCREMENTAL_MAX_THREADS,
 ): Promise<SyncOutcome | "history-expired"> {
   const affected = new Set<string>();
   let newHistoryId: string | null = null;
@@ -529,7 +522,7 @@ async function runIncrementalSync(
 
   if (affected.size > maxThreads) {
     console.warn(
-      `[gmail-sync] incremental pass for account ${accountId} touches ${affected.size} threads (> ${maxThreads}); falling back to the bounded catch-up`
+      `[gmail-sync] incremental pass for account ${accountId} touches ${affected.size} threads (> ${maxThreads}); falling back to the bounded catch-up`,
     );
     return "history-expired";
   }
@@ -577,20 +570,17 @@ async function runFullSync(
   labelMap: Map<string, string>,
   catchUpSince?: Date,
   catchUpMaxThreads?: number,
-  fullSyncMaxThreads?: number
+  fullSyncMaxThreads?: number,
 ): Promise<SyncOutcome> {
   // Cursor FIRST: anything that changes while we walk the list is
   // covered by the next incremental pass (at-least-once + idempotent
   // upserts beats a gap).
   const profileRes = await gmailFetch(accountId, "/users/me/profile");
   if (!profileRes.ok) {
-    throw new GmailSyncError(
-      `Gmail profile fetch failed (${profileRes.status}).`
-    );
+    throw new GmailSyncError(`Gmail profile fetch failed (${profileRes.status}).`);
   }
   const profile = (await profileRes.json()) as { historyId?: string | number };
-  const newHistoryId =
-    profile.historyId !== undefined ? String(profile.historyId) : null;
+  const newHistoryId = profile.historyId !== undefined ? String(profile.historyId) : null;
 
   const cap = catchUpSince
     ? (catchUpMaxThreads ?? CATCHUP_MAX_THREADS)
@@ -617,7 +607,7 @@ async function runFullSync(
     const catchUpTruncated = truncated && Boolean(catchUpSince);
     if (catchUpTruncated) {
       console.warn(
-        `[gmail-sync] catch-up for account ${accountId} stopped at the ${cap}-thread safety cap; will continue next sync`
+        `[gmail-sync] catch-up for account ${accountId} stopped at the ${cap}-thread safety cap; will continue next sync`,
       );
     }
     return {
@@ -703,7 +693,7 @@ export type BackfillResult = {
  */
 export async function backfillEmailAccount(
   accountId: string,
-  opts?: { maxThreads?: number }
+  opts?: { maxThreads?: number },
 ): Promise<BackfillResult> {
   const account = await prisma.emailAccount.findUnique({
     where: { id: accountId },
@@ -762,7 +752,7 @@ export async function backfillEmailAccount(
             where: { accountId, externalId: { in: pageIds } },
             select: { externalId: true },
           })
-        ).map((t) => t.externalId)
+        ).map((t) => t.externalId),
       );
       for (const id of pageIds) {
         if (existing.has(id)) continue;
@@ -785,10 +775,7 @@ export async function backfillEmailAccount(
     if (err instanceof GmailAuthError) {
       // Never relabel a deliberately disconnected mailbox (a
       // disconnect can land mid-pass).
-      await prisma.emailAccount.updateMany({
-        where: { id: accountId, syncStatus: { not: "disconnected" } },
-        data: { syncStatus: "error", syncError: err.message },
-      });
+      await recordGmailAuthError(accountId, err.message, "gmail-sync");
       return {
         accountId,
         emailAddress: account.emailAddress,
@@ -798,8 +785,7 @@ export async function backfillEmailAccount(
         error: err.message,
       };
     }
-    const message =
-      err instanceof Error && err.message ? err.message : "Backfill failed.";
+    const message = err instanceof Error && err.message ? err.message : "Backfill failed.";
     await prisma.emailAccount.updateMany({
       where: { id: accountId },
       data: { syncError: `Last backfill failed: ${message}` },
@@ -811,7 +797,7 @@ export async function backfillEmailAccount(
 async function finishBackfill(
   account: { id: string; emailAddress: string },
   threadsSynced: number,
-  before: Date
+  before: Date,
 ): Promise<BackfillResult> {
   const threadsIndexed = await prisma.emailThread.count({
     where: { accountId: account.id },
@@ -831,9 +817,7 @@ async function finishBackfill(
 
 // ── Thread fetch + upsert ────────────────────────────────────────────────
 
-async function fetchLabelMap(
-  accountId: string
-): Promise<Map<string, string>> {
+async function fetchLabelMap(accountId: string): Promise<Map<string, string>> {
   const res = await gmailFetch(accountId, "/users/me/labels");
   if (!res.ok) {
     throw new GmailSyncError(`Gmail label list failed (${res.status}).`);
@@ -844,7 +828,7 @@ async function fetchLabelMap(
   return new Map(
     (data.labels ?? [])
       .filter((l) => l.type === "user" || isUserLabelId(l.id))
-      .map((l) => [l.id, l.name] as const)
+      .map((l) => [l.id, l.name] as const),
   );
 }
 
@@ -862,7 +846,7 @@ const ALL_FAILED_ABORT_MIN = 3;
 function assertNotAllFailed(ctx: ThreadPassContext): void {
   if (ctx.failed.length >= ALL_FAILED_ABORT_MIN && ctx.ok === 0) {
     throw new GmailSyncError(
-      `All ${ctx.failed.length} thread imports failed; aborting without advancing the sync cursor.`
+      `All ${ctx.failed.length} thread imports failed; aborting without advancing the sync cursor.`,
     );
   }
 }
@@ -870,13 +854,8 @@ function assertNotAllFailed(ctx: ThreadPassContext): void {
 /** Does the local copy of `gthread` (a `format=minimal` response)
  *  already match Gmail: same non-draft message count, same last
  *  message time, same read/star/archive flags? */
-async function isThreadUnchanged(
-  accountId: string,
-  gthread: GmailThread
-): Promise<boolean> {
-  const messages = (gthread.messages ?? []).filter(
-    (m) => !(m.labelIds ?? []).includes("DRAFT")
-  );
+async function isThreadUnchanged(accountId: string, gthread: GmailThread): Promise<boolean> {
+  const messages = (gthread.messages ?? []).filter((m) => !(m.labelIds ?? []).includes("DRAFT"));
   if (messages.length === 0) return false;
   const local = await prisma.emailThread.findUnique({
     where: { accountId_externalId: { accountId, externalId: gthread.id } },
@@ -929,7 +908,7 @@ async function syncOneThread(
   accountId: string,
   externalThreadId: string,
   labelMap: Map<string, string>,
-  ctx: ThreadPassContext
+  ctx: ThreadPassContext,
 ): Promise<boolean> {
   const threadPath = `/users/me/threads/${encodeURIComponent(externalThreadId)}`;
   if (ctx.skipUnchanged) {
@@ -940,10 +919,7 @@ async function syncOneThread(
     }
     let unchanged = false;
     try {
-      unchanged = await isThreadUnchanged(
-        accountId,
-        (await minimal.json()) as GmailThread
-      );
+      unchanged = await isThreadUnchanged(accountId, (await minimal.json()) as GmailThread);
     } catch {
       // Cheap check only — any problem falls through to the full path,
       // which has the real error handling.
@@ -971,7 +947,7 @@ async function syncOneThread(
     console.error(
       `[gmail-sync] thread import failed (account ${accountId}, thread ${externalThreadId}): ${
         err instanceof Error ? err.name : "unknown error"
-      }`
+      }`,
     );
     return false;
   }
@@ -994,10 +970,9 @@ export async function upsertThread(
   accountId: string,
   gthread: GmailThread,
   labelMap: Map<string, string>,
-  opts?: { skipUnknownBefore?: Date | null }
+  opts?: { skipUnknownBefore?: Date | null },
 ): Promise<boolean> {
-  const isDraft = (m: GmailMessage): boolean =>
-    (m.labelIds ?? []).includes("DRAFT");
+  const isDraft = (m: GmailMessage): boolean => (m.labelIds ?? []).includes("DRAFT");
   const allMessages = gthread.messages ?? [];
   const draftIds = allMessages.filter(isDraft).map((m) => m.id);
   if (draftIds.length > 0) {
@@ -1030,11 +1005,8 @@ export async function upsertThread(
   }
 
   const subject =
-    stripNul(decodeMimeWords(headerValue(first.payload, "Subject") ?? "")).trim() ||
-    "(no subject)";
-  const snippet = last.snippet
-    ? stripNul(decodeHtmlEntities(last.snippet))
-    : null;
+    stripNul(decodeMimeWords(headerValue(first.payload, "Subject") ?? "")).trim() || "(no subject)";
+  const snippet = last.snippet ? stripNul(decodeHtmlEntities(last.snippet)) : null;
   const lastMessageAt = new Date(Number(last.internalDate ?? Date.now()));
 
   if (opts?.skipUnknownBefore && lastMessageAt < opts.skipUnknownBefore) {
@@ -1106,7 +1078,7 @@ export async function upsertThread(
         },
         select: { id: true, externalId: true },
       })
-    ).map((row) => [row.externalId, row.id] as const)
+    ).map((row) => [row.externalId, row.id] as const),
   );
 
   for (const p of parsed) {
@@ -1116,8 +1088,7 @@ export async function upsertThread(
       fromName: stripNul(p.from.name || p.from.email),
       fromEmail: stripNul(p.from.email),
       toRecipients: stripNul(JSON.stringify(p.to)),
-      ccRecipients:
-        p.cc.length > 0 ? stripNul(JSON.stringify(p.cc)) : null,
+      ccRecipients: p.cc.length > 0 ? stripNul(JSON.stringify(p.cc)) : null,
       body,
       sentAt: p.sentAt,
     };
@@ -1186,18 +1157,14 @@ type AccountRow = {
 
 async function syncAccounts(
   accounts: AccountRow[],
-  budgetMs?: number
+  budgetMs?: number,
 ): Promise<AccountSyncResult[]> {
   const results: AccountSyncResult[] = [];
   const startedAt = Date.now();
   for (const account of accounts) {
     // Out of budget: leave the rest for the next tick (the list is
     // least-recently-synced first, so they go first next time).
-    if (
-      budgetMs !== undefined &&
-      results.length > 0 &&
-      Date.now() - startedAt >= budgetMs
-    ) {
+    if (budgetMs !== undefined && results.length > 0 && Date.now() - startedAt >= budgetMs) {
       break;
     }
     if (account.syncStatus === "error") {
@@ -1224,8 +1191,7 @@ async function syncAccounts(
         mode: "skipped",
         threadsSynced: 0,
         transient: true,
-        error:
-          err instanceof Error && err.message ? err.message : "Sync failed.",
+        error: err instanceof Error && err.message ? err.message : "Sync failed.",
       });
     }
   }
@@ -1242,9 +1208,7 @@ const CONNECTED_ACCOUNT_SELECT = {
 /** Sync every connected account belonging to `userId` (the "Sync
  *  now" / page-kick path). "Connected" = has a refresh token; rows
  *  in the reconnect-required error state are reported, not retried. */
-export async function syncEmailAccountsForUser(
-  userId: string
-): Promise<AccountSyncResult[]> {
+export async function syncEmailAccountsForUser(userId: string): Promise<AccountSyncResult[]> {
   const accounts = await prisma.emailAccount.findMany({
     where: { userId, user: { isActive: true }, refreshToken: { not: null } },
     select: CONNECTED_ACCOUNT_SELECT,
@@ -1255,9 +1219,9 @@ export async function syncEmailAccountsForUser(
 
 /** Sync every connected account of every user — the headless cron
  *  path. No session involved; each account syncs for its own user. */
-export async function syncAllEmailAccounts(
-  opts?: { budgetMs?: number }
-): Promise<AccountSyncResult[]> {
+export async function syncAllEmailAccounts(opts?: {
+  budgetMs?: number;
+}): Promise<AccountSyncResult[]> {
   const accounts = await prisma.emailAccount.findMany({
     // Deactivated members' mailboxes are NOT synced — deactivation
     // is the admin lever (see actions/email-accounts.ts).
@@ -1294,21 +1258,16 @@ export function resetEmailSyncKickThrottleForTests(): void {
  */
 export async function maybeKickEmailSync(
   userId: string,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Promise<{ ran: boolean }> {
   const last = lastKickAtByUser.get(userId);
-  if (
-    last !== undefined &&
-    now.getTime() - last < EMAIL_SYNC_KICK_MIN_INTERVAL_MS
-  ) {
+  if (last !== undefined && now.getTime() - last < EMAIL_SYNC_KICK_MIN_INTERVAL_MS) {
     return { ran: false };
   }
   // Stamp BEFORE running so concurrent page loads don't stampede.
   lastKickAtByUser.set(userId, now.getTime());
   try {
-    const staleCutoff = new Date(
-      now.getTime() - EMAIL_SYNC_KICK_MIN_INTERVAL_MS
-    );
+    const staleCutoff = new Date(now.getTime() - EMAIL_SYNC_KICK_MIN_INTERVAL_MS);
     const staleAccounts = await prisma.emailAccount.count({
       where: {
         userId,

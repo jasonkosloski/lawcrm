@@ -51,10 +51,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import {
-  GoogleOAuthError,
-  refreshGoogleAccessToken,
-} from "@/lib/google/oauth";
+import { GoogleOAuthError, refreshGoogleAccessToken } from "@/lib/google/oauth";
 
 export const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1";
 
@@ -63,10 +60,7 @@ export const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1";
  *  endpoints). Anything else is refused BEFORE a token is minted —
  *  a refresh-capable token must never ride to a caller-supplied
  *  host. */
-const ALLOWED_FETCH_HOSTS = new Set([
-  "gmail.googleapis.com",
-  "www.googleapis.com",
-]);
+const ALLOWED_FETCH_HOSTS = new Set(["gmail.googleapis.com", "www.googleapis.com"]);
 
 function assertGoogleApiUrl(url: string): void {
   let parsed: URL;
@@ -82,7 +76,7 @@ function assertGoogleApiUrl(url: string): void {
     !ALLOWED_FETCH_HOSTS.has(parsed.hostname)
   ) {
     throw new Error(
-      `gmailFetch: refusing to send credentials to ${parsed.hostname || "an invalid host"}.`
+      `gmailFetch: refusing to send credentials to ${parsed.hostname || "an invalid host"}.`,
     );
   }
 }
@@ -109,7 +103,7 @@ const RECONNECT_MESSAGE =
 export class GmailAuthError extends Error {
   constructor(
     message: string,
-    readonly accountId: string
+    readonly accountId: string,
   ) {
     super(message);
     this.name = "GmailAuthError";
@@ -130,7 +124,7 @@ export interface AccessTokenEnvelope {
 export function serializeAccessToken(
   token: string,
   expiresInSeconds: number,
-  now: number = Date.now()
+  now: number = Date.now(),
 ): string {
   return JSON.stringify({
     v: 1,
@@ -142,9 +136,7 @@ export function serializeAccessToken(
 /** Parse a stored (already-decrypted) accessToken column value.
  *  Bare non-envelope strings degrade to `expiresAt: 0` ("unknown,
  *  refresh before use"); null/empty → null. */
-export function parseAccessTokenEnvelope(
-  stored: string | null
-): AccessTokenEnvelope | null {
+export function parseAccessTokenEnvelope(stored: string | null): AccessTokenEnvelope | null {
   if (!stored) return null;
   try {
     const parsed = JSON.parse(stored) as {
@@ -184,22 +176,18 @@ export function parseAccessTokenEnvelope(
  */
 export async function getGmailAccessToken(
   accountId: string,
-  opts?: { forceRefresh?: boolean }
+  opts?: { forceRefresh?: boolean },
 ): Promise<string> {
   const account = await prisma.emailAccount.findUnique({
     where: { id: accountId },
     select: { id: true, accessToken: true, refreshToken: true },
   });
   if (!account) {
-    throw new GmailAuthError(
-      "Email account not found — it may have been disconnected.",
-      accountId
-    );
+    throw new GmailAuthError("Email account not found — it may have been disconnected.", accountId);
   }
 
   const envelope = parseAccessTokenEnvelope(account.accessToken);
-  const usable =
-    envelope !== null && envelope.expiresAt - EXPIRY_SKEW_MS > Date.now();
+  const usable = envelope !== null && envelope.expiresAt - EXPIRY_SKEW_MS > Date.now();
   if (usable && !opts?.forceRefresh) return envelope.token;
 
   if (!account.refreshToken) {
@@ -225,18 +213,34 @@ export async function getGmailAccessToken(
   await prisma.emailAccount.update({
     where: { id: accountId },
     data: {
-      accessToken: serializeAccessToken(
-        refreshed.access_token,
-        refreshed.expires_in
-      ),
+      accessToken: serializeAccessToken(refreshed.access_token, refreshed.expires_in),
       // Google rarely rotates refresh tokens on refresh; persist
       // when it does, keep the proven-working one otherwise.
-      ...(refreshed.refresh_token
-        ? { refreshToken: refreshed.refresh_token }
-        : {}),
+      ...(refreshed.refresh_token ? { refreshToken: refreshed.refresh_token } : {}),
     },
   });
   return refreshed.access_token;
+}
+
+/** Record a `GmailAuthError` on its account — the reconnect signal the
+ *  /settings/integrations card reads — for callers that caught one
+ *  (sync engines, writeback, calendar push). Belt + braces: gmailFetch
+ *  usually already flipped the account. Like markReconnectRequired it
+ *  never relabels a deliberately disconnected mailbox, and it never
+ *  throws: the caller is already handling a failure. */
+export async function recordGmailAuthError(
+  accountId: string,
+  message: string,
+  logTag: string,
+): Promise<void> {
+  await prisma.emailAccount
+    .updateMany({
+      where: { id: accountId, syncStatus: { not: "disconnected" } },
+      data: { syncStatus: "error", syncError: message },
+    })
+    .catch((persistErr) => {
+      console.warn(`[${logTag}] failed to record auth error`, persistErr);
+    });
 }
 
 async function markReconnectRequired(accountId: string): Promise<void> {
@@ -271,7 +275,7 @@ async function markReconnectRequired(accountId: string): Promise<void> {
 export async function gmailFetch(
   accountId: string,
   path: string,
-  init?: RequestInit
+  init?: RequestInit,
 ): Promise<Response> {
   const url = path.startsWith("https://")
     ? path

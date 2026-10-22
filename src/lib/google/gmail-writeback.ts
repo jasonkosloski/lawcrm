@@ -56,7 +56,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
+import { GmailAuthError, gmailFetch, recordGmailAuthError } from "@/lib/google/gmail-client";
 
 export type GmailThreadModification = {
   addLabelIds?: string[];
@@ -80,7 +80,7 @@ export class GmailWritebackError extends Error {
 export async function modifyGmailThread(
   accountId: string,
   gmailThreadId: string,
-  mods: GmailThreadModification
+  mods: GmailThreadModification,
 ): Promise<void> {
   const body: Record<string, string[]> = {};
   if (mods.addLabelIds && mods.addLabelIds.length > 0) {
@@ -98,12 +98,10 @@ export async function modifyGmailThread(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-    }
+    },
   );
   if (!res.ok) {
-    throw new GmailWritebackError(
-      `Gmail thread modify failed (${res.status}).`
-    );
+    throw new GmailWritebackError(`Gmail thread modify failed (${res.status}).`);
   }
 }
 
@@ -125,7 +123,7 @@ const BATCH_MODIFY_MAX_IDS = 1000;
 export async function modifyGmailMessages(
   accountId: string,
   gmailMessageIds: string[],
-  mods: GmailThreadModification
+  mods: GmailThreadModification,
 ): Promise<void> {
   const labels: Record<string, string[]> = {};
   if (mods.addLabelIds && mods.addLabelIds.length > 0) {
@@ -156,9 +154,7 @@ export async function modifyGmailMessages(
       await modifyMessagesOneByOne(accountId, chunk, labels);
       continue;
     }
-    throw new GmailWritebackError(
-      `Gmail message batchModify failed (${res.status}).`
-    );
+    throw new GmailWritebackError(`Gmail message batchModify failed (${res.status}).`);
   }
 }
 
@@ -168,22 +164,16 @@ export async function modifyGmailMessages(
 async function modifyMessagesOneByOne(
   accountId: string,
   ids: string[],
-  labels: Record<string, string[]>
+  labels: Record<string, string[]>,
 ): Promise<void> {
   for (const id of ids) {
-    const res = await gmailFetch(
-      accountId,
-      `/users/me/messages/${encodeURIComponent(id)}/modify`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(labels),
-      }
-    );
+    const res = await gmailFetch(accountId, `/users/me/messages/${encodeURIComponent(id)}/modify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(labels),
+    });
     if (res.ok || res.status === 404) continue;
-    throw new GmailWritebackError(
-      `Gmail message modify failed (${res.status}).`
-    );
+    throw new GmailWritebackError(`Gmail message modify failed (${res.status}).`);
   }
 }
 
@@ -195,10 +185,10 @@ async function modifyMessagesOneByOne(
 export async function writebackGmailThread(
   accountId: string,
   gmailThreadId: string,
-  mods: GmailThreadModification
+  mods: GmailThreadModification,
 ): Promise<void> {
   await safeWriteback(accountId, "thread modify", () =>
-    modifyGmailThread(accountId, gmailThreadId, mods)
+    modifyGmailThread(accountId, gmailThreadId, mods),
   );
 }
 
@@ -207,17 +197,17 @@ export async function writebackGmailThread(
 export async function writebackGmailMessages(
   accountId: string,
   gmailMessageIds: string[],
-  mods: GmailThreadModification
+  mods: GmailThreadModification,
 ): Promise<void> {
   await safeWriteback(accountId, "message batchModify", () =>
-    modifyGmailMessages(accountId, gmailMessageIds, mods)
+    modifyGmailMessages(accountId, gmailMessageIds, mods),
   );
 }
 
 async function safeWriteback(
   accountId: string,
   what: string,
-  run: () => Promise<void>
+  run: () => Promise<void>,
 ): Promise<void> {
   try {
     const account = await prisma.emailAccount.findUnique({
@@ -235,17 +225,7 @@ async function safeWriteback(
       // Reconnect required — surface it where the sync engine does
       // (the /settings/integrations card reads syncError). Belt +
       // braces: gmail-client usually already flipped the account.
-      await prisma.emailAccount
-        .updateMany({
-          where: { id: accountId },
-          data: { syncStatus: "error", syncError: err.message },
-        })
-        .catch((persistErr) => {
-          console.warn(
-            "[gmail-writeback] failed to record auth error",
-            persistErr
-          );
-        });
+      await recordGmailAuthError(accountId, err.message, "gmail-writeback");
       return;
     }
     // Transient (network / 5xx / rate limit / DB hiccup) — the local

@@ -29,6 +29,7 @@ import {
   getGmailAccessToken,
   gmailFetch,
   parseAccessTokenEnvelope,
+  recordGmailAuthError,
   serializeAccessToken,
 } from "./gmail-client";
 
@@ -122,9 +123,9 @@ describe("getGmailAccessToken", () => {
             expires_in: 3599,
             refresh_token: "1//rotated-rt",
           }),
-          { status: 200 }
+          { status: 200 },
         );
-      })
+      }),
     );
     const accountId = await seedAccount({
       accessToken: expired(),
@@ -137,9 +138,7 @@ describe("getGmailAccessToken", () => {
     const row = await prisma.emailAccount.findUniqueOrThrow({
       where: { id: accountId },
     });
-    expect(parseAccessTokenEnvelope(row.accessToken)?.token).toBe(
-      "ya29.rotated"
-    );
+    expect(parseAccessTokenEnvelope(row.accessToken)?.token).toBe("ya29.rotated");
     expect(row.refreshToken).toBe("1//rotated-rt");
     expect(row.syncStatus).toBe("connected"); // untouched on success
 
@@ -155,12 +154,12 @@ describe("getGmailAccessToken", () => {
   it("keeps the proven refresh token when Google's refresh response omits one", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({ access_token: "ya29.r2", expires_in: 3599 }),
-          { status: 200 }
-        )
-      )
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ access_token: "ya29.r2", expires_in: 3599 }), {
+            status: 200,
+          }),
+      ),
     );
     const accountId = await seedAccount({
       accessToken: expired(),
@@ -176,20 +175,19 @@ describe("getGmailAccessToken", () => {
   it("invalid_grant (revoked): marks the account error + syncError and throws GmailAuthError", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ error: "invalid_grant" }), {
-          status: 400,
-        })
-      )
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: "invalid_grant" }), {
+            status: 400,
+          }),
+      ),
     );
     const accountId = await seedAccount({
       accessToken: expired(),
       refreshToken: "1//revoked",
     });
 
-    await expect(getGmailAccessToken(accountId)).rejects.toBeInstanceOf(
-      GmailAuthError
-    );
+    await expect(getGmailAccessToken(accountId)).rejects.toBeInstanceOf(GmailAuthError);
     const row = await prisma.emailAccount.findUniqueOrThrow({
       where: { id: accountId },
     });
@@ -200,7 +198,7 @@ describe("getGmailAccessToken", () => {
   it("transient refresh failure (5xx): throws WITHOUT flipping account status", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response("upstream sad", { status: 503 }))
+      vi.fn(async () => new Response("upstream sad", { status: 503 })),
     );
     const accountId = await seedAccount({
       accessToken: expired(),
@@ -220,9 +218,7 @@ describe("getGmailAccessToken", () => {
       refreshToken: null,
       syncStatus: "disconnected",
     });
-    await expect(getGmailAccessToken(accountId)).rejects.toBeInstanceOf(
-      GmailAuthError
-    );
+    await expect(getGmailAccessToken(accountId)).rejects.toBeInstanceOf(GmailAuthError);
     const row = await prisma.emailAccount.findUniqueOrThrow({
       where: { id: accountId },
     });
@@ -238,9 +234,7 @@ describe("getGmailAccessToken", () => {
       refreshToken: null,
       syncStatus: "connected",
     });
-    await expect(getGmailAccessToken(accountId)).rejects.toBeInstanceOf(
-      GmailAuthError
-    );
+    await expect(getGmailAccessToken(accountId)).rejects.toBeInstanceOf(GmailAuthError);
     const row = await prisma.emailAccount.findUniqueOrThrow({
       where: { id: accountId },
     });
@@ -248,21 +242,15 @@ describe("getGmailAccessToken", () => {
   });
 
   it("unknown account id throws GmailAuthError", async () => {
-    await expect(getGmailAccessToken("nope")).rejects.toBeInstanceOf(
-      GmailAuthError
-    );
+    await expect(getGmailAccessToken("nope")).rejects.toBeInstanceOf(GmailAuthError);
   });
 });
 
 describe("gmailFetch", () => {
   it("hits gmail/v1 with the bearer token and passes init through", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe(
-        `${GMAIL_API_BASE}/users/me/messages?maxResults=5`
-      );
-      expect(new Headers(init?.headers).get("authorization")).toBe(
-        "Bearer ya29.fresh"
-      );
+      expect(String(input)).toBe(`${GMAIL_API_BASE}/users/me/messages?maxResults=5`);
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer ya29.fresh");
       expect(init?.method).toBe("POST");
       return new Response("{}", { status: 200 });
     });
@@ -271,11 +259,7 @@ describe("gmailFetch", () => {
       accessToken: fresh(),
       refreshToken: "1//rt",
     });
-    const res = await gmailFetch(
-      accountId,
-      "users/me/messages?maxResults=5",
-      { method: "POST" }
-    );
+    const res = await gmailFetch(accountId, "users/me/messages?maxResults=5", { method: "POST" });
     expect(res.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -310,7 +294,7 @@ describe("gmailFetch", () => {
         if (url === GOOGLE_TOKEN_ENDPOINT) {
           return new Response(
             JSON.stringify({ access_token: "ya29.after-401", expires_in: 3599 }),
-            { status: 200 }
+            { status: 200 },
           );
         }
         const token = new Headers(init?.headers).get("authorization")!;
@@ -320,7 +304,7 @@ describe("gmailFetch", () => {
         return token === "Bearer ya29.after-401"
           ? new Response("{}", { status: 200 })
           : new Response("{}", { status: 401 });
-      })
+      }),
     );
     const accountId = await seedAccount({
       accessToken: fresh(), // bookkept fresh, revoked server-side
@@ -341,14 +325,8 @@ describe("gmailFetch", () => {
     });
 
     // Calendar + upload ride www.googleapis.com — allowed.
-    await gmailFetch(
-      accountId,
-      "https://www.googleapis.com/calendar/v3/calendars/primary/events"
-    );
-    await gmailFetch(
-      accountId,
-      "https://gmail.googleapis.com/gmail/v1/users/me/profile"
-    );
+    await gmailFetch(accountId, "https://www.googleapis.com/calendar/v3/calendars/primary/events");
+    await gmailFetch(accountId, "https://gmail.googleapis.com/gmail/v1/users/me/profile");
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
     // Anything else is refused before a token is even read.
@@ -373,5 +351,27 @@ describe("gmailFetch", () => {
     const res = await gmailFetch(accountId, "/users/me/messages");
     expect(res.status).toBe(429);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("recordGmailAuthError", () => {
+  it("flags a connected account for reconnect", async () => {
+    const accountId = await seedAccount({ syncStatus: "connected" });
+    await recordGmailAuthError(accountId, "Reconnect Gmail", "test");
+    const row = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: accountId },
+    });
+    expect(row.syncStatus).toBe("error");
+    expect(row.syncError).toBe("Reconnect Gmail");
+  });
+
+  it("leaves a deliberately disconnected account alone", async () => {
+    const accountId = await seedAccount({ syncStatus: "disconnected" });
+    await recordGmailAuthError(accountId, "Reconnect Gmail", "test");
+    const row = await prisma.emailAccount.findUniqueOrThrow({
+      where: { id: accountId },
+    });
+    expect(row.syncStatus).toBe("disconnected");
+    expect(row.syncError).toBeNull();
   });
 });

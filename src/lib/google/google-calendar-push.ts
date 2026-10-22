@@ -71,7 +71,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
+import { GmailAuthError, gmailFetch, recordGmailAuthError } from "@/lib/google/gmail-client";
 import {
   CALENDAR_API_BASE,
   eventToGoogleResource,
@@ -90,31 +90,12 @@ export class CalendarPushError extends Error {
 
 function eventUrl(googleCalendarId: string, googleEventId: string): string {
   return `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(
-    googleCalendarId
+    googleCalendarId,
   )}/events/${encodeURIComponent(googleEventId)}`;
 }
 
 function insertUrl(googleCalendarId: string): string {
-  return `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(
-    googleCalendarId
-  )}/events`;
-}
-
-/** Record the reconnect-required signal on an account — same shape
- *  the sync engines + gmail-writeback persist. Belt + braces:
- *  gmail-client usually already flipped the account. */
-async function markAuthError(err: GmailAuthError): Promise<void> {
-  await prisma.emailAccount
-    .updateMany({
-      where: { id: err.accountId },
-      data: { syncStatus: "error", syncError: err.message },
-    })
-    .catch((persistErr) => {
-      console.warn(
-        "[gcal-push] failed to record auth error",
-        persistErr
-      );
-    });
+  return `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(googleCalendarId)}/events`;
 }
 
 /**
@@ -178,8 +159,7 @@ export async function pushEventToGoogle(eventId: string): Promise<void> {
       },
     });
     const mappingByAccount = new Map(mappings.map((m) => [m.accountId, m]));
-    const target =
-      scoped.find((a) => mappingByAccount.has(a.id)) ?? scoped[0];
+    const target = scoped.find((a) => mappingByAccount.has(a.id)) ?? scoped[0];
     const mapping = mappingByAccount.get(target.id);
 
     const resource = eventToGoogleResource(event);
@@ -190,18 +170,17 @@ export async function pushEventToGoogle(eventId: string): Promise<void> {
 
     let res: Response;
     if (mapping) {
-      res = await gmailFetch(
-        target.id,
-        eventUrl(mapping.googleCalendarId, mapping.googleEventId),
-        { ...init, method: "PATCH" }
-      );
+      res = await gmailFetch(target.id, eventUrl(mapping.googleCalendarId, mapping.googleEventId), {
+        ...init,
+        method: "PATCH",
+      });
       if (res.status === 404 || res.status === 410) {
         // Copy deleted at Google. Deliberately NOT re-inserted —
         // the pull engine owns deleted-at-Google reconciliation
         // and re-creating here would resurrect an event the user
         // just removed there.
         console.warn(
-          `[gcal-push] Google copy of event ${eventId} is gone (${res.status}); leaving for the pull engine to reconcile.`
+          `[gcal-push] Google copy of event ${eventId} is gone (${res.status}); leaving for the pull engine to reconcile.`,
         );
         return;
       }
@@ -227,7 +206,7 @@ export async function pushEventToGoogle(eventId: string): Promise<void> {
     }
     if (!res.ok) {
       throw new CalendarPushError(
-        `Calendar ${mapping ? "patch" : "insert"} failed (${res.status}).`
+        `Calendar ${mapping ? "patch" : "insert"} failed (${res.status}).`,
       );
     }
 
@@ -241,9 +220,7 @@ export async function pushEventToGoogle(eventId: string): Promise<void> {
     // to "unknown".
     const updatedRaw = g.updated ? new Date(g.updated) : null;
     const googleUpdatedAt =
-      updatedRaw && !Number.isNaN(updatedRaw.getTime())
-        ? updatedRaw
-        : new Date();
+      updatedRaw && !Number.isNaN(updatedRaw.getTime()) ? updatedRaw : new Date();
 
     await prisma.calendarEventSync.upsert({
       where: { eventId_accountId: { eventId, accountId: target.id } },
@@ -262,7 +239,7 @@ export async function pushEventToGoogle(eventId: string): Promise<void> {
     });
   } catch (err) {
     if (err instanceof GmailAuthError) {
-      await markAuthError(err);
+      await recordGmailAuthError(err.accountId, err.message, "gcal-push");
       return;
     }
     // Transient (network / 5xx / rate limit / DB hiccup) — the
@@ -320,26 +297,22 @@ export async function deleteEventFromGoogle(eventId: string): Promise<void> {
         ) {
           continue;
         }
-        const res = await gmailFetch(
-          m.accountId,
-          eventUrl(m.googleCalendarId, m.googleEventId),
-          { method: "DELETE" }
-        );
+        const res = await gmailFetch(m.accountId, eventUrl(m.googleCalendarId, m.googleEventId), {
+          method: "DELETE",
+        });
         // 404/410 = already gone at Google. That's the outcome we
         // wanted; tolerate.
         if (!res.ok && res.status !== 404 && res.status !== 410) {
-          throw new CalendarPushError(
-            `Calendar delete failed (${res.status}).`
-          );
+          throw new CalendarPushError(`Calendar delete failed (${res.status}).`);
         }
       } catch (err) {
         if (err instanceof GmailAuthError) {
-          await markAuthError(err);
+          await recordGmailAuthError(err.accountId, err.message, "gcal-push");
           continue;
         }
         console.warn(
           `[gcal-push] Google delete failed for event ${eventId} on account ${m.accountId}; the Google copy is orphaned until removed manually.`,
-          err
+          err,
         );
       }
     }

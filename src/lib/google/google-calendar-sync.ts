@@ -96,7 +96,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
+import { GmailAuthError, gmailFetch, recordGmailAuthError } from "@/lib/google/gmail-client";
 import { isTransientInfraError } from "@/lib/google/transient-error";
 import {
   CALENDAR_API_BASE,
@@ -123,7 +123,6 @@ const PRIMARY_CALENDAR_ID = "primary";
  *  clears notes carrying THIS prefix (the column is shared with
  *  email sync, whose notes we must not eat). */
 export const CALENDAR_SYNC_ERROR_PREFIX = "Last calendar sync failed: ";
-
 
 /** A pass where at least this many items failed and none succeeded is
  *  treated as systemic and aborted (see runPullPass). */
@@ -166,10 +165,7 @@ export type CalendarPullResult = {
 };
 
 type PullCounters = Required<
-  Pick<
-    CalendarPullResult,
-    "imported" | "updated" | "deletedEvents" | "unlinked" | "failed"
-  >
+  Pick<CalendarPullResult, "imported" | "updated" | "deletedEvents" | "unlinked" | "failed">
 >;
 
 type EventsListResponse = {
@@ -187,9 +183,7 @@ type AccountForPull = {
 
 // ── Single-account pull ──────────────────────────────────────────────────
 
-export async function pullCalendarForAccount(
-  accountId: string
-): Promise<CalendarPullResult> {
+export async function pullCalendarForAccount(accountId: string): Promise<CalendarPullResult> {
   const account = await prisma.emailAccount.findUnique({
     where: { id: accountId },
     select: {
@@ -218,9 +212,7 @@ export async function pullCalendarForAccount(
     return emptyResult(account, "skipped", { ok: true });
   }
 
-  let mode: "incremental" | "full" = account.calendarSyncToken
-    ? "incremental"
-    : "full";
+  let mode: "incremental" | "full" = account.calendarSyncToken ? "incremental" : "full";
   try {
     let outcome: PullOutcome | "sync-token-expired";
     if (account.calendarSyncToken) {
@@ -251,10 +243,7 @@ export async function pullCalendarForAccount(
       await prisma.emailAccount.updateMany({
         where: {
           id: accountId,
-          OR: [
-            { syncError: null },
-            { syncError: { startsWith: CALENDAR_SYNC_ERROR_PREFIX } },
-          ],
+          OR: [{ syncError: null }, { syncError: { startsWith: CALENDAR_SYNC_ERROR_PREFIX } }],
         },
         data: {
           syncError: `${CALENDAR_SYNC_ERROR_PREFIX}${outcome.counters.failed} event(s) could not be imported and were skipped.`,
@@ -281,19 +270,13 @@ export async function pullCalendarForAccount(
     };
   } catch (err) {
     if (err instanceof GmailAuthError) {
-      // Reconnect required — gmail-client usually already flipped
-      // the account; make it unconditional and STOP.
-      await prisma.emailAccount.updateMany({
-        where: { id: accountId },
-        data: { syncStatus: "error", syncError: err.message },
-      });
+      // Reconnect required — record it (never on a deliberately
+      // disconnected mailbox) and STOP.
+      await recordGmailAuthError(accountId, err.message, "gcal-sync");
       return emptyResult(account, mode, { ok: false, error: err.message });
     }
     // Transient — note it (calendar-prefixed), rethrow for wrappers.
-    const message =
-      err instanceof Error && err.message
-        ? err.message
-        : "Calendar sync failed.";
+    const message = err instanceof Error && err.message ? err.message : "Calendar sync failed.";
     await prisma.emailAccount.updateMany({
       where: { id: accountId },
       data: { syncError: `${CALENDAR_SYNC_ERROR_PREFIX}${message}` },
@@ -305,7 +288,7 @@ export async function pullCalendarForAccount(
 function emptyResult(
   account: { id: string; emailAddress: string },
   mode: CalendarPullResult["mode"],
-  rest: { ok: boolean; error?: string; transient?: true }
+  rest: { ok: boolean; error?: string; transient?: true },
 ): CalendarPullResult {
   return {
     accountId: account.id,
@@ -332,7 +315,7 @@ type PullOutcome = {
  *  "sync-token-expired" on 410 (incremental only). */
 async function runPullPass(
   account: AccountForPull,
-  syncToken: string | null
+  syncToken: string | null,
 ): Promise<PullOutcome | "sync-token-expired"> {
   const counters: PullCounters = {
     imported: 0,
@@ -359,14 +342,8 @@ async function runPullPass(
       params.set("syncToken", syncToken);
     } else {
       const now = Date.now();
-      params.set(
-        "timeMin",
-        new Date(now - PULL_WINDOW_PAST_DAYS * DAY_MS).toISOString()
-      );
-      params.set(
-        "timeMax",
-        new Date(now + PULL_WINDOW_FUTURE_DAYS * DAY_MS).toISOString()
-      );
+      params.set("timeMin", new Date(now - PULL_WINDOW_PAST_DAYS * DAY_MS).toISOString());
+      params.set("timeMax", new Date(now + PULL_WINDOW_FUTURE_DAYS * DAY_MS).toISOString());
     }
     if (pageToken) params.set("pageToken", pageToken);
 
@@ -375,13 +352,11 @@ async function runPullPass(
     // 401 retry, GmailAuthError on revocation).
     const res = await gmailFetch(
       account.id,
-      `${CALENDAR_API_BASE}/calendars/${PRIMARY_CALENDAR_ID}/events?${params}`
+      `${CALENDAR_API_BASE}/calendars/${PRIMARY_CALENDAR_ID}/events?${params}`,
     );
     if (res.status === 410 && syncToken) return "sync-token-expired";
     if (!res.ok) {
-      throw new CalendarSyncError(
-        `Google Calendar events list failed (${res.status}).`
-      );
+      throw new CalendarSyncError(`Google Calendar events list failed (${res.status}).`);
     }
     const data = (await res.json()) as EventsListResponse;
     for (const item of data.items ?? []) {
@@ -405,7 +380,7 @@ async function runPullPass(
         console.error(
           `[gcal-sync] event import failed (account ${account.id}, event ${item.id ?? "?"}): ${
             err instanceof Error ? err.name : "unknown error"
-          }`
+          }`,
         );
       }
     }
@@ -417,7 +392,7 @@ async function runPullPass(
   // sync token is not saved past them (a lone bad item still skips).
   if (counters.failed >= ALL_FAILED_ABORT_MIN && okItems === 0) {
     throw new CalendarSyncError(
-      `All ${counters.failed} calendar items failed to import; sync token not advanced.`
+      `All ${counters.failed} calendar items failed to import; sync token not advanced.`,
     );
   }
 
@@ -429,7 +404,7 @@ async function runPullPass(
 async function applyGoogleEvent(
   account: AccountForPull,
   item: GoogleEventResource,
-  counters: PullCounters
+  counters: PullCounters,
 ): Promise<void> {
   if (!item.id) return;
 
@@ -466,11 +441,7 @@ async function applyGoogleEvent(
       googleUpdatedAt !== null &&
       googleUpdatedAt.getTime() <= mapping.googleUpdatedAt.getTime();
     if (!isEcho) {
-      const written = await lwwUpdateEvent(
-        mapping.eventId,
-        fields,
-        googleUpdatedAt
-      );
+      const written = await lwwUpdateEvent(mapping.eventId, fields, googleUpdatedAt);
       if (written) counters.updated++;
     }
     await prisma.calendarEventSync.update({
@@ -532,11 +503,7 @@ async function applyGoogleEvent(
         googleUpdatedAt !== null &&
         googleUpdatedAt.getTime() <= ownMapping.googleUpdatedAt.getTime();
       if (!isEcho) {
-        const written = await lwwUpdateEvent(
-          event.id,
-          fields,
-          googleUpdatedAt
-        );
+        const written = await lwwUpdateEvent(event.id, fields, googleUpdatedAt);
         if (written) counters.updated++;
       }
       return;
@@ -590,7 +557,7 @@ async function applyGoogleEvent(
 async function lwwUpdateEvent(
   eventId: string,
   fields: NonNullable<ReturnType<typeof googleEventToCrmFields>>,
-  googleUpdatedAt: Date | null
+  googleUpdatedAt: Date | null,
 ): Promise<boolean> {
   if (!googleUpdatedAt) return false;
   const event = await prisma.calendarEvent.findUnique({
@@ -621,7 +588,7 @@ async function lwwUpdateEvent(
 async function applyCancellation(
   account: AccountForPull,
   googleEventId: string,
-  counters: PullCounters
+  counters: PullCounters,
 ): Promise<void> {
   const mapping = await prisma.calendarEventSync.findUnique({
     where: {
@@ -651,9 +618,7 @@ type AccountRow = {
   syncError: string | null;
 };
 
-async function pullAccounts(
-  accounts: AccountRow[]
-): Promise<CalendarPullResult[]> {
+async function pullAccounts(accounts: AccountRow[]): Promise<CalendarPullResult[]> {
   const results: CalendarPullResult[] = [];
   for (const account of accounts) {
     if (account.syncStatus === "error") {
@@ -662,7 +627,7 @@ async function pullAccounts(
         emptyResult(account, "skipped", {
           ok: false,
           error: account.syncError ?? "Reconnect required.",
-        })
+        }),
       );
       continue;
     }
@@ -675,11 +640,8 @@ async function pullAccounts(
         emptyResult(account, "skipped", {
           ok: false,
           transient: true,
-          error:
-            err instanceof Error && err.message
-              ? err.message
-              : "Calendar sync failed.",
-        })
+          error: err instanceof Error && err.message ? err.message : "Calendar sync failed.",
+        }),
       );
     }
   }
@@ -696,9 +658,7 @@ const CONNECTED_ACCOUNT_SELECT = {
 /** Pull for every connected account of `userId` — rides the "Sync
  *  now" server action. Accounts without the calendar scope come
  *  back mode:"skipped" from `pullCalendarForAccount`. */
-export async function pullCalendarForUserAccounts(
-  userId: string
-): Promise<CalendarPullResult[]> {
+export async function pullCalendarForUserAccounts(userId: string): Promise<CalendarPullResult[]> {
   const accounts = await prisma.emailAccount.findMany({
     where: { userId, user: { isActive: true }, refreshToken: { not: null } },
     select: CONNECTED_ACCOUNT_SELECT,
@@ -709,9 +669,7 @@ export async function pullCalendarForUserAccounts(
 
 /** Pull for every connected account of every user — rides the
  *  /api/email-sync cron sweep. */
-export async function pullCalendarForAllAccounts(): Promise<
-  CalendarPullResult[]
-> {
+export async function pullCalendarForAllAccounts(): Promise<CalendarPullResult[]> {
   const accounts = await prisma.emailAccount.findMany({
     // Deactivated members' calendars are not pulled.
     where: { user: { isActive: true }, refreshToken: { not: null } },
