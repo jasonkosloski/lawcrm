@@ -124,6 +124,16 @@ describe("createExpense", () => {
     }
   );
 
+  test("an amount over DECIMAL(14,2) is a field error, not a Prisma throw", async () => {
+    const res = await create({ amount: "1000000000000.00" });
+    expect(res.status).toBe("error");
+    expect(res.errors?.amount?.[0]).toMatch(/too large|exceeds|at most/i);
+    expect(await prisma.expense.count({ where: { matterId } })).toBe(0);
+    // The ceiling itself is storable.
+    const ok = await create({ amount: "999999999999.99" });
+    expect(ok.status).toBe("ok");
+  });
+
   test("a blank date is a field error", async () => {
     const res = await create({ date: "" });
     expect(res.errors?.date).toBeTruthy();
@@ -263,6 +273,13 @@ describe("updateExpense", () => {
     const { expenseId } = await seedExpense({ matterId });
     const bad = await updateExpense(expenseId, expenseInitialState, form({ date: "2026-02-31" }));
     expect(bad.errors?.date).toBeTruthy();
+    const huge = await updateExpense(
+      expenseId,
+      expenseInitialState,
+      form({ amount: "1000000000000" })
+    );
+    expect(huge.status).toBe("error");
+    expect(huge.errors?.amount).toBeTruthy();
   });
 });
 

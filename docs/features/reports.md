@@ -11,4 +11,4 @@ Related: [PERMISSIONS.md](../PERMISSIONS.md)
   - **Pipeline** — intake funnel by lead stage; open matters by practice area x stage (includes retired practice areas that still hold open matters); leads converted this quarter, dated by the converted matter's `createdAt`.
   - **Utilization** — per-active-user billable vs total hours this month with a capacity tick (`Firm.dailyHoursGoal` x business days); firm MTD vs `monthlyBillableGoal`. Both goals are read fresh off the Firm row.
   - **AR aging** — client invoices sent/partial in 0-30 / 31-60 / 61-90 / 90+ buckets, Decimal-safe sums, top 5 oldest with matter links.
-  - **Realization** — trailing 3 months worked -> billed -> collected, cash basis; "billed" = client invoices sent/partial/paid.
+  - **Realization** — trailing 3 months worked -> billed -> collected, cash basis; "billed" = client invoices sent/partial/paid. Billed dollars include expenses on those invoices (payments cover the whole invoice), so collected/billed compares like with like; billed hours stay time-only. AR aging buckets by the issue instant in the viewer's zone.

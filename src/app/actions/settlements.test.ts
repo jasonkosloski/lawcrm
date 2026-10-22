@@ -109,6 +109,22 @@ const buildUpsertForm = (opts: {
   return fd;
 };
 
+describe("upsertSettlement — amount ceiling", () => {
+  test.each([
+    ["gross", { gross: "1000000000000" }, "grossAmount"],
+    ["costs", { gross: "100", costs: "1000000000000" }, "advancedCosts"],
+  ])("an over-DECIMAL(14,2) %s is a field error, not a Prisma throw", async (_n, opts, field) => {
+    const res = await upsertSettlement(
+      matterId,
+      settlementInitialState,
+      buildUpsertForm(opts)
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.[field]).toBeTruthy();
+    expect(await prisma.settlement.count({ where: { matterId } })).toBe(0);
+  });
+});
+
 describe("upsertSettlement — seeding", () => {
   test("create seeds 4 approval steps with the canonical labels", async () => {
     const fd = buildUpsertForm({ gross: "100000" });

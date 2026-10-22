@@ -30,6 +30,7 @@
 
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { roundMoney } from "@/lib/money";
 import { getCurrentUserId } from "@/lib/current-user";
 import { filterAccessibleMatterIds, matterAccessWhere } from "@/lib/matter-access";
 import {
@@ -353,10 +354,11 @@ export type ArAgingReport = {
  * stay Prisma Decimal until the final toNumber so partial payments
  * never accumulate float drift.
  *
- * issueDate is a date-only value (UTC midnight), so age is whole
- * calendar days from its key to the VIEWER's today (ADR-012) — never
- * an instant difference, which would read every invoice a day older
- * to a Denver user in the evening and shift the 30/60/90 bucket edges.
+ * issueDate is an INSTANT (generate stamps new Date(); send stamps
+ * sentAt), so age is whole calendar days from its key IN THE VIEWER'S
+ * ZONE to the viewer's today (ADR-012) — never a raw instant
+ * difference, which would read every invoice a day older to a Denver
+ * user in the evening and shift the 30/60/90 bucket edges.
  */
 export async function getArAgingReport(tz: string): Promise<ArAgingReport> {
   const invoices = await prisma.invoice.findMany({
@@ -395,7 +397,9 @@ export async function getArAgingReport(tz: string): Promise<ArAgingReport> {
     const outstanding = inv.totalAmount.minus(inv.paidAmount);
     if (outstanding.lte(0)) continue; // fully paid but status not flipped — not AR
 
-    const age = Math.max(0, daysBetweenKeys(dateOnlyKey(inv.issueDate), today));
+    // issueDate is an INSTANT (stamped new Date() at generate / sentAt
+    // at send), so its calendar day is the viewer's, not UTC's.
+    const age = Math.max(0, daysBetweenKeys(dateKeyInTz(inv.issueDate, tz), today));
     const idx = AR_BUCKETS.findIndex((b) => age >= b.min && age <= b.max);
     const bucket = bucketSums[idx >= 0 ? idx : AR_BUCKETS.length - 1];
     bucket.total = bucket.total.plus(outstanding);
@@ -441,7 +445,10 @@ export type RealizationMonth = {
   workedHours: number;
   /** Billable hours already rolled into an invoice. */
   billedHours: number;
-  /** Dollar value of those billed entries (sum of TimeEntry.amount). */
+  /** Dollars billed that month: TimeEntry.amount plus Expense.amount for
+   *  rows on the same sent/partial/paid client invoices (bucketed by the
+   *  expense date). Includes expenses because collectedAmount sums every
+   *  InvoicePayment, which pays expenses too. */
   billedAmount: number;
   /** Payments received during the month (all invoices). */
   collectedAmount: number;
@@ -473,7 +480,7 @@ export async function getRealizationReport(
       const start = startOfMonthInTz(tz, back);
       const end = startOfMonthInTz(tz, back - 1); // exclusive
 
-      const [workedAgg, billedAgg, collectedAgg] = await Promise.all([
+      const [workedAgg, billedAgg, billedExpenseAgg, collectedAgg] = await Promise.all([
         prisma.timeEntry.aggregate({
           where: { billable: true, date: { gte: start, lt: end } },
           _sum: { hours: true },
@@ -490,6 +497,17 @@ export async function getRealizationReport(
           },
           _sum: { hours: true, amount: true },
         }),
+        prisma.expense.aggregate({
+          where: {
+            invoiceId: { not: null },
+            invoice: {
+              kind: "client",
+              status: { in: [...BILLED_STATUSES] },
+            },
+            date: { gte: start, lt: end },
+          },
+          _sum: { amount: true },
+        }),
         prisma.invoicePayment.aggregate({
           where: { date: { gte: start, lt: end } },
           _sum: { amount: true },
@@ -498,7 +516,11 @@ export async function getRealizationReport(
 
       const workedHours = workedAgg._sum.hours ?? 0;
       const billedHours = billedAgg._sum.hours ?? 0;
-      const billedAmount = billedAgg._sum.amount?.toNumber() ?? 0;
+      const billedAmount = roundMoney(
+        (billedAgg._sum.amount ?? new Prisma.Decimal(0)).plus(
+          billedExpenseAgg._sum.amount ?? new Prisma.Decimal(0)
+        )
+      ).toNumber();
       const collectedAmount = collectedAgg._sum.amount?.toNumber() ?? 0;
 
       return {

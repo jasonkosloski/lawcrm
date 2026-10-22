@@ -48,7 +48,6 @@ import {
 } from "@/lib/queries/reports";
 import {
   addDaysToKey,
-  parseDateOnly,
   todayKey,
 } from "@/lib/format-date";
 import {
@@ -314,8 +313,12 @@ describe("getUtilizationReport", () => {
 describe("getArAgingReport", () => {
   // Date-only (UTC midnight) issue dates, counted back from the
   // VIEWER's (Denver) calendar today — June 15 at the frozen NOW.
+  // issueDate is an instant; noon UTC keeps the same calendar day in
+  // both Denver and Tokyo.
   const issuedDaysAgo = (days: number): Date =>
-    parseDateOnly(addDaysToKey(todayKey(DENVER, NOW), -days)) as Date;
+    new Date(
+      `${addDaysToKey(todayKey(DENVER, NOW), -days)}T12:00:00Z`
+    );
 
   test("buckets by age with Decimal-safe outstanding; filters status + kind", async () => {
     await seedInvoice({ matterId, issueDate: issuedDaysAgo(10), total: 500 });
@@ -382,7 +385,7 @@ describe("getArAgingReport", () => {
     // an instant diff (31.08 days) would wrongly push it to 31-60.
     await seedInvoice({
       matterId,
-      issueDate: parseDateOnly("2026-05-16") as Date,
+      issueDate: new Date("2026-05-16T12:00:00Z"),
       total: 100,
     });
 
@@ -394,6 +397,19 @@ describe("getArAgingReport", () => {
     const tokyo = await getArAgingReport(TOKYO);
     expect(tokyo.buckets[1]).toMatchObject({ key: "31-60", total: 100 });
     expect(tokyo.worstOffenders[0].daysOutstanding).toBe(31);
+  });
+
+  test("issueDate is an instant: aged by the viewer-zone day, not the UTC day", async () => {
+    // 2026-05-16T03:00Z is May 15 9 PM in Denver (31 days before Jun 15)
+    // but May 16 in UTC (30 days) — the UTC key would misbucket it.
+    await seedInvoice({
+      matterId,
+      issueDate: new Date("2026-05-16T03:00:00Z"),
+      total: 100,
+    });
+    const denver = await getArAgingReport(DENVER);
+    expect(denver.worstOffenders[0].daysOutstanding).toBe(31);
+    expect(denver.buckets[1]).toMatchObject({ key: "31-60", total: 100 });
   });
 
   test("worst offenders: five oldest, oldest first, with matter link data", async () => {
@@ -589,6 +605,39 @@ describe("getRealizationReport — what counts as billed", () => {
     expect(june.billedHours).toBe(3);
     expect(june.billedAmount).toBe(7000);
     expect(june.billedPctOfWorked).toBe(50);
+  });
+
+  test("billed dollars include expenses on billed invoices, matching what payments cover", async () => {
+    const day = new Date(Date.UTC(2026, 5, 3));
+    const { invoiceId } = await seedInvoice({
+      matterId,
+      issueDate: day,
+      total: 2000,
+      status: "paid",
+    });
+    await seedEntryOn({ date: day, hours: 1, invoiceId, amount: 1000 });
+    await prisma.expense.create({
+      data: {
+        matterId,
+        date: day,
+        description: "Filing fee",
+        amount: new Prisma.Decimal(1000),
+        invoiceId,
+      },
+    });
+    await prisma.invoicePayment.create({
+      data: {
+        invoiceId,
+        source: "check",
+        amount: new Prisma.Decimal(2000),
+        date: day,
+      },
+    });
+
+    const june = (await getRealizationReport(DENVER))[2];
+    expect(june.billedAmount).toBe(2000);
+    expect(june.collectedAmount).toBe(2000);
+    expect(june.collectedPctOfBilled).toBe(100);
   });
 
   test("an entry dated the 1st of a month lands in that month's block", async () => {

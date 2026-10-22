@@ -37,6 +37,7 @@ import {
 // Expense.date is a date-only value (ADR-012): "YYYY-MM-DD" parses to
 // UTC midnight and is read back in UTC — no time zone is ever applied.
 import { parseDateOnly } from "@/lib/format-date";
+import { MONEY_TOO_LARGE_MESSAGE, fitsMoneyColumn } from "@/lib/money";
 import {
   currentUserHasAnyPermission,
   requirePermission,
@@ -66,7 +67,8 @@ const expenseSchema = z.object({
     .min(1, "Amount is required")
     .transform((v) => v.replace(/[$,]/g, ""))
     .refine((v) => /^\d+(\.\d{1,2})?$/.test(v), "Enter a valid amount")
-    .refine((v) => parseFloat(v) > 0, "Amount must be greater than 0"),
+    .refine((v) => parseFloat(v) > 0, "Amount must be greater than 0")
+    .refine(fitsMoneyColumn, MONEY_TOO_LARGE_MESSAGE),
   utbmsCode: z.string().trim().max(20).optional().or(z.literal("")),
   billable: z.literal("on").optional(),
   clientAdvanced: z.literal("on").optional(),

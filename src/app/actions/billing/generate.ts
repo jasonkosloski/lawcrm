@@ -22,6 +22,7 @@ import {
   invoiceNumberYear,
   describeBundle,
   nextInvoiceNumber,
+  retryOnInvoiceNumberCollision,
   sumLineAmounts,
   linkWipToInvoice,
 } from "./helpers";
@@ -171,22 +172,10 @@ export async function generateInvoiceFromWip(
 
   try {
     // P2002 = duplicate invoiceNumber minted by a concurrent
-    // generate. That INSERT aborted its transaction, so retry once
-    // by re-running the whole transaction — the fresh run re-reads
-    // the committed numbers and picks the next free one.
-    let result: Awaited<ReturnType<typeof mintInvoice>>;
-    try {
-      result = await mintInvoice();
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
-      ) {
-        result = await mintInvoice();
-      } else {
-        throw err;
-      }
-    }
+    // generate. That INSERT aborted its transaction, so retry (up to
+    // 5 times) by re-running the whole transaction — each fresh run
+    // re-reads the committed numbers and picks the next free one.
+    const result = await retryOnInvoiceNumberCollision(mintInvoice);
 
     // Activity log detail spells out both buckets so the audit
     // makes the bundle's composition readable at a glance.
@@ -364,22 +353,10 @@ export async function bundleAsInternalRecord(
     });
 
   try {
-    // Retry the whole transaction once on an invoice-number
-    // collision — see generateInvoiceFromWip for why the retry
-    // can't live inside the (aborted) transaction.
-    let result: Awaited<ReturnType<typeof mintRecord>>;
-    try {
-      result = await mintRecord();
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
-      ) {
-        result = await mintRecord();
-      } else {
-        throw err;
-      }
-    }
+    // Retry the whole transaction on an invoice-number collision —
+    // see generateInvoiceFromWip for why the retry can't live inside
+    // the (aborted) transaction.
+    const result = await retryOnInvoiceNumberCollision(mintRecord);
 
     await logActivity({
       matterId: result.matter.id,

@@ -63,19 +63,41 @@ export async function nextInvoiceNumber(
   year: string
 ): Promise<string> {
   const prefix = `${year}-`;
-  const existing = await tx.invoice.findMany({
-    where: { invoiceNumber: { startsWith: prefix } },
-    select: { invoiceNumber: true },
-  });
-  // Strip prefix, parse number, find max. Defensive against any
-  // hand-crafted invoice numbers that don't match the pattern.
-  let max = 0;
-  for (const inv of existing) {
-    const tail = inv.invoiceNumber.slice(prefix.length);
-    const n = parseInt(tail, 10);
-    if (Number.isFinite(n) && n > max) max = n;
-  }
+  // MAX over the leading digits of the suffix, computed in the DB so
+  // the year's invoices are never loaded. Non-numeric (hand-crafted)
+  // suffixes are ignored; at most 9 digits so the cast can't overflow.
+  const rows = await tx.$queryRaw<{ max: number | null }[]>`
+    SELECT MAX(
+      CAST(substring(substring("invoiceNumber" from ${prefix.length + 1}::int) from '^[0-9]{1,9}') AS integer)
+    ) AS max
+    FROM invoices
+    WHERE left("invoiceNumber", ${prefix.length}::int) = ${prefix}`;
+  const max = rows[0]?.max ?? 0;
   return `${prefix}${String(max + 1).padStart(3, "0")}`;
+}
+
+/** Max whole-transaction attempts when concurrent mints collide on the
+ *  invoice-number unique index. */
+export const INVOICE_NUMBER_ATTEMPTS = 5;
+
+/** Run `mint` (a function that opens a NEW transaction each call),
+ *  re-running it on an invoice-number unique violation (P2002) up to
+ *  INVOICE_NUMBER_ATTEMPTS times. Each run recomputes the number from
+ *  committed rows. Generate locks are per-matter, so concurrent mints
+ *  on different matters can race for the same number repeatedly. */
+export async function retryOnInvoiceNumberCollision<T>(
+  mint: () => Promise<T>
+): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await mint();
+    } catch (err) {
+      const collided =
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002";
+      if (!collided || attempt >= INVOICE_NUMBER_ATTEMPTS) throw err;
+    }
+  }
 }
 
 /** Mutation helper — adjusts a matter's trustBalance by the signed

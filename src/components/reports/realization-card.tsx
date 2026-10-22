@@ -3,7 +3,8 @@
  *
  * Trailing 3 months (viewer's calendar), one block per month:
  * billable hours worked → hours billed (as a % of worked, bar) →
- * dollars collected (as a % of billed dollars, bar). Cash-basis
+ * dollars collected (as a % of billed dollars — time plus expenses on
+ * sent invoices — bar). Cash-basis
  * collections — payments bucket by when they landed, so a strong
  * collections month can exceed 100%.
  *

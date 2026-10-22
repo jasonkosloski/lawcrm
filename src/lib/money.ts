@@ -38,3 +38,20 @@ export function hasAtMostDecimals(
   if (!d.isFinite()) return false;
   return d.decimalPlaces() <= places;
 }
+
+/** Largest value a DECIMAL(14,2) money column can hold. */
+export const MAX_MONEY_AMOUNT = "999999999999.99";
+
+/** True when `value` (a non-negative numeric string already shaped
+ *  `\d+(\.\d{1,2})?`) fits a DECIMAL(14,2) column. Compared as Decimals,
+ *  not floats, so the ceiling is exact. Form validators use this to
+ *  return a field error instead of letting Prisma throw on write. */
+export function fitsMoneyColumn(value: string): boolean {
+  try {
+    return new Prisma.Decimal(value).lte(MAX_MONEY_AMOUNT);
+  } catch {
+    return false;
+  }
+}
+
+export const MONEY_TOO_LARGE_MESSAGE = "Amount is too large";

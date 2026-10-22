@@ -342,4 +342,44 @@ describe("invoice-number collision retry", () => {
       await prisma.timeEntry.count({ where: { matterId, invoiceId: mine.id } })
     ).toBe(1);
   });
+
+  test("survives more than one consecutive collision (bounded retry loop)", async () => {
+    await seedTimeEntry({ matterId, userId, amount: 100 });
+    const year = todayKey("America/Denver").slice(0, 4);
+    const area = await seedPracticeArea({ name: "Other area" });
+    const other = await seedMatter({
+      practiceAreaId: area.areaId,
+      stageId: area.stageId,
+      leadUserId: userId,
+      name: "Other matter",
+    });
+    const hold = (n: string) =>
+      holdTransaction((tx) =>
+        tx.invoice.create({
+          data: {
+            invoiceNumber: `${year}-${n}`,
+            matterId: other.matterId,
+            issueDate: new Date(),
+            dueDate: new Date(),
+            subtotal: 5,
+            totalAmount: 5,
+            paidAmount: 0,
+          },
+        })
+      );
+    // Two uncommitted numbers: attempt 1 picks 001 and blocks; once 001
+    // commits, attempt 2 picks 002 (003 is invisible) and blocks again.
+    const first = await hold("001");
+    const second = await hold("002");
+    const racer = generateInvoiceFromWip(matterId, billingInitialState, new FormData());
+    await waitForBlocked(1);
+    await first.release();
+    await waitForBlocked(1);
+    await second.release();
+    const res = await racer;
+
+    expect(res.status).toBe("ok");
+    const mine = await prisma.invoice.findFirstOrThrow({ where: { matterId } });
+    expect(mine.invoiceNumber).toBe(`${year}-003`);
+  });
 });

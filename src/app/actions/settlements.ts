@@ -37,7 +37,11 @@ import {
   requirePermission,
 } from "@/lib/permission-check";
 import { filterUsersWithPermission } from "@/lib/permission-holders";
-import { roundMoney } from "@/lib/money";
+import {
+  MONEY_TOO_LARGE_MESSAGE,
+  fitsMoneyColumn,
+  roundMoney,
+} from "@/lib/money";
 import { firmFeeFromPercent } from "@/lib/settlement-waterfall";
 import {
   LIENHOLDER_TYPES,
@@ -72,10 +76,16 @@ const moneyField = (required: boolean) => {
           (v: string) => /^\d+(\.\d{1,2})?$/.test(v),
           "Enter a valid amount"
         )
-    : base.refine(
-        (v: string) => v === "" || /^\d+(\.\d{1,2})?$/.test(v),
-        "Enter a valid amount"
-      );
+        .refine(fitsMoneyColumn, MONEY_TOO_LARGE_MESSAGE)
+    : base
+        .refine(
+          (v: string) => v === "" || /^\d+(\.\d{1,2})?$/.test(v),
+          "Enter a valid amount"
+        )
+        .refine(
+          (v: string) => v === "" || fitsMoneyColumn(v),
+          MONEY_TOO_LARGE_MESSAGE
+        );
 };
 
 const upsertSchema = z.object({

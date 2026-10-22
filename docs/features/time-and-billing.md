@@ -4,6 +4,11 @@ Time tracking (week view, day reconciliation, timer widget, UTBMS-coded entries)
 Related: [ADR-013](../decisions/013-timer-sessions-are-pre-entries-ungated-to.md), [ADR-024](../decisions/024-invoice-line-items-are-draft-only-money.md), [ADR-030](../decisions/030-settlement-status-follows-the-approval-chain-amounts.md), [ADR-036](../decisions/036-money-is-decimal-14-2-one-settlement.md), [ADR-038](../decisions/038-billing-view-gates-the-billing-read-surface.md), [ADR-021](../decisions/021-matter-tabs-honour-calendar-visibility-and-money.md), [PERMISSIONS.md](../PERMISSIONS.md)
 
 ## Open work
+- [ ] **Payment reversal** (P2) — `InvoicePayment` rows are append-only: no action edits, deletes or reverses one, and void is refused while any payment exists. A payment recorded against the wrong invoice (or a trust payment that already drew down `trustBalance`) can only be fixed in the database today. Needs a decision before building:
+  - **Shape:** a reversing entry (negative `InvoicePayment` with `reversesId`, keeps the audit trail; matches how trust is a ledger) vs. a soft-delete flag. Leaning reversing entry: money history stays append-only.
+  - **Effects to unwind under the invoice + matter locks:** `paidAmount` and status (paid → partial/sent), and for trust-sourced payments a compensating trust deposit restoring `trustBalance`.
+  - **Gate:** its own key (`billing.reverse_payment`), required reason, activity-logged; client notice optional like the void notice.
+  - Until it ships, the void error says to contact an admin rather than pointing at a refund action that doesn't exist.
 - [ ] **Settings — Billing & rates** (P2) — Default hourly rate, UTBMS code library, invoice templates, payment terms.
 - [ ] **Time follow-ups** — auto-capture from activity; idle-detection prompts; admin/manager user picker on `/time` (own permission key; today current-user only); read-only reconciliation lanes could become editable.
 - [ ] **Palette "Start timer" row** — now safe to add since `startTimer` returns `already_running` instead of replacing.
