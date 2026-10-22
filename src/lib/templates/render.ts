@@ -22,6 +22,8 @@ import type {
   ListFieldNode,
   MarkType,
   ShowIfNode,
+  TableCellNode,
+  TableNode,
   TemplateDoc,
   TextAlign,
 } from "./schema";
@@ -59,11 +61,15 @@ export type ResolvedBulletList = { type: "bulletList"; content: ResolvedListItem
 export type ResolvedOrderedList = { type: "orderedList"; content: ResolvedListItem[] };
 export type ResolvedTableCell = {
   type: "tableCell" | "tableHeader";
-  attrs?: { colspan?: 1; rowspan?: 1; colwidth?: number[] | null };
+  attrs?: TableCellNode["attrs"];
   content: ResolvedBlock[];
 };
 export type ResolvedTableRow = { type: "tableRow"; content: ResolvedTableCell[] };
-export type ResolvedTable = { type: "table"; content: ResolvedTableRow[] };
+export type ResolvedTable = {
+  type: "table";
+  attrs?: TableNode["attrs"];
+  content: ResolvedTableRow[];
+};
 export type ResolvedPageBreak = { type: "pageBreak" };
 
 export type ResolvedBlock =
@@ -273,6 +279,7 @@ function blocks(e: Engine, nodes: readonly BlockNode[] | undefined, s: Scope): R
         return [
           {
             type: "table",
+            ...(n.attrs ? { attrs: n.attrs } : {}),
             content: n.content.map((row) => ({
               type: "tableRow" as const,
               content: row.content.map((cell) => ({

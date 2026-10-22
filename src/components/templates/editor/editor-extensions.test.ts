@@ -20,7 +20,7 @@ const t = (text: string, marks?: { type: string }[]) =>
   marks ? { type: "text", text, marks } : { type: "text", text };
 const cell = (type: "tableCell" | "tableHeader", ...content: unknown[]) => ({
   type,
-  attrs: { colspan: 1, rowspan: 1, colwidth: null },
+  attrs: { colspan: 1, rowspan: 1, colwidth: null, verticalAlign: null, borders: null },
   content,
 });
 
@@ -47,6 +47,7 @@ const FULL_DOC = {
     },
     {
       type: "table",
+      attrs: { width: null },
       content: [
         { type: "tableRow", content: [cell("tableHeader", p(t("H")))] },
         { type: "tableRow", content: [cell("tableCell", p(t("c")))] },

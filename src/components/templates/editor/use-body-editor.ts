@@ -17,6 +17,13 @@ import { FitHighlight } from "./fit-highlight";
 export const BODY_CLASS = cn(
   "prose prose-sm max-w-none min-h-[420px] px-6 py-5 text-xs text-ink focus:outline-none",
   "[&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:p-1 [&_th]:border [&_th]:border-line [&_th]:p-1",
+  // Full-width tables fill the line (columns keep their proportions);
+  // fit tables size to content. !important beats the resize view's inline width.
+  "[&_table[data-width=full]]:!w-full [&_table[data-width=full]]:table-fixed [&_table[data-width=fit]]:!w-auto [&_table]:my-0",
+  "[&_td]:relative [&_th]:relative [&_td>*]:my-0 [&_th>*]:my-0 [&_th]:text-left [&_th]:font-normal",
+  "[&_.tableWrapper]:overflow-x-auto [&.resize-cursor]:cursor-col-resize",
+  "[&_.column-resize-handle]:pointer-events-none [&_.column-resize-handle]:absolute [&_.column-resize-handle]:-right-0.5 [&_.column-resize-handle]:inset-y-0 [&_.column-resize-handle]:w-1 [&_.column-resize-handle]:bg-accent",
+  "[&_.selectedCell]:bg-accent/10",
 );
 
 const EDITOR_PROPS = { attributes: { "aria-label": "Template body", class: BODY_CLASS } };

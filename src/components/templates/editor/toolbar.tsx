@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useEditorState, type Editor } from "@tiptap/react";
 import {
   AlignCenter,
@@ -33,42 +33,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
 import type { CatalogField, CatalogList, TemplateData } from "@/lib/templates/catalog";
 import type { BlockSource } from "@/lib/templates/render";
 import type { TemplateKind } from "@/lib/templates/schema";
 import { FieldPicker } from "./field-picker";
 import { repeatListAt } from "./field-format-popover";
 import { RuleForm } from "./rule-popover";
-
-function ToolButton({
-  label,
-  active,
-  onClick,
-  children,
-}: {
-  label: string;
-  active?: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      aria-pressed={active}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-7 min-w-7 items-center justify-center rounded px-1 text-ink-3 hover:bg-paper-2 hover:text-ink",
-        active && "bg-paper-2 text-ink",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
+import { TableMenu } from "./table-menu";
+import { ToolButton } from "./toolbar-button";
 
 const Divider = () => <span className="mx-1 h-4 w-px bg-line" aria-hidden="true" />;
 
@@ -280,6 +252,7 @@ export function Toolbar({
           >
             <Table size={13} />
           </ToolButton>
+          <TableMenu editor={editor} />
           {kind !== "email" && (
             <ToolButton label="Page break" onClick={() => chain().insertPageBreak().run()}>
               <Scissors size={13} />

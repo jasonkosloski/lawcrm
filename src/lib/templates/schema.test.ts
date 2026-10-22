@@ -139,7 +139,7 @@ describe("validateTemplateContent", () => {
     });
   });
 
-  it("rejects merged table cells", () => {
+  it("allows cells merged across a row but not down a column", () => {
     const d = doc({
       type: "table",
       content: [
@@ -149,7 +149,7 @@ describe("validateTemplateContent", () => {
         },
       ],
     });
-    expect(validateTemplateContent("letter", d).ok).toBe(false);
+    expect(validateTemplateContent("letter", d).ok).toBe(true);
     const d2 = doc({
       type: "table",
       content: [
@@ -160,6 +160,72 @@ describe("validateTemplateContent", () => {
       ],
     });
     expect(validateTemplateContent("letter", d2).ok).toBe(false);
+  });
+
+  describe("table layout attrs", () => {
+    const table = (tableAttrs: unknown, cellAttrs: unknown) =>
+      doc({
+        type: "table",
+        ...(tableAttrs === undefined ? {} : { attrs: tableAttrs }),
+        content: [
+          {
+            type: "tableRow",
+            content: [{ type: "tableCell", attrs: cellAttrs, content: [para()] }],
+          },
+        ],
+      });
+    const firstCell = (r: ReturnType<typeof validateTemplateContent>) => {
+      if (!r.ok) throw new Error(r.error);
+      const t = r.doc.content![0] as {
+        attrs?: unknown;
+        content: { content: { attrs?: unknown }[] }[];
+      };
+      return { table: t.attrs, cell: t.content[0].content[0].attrs };
+    };
+
+    it("keeps fit width, vertical alignment and non-thin borders; drops defaults", () => {
+      const r = validateTemplateContent(
+        "letter",
+        table(
+          { width: "fit" },
+          {
+            verticalAlign: "bottom",
+            borders: { top: "thick", right: "none", bottom: "thin", left: null },
+          },
+        ),
+      );
+      expect(firstCell(r)).toEqual({
+        table: { width: "fit" },
+        cell: { verticalAlign: "bottom", borders: { top: "thick", right: "none" } },
+      });
+      const d = validateTemplateContent(
+        "letter",
+        table({ width: "full" }, { verticalAlign: "top", borders: { top: "thin" } }),
+      );
+      expect(firstCell(d)).toEqual({ table: undefined, cell: undefined });
+    });
+
+    it("drops a column width list that doesn't match the span", () => {
+      const r = validateTemplateContent(
+        "letter",
+        table(undefined, { colspan: 2, colwidth: [100] }),
+      );
+      expect(firstCell(r).cell).toEqual({ colspan: 2, colwidth: null });
+    });
+
+    it.each([
+      [{ width: "half" }, {}, "Invalid table width."],
+      [undefined, { verticalAlign: "baseline" }, "Invalid vertical alignment."],
+      [undefined, { borders: { top: "double" } }, "Invalid table borders."],
+      [undefined, { borders: "none" }, "Invalid table borders."],
+      [undefined, { colspan: 0 }, "Invalid merged cell."],
+      [undefined, { colspan: 1.5 }, "Invalid merged cell."],
+      [undefined, { colspan: 21 }, "Invalid merged cell."],
+      [undefined, { colwidth: [-5] }, "Invalid table column width."],
+      [undefined, { rowspan: 2 }, "Cells can only be merged across a row."],
+    ])("rejects table %j / cell %j", (t, cellAttrs, error) => {
+      expect(validateTemplateContent("letter", table(t, cellAttrs))).toEqual({ ok: false, error });
+    });
   });
 
   it("names unknown node types", () => {

@@ -141,6 +141,19 @@ describe("sanitizeUserHtml — output cleanliness", () => {
 // ── Document profile (DOCX preview pipeline) ────────────────────────────
 
 describe("sanitizeDocumentHtml — document structure passes through", () => {
+  test("keeps template table attributes and only numeric column widths", () => {
+    const ok =
+      '<table data-width="fit"><colgroup><col style="width:66.67%" /><col style="width:120px" /></colgroup>' +
+      '<tr><td colspan="2" data-bt="thick" data-bb="none" data-valign="middle">x</td></tr></table>';
+    expect(sanitizeDocumentHtml(ok)).toBe(ok);
+    expect(
+      sanitizeDocumentHtml('<col style="width:expression(alert(1));background:url(x)" />'),
+    ).toBe("<col />");
+    expect(sanitizeDocumentHtml('<td style="border:1px solid red" onclick="x()">y</td>')).toBe(
+      "<td>y</td>",
+    );
+  });
+
   test("note-profile tags still pass (superset, not a replacement)", () => {
     const html =
       "<h2>Header</h2><p><strong>b</strong> <em>i</em> <u>u</u></p>" + "<ul><li>one</li></ul>";

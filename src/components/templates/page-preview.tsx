@@ -11,6 +11,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { ResolvedDoc } from "@/lib/templates/render";
 import type { PreviewPageStyle } from "@/lib/templates/page-style";
+import { CELL_SIDES } from "@/lib/templates/schema";
+import { CELL_SIDE_ATTR } from "@/lib/templates/table-layout";
 import {
   CELL_PAD_PX,
   LOGO_MAX_H_PX,
@@ -21,6 +23,7 @@ import {
 } from "@/lib/templates/to-html";
 
 const HEADING_PT = [6, 4, 2] as const;
+
 const PAGE_CSS = `
 [data-page]{box-sizing:border-box;background:#fff;color:#000;font-family:var(--page-family);font-size:var(--page-font-size);line-height:var(--page-line-height);}
 [data-page] p,[data-page] ul,[data-page] ol,[data-page] table{margin:0 0 var(--page-space-after);}
@@ -28,8 +31,14 @@ const PAGE_CSS = `
 [data-page] ul{list-style:disc;}
 [data-page] ol{list-style:decimal;}
 [data-page] li>p{margin:0;}
-[data-page] td,[data-page] th{border:1px solid #999;padding:0 ${CELL_PAD_PX}px;vertical-align:top;}
-[data-page] table{border-collapse:collapse;}
+[data-page] td,[data-page] th{border:1px solid #999;padding:0 ${CELL_PAD_PX}px;vertical-align:top;text-align:left;font-weight:normal;}
+[data-page] table{border-collapse:collapse;table-layout:fixed;width:100%;}
+[data-page] table[data-width=fit]{table-layout:auto;width:auto;max-width:100%;}
+[data-page] table td>*,[data-page] table th>*{margin:0;}
+[data-page] p:empty::before{content:"\\a0";}
+${CELL_SIDES.map((side) => `[data-page] [${CELL_SIDE_ATTR[side]}=none]{border-${side}-style:none;}\n[data-page] [${CELL_SIDE_ATTR[side]}=thick]{border-${side}:2px solid #000;}`).join("\n")}
+[data-page] [data-valign=middle]{vertical-align:middle;}
+[data-page] [data-valign=bottom]{vertical-align:bottom;}
 [data-page] hr[data-page-break]{border:0;border-top:1px dashed #bbb;margin:0 0 var(--page-space-after);}
 [data-page] mark[data-missing]{background:#fde68a;color:inherit;}
 [data-page] h1,[data-page] h2,[data-page] h3{font-weight:bold;margin:0 0 var(--page-space-after);}

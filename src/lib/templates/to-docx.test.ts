@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { resolvedToDocx } from "./to-docx";
-import { renderFixture } from "./converters-fixture";
+import { captionFixture, renderFixture } from "./converters-fixture";
 import {
   CELL_PAD_TWIPS,
   DEFAULT_DOCUMENT_STYLE,
@@ -279,5 +279,108 @@ describe("resolvedToDocx", () => {
     // Body paragraphs outside the table keep the document spacing.
     const after = doc.slice(doc.indexOf("</w:tbl>"));
     expect(after).not.toContain('w:after="0"');
+  });
+});
+
+describe("resolvedToDocx tables", () => {
+  const cells = (xml: string) => xml.match(/<w:tc>.*?<\/w:tc>/g) ?? [];
+
+  it("fills the text width in the editor's column proportions", async () => {
+    const { doc } = await build({ body: captionFixture(), style: letterStyle() });
+    // Letter paper (12240 twips) less 1in margins each side = 9360.
+    expect(doc).toContain('<w:tblW w:type="dxa" w:w="9360"/>');
+    expect(doc).toContain('<w:tblLayout w:type="fixed"/>');
+    expect(doc).toContain('<w:gridCol w:w="6240"/><w:gridCol w:w="3120"/>');
+  });
+
+  it("writes merges, vertical alignment and per-side borders", async () => {
+    const { doc } = await build({ body: captionFixture(), style: letterStyle() });
+    const tcs = cells(doc);
+    expect(tcs).toHaveLength(7);
+    const stamp = tcs[1];
+    expect(stamp).toMatch(/<w:bottom w:val="none"/);
+    const courtUse = tcs[3];
+    expect(courtUse).toContain('<w:vAlign w:val="bottom"/>');
+    expect(courtUse).toMatch(/<w:top w:val="none"/);
+    expect(courtUse).toMatch(/<w:bottom w:val="single" w:color="000000" w:sz="12"/);
+    const parties = tcs[2];
+    expect(parties).toMatch(/<w:top w:val="single" w:color="000000" w:sz="12"/);
+    expect(parties).toMatch(/<w:left w:val="single" w:color="000000" w:sz="4"/);
+    const title = tcs[6];
+    expect(title).toContain('<w:gridSpan w:val="2"/>');
+    expect(title).toContain('<w:tcW w:type="dxa" w:w="9360"/>');
+  });
+
+  it("gives a fit table's unset columns a usable starting grid", async () => {
+    const body: ResolvedDoc = {
+      type: "doc",
+      content: [
+        {
+          type: "table",
+          attrs: { width: "fit" },
+          content: [
+            {
+              type: "tableRow",
+              content: ["a", "b", "c"].map((x) => ({
+                type: "tableCell" as const,
+                content: [
+                  { type: "paragraph" as const, content: [{ type: "text" as const, text: x }] },
+                ],
+              })),
+            },
+          ],
+        },
+      ],
+    };
+    const { doc } = await build({ body, style: letterStyle() });
+    expect(doc).toContain('<w:gridCol w:w="3120"/><w:gridCol w:w="3120"/><w:gridCol w:w="3120"/>');
+    expect(doc).toContain('<w:tcW w:type="auto" w:w="0"/>');
+  });
+
+  it("sizes a table nested in a cell to that cell", async () => {
+    const body: ResolvedDoc = {
+      type: "doc",
+      content: [
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                {
+                  type: "tableCell",
+                  content: [
+                    {
+                      type: "table",
+                      content: [
+                        {
+                          type: "tableRow",
+                          content: [{ type: "tableCell", content: [{ type: "paragraph" }] }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+                { type: "tableCell", content: [{ type: "paragraph" }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const { doc } = await build({ body, style: letterStyle() });
+    // Outer cell 4680 twips less 2 x 115 padding.
+    expect(doc).toContain('<w:tblW w:type="dxa" w:w="4450"/>');
+  });
+
+  it("lets Word autofit a fit-to-content table", async () => {
+    const body = captionFixture();
+    const t = body.content![0];
+    if (t.type === "table") t.attrs = { width: "fit" };
+    const { doc } = await build({ body, style: letterStyle() });
+    expect(doc).toContain('<w:tblLayout w:type="autofit"/>');
+    expect(doc).toContain('<w:tblW w:type="auto" w:w="0"/>');
+    // Set widths are kept as Word's starting grid (editor px x 15).
+    expect(doc).toContain('<w:gridCol w:w="6000"/><w:gridCol w:w="3000"/>');
   });
 });

@@ -2,6 +2,7 @@
 
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   Footer,
   Header,
@@ -14,8 +15,10 @@ import {
   Paragraph,
   Table,
   TableCell,
+  TableLayoutType,
   TableRow,
   TextRun,
+  VerticalAlignTable,
   WidthType,
   type ParagraphChild,
 } from "docx";
@@ -29,7 +32,17 @@ import {
   type LoadedLogo,
   type PageStyle,
 } from "./page-style";
-import type { ResolvedBlock, ResolvedDoc, ResolvedInline, ResolvedTableCell } from "./render";
+import type { ResolvedBlock, ResolvedDoc, ResolvedInline, ResolvedTable } from "./render";
+import type { BorderWeight } from "./schema";
+import {
+  BORDER_PT,
+  columnFractions,
+  columnPx,
+  spannedWidth,
+  tableGrid,
+  verticalAlignOf,
+  type GridCell,
+} from "./table-layout";
 
 const ALIGN = {
   left: AlignmentType.LEFT,
@@ -58,8 +71,9 @@ function runs(nodes: ResolvedInline[] | undefined): ParagraphChild[] {
   });
 }
 
-/** `inCell`: paragraphs inside a table cell have no space after (as in the PDF). */
-type Ctx = { instance: { n: number }; inCell?: boolean };
+/** `inCell`: paragraphs inside a table cell have no space after (as in the PDF).
+ *  `textTwips`: the width between the margins, which full-width tables fill. */
+type Ctx = { instance: { n: number }; textTwips: number; inCell?: boolean };
 
 const cellSpacing = (ctx: Ctx) => (ctx.inCell ? { spacing: { after: 0 } } : {});
 
@@ -114,26 +128,75 @@ function blocks(list: ResolvedBlock[], ctx: Ctx, level: number): (Paragraph | Ta
         );
       }
       case "table":
-        return [
-          new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
-            rows: b.content.map(
-              (r) => new TableRow({ children: r.content.map((c) => tableCell(c, ctx)) }),
-            ),
-          }),
-        ];
+        return [table(b, ctx)];
       case "pageBreak":
         return [new Paragraph({ children: [new PageBreak()] })];
     }
   });
 }
 
-function tableCell(c: ResolvedTableCell, ctx: Ctx): TableCell {
-  const children = blocks(c.content, { ...ctx, inCell: true }, 0);
+const TWIPS_PER_PX = 15; // editor pixels are CSS pixels: 1440 twips / 96
+const VALIGN = {
+  top: VerticalAlignTable.TOP,
+  middle: VerticalAlignTable.CENTER,
+  bottom: VerticalAlignTable.BOTTOM,
+} as const;
+
+/** Border sizes are in eighths of a point. */
+const rule = (w: BorderWeight) =>
+  w === "none"
+    ? { style: BorderStyle.NONE, size: 0, color: "auto" }
+    : { style: BorderStyle.SINGLE, size: BORDER_PT[w] * 8, color: "000000" };
+
+/** Unset columns of a fit table share what the set ones leave, as the
+ *  starting grid: Word autofits over it, LibreOffice and Docs use it. */
+function fitGrid(px: (number | null)[], textTwips: number): number[] {
+  const set = px.map((w) => (w === null ? 0 : Math.round(w * TWIPS_PER_PX)));
+  const unset = px.filter((w) => w === null).length;
+  const share = unset
+    ? Math.max(720, Math.round((textTwips - set.reduce((a, b) => a + b, 0)) / unset))
+    : 0;
+  return px.map((w, i) => (w === null ? share : set[i]));
+}
+
+/** Full width: fixed layout filling the width it sits in, in the editor's
+ *  column proportions. Fit: Word autofits to content. */
+function table(t: ResolvedTable, ctx: Ctx): Table {
+  const grid = tableGrid(t);
+  const fit = t.attrs?.width === "fit";
+  const widths = fit
+    ? fitGrid(columnPx(grid), ctx.textTwips)
+    : columnFractions(grid).map((f) => Math.round(f * ctx.textTwips));
+  return new Table({
+    layout: fit ? TableLayoutType.AUTOFIT : TableLayoutType.FIXED,
+    width: fit ? { size: 0, type: WidthType.AUTO } : { size: ctx.textTwips, type: WidthType.DXA },
+    columnWidths: widths,
+    rows: grid.rows.map(
+      (r) => new TableRow({ children: r.map((g) => tableCell(g, widths, fit, ctx)) }),
+    ),
+  });
+}
+
+/** Sides as declared: Word resolves each shared edge segment itself. */
+function tableCell(g: GridCell, widths: number[], fit: boolean, ctx: Ctx): TableCell {
+  const w = spannedWidth(g, widths);
+  // A table nested in this cell fills the cell, not the page.
+  const inner = Math.max(720, w - 2 * CELL_PAD_TWIPS);
+  const children = blocks(g.cell.content, { ...ctx, inCell: true, textTwips: inner }, 0);
+  const sized = !fit || (g.cell.attrs?.colwidth ?? []).some((px) => px > 0);
   return new TableCell({
     // Word requires at least one paragraph per cell.
     children: children.length ? children : [new Paragraph({ spacing: { after: 0 } })],
     margins: { left: CELL_PAD_TWIPS, right: CELL_PAD_TWIPS, top: 0, bottom: 0 },
+    ...(g.span > 1 ? { columnSpan: g.span } : {}),
+    width: sized ? { size: w, type: WidthType.DXA } : { size: 0, type: WidthType.AUTO },
+    verticalAlign: VALIGN[verticalAlignOf(g.cell)],
+    borders: {
+      top: rule(g.declared.top),
+      right: rule(g.declared.right),
+      bottom: rule(g.declared.bottom),
+      left: rule(g.declared.left),
+    },
   });
 }
 
@@ -191,7 +254,11 @@ export async function resolvedToDocx(input: {
   style: PageStyle;
 }): Promise<Buffer> {
   const { style } = input;
-  const ctx: Ctx = { instance: { n: 0 } };
+  const m = style.marginsIn;
+  const ctx: Ctx = {
+    instance: { n: 0 },
+    textTwips: PAGE_DIMENSIONS[style.paperSize].twips.w - Math.round((m.left + m.right) * 1440),
+  };
   const children = blocks(input.body.content ?? [], ctx, 0);
   const isLetter = style.kind === "letter";
   // Page numbers show on pages 2+ only. Letters carry "Page N" in the

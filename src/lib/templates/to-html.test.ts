@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolvedToHtml } from "./to-html";
-import { renderFixture } from "./converters-fixture";
+import { captionFixture, renderFixture } from "./converters-fixture";
 
 describe("resolvedToHtml", () => {
   const html = resolvedToHtml(renderFixture());
@@ -12,9 +12,9 @@ describe("resolvedToHtml", () => {
   it("keeps headings, alignment, tables, lists and marks", () => {
     expect(html).toContain('<h2 style="text-align:center">');
     expect(html).toContain('<p style="text-align:right">');
-    expect(html).toContain("<table>");
-    expect(html).toContain("<th>A</th>");
-    expect(html).toContain("<td>1</td>");
+    expect(html).toContain('<table data-width="full">');
+    expect(html).toContain("<th><p>A</p></th>");
+    expect(html).toContain("<td><p>1</p></td>");
     expect(html).toContain("<ul><li><p>one</p></li><li><p>two</p></li></ul>");
     expect(html).toContain("<ol><li>");
     expect(html).toContain("<strong>");
@@ -74,10 +74,10 @@ describe("resolvedToPageParts", () => {
   });
   it("letter: letterhead, logo, top strip with right Page 2", () => {
     const p = mk("letter", {}, logo);
-    expect(p.letterheadHtml).toContain("<table>");
+    expect(p.letterheadHtml).toContain("<table data-width");
     expect(p.logo).toEqual({ url: "/api/document-style/logo", position: "right" });
     expect(p.strip?.placement).toBe("top");
-    expect(p.strip?.continuationHtml).toContain("<table>");
+    expect(p.strip?.continuationHtml).toContain("<table data-width");
     expect(p.strip?.pageLabel).toEqual({ text: "Page 2", align: "right" });
   });
   it("letter without page numbers keeps continuation only; nothing -> no strip", () => {
@@ -128,5 +128,39 @@ describe("resolvedToPageParts", () => {
   });
   it("sanitized fragments carry no raw page style", () => {
     expect(mk("letter").bodyHtml).not.toContain("--page");
+  });
+});
+
+describe("resolvedToHtml tables", () => {
+  const html = resolvedToHtml(captionFixture());
+
+  it("keeps column proportions, merges, borders and vertical alignment through the sanitizer", () => {
+    expect(html).toContain(
+      '<table data-width="full"><colgroup><col style="width:66.67%" /><col style="width:33.33%" /></colgroup>',
+    );
+    expect(html).toContain('<td data-bb="none"><p></p></td>');
+    expect(html).toContain('<td data-bt="none" data-bb="thick" data-valign="bottom">');
+    expect(html).toContain('<td colspan="2"><p style="text-align:center"><strong>MOTION');
+    // Sides go out as declared; collapsed CSS draws the heavier per segment.
+    expect(html).toContain('<td data-bt="thick" data-bb="thick"><p><strong>Plaintiff');
+    expect(html).toContain("<td><p>Attorney: Pat Lawyer</p></td>");
+  });
+
+  it("keeps paragraph alignment inside cells", () => {
+    expect(html).toContain('<p style="text-align:center"><strong>▲ COURT USE ONLY ▲</strong></p>');
+  });
+
+  it("emits set pixel widths for a fit table", () => {
+    const doc = captionFixture();
+    const t = doc.content![0];
+    if (t.type === "table") {
+      t.attrs = { width: "fit" };
+      t.content[0].content[1].attrs = { colwidth: [200.333] };
+    }
+    const out = resolvedToHtml(doc);
+    // Rounded, so the sanitizer's numeric width rule keeps it.
+    expect(out).toContain(
+      '<colgroup><col style="width:400px" /><col style="width:200px" /></colgroup>',
+    );
   });
 });

@@ -1,6 +1,7 @@
-/** Test fixture: renders a template with a table and a bullet list. */
+/** Test fixtures: a template with a table and a bullet list, and a court caption. */
 import { SAMPLE_TEMPLATE_DATA } from "./catalog";
-import { renderTemplate, type ResolvedDoc } from "./render";
+import { renderTemplate, type ResolvedDoc, type ResolvedTableCell } from "./render";
+import type { TableCellNode } from "./schema";
 import type { TemplateDoc } from "./schema";
 
 const cell = (text: string, header = false) => ({
@@ -69,4 +70,66 @@ export function renderFixture(): ResolvedDoc {
     data: { ...SAMPLE_TEMPLATE_DATA, signer: { ...SAMPLE_TEMPLATE_DATA.signer!, barNumber: null } },
     blocks: new Map(),
   }).doc;
+}
+
+const p = (text: string, bold = false, textAlign?: "center") => ({
+  type: "paragraph" as const,
+  ...(textAlign ? { attrs: { textAlign } } : {}),
+  content: [
+    { type: "text" as const, text, ...(bold ? { marks: [{ type: "bold" as const }] } : {}) },
+  ],
+});
+const capCell = (
+  attrs: TableCellNode["attrs"],
+  ...content: ReturnType<typeof p>[]
+): ResolvedTableCell => ({ type: "tableCell", attrs, content });
+
+/**
+ * A Colorado-style caption (JDF "flexible caption"): court and parties on
+ * the left, a court-use box on the right, thick rules around the parties,
+ * and the title across both columns.
+ */
+export function captionFixture(): ResolvedDoc {
+  return {
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              capCell(
+                { colwidth: [400] },
+                p("☐ County Court ☒ District Court"),
+                p("Court Address: 1437 Bannock St"),
+              ),
+              capCell({ colwidth: [200], borders: { bottom: "none" } }, p("")),
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [
+              capCell(
+                { borders: { top: "thick", bottom: "thick" } },
+                p("Plaintiff: Sam Sample", true),
+              ),
+              capCell(
+                { verticalAlign: "bottom", borders: { top: "none", bottom: "thick" } },
+                p("▲ COURT USE ONLY ▲", true, "center"),
+              ),
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [capCell({}, p("Attorney: Pat Lawyer")), capCell({}, p("Case Number:"))],
+          },
+          {
+            type: "tableRow",
+            content: [capCell({ colspan: 2 }, p("MOTION TO DISMISS", true, "center"))],
+          },
+        ],
+      },
+    ],
+  };
 }

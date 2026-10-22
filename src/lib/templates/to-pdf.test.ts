@@ -1,14 +1,14 @@
 import { PDFDocument, PDFName, PDFDict, PDFRawStream } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import { FONTS } from "./fonts";
-import { renderFixture } from "./converters-fixture";
+import { captionFixture, renderFixture } from "./converters-fixture";
 import {
   DEFAULT_DOCUMENT_STYLE,
   HEADER_DISTANCE_PT,
   resolvePageStyle,
   type PageStyle,
 } from "./page-style";
-import type { ResolvedDoc } from "./render";
+import type { ResolvedDoc, ResolvedTableCell } from "./render";
 import { resolvedToPdf } from "./to-pdf";
 
 const para = (t: string, marks?: { type: "missing" }[]): ResolvedDoc["content"] => [
@@ -457,5 +457,119 @@ describe("Page N line", () => {
     const pitch = body[0] - body[1];
     expect(ch.y - num.y).toBeCloseTo(pitch, 1);
     expect(num.y - body[0]).toBeCloseTo(pitch, 1);
+  });
+});
+
+describe("resolvedToPdf tables", () => {
+  type Placed = { str: string; x: number; y: number };
+  async function placed(buf: Buffer): Promise<Placed[]> {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(buf), verbosity: 0 }).promise;
+    const tc = await (await pdf.getPage(1)).getTextContent();
+    return tc.items
+      .filter((it): it is typeof it & { str: string } => "str" in it && it.str.trim() !== "")
+      .map((it) => {
+        const m = (it as { transform: number[] }).transform;
+        return { str: it.str, x: m[4], y: m[5] };
+      });
+  }
+  const find = (items: Placed[], s: string) => {
+    const hit = items.find((i) => i.str.includes(s));
+    if (!hit) throw new Error(`"${s}" not on the page: ${items.map((i) => i.str).join(" | ")}`);
+    return hit;
+  };
+  const render = async (body: ResolvedDoc) =>
+    resolvedToPdf({ body, letterhead: null, continuation: null, style: style("filing") });
+  const cell = (attrs: ResolvedTableCell["attrs"], ...lines: string[]): ResolvedTableCell => ({
+    type: "tableCell",
+    attrs,
+    content: lines.map((text) => ({ type: "paragraph", content: [{ type: "text", text }] })),
+  });
+  const oneRow = (width: "fit" | undefined, ...cells: ResolvedTableCell[]): ResolvedDoc => ({
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        ...(width ? { attrs: { width } } : {}),
+        content: [{ type: "tableRow", content: cells }],
+      },
+    ],
+  });
+
+  it("draws the caption with ballot boxes from the symbol fallback and no warnings", async () => {
+    const { buffer, warnings } = await render(captionFixture());
+    expect(warnings).toEqual([]);
+    expect((await fontNames(buffer)).some((n) => n.includes("DejaVuSans"))).toBe(true);
+    const items = await placed(buffer);
+    expect(items.map((i) => i.str).join(" ")).toContain("☒");
+  });
+
+  it("splits a full-width table in the editor's proportions", async () => {
+    const items = await placed((await render(captionFixture())).buffer);
+    // 1in margins: text width 468pt; column 2 starts at 72 + 2/3 * 468.
+    const pad = 5.75;
+    expect(find(items, "Attorney").x).toBeCloseTo(72 + 0.5 + pad, 0);
+    expect(find(items, "Case Number").x).toBeCloseTo(72 + 312 + pad, 0);
+  });
+
+  it("centres the merged title across both columns", async () => {
+    const items = await placed((await render(captionFixture())).buffer);
+    const title = find(items, "MOTION");
+    expect(title.x).toBeGreaterThan(200);
+    expect(title.x).toBeLessThan(306);
+  });
+
+  it("aligns cell content to the bottom or middle of the row", async () => {
+    const tall = cell({}, "one", "two", "three");
+    const bottom = await placed(
+      (await render(oneRow(undefined, tall, cell({ verticalAlign: "bottom" }, "low")))).buffer,
+    );
+    expect(find(bottom, "low").y).toBeCloseTo(find(bottom, "three").y, 0);
+    const middle = await placed(
+      (await render(oneRow(undefined, tall, cell({ verticalAlign: "middle" }, "mid")))).buffer,
+    );
+    expect(find(middle, "mid").y).toBeCloseTo(find(middle, "two").y, 0);
+    const top = await placed((await render(oneRow(undefined, tall, cell({}, "high")))).buffer);
+    expect(find(top, "high").y).toBeCloseTo(find(top, "one").y, 0);
+  });
+
+  it("keeps a table nested in a cell inside that cell", async () => {
+    const nested: ResolvedTableCell = {
+      type: "tableCell",
+      content: [
+        {
+          type: "table",
+          content: [{ type: "tableRow", content: [cell({}, "inner-a"), cell({}, "inner-b")] }],
+        },
+      ],
+    };
+    const items = await placed(
+      (await render(oneRow(undefined, nested, cell({}, "outer-right")))).buffer,
+    );
+    // The outer cells split 468pt at 72 + 234; the nested halves fit in the first.
+    expect(find(items, "inner-b").x).toBeLessThan(find(items, "outer-right").x);
+    expect(find(items, "inner-b").x).toBeCloseTo(72 + 0.5 + 5.75 + (234 - 11.5 - 3) / 2 + 5.75, -1);
+  });
+
+  it("measures fallback glyphs in the font that draws them", async () => {
+    const items = await placed(
+      (await render(oneRow("fit", cell({}, "☐☐☐☐☐☐☐☐ County"), cell({}, "next")))).buffer,
+    );
+    // Sized wide enough: the boxes and "County" stay on one line.
+    const all = items.filter((i) => /County|☐/.test(i.str));
+    expect(new Set(all.map((i) => Math.round(i.y))).size).toBe(1);
+  });
+
+  it("shrinks a fit table to its content", async () => {
+    const full = await placed(
+      (await render(oneRow(undefined, cell({}, "Div."), cell({}, "Ctrm.")))).buffer,
+    );
+    const fit = await placed(
+      (await render(oneRow("fit", cell({}, "Div."), cell({}, "Ctrm.")))).buffer,
+    );
+    expect(find(full, "Ctrm").x).toBeGreaterThan(300);
+    // "Div." at 12pt is ~24pt wide, plus padding and rules.
+    expect(find(fit, "Ctrm").x).toBeGreaterThan(find(fit, "Div").x + 20);
+    expect(find(fit, "Ctrm").x).toBeLessThan(find(fit, "Div").x + 50);
   });
 });

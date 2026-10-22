@@ -56,13 +56,34 @@ export type OrderedListNode = {
   attrs?: { start?: number };
   content: ListItemNode[];
 };
+/** A cell side's rule. Absent means "thin", the default. */
+export const BORDER_WEIGHTS = ["none", "thin", "thick"] as const;
+export type BorderWeight = (typeof BORDER_WEIGHTS)[number];
+export const CELL_SIDES = ["top", "right", "bottom", "left"] as const;
+export type CellSide = (typeof CELL_SIDES)[number];
+export type CellBorders = Partial<Record<CellSide, "none" | "thick">>;
+export const VERTICAL_ALIGNS = ["top", "middle", "bottom"] as const;
+export type VerticalAlign = (typeof VERTICAL_ALIGNS)[number];
+/** Most columns a cell may span; well past any real caption. */
+export const MAX_COLSPAN = 20;
+
 export type TableCellNode = {
   type: "tableCell" | "tableHeader";
-  attrs?: { colspan?: 1; rowspan?: 1; colwidth?: number[] | null };
+  /** Cells merge across a row (colspan) only; `colwidth` has one entry
+   *  per spanned column, in editor pixels (0 = unset). Absent
+   *  `verticalAlign` is top; absent `borders` sides are thin. */
+  attrs?: {
+    colspan?: number;
+    rowspan?: 1;
+    colwidth?: number[] | null;
+    verticalAlign?: "middle" | "bottom";
+    borders?: CellBorders;
+  };
   content: BlockNode[];
 };
 export type TableRowNode = { type: "tableRow"; content: TableCellNode[] };
-export type TableNode = { type: "table"; content: TableRowNode[] };
+/** Absent `width` is full (margin to margin). */
+export type TableNode = { type: "table"; attrs?: { width?: "fit" }; content: TableRowNode[] };
 export type PageBreakNode = { type: "pageBreak" };
 export type BlockRefNode = { type: "block"; attrs: { blockId: string } };
 export type ShowIfNode = {
@@ -295,7 +316,16 @@ function block(raw: unknown, depth: number, ctx: Ctx): BlockNode {
     case "table": {
       const rows = children(n);
       if (rows.length === 0) return fail("A table needs at least one row.");
-      return { type: "table", content: rows.map((r) => tableRow(r, depth + 1, ctx)) };
+      const w = attrsOf(n).width;
+      if (w !== undefined && w !== null && w !== "full" && w !== "fit") {
+        return fail("Invalid table width.");
+      }
+      const out: TableNode = {
+        type: "table",
+        content: rows.map((r) => tableRow(r, depth + 1, ctx)),
+      };
+      if (w === "fit") out.attrs = { width: "fit" };
+      return out;
     }
     case "pageBreak":
       if (ctx.kind === "email") return fail("Email templates cannot contain page breaks.");
@@ -364,21 +394,50 @@ function tableCell(raw: unknown, depth: number, ctx: Ctx): TableCellNode {
   }
   const a = attrsOf(n);
   const attrs: NonNullable<TableCellNode["attrs"]> = {};
-  for (const k of ["colspan", "rowspan"] as const) {
-    if (a[k] === undefined || a[k] === null) continue;
-    if (a[k] !== 1) return fail("Merged table cells are not supported.");
-    attrs[k] = 1;
+  if (a.rowspan !== undefined && a.rowspan !== null) {
+    if (a.rowspan !== 1) return fail("Cells can only be merged across a row.");
+    attrs.rowspan = 1;
+  }
+  let span = 1;
+  if (a.colspan !== undefined && a.colspan !== null) {
+    if (
+      typeof a.colspan !== "number" ||
+      !Number.isInteger(a.colspan) ||
+      a.colspan < 1 ||
+      a.colspan > MAX_COLSPAN
+    ) {
+      return fail("Invalid merged cell.");
+    }
+    span = a.colspan;
+    attrs.colspan = span;
   }
   if (a.colwidth !== undefined && a.colwidth !== null) {
     if (
       !Array.isArray(a.colwidth) ||
-      !a.colwidth.every((w) => typeof w === "number" && isFinite(w))
+      !a.colwidth.every((w) => typeof w === "number" && isFinite(w) && w >= 0)
     ) {
       return fail("Invalid table column width.");
     }
-    attrs.colwidth = a.colwidth as number[];
+    // A width list that doesn't match the span is stale; drop it.
+    attrs.colwidth = a.colwidth.length === span ? (a.colwidth as number[]) : null;
   } else if (a.colwidth === null) {
     attrs.colwidth = null;
+  }
+  const va = a.verticalAlign;
+  if (va !== undefined && va !== null && !VERTICAL_ALIGNS.includes(va as VerticalAlign)) {
+    return fail("Invalid vertical alignment.");
+  }
+  if (va === "middle" || va === "bottom") attrs.verticalAlign = va;
+  if (a.borders !== undefined && a.borders !== null) {
+    if (!isObj(a.borders)) return fail("Invalid table borders.");
+    const borders: CellBorders = {};
+    for (const side of CELL_SIDES) {
+      const v = a.borders[side];
+      if (v === undefined || v === null || v === "thin") continue;
+      if (v !== "none" && v !== "thick") return fail("Invalid table borders.");
+      borders[side] = v;
+    }
+    if (Object.keys(borders).length) attrs.borders = borders;
   }
   const out: TableCellNode = {
     type: t,

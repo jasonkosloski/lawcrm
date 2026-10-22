@@ -1,0 +1,255 @@
+/**
+ * Table controls shown in the toolbar while the cursor is in a table:
+ * rows, columns, merging (across a row only), width, borders and
+ * vertical alignment. Horizontal alignment is the toolbar's own
+ * align buttons, which apply to every selected cell.
+ */
+
+"use client";
+
+import { useState, type ReactNode } from "react";
+import { useEditorState, type Editor } from "@tiptap/react";
+import {
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  AlignVerticalJustifyStart,
+  ChevronDown,
+  Grid2x2,
+  Table,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import type { CellSide, VerticalAlign } from "@/lib/templates/schema";
+import {
+  bordersAre,
+  canMergeInRow,
+  setBorders,
+  setTableWidth,
+  tableWidthAt,
+  type BorderTarget,
+  type TableWidth,
+  type Weight,
+} from "./table-commands";
+import { ToolButton } from "./toolbar-button";
+
+const SIDES: CellSide[] = ["top", "bottom", "left", "right"];
+const SIDE_LABEL: Record<CellSide, string> = {
+  top: "Top border",
+  bottom: "Bottom border",
+  left: "Left border",
+  right: "Right border",
+};
+const PRESETS: { target: BorderTarget; label: string }[] = [
+  { target: "all", label: "All borders" },
+  { target: "outer", label: "Outside borders" },
+  { target: "inner", label: "Inside borders" },
+  { target: "none", label: "No borders" },
+];
+
+/** A 2x2 cell diagram with the lines `target` draws in solid ink. */
+function BorderIcon({ target }: { target: BorderTarget }) {
+  const on = (edge: CellSide | "innerH" | "innerV") => {
+    if (target === "all") return true;
+    if (target === "none") return false;
+    if (target === "outer") return edge !== "innerH" && edge !== "innerV";
+    if (target === "inner") return edge === "innerH" || edge === "innerV";
+    return edge === target;
+  };
+  const line = (edge: Parameters<typeof on>[0], d: string) => (
+    <path
+      d={d}
+      stroke="currentColor"
+      strokeWidth={on(edge) ? 1.6 : 1}
+      strokeDasharray={on(edge) ? undefined : "1.5 1.5"}
+      opacity={on(edge) ? 1 : 0.45}
+    />
+  );
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      {line("top", "M1 1H13")}
+      {line("bottom", "M1 13H13")}
+      {line("left", "M1 1V13")}
+      {line("right", "M13 1V13")}
+      {line("innerH", "M1 7H13")}
+      {line("innerV", "M7 1V13")}
+    </svg>
+  );
+}
+
+function Segment({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      className={cn(
+        "flex-1 rounded px-2 py-0.5 text-2xs text-ink-3 hover:text-ink",
+        active && "bg-paper text-ink shadow-sm",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function TableMenu({ editor }: { editor: Editor }) {
+  const [weight, setWeight] = useState<Weight>("thin");
+  const s = useEditorState({
+    editor,
+    selector: ({ editor: e }) => {
+      const width = tableWidthAt(e.state);
+      if (!width) return null;
+      const va = (v: VerticalAlign) =>
+        e.isActive("tableCell", { verticalAlign: v }) ||
+        e.isActive("tableHeader", { verticalAlign: v });
+      return {
+        width,
+        canMerge: canMergeInRow(e.state),
+        canSplit: e.can().splitCell(),
+        middle: va("middle"),
+        bottom: va("bottom"),
+        thin: Object.fromEntries(SIDES.map((x) => [x, bordersAre(e.state, x, "thin")])),
+        thick: Object.fromEntries(SIDES.map((x) => [x, bordersAre(e.state, x, "thick")])),
+      };
+    },
+  });
+  if (!s) return null;
+
+  const chain = () => editor.chain().focus();
+  const dispatch = (tr: ReturnType<typeof setBorders>) => {
+    if (tr) editor.view.dispatch(tr);
+    editor.commands.focus();
+  };
+  const width = (w: TableWidth) => dispatch(setTableWidth(editor.state, w));
+  const valign = (v: VerticalAlign) =>
+    chain()
+      .setCellAttribute("verticalAlign", v === "top" ? null : v)
+      .run();
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button variant="outline" size="xs" className="gap-1">
+              <Table size={12} />
+              Table
+              <ChevronDown size={11} />
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="start" className="min-w-52">
+          <DropdownMenuItem onClick={() => chain().addRowBefore().run()}>
+            Insert row above
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => chain().addRowAfter().run()}>
+            Insert row below
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => chain().addColumnBefore().run()}>
+            Insert column left
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => chain().addColumnAfter().run()}>
+            Insert column right
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => chain().deleteRow().run()}>Delete row</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => chain().deleteColumn().run()}>
+            Delete column
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={!s.canMerge} onClick={() => chain().mergeCells().run()}>
+            Merge cells
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!s.canSplit} onClick={() => chain().splitCell().run()}>
+            Split cell
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuCheckboxItem checked={s.width === "full"} onClick={() => width("full")}>
+            Full width
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuCheckboxItem checked={s.width === "fit"} onClick={() => width("fit")}>
+            Fit to content
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onClick={() => chain().deleteTable().run()}>
+            Delete table
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Popover>
+        <PopoverTrigger
+          render={
+            <Button variant="outline" size="xs" className="gap-1">
+              <Grid2x2 size={12} />
+              Borders
+              <ChevronDown size={11} />
+            </Button>
+          }
+        />
+        <PopoverContent align="start" className="w-56">
+          <div className="flex gap-0.5 rounded bg-paper-2 p-0.5" role="group" aria-label="Line">
+            <Segment active={weight === "thin"} onClick={() => setWeight("thin")}>
+              Thin
+            </Segment>
+            <Segment active={weight === "thick"} onClick={() => setWeight("thick")}>
+              Thick
+            </Segment>
+          </div>
+          <div className="mt-2 grid grid-cols-4 gap-1">
+            {PRESETS.map((p) => (
+              <ToolButton
+                key={p.target}
+                label={p.label}
+                onClick={() => dispatch(setBorders(editor.state, p.target, weight))}
+              >
+                <BorderIcon target={p.target} />
+              </ToolButton>
+            ))}
+            {SIDES.map((side) => (
+              <ToolButton
+                key={side}
+                label={SIDE_LABEL[side]}
+                active={s[weight][side]}
+                onClick={() => dispatch(setBorders(editor.state, side, weight))}
+              >
+                <BorderIcon target={side} />
+              </ToolButton>
+            ))}
+          </div>
+          <p className="mt-2 text-2xs text-ink-4">
+            Applies to the selected cells. A side button turns that line on or off.
+          </p>
+        </PopoverContent>
+      </Popover>
+
+      <ToolButton label="Align top" active={!s.middle && !s.bottom} onClick={() => valign("top")}>
+        <AlignVerticalJustifyStart size={13} />
+      </ToolButton>
+      <ToolButton label="Align middle" active={s.middle} onClick={() => valign("middle")}>
+        <AlignVerticalJustifyCenter size={13} />
+      </ToolButton>
+      <ToolButton label="Align bottom" active={s.bottom} onClick={() => valign("bottom")}>
+        <AlignVerticalJustifyEnd size={13} />
+      </ToolButton>
+    </>
+  );
+}

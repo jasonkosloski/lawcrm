@@ -20,6 +20,7 @@
  */
 
 import sanitizeHtml from "sanitize-html";
+import { CELL_SIDE_ATTR } from "@/lib/templates/table-layout";
 
 /** Tags emitted by Tiptap StarterKit + a couple Tiptap extensions
  *  we use (link, underline, strikethrough). Keep this list in
@@ -148,8 +149,9 @@ export function sanitizeUserHtml(html: string): string {
 // sanitize the converter's output before it ever reaches
 // `dangerouslySetInnerHTML`. Script contexts stay impossible:
 // no <script>/<iframe>/<style>, no event handlers, and style attrs only
-// as a validated text-align on p/h1-h3/td/th (the template converters and
-// the docx preview also keep <mark data-missing> and <hr data-page-break>;
+// as a validated text-align on p/h1-h3/td/th or a numeric width on <col>
+// (the template converters and the docx preview also keep <mark
+// data-missing>, <hr data-page-break> and table border/alignment data-*;
 // sanitize-html strips every other unlisted attribute), and image sources are
 // restricted to `data:` URIs — mammoth inlines embedded images as
 // data URIs, and a data-URI <img> is a non-scripting context even
@@ -192,10 +194,12 @@ const DOCUMENT_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = 
 };
 
 // Template converter output (src/lib/templates/to-html.ts) also needs
-// <mark data-missing>, <hr data-page-break> and a text-align style on
-// blocks. Added here on DOCUMENT_OPTIONS only, so the email profile
-// (which spreads the constants above) is not widened.
+// <mark data-missing>, <hr data-page-break>, a text-align style on
+// blocks, table border/alignment data-* and column widths. Added here on
+// DOCUMENT_OPTIONS only, so the email profile (which spreads the
+// constants above) is not widened.
 const TEMPLATE_ALIGN_TAGS = ["p", "h1", "h2", "h3", "td", "th"];
+const TEMPLATE_CELL_ATTRS = [...Object.values(CELL_SIDE_ATTR), "data-valign"];
 
 const DOCUMENT_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [...DOCUMENT_ALLOWED_TAGS, "mark"],
@@ -207,10 +211,17 @@ const DOCUMENT_OPTIONS: sanitizeHtml.IOptions = {
         [...((DOCUMENT_ALLOWED_ATTRIBUTES as Record<string, string[]>)[tag] ?? []), "style"],
       ]),
     ),
+    td: ["colspan", "rowspan", "style", ...TEMPLATE_CELL_ATTRS],
+    th: ["colspan", "rowspan", "style", ...TEMPLATE_CELL_ATTRS],
+    table: ["data-width"],
+    col: ["span", "style"],
     mark: ["data-missing"],
     hr: ["data-page-break"],
   },
-  allowedStyles: { "*": { "text-align": [/^(left|right|center|justify)$/] } },
+  allowedStyles: {
+    "*": { "text-align": [/^(left|right|center|justify)$/] },
+    col: { width: [/^\d{1,4}(\.\d{1,2})?(px|%)$/] },
+  },
   allowedSchemes: ALLOWED_SCHEMES,
   // Images: data URIs only (mammoth inlines embedded media). No
   // remote fetches from inside a rendered document.

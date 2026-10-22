@@ -28,16 +28,35 @@ import {
   type LoadedLogo,
   type PageStyle,
 } from "./page-style";
-import type { ResolvedBlock, ResolvedDoc, ResolvedInline, ResolvedTableCell } from "./render";
+import type {
+  ResolvedBlock,
+  ResolvedDoc,
+  ResolvedInline,
+  ResolvedTable,
+  ResolvedTableCell,
+} from "./render";
+import {
+  BORDER_PT,
+  columnFractions,
+  fitColumnWidths,
+  spannedWidth,
+  tableGrid,
+  verticalAlignOf,
+  type GridCell,
+} from "./table-layout";
 
 const FALLBACK_FAMILY = "Liberation Sans";
+/** Last-resort glyphs the text fonts lack (ballot boxes ☐ ☑ ☒, check
+ *  marks). One face serves every weight and style. */
+const SYMBOL_FAMILY = "DejaVu Sans";
+const SYMBOL_FILE = "DejaVuSans.ttf";
 const PT_PER_IN = 72;
 /** imageSize reports pixels; Word places them at 96 dpi. */
 const PT_PER_PX = 72 / 96;
 const LOGO_MAX_W_PT = 3 * PT_PER_IN;
 const LOGO_MAX_H_PT = 1 * PT_PER_IN;
 const LIST_INDENT = 18; // marker column and per-level indent, in points
-const BORDER = { borderColor: "#000000", borderWidth: 0.5 } as const;
+const BORDER_COLOR = "#000000";
 
 const registered = new Set<string>();
 
@@ -65,17 +84,24 @@ function ensureFonts(key: FontKey) {
   }
   registerFamily(FONTS[key].pdfFamily, FONTS[key].files);
   registerFamily(FALLBACK_FAMILY, FONTS.arial.files);
+  registerFamily(SYMBOL_FAMILY, {
+    regular: SYMBOL_FILE,
+    bold: SYMBOL_FILE,
+    italic: SYMBOL_FILE,
+    boldItalic: SYMBOL_FILE,
+  });
 }
 
-const glyphFonts = new Map<FontKey, GlyphFont>();
-function glyphFont(key: FontKey): GlyphFont {
-  let f = glyphFonts.get(key);
+const glyphFonts = new Map<string, GlyphFont>();
+function glyphFile(file: string): GlyphFont {
+  let f = glyphFonts.get(file);
   if (!f) {
-    f = openSync(fontFilePath(FONTS[key].files.regular));
-    glyphFonts.set(key, f);
+    f = openSync(fontFilePath(file));
+    glyphFonts.set(file, f);
   }
   return f;
 }
+const glyphFont = (key: FontKey) => glyphFile(FONTS[key].files.regular);
 
 /** Word's "single" is the font's natural line height, which react-pdf's
  *  unitless lineHeight (a multiple of font size) does not default to. */
@@ -94,10 +120,11 @@ function collectText(doc: ResolvedDoc | null, out: string[]) {
   walk(doc);
 }
 
-/** True when any code point has no glyph in the chosen font or the fallback. */
+/** True when any code point has no glyph in the chosen font or a fallback. */
 function hasUnsupported(key: FontKey, strings: string[]): boolean {
   const font = glyphFont(key);
   const fallback = glyphFont("arial"); // Liberation Sans, the registered fallback
+  const symbols = glyphFile(SYMBOL_FILE);
   const seen = new Set<number>();
   for (const s of strings) {
     for (const ch of s) {
@@ -105,7 +132,13 @@ function hasUnsupported(key: FontKey, strings: string[]): boolean {
       if (seen.has(cp)) continue;
       seen.add(cp);
       if (cp <= 0x20 || (cp >= 0x7f && cp <= 0xa0) || cp === 0x200b) continue; // whitespace, controls
-      if (!font.hasGlyphForCodePoint(cp) && !fallback.hasGlyphForCodePoint(cp)) return true;
+      if (
+        !font.hasGlyphForCodePoint(cp) &&
+        !fallback.hasGlyphForCodePoint(cp) &&
+        !symbols.hasGlyphForCodePoint(cp)
+      ) {
+        return true;
+      }
     }
   }
   return false;
@@ -134,7 +167,8 @@ function inline(nodes: ResolvedInline[] | undefined): ReactNode[] {
   });
 }
 
-type Ctx = { style: PageStyle };
+/** `textWidth`: points between the margins, which full-width tables fill. */
+type Ctx = { style: PageStyle; textWidth: number };
 
 function paragraph(
   key: string | number,
@@ -188,7 +222,9 @@ function blocks(list: ResolvedBlock[], ctx: Ctx): ReactElement[] {
                   >
                     {marker}
                   </Text>
-                  <View style={{ flex: 1 }}>{blocks(li.content, ctx)}</View>
+                  <View style={{ flex: 1 }}>
+                    {blocks(li.content, { ...ctx, textWidth: ctx.textWidth - 2 * LIST_INDENT })}
+                  </View>
                 </View>
               );
             })}
@@ -196,43 +232,139 @@ function blocks(list: ResolvedBlock[], ctx: Ctx): ReactElement[] {
         );
       }
       case "table":
-        return (
-          <View
-            key={i}
-            style={{
-              marginBottom: ctx.style.spaceAfterPt,
-              borderTopWidth: 0.5,
-              borderLeftWidth: 0.5,
-              borderColor: BORDER.borderColor,
-            }}
-          >
-            {b.content.map((r, j) => (
-              <View key={j} style={{ flexDirection: "row" }} wrap={false}>
-                {r.content.map((c, k) => cell(c, k, ctx))}
-              </View>
-            ))}
-          </View>
-        );
+        return table(i, b, ctx);
       case "pageBreak":
         return <View key={i} break />;
     }
   });
 }
 
-function cell(c: ResolvedTableCell, key: number, ctx: Ctx) {
+/** Width of a run of text at the body size, in points. */
+/** Width of a run of text, in points. Each character is measured in the
+ *  face that will draw it: the chosen font, else a fallback. */
+function textWidth(text: string, marks: Set<string>, ctx: Ctx, sizePt: number): number {
+  const face = marks.has("bold")
+    ? marks.has("italic")
+      ? "boldItalic"
+      : "bold"
+    : marks.has("italic")
+      ? "italic"
+      : "regular";
+  const faces = [
+    glyphFile(FONTS[ctx.style.font].files[face]),
+    glyphFile(FONTS.arial.files[face]),
+    glyphFile(SYMBOL_FILE),
+  ];
+  let total = 0;
+  let run = "";
+  let runFont = faces[0];
+  const flush = () => {
+    if (run) total += (runFont.layout(run).advanceWidth * sizePt) / runFont.unitsPerEm;
+    run = "";
+  };
+  for (const ch of text) {
+    const cp = ch.codePointAt(0)!;
+    const f = faces.find((x) => x.hasGlyphForCodePoint(cp)) ?? faces[0];
+    if (f !== runFont) {
+      flush();
+      runFont = f;
+    }
+    run += ch;
+  }
+  flush();
+  return total;
+}
+
+/** The widest line a cell's content would set on, plus its padding:
+ *  what a fit-to-content column needs to avoid wrapping. */
+function naturalWidth(c: ResolvedTableCell, ctx: Ctx): number {
+  const widest = (list: ResolvedBlock[], indent: number): number =>
+    Math.max(
+      0,
+      ...list.map((b): number => {
+        switch (b.type) {
+          case "paragraph":
+          case "heading": {
+            const size =
+              b.type === "heading"
+                ? headingSizePt(ctx.style.sizePt, b.attrs.level)
+                : ctx.style.sizePt;
+            const lines = [0];
+            for (const n of b.content ?? []) {
+              if (n.type === "hardBreak") lines.push(0);
+              else {
+                const marks = new Set<string>((n.marks ?? []).map((m) => m.type));
+                if (b.type === "heading") marks.add("bold");
+                lines[lines.length - 1] += textWidth(n.text, marks, ctx, size);
+              }
+            }
+            return indent + Math.max(...lines);
+          }
+          case "bulletList":
+          case "orderedList":
+            return Math.max(
+              0,
+              ...b.content.map((li) => widest(li.content, indent + LIST_INDENT * 2)),
+            );
+          case "table":
+            return indent + ctx.textWidth;
+          case "pageBreak":
+            return 0;
+        }
+      }),
+    );
+  // A little slack so rounding never wraps the widest line.
+  return widest(c.content, 0) + 2 * CELL_PAD_PT + 2 * BORDER_PT.thick + 1;
+}
+
+const VALIGN = { top: "flex-start", middle: "center", bottom: "flex-end" } as const;
+
+/**
+ * Each cell draws its bottom and right rule; the first row also draws
+ * the top and a row's first cell the left, so every edge is drawn once
+ * and a table split across pages keeps its bottom line on each page.
+ * `textWidth` is the width the table sits in (narrower in a list or cell).
+ */
+function table(key: number, t: ResolvedTable, ctx: Ctx) {
+  const grid = tableGrid(t);
+  const widths =
+    t.attrs?.width === "fit"
+      ? fitColumnWidths(grid, (c) => naturalWidth(c, ctx), PT_PER_PX, ctx.textWidth)
+      : columnFractions(grid).map((f) => f * ctx.textWidth);
+  return (
+    <View
+      key={key}
+      style={{ marginBottom: ctx.style.spaceAfterPt, width: widths.reduce((a, b) => a + b, 0) }}
+    >
+      {grid.rows.map((r, j) => (
+        <View key={j} style={{ flexDirection: "row" }} wrap={false}>
+          {r.map((g, k) => cell(g, k, widths, j === 0, ctx))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function cell(g: GridCell, key: number, widths: number[], firstRow: boolean, ctx: Ctx) {
+  const b = g.borders;
+  const width = spannedWidth(g, widths);
+  const inner = { ...ctx, textWidth: width - 2 * CELL_PAD_PT - BORDER_PT.thick * 2 };
   return (
     <View
       key={key}
       style={{
-        flex: 1,
+        width,
         paddingLeft: CELL_PAD_PT,
         paddingRight: CELL_PAD_PT,
-        borderRightWidth: 0.5,
-        borderBottomWidth: 0.5,
-        borderColor: BORDER.borderColor,
+        justifyContent: VALIGN[verticalAlignOf(g.cell)],
+        borderColor: BORDER_COLOR,
+        borderTopWidth: firstRow ? BORDER_PT[b.top] : 0,
+        borderLeftWidth: key === 0 ? BORDER_PT[b.left] : 0,
+        borderBottomWidth: BORDER_PT[b.bottom],
+        borderRightWidth: BORDER_PT[b.right],
       }}
     >
-      {blocks(c.content, { ...ctx, style: { ...ctx.style, spaceAfterPt: 0 } })}
+      {blocks(g.cell.content, { ...inner, style: { ...ctx.style, spaceAfterPt: 0 } })}
     </View>
   );
 }
@@ -270,7 +402,12 @@ export async function resolvedToPdf(input: {
   const { style } = input;
   const isLetter = style.kind === "letter";
   ensureFonts(style.font);
-  const ctx: Ctx = { style };
+  const ctx: Ctx = {
+    style,
+    textWidth:
+      PAGE_DIMENSIONS[style.paperSize].pt.w -
+      (style.marginsIn.left + style.marginsIn.right) * PT_PER_IN,
+  };
 
   const strings: string[] = [];
   collectText(input.body, strings);
@@ -287,7 +424,7 @@ export async function resolvedToPdf(input: {
     warnings.push("Logo couldn't be loaded.");
   }
 
-  const family = [FONTS[style.font].pdfFamily, FALLBACK_FAMILY];
+  const family = [FONTS[style.font].pdfFamily, FALLBACK_FAMILY, SYMBOL_FAMILY];
   const m = style.marginsIn;
   const pt = (n: number) => n * PT_PER_IN;
 

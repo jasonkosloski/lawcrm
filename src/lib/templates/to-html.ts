@@ -25,8 +25,17 @@ import type {
   ResolvedDoc,
   ResolvedInline,
   ResolvedListItem,
-  ResolvedTableCell,
+  ResolvedTable,
 } from "./render";
+import { CELL_SIDES } from "./schema";
+import {
+  CELL_SIDE_ATTR,
+  columnFractions,
+  columnPx,
+  tableGrid,
+  verticalAlignOf,
+  type GridCell,
+} from "./table-layout";
 
 const ESCAPES: Record<string, string> = {
   "&": "&amp;",
@@ -64,10 +73,31 @@ function listItem(li: ResolvedListItem): string {
   return `<li>${li.content.map(block).join("")}</li>`;
 }
 
-function cell(c: ResolvedTableCell): string {
+/** Borders and vertical alignment travel as data attributes the page
+ *  CSS styles; only widths need an inline (sanitizer-validated) style.
+ *  Sides are as declared: collapsed CSS resolves each shared segment. */
+function cell(g: GridCell): string {
+  const c = g.cell;
   const tag = c.type === "tableHeader" ? "th" : "td";
-  const inner = c.content.map((b) => (b.type === "paragraph" ? inline(b.content) : block(b)));
-  return `<${tag}>${inner.join("<br />")}</${tag}>`;
+  let attrs = g.span > 1 ? ` colspan="${g.span}"` : "";
+  for (const side of CELL_SIDES) {
+    const w = g.declared[side];
+    if (w !== "thin") attrs += ` ${CELL_SIDE_ATTR[side]}="${w}"`;
+  }
+  const va = verticalAlignOf(c);
+  if (va !== "top") attrs += ` data-valign="${va}"`;
+  return `<${tag}${attrs}>${c.content.map(block).join("")}</${tag}>`;
+}
+
+function table(t: ResolvedTable): string {
+  const grid = tableGrid(t);
+  const fit = t.attrs?.width === "fit";
+  const px = columnPx(grid);
+  const cols = fit
+    ? px.map((w) => (w === null ? "<col>" : `<col style="width:${Math.round(w)}px">`))
+    : columnFractions(grid).map((f) => `<col style="width:${(f * 100).toFixed(2)}%">`);
+  const rows = grid.rows.map((r) => `<tr>${r.map(cell).join("")}</tr>`).join("");
+  return `<table data-width="${fit ? "fit" : "full"}"><colgroup>${cols.join("")}</colgroup>${rows}</table>`;
 }
 
 function block(b: ResolvedBlock): string {
@@ -81,9 +111,7 @@ function block(b: ResolvedBlock): string {
     case "orderedList":
       return `<ol>${b.content.map(listItem).join("")}</ol>`;
     case "table":
-      return `<table>${b.content
-        .map((r) => `<tr>${r.content.map(cell).join("")}</tr>`)
-        .join("")}</table>`;
+      return table(b);
     case "pageBreak":
       return "<hr data-page-break>";
   }
