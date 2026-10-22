@@ -1,8 +1,9 @@
 /**
- * Table controls shown in the toolbar while the cursor is in a table:
- * rows, columns, merging (across a row only), width, borders and
- * vertical alignment. Horizontal alignment is the toolbar's own
- * align buttons, which apply to every selected cell.
+ * The toolbar's table controls: insert a table, then (with the cursor in
+ * one) rows, columns, merging (across a row only), width, borders and
+ * vertical alignment. Always shown, greyed out outside a table, so they
+ * can be found. Horizontal alignment is the toolbar's own align
+ * buttons, which apply to every selected cell.
  */
 
 "use client";
@@ -110,17 +111,30 @@ function Segment({
   );
 }
 
+const NO_SIDES = { top: false, bottom: false, left: false, right: false };
+const OUTSIDE = {
+  inTable: false,
+  width: "full" as TableWidth,
+  canMerge: false,
+  canSplit: false,
+  middle: false,
+  bottom: false,
+  thin: NO_SIDES as Record<CellSide, boolean>,
+  thick: NO_SIDES as Record<CellSide, boolean>,
+};
+
 export function TableMenu({ editor }: { editor: Editor }) {
   const [weight, setWeight] = useState<Weight>("thin");
   const s = useEditorState({
     editor,
     selector: ({ editor: e }) => {
       const width = tableWidthAt(e.state);
-      if (!width) return null;
+      if (!width) return OUTSIDE;
       const va = (v: VerticalAlign) =>
         e.isActive("tableCell", { verticalAlign: v }) ||
         e.isActive("tableHeader", { verticalAlign: v });
       return {
+        inTable: true,
         width,
         canMerge: canMergeInRow(e.state),
         canSplit: e.can().splitCell(),
@@ -131,7 +145,8 @@ export function TableMenu({ editor }: { editor: Editor }) {
       };
     },
   });
-  if (!s) return null;
+  const t = s ?? OUTSIDE;
+  const off = !t.inTable;
 
   const chain = () => editor.chain().focus();
   const dispatch = (tr: ReturnType<typeof setBorders>) => {
@@ -157,39 +172,64 @@ export function TableMenu({ editor }: { editor: Editor }) {
           }
         />
         <DropdownMenuContent align="start" className="min-w-52">
-          <DropdownMenuItem onClick={() => chain().addRowBefore().run()}>
+          <DropdownMenuItem
+            onClick={() => chain().insertTable({ rows: 2, cols: 2, withHeaderRow: false }).run()}
+          >
+            Insert table
+          </DropdownMenuItem>
+          {off && (
+            <p className="px-1.5 py-1 text-2xs text-ink-4">
+              Click in a table for rows, columns, merging and width.
+            </p>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={off} onClick={() => chain().addRowBefore().run()}>
             Insert row above
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => chain().addRowAfter().run()}>
+          <DropdownMenuItem disabled={off} onClick={() => chain().addRowAfter().run()}>
             Insert row below
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => chain().addColumnBefore().run()}>
+          <DropdownMenuItem disabled={off} onClick={() => chain().addColumnBefore().run()}>
             Insert column left
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => chain().addColumnAfter().run()}>
+          <DropdownMenuItem disabled={off} onClick={() => chain().addColumnAfter().run()}>
             Insert column right
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => chain().deleteRow().run()}>Delete row</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => chain().deleteColumn().run()}>
+          <DropdownMenuItem disabled={off} onClick={() => chain().deleteRow().run()}>
+            Delete row
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={off} onClick={() => chain().deleteColumn().run()}>
             Delete column
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={!s.canMerge} onClick={() => chain().mergeCells().run()}>
+          <DropdownMenuItem disabled={!t.canMerge} onClick={() => chain().mergeCells().run()}>
             Merge cells
           </DropdownMenuItem>
-          <DropdownMenuItem disabled={!s.canSplit} onClick={() => chain().splitCell().run()}>
+          <DropdownMenuItem disabled={!t.canSplit} onClick={() => chain().splitCell().run()}>
             Split cell
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuCheckboxItem checked={s.width === "full"} onClick={() => width("full")}>
+          <DropdownMenuCheckboxItem
+            disabled={off}
+            checked={t.inTable && t.width === "full"}
+            onClick={() => width("full")}
+          >
             Full width
           </DropdownMenuCheckboxItem>
-          <DropdownMenuCheckboxItem checked={s.width === "fit"} onClick={() => width("fit")}>
+          <DropdownMenuCheckboxItem
+            disabled={off}
+            checked={t.width === "fit"}
+            onClick={() => width("fit")}
+          >
             Fit to content
           </DropdownMenuCheckboxItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onClick={() => chain().deleteTable().run()}>
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={off}
+            onClick={() => chain().deleteTable().run()}
+          >
             Delete table
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -198,7 +238,7 @@ export function TableMenu({ editor }: { editor: Editor }) {
       <Popover>
         <PopoverTrigger
           render={
-            <Button variant="outline" size="xs" className="gap-1">
+            <Button variant="outline" size="xs" className="gap-1" disabled={off}>
               <Grid2x2 size={12} />
               Borders
               <ChevronDown size={11} />
@@ -228,7 +268,7 @@ export function TableMenu({ editor }: { editor: Editor }) {
               <ToolButton
                 key={side}
                 label={SIDE_LABEL[side]}
-                active={s[weight][side]}
+                active={t[weight][side]}
                 onClick={() => dispatch(setBorders(editor.state, side, weight))}
               >
                 <BorderIcon target={side} />
@@ -241,13 +281,28 @@ export function TableMenu({ editor }: { editor: Editor }) {
         </PopoverContent>
       </Popover>
 
-      <ToolButton label="Align top" active={!s.middle && !s.bottom} onClick={() => valign("top")}>
+      <ToolButton
+        label="Align top"
+        disabled={off}
+        active={t.inTable && !t.middle && !t.bottom}
+        onClick={() => valign("top")}
+      >
         <AlignVerticalJustifyStart size={13} />
       </ToolButton>
-      <ToolButton label="Align middle" active={s.middle} onClick={() => valign("middle")}>
+      <ToolButton
+        label="Align middle"
+        disabled={off}
+        active={t.middle}
+        onClick={() => valign("middle")}
+      >
         <AlignVerticalJustifyCenter size={13} />
       </ToolButton>
-      <ToolButton label="Align bottom" active={s.bottom} onClick={() => valign("bottom")}>
+      <ToolButton
+        label="Align bottom"
+        disabled={off}
+        active={t.bottom}
+        onClick={() => valign("bottom")}
+      >
         <AlignVerticalJustifyEnd size={13} />
       </ToolButton>
     </>

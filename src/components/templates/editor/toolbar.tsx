@@ -22,7 +22,6 @@ import {
   ListOrdered,
   Repeat,
   Scissors,
-  Table,
   Underline,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -245,12 +244,6 @@ export function Toolbar({
             onClick={() => chain().setTextAlign("right").run()}
           >
             <AlignRight size={13} />
-          </ToolButton>
-          <ToolButton
-            label="Insert table"
-            onClick={() => chain().insertTable({ rows: 2, cols: 2, withHeaderRow: false }).run()}
-          >
-            <Table size={13} />
           </ToolButton>
           <TableMenu editor={editor} />
           {kind !== "email" && (
