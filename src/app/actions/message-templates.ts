@@ -20,7 +20,8 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 import type { RecordScope } from "@/lib/record-scope";
 import { loadTemplateData } from "@/lib/templates/load-data";
 import { contentOf, loadBlockMap } from "@/lib/templates/template-source";
-import { renderTemplate, type RenderReport } from "@/lib/templates/render";
+import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templates/render";
+import { mergeReport } from "@/lib/templates/page-render";
 import { usesRecipient } from "@/lib/templates/inspect";
 import { resolvedToHtml } from "@/lib/templates/to-html";
 import { resolvedToText } from "@/lib/templates/to-text";
@@ -51,7 +52,6 @@ export async function listMessageTemplateOptions(
   kind: MessageKind,
   scope: RecordScope,
 ): Promise<MessageTemplateOptions> {
-  await assertScopeAccess(scope);
   if (!(await currentUserHasPermission(PERMISSION[kind]))) {
     return { ok: false, error: DENIED[kind] };
   }
@@ -61,6 +61,7 @@ export async function listMessageTemplateOptions(
       orderBy: [{ category: "asc" }, { name: "asc" }],
       select: { id: true, name: true, category: true },
     }),
+    // Access-checks the record before reading its contacts.
     loadGenerateOptions(scope),
   ]);
   return { ok: true, templates, recipients: options.contacts };
@@ -85,26 +86,33 @@ export type RenderedMessage = {
 
 export type RenderMessageResult = RenderedMessage | { ok: false; error: string };
 
-/** Formatting the email editor (notes profile) can't keep. */
-function usesUnsupportedEmailFormatting(doc: TemplateDoc): boolean {
-  let found = false;
-  const walk = (node: unknown): void => {
-    if (found || !node || typeof node !== "object") return;
+/** Formatting the email editor (notes profile) can't keep: tables,
+ *  non-left alignment, top-level headings, underline — in the template or
+ *  any block it inserts. */
+function usesUnsupportedEmailFormatting(
+  doc: TemplateDoc,
+  blocks: Map<string, BlockSource>,
+): boolean {
+  const unsupported = (node: unknown): boolean => {
+    if (!node || typeof node !== "object") return false;
     const n = node as {
       type?: string;
       attrs?: Record<string, unknown>;
       marks?: { type: string }[];
       content?: unknown[];
     };
-    if (n.type === "table") found = true;
-    else if ((n.type === "paragraph" || n.type === "heading") && n.attrs?.textAlign) {
-      found = n.attrs.textAlign !== "left";
-    } else if (n.type === "heading" && n.attrs?.level === 1) found = true;
-    else if (n.marks?.some((m) => m.type === "underline")) found = true;
-    n.content?.forEach(walk);
+    if (n.type === "table") return true;
+    const align = n.attrs?.textAlign;
+    if ((n.type === "paragraph" || n.type === "heading") && align && align !== "left") return true;
+    if (n.type === "heading" && n.attrs?.level === 1) return true;
+    if (n.marks?.some((m) => m.type === "underline")) return true;
+    if (n.type === "block" && typeof n.attrs?.blockId === "string") {
+      const block = blocks.get(n.attrs.blockId);
+      if (block && unsupported(block.content)) return true;
+    }
+    return (n.content ?? []).some(unsupported);
   };
-  walk(doc);
-  return found;
+  return unsupported(doc);
 }
 
 /** Fill an email or text template against a record. */
@@ -146,17 +154,17 @@ export async function renderMessageTemplate(
   const content = contentOf(template);
   const subjectDoc =
     kind === "email" && template.subject ? (template.subject as unknown as TemplateDoc) : null;
-  const blocks = await loadBlockMap(content);
-  const loaded = await loadTemplateData({
-    scope,
-    recipientContactId: opts.recipientContactId ?? null,
-  });
+  const [blocks, loaded] = await Promise.all([
+    loadBlockMap(content),
+    loadTemplateData({ scope, recipientContactId: opts.recipientContactId ?? null }),
+  ]);
   if (!loaded.ok) return { ok: false, error: loaded.error };
 
   const ctx = { data: loaded.data, blocks };
   const body = renderTemplate(content, ctx);
   const subject = subjectDoc ? renderTemplate(subjectDoc, ctx) : null;
-  const report = subject ? mergeReports(body.report, subject.report) : body.report;
+  const report = body.report;
+  if (subject) mergeReport(report, subject.report);
 
   return {
     ok: true,
@@ -167,15 +175,6 @@ export async function renderMessageTemplate(
     text: resolvedToText(body.doc),
     report,
     needsRecipient: usesRecipient(content, blocks),
-    dropsFormatting: kind === "email" && usesUnsupportedEmailFormatting(content),
-  };
-}
-
-function mergeReports(a: RenderReport, b: RenderReport): RenderReport {
-  const merge = (x: string[], y: string[]) => [...new Set([...x, ...y])];
-  return {
-    missing: merge(a.missing, b.missing),
-    invalid: merge(a.invalid, b.invalid),
-    archivedBlocks: merge(a.archivedBlocks, b.archivedBlocks),
+    dropsFormatting: kind === "email" && usesUnsupportedEmailFormatting(content, blocks),
   };
 }

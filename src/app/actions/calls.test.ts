@@ -908,9 +908,15 @@ describe("thread reuse", () => {
 });
 
 describe("logText", () => {
+  const M = () => ({ kind: "matter" as const, matterId });
+  // The contact must be on the record: make Maria the matter's client.
+  beforeEach(async () => {
+    await prisma.matter.update({ where: { id: matterId }, data: { clientId: contactId } });
+  });
+
   test("files an outbound text on the contact's thread, to the matter", async () => {
     const { logText } = await import("@/app/actions/calls");
-    const res = await logText({ contactId, matterId, body: "Your hearing is on Friday." });
+    const res = await logText({ scope: M(), contactId, body: "Your hearing is on Friday." });
     expect(res).toEqual({ ok: true });
     const item = await prisma.messengerItem.findFirstOrThrow({
       where: { kind: "sms" },
@@ -929,12 +935,29 @@ describe("logText", () => {
     expect(log?.title).toBe("Logged a text to Maria Alvarez");
   });
 
-  test("files unfiled (no matter) for a lead's text", async () => {
+  test("a lead's text logs against the lead (so its wall covers it), unfiled on the thread", async () => {
     const { logText } = await import("@/app/actions/calls");
-    const res = await logText({ contactId, matterId: null, body: "Hi" });
+    const { seedLead } = await import("@/test/integration-helpers");
+    const { leadId } = await seedLead({ contactId });
+    const res = await logText({ scope: { kind: "lead", leadId }, contactId, body: "Hi" });
     expect(res).toEqual({ ok: true });
     const item = await prisma.messengerItem.findFirstOrThrow({ where: { kind: "sms" } });
     expect(item.matterId).toBeNull();
+    const log = await prisma.activityLog.findFirstOrThrow({ where: { leadId } });
+    expect(log).toMatchObject({ matterId: null, title: "Logged a text to Maria Alvarez" });
+  });
+
+  test("refuses a contact that isn't on the record", async () => {
+    const { logText } = await import("@/app/actions/calls");
+    const stranger = await prisma.contact.create({
+      data: { name: "Stranger", type: "client", phone: "(303) 555-0199" },
+      select: { id: true },
+    });
+    expect(await logText({ scope: M(), contactId: stranger.id, body: "Hi" })).toEqual({
+      ok: false,
+      error: "That contact isn't on this record.",
+    });
+    expect(await prisma.messengerItem.count()).toBe(0);
   });
 
   test("refuses a contact with no phone, and an empty text", async () => {
@@ -943,11 +966,14 @@ describe("logText", () => {
       data: { name: "No Phone", type: "client" },
       select: { id: true },
     });
-    expect(await logText({ contactId: bare.id, matterId, body: "Hi" })).toEqual({
+    await prisma.matterContact.create({
+      data: { matterId, contactId: bare.id, category: "lay_witness" },
+    });
+    expect(await logText({ scope: M(), contactId: bare.id, body: "Hi" })).toEqual({
       ok: false,
       error: "No Phone has no valid phone number on file.",
     });
-    expect(await logText({ contactId, matterId, body: "   " })).toEqual({
+    expect(await logText({ scope: M(), contactId, body: "   " })).toEqual({
       ok: false,
       error: "The text is empty.",
     });
@@ -960,8 +986,11 @@ describe("logText", () => {
       data: { name: "Front Desk", type: "other", phone: "(303) 555-0182" },
       select: { id: true },
     });
-    expect((await logText({ contactId: other.id, matterId, body: "First" })).ok).toBe(true);
-    expect(await logText({ contactId, matterId, body: "Second" })).toEqual({
+    await prisma.matterContact.create({
+      data: { matterId, contactId: other.id, category: "other" },
+    });
+    expect((await logText({ scope: M(), contactId: other.id, body: "First" })).ok).toBe(true);
+    expect(await logText({ scope: M(), contactId, body: "Second" })).toEqual({
       ok: false,
       error: "This number is already linked to Front Desk, so the text wasn't logged.",
     });

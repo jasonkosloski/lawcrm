@@ -77,8 +77,8 @@ describe("TextFromTemplateButton", () => {
     await user.click(screen.getByRole("button", { name: /copy and log/i }));
     await waitFor(() =>
       expect(logText).toHaveBeenCalledWith({
+        scope: { kind: "matter", matterId: "m1" },
         contactId: "c1",
-        matterId: "m1",
         body: "Hi Maria, your hearing is Friday.",
       }),
     );
@@ -86,12 +86,63 @@ describe("TextFromTemplateButton", () => {
     expect(await navigator.clipboard.readText()).toBe("Hi Maria, your hearing is Friday.");
   });
 
-  test("on a lead the text logs unfiled", async () => {
+  test("on a lead the text logs against the lead", async () => {
     const user = setupUser();
     await fill(user, { kind: "lead", leadId: "l1" });
     await user.click(screen.getByRole("button", { name: /copy and log/i }));
     await waitFor(() =>
-      expect(logText).toHaveBeenCalledWith(expect.objectContaining({ matterId: null })),
+      expect(logText).toHaveBeenCalledWith(
+        expect.objectContaining({ scope: { kind: "lead", leadId: "l1" } }),
+      ),
     );
+  });
+
+  test("reopening after a logged text starts fresh (no one-click duplicate)", async () => {
+    const user = setupUser();
+    await fill(user, { kind: "matter", matterId: "m1" });
+    await user.click(screen.getByRole("button", { name: /copy and log/i }));
+    await waitFor(() => expect(logText).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByTestId("text-preview")).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /text from template/i }));
+    await screen.findByRole("combobox", { name: "Template" });
+    expect(screen.queryByTestId("text-preview")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /copy and log/i })).toBeDisabled();
+  });
+
+  test("a slower earlier fill never overwrites a newer one", async () => {
+    const user = setupUser();
+    let resolveFirst!: (v: Awaited<ReturnType<typeof renderMessageTemplate>>) => void;
+    vi.mocked(listMessageTemplateOptions).mockResolvedValue({
+      ok: true,
+      templates: [
+        { id: "t1", name: "First", category: "general" },
+        { id: "t2", name: "Second", category: "general" },
+      ],
+      recipients: [],
+    });
+    const base = {
+      ok: true as const,
+      kind: "sms" as const,
+      templateName: "x",
+      subject: null,
+      html: "",
+      report: { missing: [], invalid: [], archivedBlocks: [] },
+      needsRecipient: false,
+      dropsFormatting: false,
+    };
+    vi.mocked(renderMessageTemplate)
+      .mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)))
+      .mockResolvedValueOnce({ ...base, text: "Second text" });
+    render(<TextFromTemplateButton scope={{ kind: "matter", matterId: "m1" }} />);
+    await user.click(screen.getByRole("button", { name: /text from template/i }));
+    const select = await screen.findByRole("combobox", { name: "Template" });
+    await user.selectOptions(select, "t1");
+    await user.selectOptions(select, "t2");
+    await waitFor(() =>
+      expect(screen.getByTestId("text-preview")).toHaveTextContent("Second text"),
+    );
+    resolveFirst({ ...base, text: "First text" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByTestId("text-preview")).toHaveTextContent("Second text");
   });
 });

@@ -251,3 +251,41 @@ describe("listMessageTemplateOptions", () => {
     expect(res.ok && res.templates.map((t) => t.name)).toEqual(["Both"]);
   });
 });
+
+describe("renderMessageTemplate formatting note", () => {
+  test("an H1 with left alignment still counts", async () => {
+    const id = await template({
+      kind: "email",
+      content: jsonDoc({
+        type: "heading",
+        attrs: { level: 1, textAlign: "left" },
+        content: [text("Big")],
+      }),
+    });
+    expect(await renderMessageTemplate(id, M)).toMatchObject({ ok: true, dropsFormatting: true });
+  });
+
+  test("a table inside an inserted block counts", async () => {
+    const block = await prisma.templateBlock.create({
+      data: {
+        key: "tbl",
+        name: "Table block",
+        content: jsonDoc({
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [{ type: "tableCell", content: [para(text("cell"))] }],
+            },
+          ],
+        }),
+      },
+      select: { id: true },
+    });
+    const id = await template({
+      kind: "email",
+      content: jsonDoc({ type: "block", attrs: { blockId: block.id } }),
+    });
+    expect(await renderMessageTemplate(id, M)).toMatchObject({ ok: true, dropsFormatting: true });
+  });
+});

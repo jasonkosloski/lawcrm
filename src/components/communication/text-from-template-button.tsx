@@ -5,12 +5,13 @@
  * thread. There's no SMS provider yet; when one lands, Copy becomes Send.
  *
  * Shown beside "Log call" (same `communication.log_call` gate). Lead texts
- * log unfiled (MessengerItem files to matters only), like lead calls.
+ * log against the lead and stay unfiled on the thread (MessengerItem files
+ * to matters only), like lead calls.
  */
 
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MessageSquareText } from "lucide-react";
 import {
@@ -45,6 +46,19 @@ export function TextFromTemplateButton({ scope }: { scope: RecordScope }) {
   const [result, setResult] = useState<RenderedMessage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Only the latest fill may land (see template-insert-panel).
+  const fillSeq = useRef(0);
+
+  // Each opening starts fresh, so a logged text can't be re-logged by
+  // reopening the dialog.
+  const close = () => {
+    fillSeq.current++;
+    setOpen(false);
+    setTemplateId("");
+    setContactId("");
+    setResult(null);
+    setError(null);
+  };
 
   useEffect(() => {
     if (!open || templates) return;
@@ -65,6 +79,7 @@ export function TextFromTemplateButton({ scope }: { scope: RecordScope }) {
   }, [open, scope, templates]);
 
   const fill = (tid: string, cid: string) => {
+    const seq = ++fillSeq.current;
     if (!tid) {
       setResult(null);
       return;
@@ -73,13 +88,14 @@ export function TextFromTemplateButton({ scope }: { scope: RecordScope }) {
     startTransition(async () => {
       try {
         const res = await renderMessageTemplate(tid, scope, { recipientContactId: cid || null });
+        if (seq !== fillSeq.current) return;
         if (res.ok) setResult(res);
         else {
           setResult(null);
           setError(res.error);
         }
       } catch {
-        setError("Couldn't fill the template. Try again.");
+        if (seq === fillSeq.current) setError("Couldn't fill the template. Try again.");
       }
     });
   };
@@ -102,14 +118,10 @@ export function TextFromTemplateButton({ scope }: { scope: RecordScope }) {
     startTransition(async () => {
       if (!(await copy())) return;
       try {
-        const res = await logText({
-          contactId: contact.id,
-          matterId: scope.kind === "matter" ? scope.matterId : null,
-          body: message,
-        });
+        const res = await logText({ scope, contactId: contact.id, body: message });
         if (res.ok) {
           notifySuccess(`Copied and logged a text to ${contact.name}.`);
-          setOpen(false);
+          close();
           router.refresh();
         } else setError(res.error);
       } catch {
@@ -133,7 +145,14 @@ export function TextFromTemplateButton({ scope }: { scope: RecordScope }) {
         <MessageSquareText size={12} />
         <span className="hidden sm:inline">Text from template</span>
       </Button>
-      <Dialog open={open} onOpenChange={(o) => !isPending && setOpen(o)}>
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          if (isPending) return;
+          if (o) setOpen(true);
+          else close();
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Text from template</DialogTitle>

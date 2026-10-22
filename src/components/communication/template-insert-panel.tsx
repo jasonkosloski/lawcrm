@@ -10,7 +10,7 @@
 
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/matters/captures/primary-fields";
@@ -59,6 +59,9 @@ export function TemplateInsertPanel({
   const [result, setResult] = useState<RenderedMessage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Only the latest fill may land: a slower earlier one must not
+  // overwrite the preview (and what Insert puts in the email).
+  const fillSeq = useRef(0);
   useEffect(() => {
     if (!open || !scope || templates) return;
     let live = true;
@@ -77,6 +80,7 @@ export function TemplateInsertPanel({
   }, [open, scope, templates]);
 
   const fill = (id: string, recipient: string) => {
+    const seq = ++fillSeq.current;
     if (!scope || !id) {
       setResult(null);
       return;
@@ -87,13 +91,14 @@ export function TemplateInsertPanel({
         const res = await renderMessageTemplate(id, scope, {
           recipientContactId: recipient || null,
         });
+        if (seq !== fillSeq.current) return;
         if (res.ok) setResult(res);
         else {
           setResult(null);
           setError(res.error);
         }
       } catch {
-        setError("Couldn't fill the template. Try again.");
+        if (seq === fillSeq.current) setError("Couldn't fill the template. Try again.");
       }
     });
   };
@@ -216,7 +221,8 @@ export function TemplateInsertPanel({
             onInsert({
               subject: withSubject ? result.subject : null,
               html: result.html,
-              recipientEmail: recipient?.email ?? null,
+              // Only a template that uses the recipient addresses the email.
+              recipientEmail: result.needsRecipient ? (recipient?.email ?? null) : null,
             });
             setOpen(false);
           }}

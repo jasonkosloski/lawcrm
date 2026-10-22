@@ -53,6 +53,9 @@ import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
 import { normalizePhone } from "@/lib/queries/messenger";
+import { loadGenerateOptions } from "@/lib/templates/generate-options";
+import { assertScopeAccess } from "@/lib/scope-access";
+import type { RecordScope } from "@/lib/record-scope";
 import { formatDate } from "@/lib/format-date";
 import {
   CALL_DIRECTIONS,
@@ -314,7 +317,6 @@ export async function logCall(
 
 const logTextSchema = z.object({
   contactId: z.string().min(1, "Pick a contact"),
-  matterId: z.string().nullable(),
   body: z
     .string()
     .trim()
@@ -325,29 +327,33 @@ const logTextSchema = z.object({
 export type LogTextResult = { ok: true } | { ok: false; error: string };
 
 /** Record an outbound text the user sent from their own phone (there's no
- *  SMS provider yet), on the contact's thread, filed to the matter when
- *  given. Same thread rules as `logCall`; the number is the one on file. */
+ *  SMS provider yet) on the contact's thread. The contact must be one of
+ *  the record's own contacts (the same set the template pickers offer).
+ *  Matter texts file to the matter; lead texts log against the lead (so
+ *  the lead's wall covers the activity row) and stay unfiled on the
+ *  thread, like lead calls. Same thread rules as `logCall`. */
 export async function logText(input: {
+  scope: RecordScope;
   contactId: string;
-  matterId: string | null;
   body: string;
 }): Promise<LogTextResult> {
   await requirePermission("communication.log_call");
   const userId = await getCurrentUserId();
-  const parsed = logTextSchema.safeParse(input);
+  const parsed = logTextSchema.safeParse({ contactId: input.contactId, body: input.body });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid text." };
   }
-  const { contactId, matterId, body } = parsed.data;
+  const { contactId, body } = parsed.data;
+  const { scope } = input;
 
-  await assertOptionalMatterAccess(matterId);
-  if (matterId) {
-    const matter = await prisma.matter.findUnique({
-      where: { id: matterId },
-      select: { id: true },
-    });
-    if (!matter) return { ok: false, error: "Matter not found." };
+  await assertScopeAccess(scope);
+  const { contacts } = await loadGenerateOptions(scope);
+  if (!contacts.some((c) => c.id === contactId)) {
+    return { ok: false, error: "That contact isn't on this record." };
   }
+  const matterId = scope.kind === "matter" ? scope.matterId : null;
+  const leadId = scope.kind === "lead" ? scope.leadId : null;
+
   const contact = await prisma.contact.findUnique({
     where: { id: contactId },
     select: {
@@ -388,6 +394,7 @@ export async function logText(input: {
 
   await logActivity({
     matterId,
+    leadId,
     userId,
     type: "call",
     title: `Logged a text to ${contact.name}`,
@@ -398,6 +405,9 @@ export async function logText(input: {
     revalidatePath(`/matters/${matterId}`);
     revalidatePath(`/matters/${matterId}/timeline`);
     revalidatePath(`/matters/${matterId}/communication`);
+  } else if (leadId) {
+    revalidatePath(`/intake/${leadId}`);
+    revalidatePath(`/intake/${leadId}/communication`);
   }
   return { ok: true };
 }
