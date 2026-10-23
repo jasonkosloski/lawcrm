@@ -247,12 +247,35 @@ function validFields(raw: Record<string, unknown>): Partial<StyleValues> {
  *  spacing and space after (today's heading look). Stored values win. */
 export function readStyleOverrides(
   stored: unknown,
-  legacy: {
-    fontSizeHalfPt: number | null;
-    lineSpacing: string | null;
-    spaceAfterPt: number | null;
-  },
+  legacy: LegacyCourtColumns,
   firmKeys?: ReadonlySet<string>,
+): Record<string, Partial<StyleValues>> {
+  return readOverrides(stored, legacy, firmKeys, true);
+}
+
+/** Like readStyleOverrides but with only the legacy Body overlay, never the
+ *  derived headings. For anything that SAVES (the court editor): derived
+ *  headings would be persisted as stored overrides and then stick when Body
+ *  changes. Rendering uses readStyleOverrides. */
+export function readEditableStyleOverrides(
+  stored: unknown,
+  legacy: LegacyCourtColumns,
+  firmKeys?: ReadonlySet<string>,
+): Record<string, Partial<StyleValues>> {
+  return readOverrides(stored, legacy, firmKeys, false);
+}
+
+type LegacyCourtColumns = {
+  fontSizeHalfPt: number | null;
+  lineSpacing: string | null;
+  spaceAfterPt: number | null;
+};
+
+function readOverrides(
+  stored: unknown,
+  legacy: LegacyCourtColumns,
+  firmKeys: ReadonlySet<string> | undefined,
+  deriveHeadings: boolean,
 ): Record<string, Partial<StyleValues>> {
   const out: Record<string, Partial<StyleValues>> = {};
   if (stored && typeof stored === "object" && !Array.isArray(stored)) {
@@ -273,12 +296,16 @@ export function readStyleOverrides(
     return validFields(raw);
   };
   const size = legacy.fontSizeHalfPt === null ? undefined : legacy.fontSizeHalfPt / 2;
-  const targets: [string, Partial<StyleValues>][] = [
-    ["body", derive(size)],
-    ["heading1", derive(size === undefined ? undefined : headingSizePt(size, 1))],
-    ["heading2", derive(size === undefined ? undefined : headingSizePt(size, 2))],
-    ["heading3", derive(size === undefined ? undefined : headingSizePt(size, 3))],
-  ];
+  const headingAt = (level: 1 | 2 | 3) =>
+    derive(size === undefined ? undefined : headingSizePt(size, level));
+  const targets: [string, Partial<StyleValues>][] = [["body", derive(size)]];
+  if (deriveHeadings) {
+    targets.push(
+      ["heading1", headingAt(1)],
+      ["heading2", headingAt(2)],
+      ["heading3", headingAt(3)],
+    );
+  }
   for (const [key, derived] of targets) {
     if (firmKeys && !firmKeys.has(key)) continue;
     const merged = { ...derived, ...out[key] };

@@ -17,7 +17,12 @@ import {
   saveCourtFormat,
   setCourtFormatActive,
 } from "@/app/actions/court-formats";
-import { readStyleOverrides } from "@/lib/templates/paragraph-styles";
+import {
+  DEFAULT_DOCUMENT_STYLE,
+  resolvePageStyle,
+  type CourtFormatValues,
+} from "@/lib/templates/page-style";
+import { readEditableStyleOverrides, readStyleOverrides } from "@/lib/templates/paragraph-styles";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
 let userId: string;
@@ -184,12 +189,14 @@ describe("saveCourtFormat", () => {
     expect(row.fontSizeHalfPt).toBe(28);
   });
 
-  test("a legacy-only court opened and saved untouched keeps its values", async () => {
+  test("a legacy-only court opened and saved untouched keeps its values; generation derives headings", async () => {
     const legacy = { fontSizeHalfPt: 28, lineSpacing: "double", spaceAfterPt: 6 };
     const row0 = await prisma.courtFormat.create({
       data: { ...base, ...legacy, replacements: undefined, styleOverrides: {} } as never,
     });
-    const loaded = readStyleOverrides(row0.styleOverrides, row0);
+    // What the court editor receives: Body overlay only, no derived headings.
+    const loaded = readEditableStyleOverrides(row0.styleOverrides, row0);
+    expect(Object.keys(loaded)).toEqual(["body"]);
     const r = await saveCourtFormat({
       ...base,
       id: row0.id,
@@ -199,8 +206,48 @@ describe("saveCourtFormat", () => {
     expect(r.ok).toBe(true);
     const row = await prisma.courtFormat.findUniqueOrThrow({ where: { id: row0.id } });
     expect([row.fontSizeHalfPt, row.lineSpacing, row.spaceAfterPt]).toEqual([28, "double", 6]);
-    expect(readStyleOverrides(row.styleOverrides, row)).toEqual(loaded);
-    expect(loaded.heading1).toEqual({ sizePt: 20, lineSpacing: "double", spaceAfterPt: 6 });
+    expect(Object.keys(row.styleOverrides as object)).toEqual(["body"]);
+    // Generation still derives the headings.
+    expect(readStyleOverrides(row.styleOverrides, row).heading1).toEqual({
+      sizePt: 20,
+      lineSpacing: "double",
+      spaceAfterPt: 6,
+    });
+  });
+
+  test("changing or clearing Body later moves the derived headings with it", async () => {
+    const c = await create({ styleOverrides: { body: { sizePt: 14 } } });
+    const row0 = await prisma.courtFormat.findUniqueOrThrow({ where: { id: c.id } });
+    expect(Object.keys(readEditableStyleOverrides(row0.styleOverrides, row0))).toEqual(["body"]);
+    const h1 = async () => {
+      const row = await prisma.courtFormat.findUniqueOrThrow({ where: { id: c.id } });
+      const court = {
+        ...row,
+        marginTopIn: null,
+        marginRightIn: null,
+        marginBottomIn: null,
+        marginLeftIn: null,
+        styleOverrides: readStyleOverrides(row.styleOverrides, row),
+      } as unknown as CourtFormatValues;
+      const style = resolvePageStyle("filing", DEFAULT_DOCUMENT_STYLE, null, court);
+      return style.styles.find((x) => x.key === "heading1")!.values.sizePt;
+    };
+    expect(await h1()).toBe(20);
+    const save = async (styleOverrides: Record<string, unknown>) => {
+      const cur = await prisma.courtFormat.findUniqueOrThrow({ where: { id: c.id } });
+      const r = await saveCourtFormat({
+        ...base,
+        id: c.id,
+        expectedUpdatedAt: cur.updatedAt.toISOString(),
+        styleOverrides,
+      });
+      expect(r.ok).toBe(true);
+    };
+    await save({ body: { sizePt: 12 } });
+    expect(await h1()).toBe(18);
+    await save({});
+    const firm = DEFAULT_DOCUMENT_STYLE.paragraphStyles.find((x) => x.key === "heading1")!;
+    expect(await h1()).toBe(firm.values.sizePt);
   });
 
   test("clearing the Body override clears the legacy columns on update", async () => {
