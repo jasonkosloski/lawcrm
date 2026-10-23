@@ -13,6 +13,7 @@
 - Templates hold content, never formatting. Formatting layers: firm house style (font, spacing, margins, letterhead placement), overridden by court rules for filings. Until those ship, `.docx` output uses plain defaults.
 - One typed field catalog (`src/lib/templates/catalog.ts`) says what each field is, which scopes (matter, lead) it is valid in and which formats it allows. Templates work on matters and leads.
 - `renderTemplate` is pure: it resolves content and data into a plain `ResolvedDoc` plus a report (missing, invalid, archived blocks), never silently dropping anything. One deliberate exception (amended 2026-10-23): a field chip set to "If missing → Leave blank" (`ifMissing: "hide"`) prints nothing when empty, and a paragraph emptied only by such fields is dropped. The author chose that blank, so it goes in the report's `blank` list (shown in the editor preview) rather than `missing` (the warnings at generate and send time). Unknown or out-of-scope paths are never hidden. Converters (html, plain text, docx) read the `ResolvedDoc`. Data loading is server-only and passes through the matter/lead scope guards first.
+- Blocks nest (amended 2026-10-23): a block's content may include other blocks, up to 5 levels deep. Loops and depth are refused on save, checked over the whole block graph under one transaction-scoped advisory lock (`pg_advisory_xact_lock`, `src/lib/templates/block-graph-db.ts`; pure rules in `block-graph.ts`) so two saves cannot jointly create a cycle; the renderer guards against both anyway and reports an over-deep block rather than recursing. Each block has `appliesTo` (matter, lead, both; existing rows default to both): its own fields are checked against that scope on save, while misfits further up the chain only warn in the editor preview and never block a save. Delete's usage check stays outside the lock (accepted race; a missing block renders `[Missing block]`).
 - Legacy plain-text bodies convert lazily (when opened in the editor or generated from), not by a bulk rewrite. `DocumentTemplate.body` stays, nullable, until every row is converted; a later expand-only follow-up migration drops it.
 
 **Rejected:**
@@ -27,5 +28,5 @@
 - (+) One format and one engine for every later output; the editor shows fields, blocks and rules as objects, not syntax
 - (+) Formatting changes (house style, court rules) never touch template content
 - (-) A stored content tree is only as good as the schema that validates it; node changes need migration care
-- (-) Block references live in JSON, so referential integrity is app-enforced (the delete refusal)
+- (-) Block references live in JSON, so referential integrity is app-enforced (the delete refusal, the save-time loop and depth checks)
 - (-) Authoring is desktop-only and needs a rich editor

@@ -10,7 +10,7 @@
 - A firm-defined `CourtFormat` (Settings, Court formats) holds optional formatting overrides on top of the house style (font, size, spacing, margins, page numbers), a paper size (Letter or Legal) and block replacements (`CourtFormatBlock`: block A is swapped for block B, e.g. the caption).
 - A venue picks a court format and carries a caption name. A matter's `courtCaption` field feeds the caption.
 - Applies to filings only; letters keep the house style. A filing for a matter whose venue has an active format uses it in Word, PDF and previews.
-- Replacements apply to blocks the template inserts; filings have no letterhead or continuation header. Blocks cannot contain blocks, so there is no nested case.
+- Replacements apply to blocks the template inserts; filings have no letterhead or continuation header. Blocks can nest (ADR-063); how replacements treat nested blocks is not covered by this ADR.
 - An archived format is ignored (house style applies) with a note in the UI.
 - The template editor's "Preview as" shows a template under a chosen format, since the swap is invisible in the template itself.
 - Three permission keys: `court_formats.add`, `.edit`, `.delete`. The Court formats pages return not-found for staff holding none of them and the nav entry is hidden, like Venues; no `.view` key exists.
