@@ -240,6 +240,17 @@ export async function seedUser(opts: {
   return { userId: user.id };
 }
 
+/** A bar admission for a user, so they count as an attorney (and can lead a matter). */
+export async function seedBarAdmission(opts: {
+  userId: string;
+  state?: string;
+  number?: string;
+}): Promise<void> {
+  await prisma.barAdmission.create({
+    data: { userId: opts.userId, state: opts.state ?? "CO", number: opts.number ?? "12345" },
+  });
+}
+
 /** A practice area + a single active "Intake" stage on it. */
 export async function seedPracticeArea(opts?: {
   name?: string;

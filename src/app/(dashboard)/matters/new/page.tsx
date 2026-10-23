@@ -9,6 +9,7 @@
  * to the new matter's detail page.
  */
 
+import { attorneyUserWhere } from "@/lib/attorneys";
 import { normalizeAreaBillingTypes } from "@/lib/billing-type";
 import { TopBar } from "@/components/layout/topbar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -54,6 +55,7 @@ export default async function NewMatterPage({
     areaRows,
     clients,
     users,
+    leadUsers,
     canManageTeam,
     venueRows,
     firm,
@@ -99,6 +101,12 @@ export default async function NewMatterPage({
     }),
     prisma.user.findMany({
       where: { isActive: true },
+      select: { id: true, name: true, jobTitle: true, initials: true },
+      orderBy: { name: "asc" },
+    }),
+    // Lead options: only attorneys (an active user with a bar admission).
+    prisma.user.findMany({
+      where: attorneyUserWhere,
       select: { id: true, name: true, jobTitle: true, initials: true },
       orderBy: { name: "asc" },
     }),
@@ -186,6 +194,7 @@ export default async function NewMatterPage({
                   areas,
                   clients,
                   users,
+                  leadUsers,
                   currentUserId,
                   canManageTeam,
                   venues,

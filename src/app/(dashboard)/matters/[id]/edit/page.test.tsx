@@ -68,7 +68,7 @@ const formProps = vi.hoisted(() => ({
     | undefined,
 }));
 const teamProps = vi.hoisted(() => ({
-  current: undefined as { userOptions: Array<{ id: string }> } | undefined,
+  current: undefined as { userOptions: Array<{ id: string }>; attorneyIds: string[] } | undefined,
 }));
 vi.mock("@/components/matters/edit-matter-form", () => ({
   EditMatterForm: (props: NonNullable<typeof formProps.current>) => {
@@ -233,8 +233,15 @@ describe("EditMatterPage — option lists keep the current client and lead (F082
       { id: "c1", name: "Maria", organization: null, isActive: false },
     ] as never);
     vi.mocked(prisma.user.findMany).mockResolvedValueOnce([
-      { id: "u-lead", name: "Dana Lead", jobTitle: "Attorney", isActive: false },
-      { id: "u2", name: "Eli Active", jobTitle: "Paralegal", isActive: true },
+      { id: "u-lead", name: "Dana Lead", jobTitle: "Attorney", isActive: false, barAdmissions: [] },
+      {
+        id: "u2",
+        name: "Eli Active",
+        jobTitle: "Paralegal",
+        isActive: true,
+        barAdmissions: [{ id: "b1" }],
+      },
+      { id: "u3", name: "Pat Para", jobTitle: "Paralegal", isActive: true, barAdmissions: [] },
     ] as never);
     render(
       await EditMatterPage({
@@ -244,12 +251,14 @@ describe("EditMatterPage — option lists keep the current client and lead (F082
     expect(formProps.current?.options.clients).toEqual([
       expect.objectContaining({ id: "c1", inactive: true }),
     ]);
+    // Lead options: attorneys plus the current lead (grandfathered), not Pat.
     expect(formProps.current?.options.users).toEqual([
       expect.objectContaining({ id: "u-lead", inactive: true }),
       expect.objectContaining({ id: "u2", inactive: false }),
     ]);
-    // Team card never offers the departed user.
-    expect(teamProps.current?.userOptions.map((u) => u.id)).toEqual(["u2"]);
+    // Team card never offers the departed user, and only attorneys can be lead.
+    expect(teamProps.current?.userOptions.map((u) => u.id)).toEqual(["u2", "u3"]);
+    expect(teamProps.current?.attorneyIds).toEqual(["u2"]);
   });
 
   test("the lead field is only unlocked with matters.manage_team (F138/F300/F767)", async () => {

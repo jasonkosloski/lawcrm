@@ -64,16 +64,44 @@ const userOptions: TeamUserOption[] = [
   { id: "u-new", name: "Nia New", jobTitle: "Associate" },
 ];
 
+let attorneyIds: string[] = [];
+
 beforeEach(() => {
+  attorneyIds = [];
   mockedAdd.mockReset();
   mockedRemove.mockReset();
   vi.mocked(confirmAction).mockResolvedValue(true);
 });
 
 const renderCard = () =>
-  render(<MatterTeamManagement matterId="m1" members={members} userOptions={userOptions} />);
+  render(
+    <MatterTeamManagement
+      matterId="m1"
+      members={members}
+      userOptions={userOptions}
+      attorneyIds={attorneyIds}
+    />,
+  );
 
 describe("MatterTeamManagement", () => {
+  const roleValues = () =>
+    Array.from((screen.getByLabelText("Role") as HTMLSelectElement).options).map((o) => o.value);
+
+  test("Lead attorney is hidden in the role select for a non-attorney pick", async () => {
+    const user = userEvent.setup();
+    renderCard();
+    await user.selectOptions(screen.getByLabelText("Add member"), "u-new");
+    expect(roleValues()).not.toContain("lead");
+  });
+
+  test("Lead attorney is offered for an attorney pick", async () => {
+    attorneyIds = ["u-new"];
+    const user = userEvent.setup();
+    renderCard();
+    await user.selectOptions(screen.getByLabelText("Add member"), "u-new");
+    expect(roleValues()).toContain("lead");
+  });
+
   test("the selects have accessible names (label click target)", () => {
     renderCard();
     expect(screen.getByLabelText("Add member")).toBeTruthy();

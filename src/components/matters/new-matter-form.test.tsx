@@ -13,6 +13,7 @@
  * silently dropped the user's typed Case location on round trip.
  */
 
+import { NO_ATTORNEYS } from "@/lib/attorney-messages";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
@@ -85,6 +86,7 @@ const options: NewMatterFormOptions = {
   ],
   clients: [],
   users: [{ id: "u1", name: "Jason Kosloski", jobTitle: "Attorney", initials: "JK" }],
+  leadUsers: [{ id: "u1", name: "Jason Kosloski", jobTitle: "Attorney", initials: "JK" }],
   currentUserId: "u1",
   canManageTeam: false,
   venues: [
@@ -176,12 +178,11 @@ describe("NewMatterForm — selections survive a validation error (F095)", () =>
         : { status: "idle" as const };
     });
 
+    const eli = { id: "u2", name: "Eli Active", jobTitle: "Attorney", initials: "EA" };
     const twoUsers: NewMatterFormOptions = {
       ...options,
-      users: [
-        ...options.users,
-        { id: "u2", name: "Eli Active", jobTitle: "Paralegal", initials: "EA" },
-      ],
+      users: [...options.users, eli],
+      leadUsers: [...options.leadUsers, eli],
     };
     const user = userEvent.setup();
     render(<NewMatterForm options={twoUsers} />);
@@ -260,6 +261,44 @@ describe("NewMatterForm — conflict review (ADR-054)", () => {
     expect(screen.queryByLabelText(/override justification/i)).toBeNull();
     expect(formData().get("conflictAck")).toBeNull();
     expect(screen.getByText(/permission to override/i)).toBeInTheDocument();
+  });
+});
+
+describe("NewMatterForm — lead attorney", () => {
+  const leadSelect = () => screen.getByLabelText(/lead attorney/i) as HTMLSelectElement;
+
+  test("the lead select lists only the passed attorneys", () => {
+    render(
+      <NewMatterForm
+        options={{
+          ...options,
+          users: [
+            ...options.users,
+            { id: "u2", name: "Pat Para", jobTitle: "Paralegal", initials: "PP" },
+          ],
+        }}
+      />,
+    );
+    expect(Array.from(leadSelect().options).map((o) => o.value)).toEqual(["u1"]);
+  });
+
+  test("a non-attorney current user starts on a placeholder, not themselves", () => {
+    render(
+      <NewMatterForm
+        options={{
+          ...options,
+          leadUsers: [{ id: "u2", name: "Ann Atty", jobTitle: "Attorney", initials: "AA" }],
+        }}
+      />,
+    );
+    expect(leadSelect().value).toBe("");
+  });
+
+  test("with no attorneys it explains why and disables Create matter", () => {
+    render(<NewMatterForm options={{ ...options, leadUsers: [] }} />);
+    expect(screen.getByText(NO_ATTORNEYS)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/lead attorney/i)).toBeNull();
+    expect(screen.getByRole("button", { name: /create matter/i })).toBeDisabled();
   });
 });
 

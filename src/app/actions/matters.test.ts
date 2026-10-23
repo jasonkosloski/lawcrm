@@ -48,6 +48,7 @@ vi.mock("next/navigation", () => ({
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { prisma } from "@/lib/prisma";
+import { LEAD_NOT_ATTORNEY } from "@/lib/attorneys";
 import { dateOnlyKey } from "@/lib/format-date";
 import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
 import {
@@ -70,6 +71,7 @@ import {
   seedMatter,
   seedPracticeArea,
   seedUser,
+  seedBarAdmission,
 } from "@/test/integration-helpers";
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
@@ -91,6 +93,7 @@ beforeEach(async () => {
   firmId = firm.firmId;
   const u = await seedUser({ firmId });
   userId = u.userId;
+  await seedBarAdmission({ userId });
   mockedGetUser.mockResolvedValue(userId);
   vi.mocked(currentUserHasPermission).mockResolvedValue(true);
   // requirePermission returns the actor id (used for audit rows).
@@ -531,6 +534,7 @@ describe("updateMatter lead change authorization (F138/F300/F767)", () => {
 
   test("with manage_team the lead swaps, demotes the old lead and is audited", async () => {
     const other = await seedUser({ firmId, name: "Other Attorney" });
+    await seedBarAdmission({ userId: other.userId });
     const { matterId } = await seedMatter({
       practiceAreaId: areaId,
       stageId,
@@ -807,6 +811,7 @@ describe("updateMatter SOL recompute", () => {
 
   test("the SOL deadline owner follows a lead swap when the old lead owned it", async () => {
     const other = await seedUser({ firmId, name: "New Lead" });
+    await seedBarAdmission({ userId: other.userId });
     const matterId = await seedSolMatter({ incident: null, sol: "2027-06-01" });
     await save(matterId, {
       statuteOfLimitationsDate: "2027-06-01",
@@ -1396,6 +1401,7 @@ describe("addMatterTeamMember / removeMatterTeamMember", () => {
       leadUserId: userId,
     }));
     ({ userId: other } = await seedUser({ firmId, name: "Dana Other" }));
+    await seedBarAdmission({ userId: other });
   });
 
   test("re-adding the ACTIVE lead at another role is refused: the matter keeps its lead", async () => {
@@ -2320,5 +2326,101 @@ describe("updateMatter billing type lock", () => {
     expect(res.status).toBe("error");
     expect(res.errors?.billingType).toBeTruthy();
     expect(await stored(id)).toEqual({ feeStructure: "hourly", billingMode: "client" });
+  });
+});
+
+// ── The lead must be an attorney ─────────────────────────────────────────
+
+describe("the lead must hold a bar admission", () => {
+  const leadCount = () => prisma.matterTeamMember.count({ where: { role: "lead" } });
+
+  test("createMatter accepts an attorney lead", async () => {
+    const atty = await seedUser({ firmId, name: "Ann Attorney" });
+    await seedBarAdmission({ userId: atty.userId });
+    await expect(
+      createMatter(createMatterInitialState, createForm({ leadUserId: atty.userId })),
+    ).rejects.toThrow(/__REDIRECT__/);
+    const lead = await prisma.matterTeamMember.findFirst({ where: { role: "lead" } });
+    expect(lead?.userId).toBe(atty.userId);
+  });
+
+  test("createMatter rejects a posted non-attorney lead", async () => {
+    const para = await seedUser({ firmId, name: "Pat Para" });
+    const res = await createMatter(
+      createMatterInitialState,
+      createForm({ leadUserId: para.userId }),
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.leadUserId).toEqual([LEAD_NOT_ATTORNEY]);
+    expect(await prisma.matter.count()).toBe(0);
+  });
+
+  test("no silent fallback to a non-attorney current user", async () => {
+    const para = await seedUser({ firmId, name: "Pat Para" });
+    mockedGetUser.mockResolvedValue(para.userId);
+    const res = await createMatter(
+      createMatterInitialState,
+      createForm({ leadUserId: "stale-id" }),
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.leadUserId).toEqual([LEAD_NOT_ATTORNEY]);
+    expect(await prisma.matter.count()).toBe(0);
+  });
+
+  test("a stale lead id falls back to an attorney current user", async () => {
+    await expect(
+      createMatter(createMatterInitialState, createForm({ leadUserId: "stale-id" })),
+    ).rejects.toThrow(/__REDIRECT__/);
+    const lead = await prisma.matterTeamMember.findFirst({ where: { role: "lead" } });
+    expect(lead?.userId).toBe(userId);
+    expect(await leadCount()).toBe(1);
+  });
+
+  test("updateMatter rejects changing the lead to a non-attorney", async () => {
+    const para = await seedUser({ firmId, name: "Pat Para" });
+    const { matterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId });
+    const res = await updateMatter(
+      matterId,
+      updateMatterInitialState,
+      updateForm({ leadUserId: para.userId }),
+    );
+    expect(res.status).toBe("error");
+    expect(res.errors?.leadUserId).toEqual([LEAD_NOT_ATTORNEY]);
+  });
+
+  test("unchanged non-attorney lead is not re-validated", async () => {
+    const grandfathered = await seedUser({ firmId, name: "Old Lead" });
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: grandfathered.userId,
+    });
+    await expect(
+      updateMatter(
+        matterId,
+        updateMatterInitialState,
+        updateForm({ leadUserId: grandfathered.userId, name: "Renamed" }),
+      ),
+    ).rejects.toThrow(/__REDIRECT__/);
+    expect((await prisma.matter.findUniqueOrThrow({ where: { id: matterId } })).name).toBe(
+      "Renamed",
+    );
+  });
+
+  test("addMatterTeamMember refuses a non-attorney as lead but allows co-counsel", async () => {
+    const para = await seedUser({ firmId, name: "Pat Para" });
+    const { matterId } = await seedMatter({ practiceAreaId: areaId, stageId, leadUserId: userId });
+    const form = (role: string) => {
+      const fd = new FormData();
+      fd.set("userId", para.userId);
+      fd.set("role", role);
+      return fd;
+    };
+    const bad = await addMatterTeamMember(matterId, form("lead"));
+    expect(bad).toEqual({ ok: false, error: LEAD_NOT_ATTORNEY });
+    expect(await prisma.matterTeamMember.count({ where: { matterId, userId: para.userId } })).toBe(
+      0,
+    );
+    expect((await addMatterTeamMember(matterId, form("co_counsel"))).ok).toBe(true);
   });
 });

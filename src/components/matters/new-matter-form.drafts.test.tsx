@@ -53,6 +53,7 @@ const options: NewMatterFormOptions = {
   areas: [area("a1", "Personal Injury"), area("a2", "Criminal Defense")],
   clients: [],
   users: [{ id: "u1", name: "Jason K", jobTitle: "Attorney", initials: "JK" }],
+  leadUsers: [{ id: "u1", name: "Jason K", jobTitle: "Attorney", initials: "JK" }],
   currentUserId: "u1",
   canManageTeam: false,
   venues: [],

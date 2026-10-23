@@ -116,6 +116,21 @@ describe("NewMatterPage — matters.create gate", () => {
     expect(o.timeZone).toBe("America/Chicago");
   });
 
+  test("lead options come from the attorney query, separate from the team pool", async () => {
+    vi.mocked(requirePermission).mockResolvedValue("user_1");
+    vi.mocked(prisma.user.findMany).mockImplementation((async (args: { where?: object }) =>
+      args.where && "barAdmissions" in args.where
+        ? [{ id: "a1", name: "Ann Atty", jobTitle: "Attorney", initials: "AA" }]
+        : [
+            { id: "a1", name: "Ann Atty", jobTitle: "Attorney", initials: "AA" },
+            { id: "p1", name: "Pat Para", jobTitle: "Paralegal", initials: "PP" },
+          ]) as never);
+    render(await NewMatterPage());
+    const o = JSON.parse(screen.getByTestId("new-matter-form").getAttribute("data-options")!);
+    expect(o.leadUsers.map((u: { id: string }) => u.id)).toEqual(["a1"]);
+    expect(o.users).toHaveLength(2);
+  });
+
   test("a denied user is bounced before any data is read or the form renders", async () => {
     // The real requirePermission redirects (throws) on denial.
     vi.mocked(requirePermission).mockRejectedValue(new Error("NEXT_REDIRECT"));

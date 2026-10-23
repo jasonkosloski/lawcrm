@@ -10,6 +10,7 @@
 
 "use server";
 
+import { LEAD_NOT_ATTORNEY, isAttorney } from "@/lib/attorneys";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -603,6 +604,11 @@ export async function createMatter(
     select: { id: true, isActive: true },
   });
   const leadUserId = lead?.isActive ? lead.id : currentUserId;
+  // The lead must hold a bar admission. No silent fallback past this: a
+  // non-attorney current user can't become lead by default either.
+  if (!(await isAttorney(leadUserId))) {
+    return { status: "error", errors: { leadUserId: [LEAD_NOT_ATTORNEY] }, values: raw };
+  }
 
   // Only persist SOL fields when the area actually tracks them;
   // otherwise drop them on the floor so a stale form submission from
@@ -1112,6 +1118,13 @@ export async function updateMatter(
       return {
         status: "error",
         errors: { leadUserId: ["Lead attorney must be an active user."] },
+        values: raw,
+      };
+    }
+    if (!(await isAttorney(lead.id))) {
+      return {
+        status: "error",
+        errors: { leadUserId: [LEAD_NOT_ATTORNEY] },
         values: raw,
       };
     }
@@ -1896,6 +1909,9 @@ export async function addMatterTeamMember(
   if (!matter) return { ok: false, error: "Matter not found." };
   if (!user || !user.isActive) {
     return { ok: false, error: "User not found or deactivated." };
+  }
+  if (role === "lead" && !(await isAttorney(user.id))) {
+    return { ok: false, error: LEAD_NOT_ATTORNEY };
   }
 
   // Lead is unique per matter — when promoting a new lead, retire

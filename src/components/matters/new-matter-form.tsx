@@ -19,6 +19,7 @@
 
 "use client";
 
+import { NO_ATTORNEYS } from "@/lib/attorney-messages";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
@@ -90,6 +91,8 @@ export type NewMatterFormOptions = {
   areas: AreaOption[];
   clients: ClientOption[];
   users: Array<{ id: string; name: string; jobTitle: string; initials: string }>;
+  /** Attorneys only (an active bar admission): who may be picked as lead. */
+  leadUsers: Array<{ id: string; name: string; jobTitle: string; initials: string }>;
   currentUserId: string;
   /** Holds `matters.manage_team`: shows the extra team seats. */
   canManageTeam: boolean;
@@ -313,7 +316,10 @@ export function NewMatterForm({
   const initialArea = options.areas.find((a) => a.id === initialAreaId);
   const initialStageId = vals.stageId ?? initialArea?.stages[0]?.id ?? "";
 
-  const [leadUserId, setLeadUserId] = useState<string>(vals.leadUserId ?? options.currentUserId);
+  const [leadUserId, setLeadUserId] = useState<string>(
+    vals.leadUserId ??
+      (options.leadUsers.some((u) => u.id === options.currentUserId) ? options.currentUserId : ""),
+  );
 
   const [practiceAreaId, setPracticeAreaId] = useState<string>(initialAreaId);
   const [stageId, setStageId] = useState<string>(initialStageId);
@@ -786,21 +792,30 @@ export function NewMatterForm({
           </div>
 
           <Field label="Lead attorney" htmlFor="leadUserId" required error={errs.leadUserId}>
-            <NativeSelect
-              className="w-full"
-              id="leadUserId"
-              name="leadUserId"
-              value={leadUserId}
-              onChange={(e) => setLeadUserId(e.target.value)}
-              required
-              aria-invalid={!!errs.leadUserId || undefined}
-            >
-              {options.users.map((u) => (
-                <NativeSelectOption key={u.id} value={u.id}>
-                  {u.name} · {u.jobTitle}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+            {options.leadUsers.length === 0 ? (
+              <div className="text-xs text-warn">{NO_ATTORNEYS}</div>
+            ) : (
+              <NativeSelect
+                className="w-full"
+                id="leadUserId"
+                name="leadUserId"
+                value={leadUserId}
+                onChange={(e) => setLeadUserId(e.target.value)}
+                required
+                aria-invalid={!!errs.leadUserId || undefined}
+              >
+                {leadUserId === "" && (
+                  <NativeSelectOption value="" disabled>
+                    Choose a lead…
+                  </NativeSelectOption>
+                )}
+                {options.leadUsers.map((u) => (
+                  <NativeSelectOption key={u.id} value={u.id}>
+                    {u.name} · {u.jobTitle}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            )}
           </Field>
         </Row>
 
@@ -1091,7 +1106,7 @@ export function NewMatterForm({
         >
           Save draft
         </Button>
-        <Button size="sm" type="submit" disabled={isPending}>
+        <Button size="sm" type="submit" disabled={isPending || options.leadUsers.length === 0}>
           {isPending ? "Creating…" : "Create matter"}
         </Button>
       </div>

@@ -88,6 +88,7 @@ const options: NewMatterFormOptions = {
     },
   ],
   users: [{ id: "u1", name: "Jason Kosloski", jobTitle: "Attorney", initials: "JK" }],
+  leadUsers: [{ id: "u1", name: "Jason Kosloski", jobTitle: "Attorney", initials: "JK" }],
   currentUserId: "u1",
   canManageTeam: false,
   venues: [

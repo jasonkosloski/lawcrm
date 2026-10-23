@@ -54,10 +54,13 @@ export function MatterTeamManagement({
   matterId,
   members,
   userOptions,
+  attorneyIds,
 }: {
   matterId: string;
   members: TeamMemberRow[];
   userOptions: TeamUserOption[];
+  /** Users holding a bar admission: only they can be made lead. */
+  attorneyIds: string[];
 }) {
   const [pending, startTransition] = useTransition();
   // Which operation is in flight, so only the Add button reads "Adding…"
@@ -196,7 +199,13 @@ export function MatterTeamManagement({
               className="w-full"
               id={addUserSelectId}
               value={addUserId}
-              onChange={(e) => setAddUserId(e.target.value)}
+              onChange={(e) => {
+                setAddUserId(e.target.value);
+                // "Lead attorney" is offered only for attorneys.
+                if (addRole === "lead" && !attorneyIds.includes(e.target.value)) {
+                  setAddRole("co_counsel");
+                }
+              }}
               disabled={pending}
             >
               <NativeSelectOption value="">Pick a user…</NativeSelectOption>
@@ -219,11 +228,13 @@ export function MatterTeamManagement({
               onChange={(e) => setAddRole(e.target.value as MatterTeamRole)}
               disabled={pending}
             >
-              {MATTER_TEAM_ROLES.map((r) => (
-                <NativeSelectOption key={r} value={r}>
-                  {MATTER_TEAM_ROLE_LABEL[r]}
-                </NativeSelectOption>
-              ))}
+              {MATTER_TEAM_ROLES.filter((r) => r !== "lead" || attorneyIds.includes(addUserId)).map(
+                (r) => (
+                  <NativeSelectOption key={r} value={r}>
+                    {MATTER_TEAM_ROLE_LABEL[r]}
+                  </NativeSelectOption>
+                ),
+              )}
             </NativeSelect>
           </div>
           <Button

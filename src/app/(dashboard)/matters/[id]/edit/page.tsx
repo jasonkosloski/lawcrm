@@ -111,7 +111,13 @@ export default async function EditMatterPage({ params }: PageProps<"/matters/[id
       where: {
         OR: [{ isActive: true }, ...(activeLead ? [{ id: activeLead.userId }] : [])],
       },
-      select: { id: true, name: true, jobTitle: true, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        jobTitle: true,
+        isActive: true,
+        barAdmissions: { select: { id: true }, take: 1 },
+      },
       orderBy: { name: "asc" },
     }),
     currentUserHasPermission("matters.manage_team"),
@@ -172,12 +178,19 @@ export default async function EditMatterPage({ params }: PageProps<"/matters/[id
   }));
   // Lead picker: active users plus the (possibly deactivated) current
   // lead. The team-management card below only ever gets active users.
-  const leadOptions = userRows.map((u) => ({
-    id: u.id,
-    name: u.name,
-    jobTitle: u.jobTitle,
-    inactive: !u.isActive,
-  }));
+  // Only attorneys can be picked as lead, but the current lead stays
+  // listed (grandfathered, or since deactivated) so "unchanged" is
+  // selectable.
+  const isAttorneyRow = (u: (typeof userRows)[number]) => u.isActive && u.barAdmissions.length > 0;
+  const leadOptions = userRows
+    .filter((u) => isAttorneyRow(u) || u.id === activeLead?.userId)
+    .map((u) => ({
+      id: u.id,
+      name: u.name,
+      jobTitle: u.jobTitle,
+      inactive: !u.isActive,
+    }));
+  const attorneyIds = userRows.filter(isAttorneyRow).map((u) => u.id);
   const users = userRows
     .filter((u) => u.isActive)
     .map((u) => ({ id: u.id, name: u.name, jobTitle: u.jobTitle }));
@@ -262,6 +275,7 @@ export default async function EditMatterPage({ params }: PageProps<"/matters/[id
                 matterId={matter.id}
                 members={teamMembers}
                 userOptions={users}
+                attorneyIds={attorneyIds}
               />
             </CardContent>
           </Card>
