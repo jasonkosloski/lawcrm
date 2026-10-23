@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { resolvedToText } from "./to-text";
 import { renderFixture } from "./converters-fixture";
+import { defaultParagraphStyles } from "./paragraph-styles";
+import { renderTemplate } from "./render";
+import { SAMPLE_TEMPLATE_DATA } from "./catalog";
+import { DEFAULT_DOCUMENT_STYLE } from "./page-style";
+import type { TemplateDoc } from "./schema";
 
 describe("resolvedToText", () => {
   it("separates blocks with blank lines, renders lists and tables", () => {
@@ -16,12 +21,6 @@ describe("resolvedToText", () => {
     expect(resolvedToText({ type: "doc" })).toBe("");
   });
 });
-
-import { defaultParagraphStyles } from "./paragraph-styles";
-import { renderTemplate } from "./render";
-import { SAMPLE_TEMPLATE_DATA } from "./catalog";
-import { DEFAULT_DOCUMENT_STYLE } from "./page-style";
-import type { TemplateDoc } from "./schema";
 
 describe("resolvedToText all caps", () => {
   const styles = defaultParagraphStyles(DEFAULT_DOCUMENT_STYLE).map((s) =>

@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { resolvedToHtml } from "./to-html";
 import { captionFixture, mergedCaptionFixture, renderFixture } from "./converters-fixture";
+import { defaultParagraphStyles } from "./paragraph-styles";
+import { resolvePageStyle, DEFAULT_DOCUMENT_STYLE } from "./page-style";
+import { resolvedToPageParts, pageFontFaceCss } from "./to-html";
+import { renderTemplate } from "./render";
+import { SAMPLE_TEMPLATE_DATA } from "./catalog";
+import { DEFAULT_PARAGRAPH_STYLES } from "./page-style";
+import type { TemplateDoc } from "./schema";
 
 describe("resolvedToHtml", () => {
   const html = resolvedToHtml(renderFixture());
@@ -30,10 +37,6 @@ describe("resolvedToHtml", () => {
     expect(html).toContain("&lt;b&gt;Notice&lt;/b&gt;");
   });
 });
-
-import { defaultParagraphStyles } from "./paragraph-styles";
-import { resolvePageStyle, DEFAULT_DOCUMENT_STYLE } from "./page-style";
-import { resolvedToPageParts, pageFontFaceCss } from "./to-html";
 
 describe("resolvedToPageParts", () => {
   const doc = renderFixture();
@@ -197,11 +200,6 @@ describe("resolvedToHtml small caps", () => {
     expect(html).toBe("<p><strong><span data-small-caps>Plaintiff</span></strong></p>");
   });
 });
-
-import { renderTemplate } from "./render";
-import { SAMPLE_TEMPLATE_DATA } from "./catalog";
-import { DEFAULT_PARAGRAPH_STYLES } from "./page-style";
-import type { TemplateDoc } from "./schema";
 
 describe("paragraph styles in HTML", () => {
   const run = (content: unknown[]) =>

@@ -203,8 +203,8 @@ const DOCUMENT_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = 
 const TEMPLATE_ALIGN_TAGS = ["p", "h1", "h2", "h3", "td", "th"];
 const TEMPLATE_CELL_ATTRS = [...Object.values(CELL_SIDE_ATTR), "data-valign"];
 
-// Paragraph styles (to-html.ts writes these inline so previews and emailed
-// templates carry real spacing). Each property is allowlisted with a strict
+// Paragraph styles (to-html.ts writes these inline so the in-app preview
+// carries real spacing; sent mail is sanitized by a stricter profile). Each property is allowlisted with a strict
 // value pattern, on <p> only (text-align stays on the "*" rule), plus
 // font-size and text-transform on <span> for the size and all-caps marks.
 // Never a class, never any other property: no position, no url(), no
