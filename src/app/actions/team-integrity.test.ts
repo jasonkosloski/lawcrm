@@ -70,7 +70,6 @@ function updateForm(opts: { name?: string; roleIds?: string[]; active?: boolean 
   fd.set("initials", "EN");
   fd.set("jobTitle", "Attorney");
   fd.set("phone", "");
-  fd.set("barNumber", "");
   if (opts.active !== false) fd.set("isActive", "on");
   for (const id of opts.roleIds ?? []) fd.append("roleId", id);
   return fd;
@@ -84,7 +83,6 @@ function inviteForm(overrides: Record<string, string> = {}, roleIds: string[] = 
     initials: "NH",
     jobTitle: "Paralegal",
     phone: "",
-    barNumber: "",
   };
   for (const [k, v] of Object.entries({ ...defaults, ...overrides })) {
     fd.set(k, v);

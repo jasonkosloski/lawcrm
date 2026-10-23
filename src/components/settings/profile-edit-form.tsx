@@ -33,7 +33,7 @@ export type EditableProfile = {
   name: string;
   initials: string;
   phone: string | null;
-  barNumber: string | null;
+  barAdmissions: { state: string; number: string }[];
   avatarUrl: string | null;
   timeZone: string;
   /** "default" — only attendees / matter team / a per-event
@@ -123,21 +123,6 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
             defaultValue={vals.phone ?? profile.phone ?? ""}
             placeholder="(555) 555-5555"
             className={inputClass(!!errs.phone, "md")}
-          />
-        </Field>
-        <Field
-          label="Bar number"
-          name="barNumber"
-          error={errs.barNumber?.[0]}
-          hint="State bar number — attorneys only."
-        >
-          <input
-            id="barNumber"
-            name="barNumber"
-            type="text"
-            maxLength={40}
-            defaultValue={vals.barNumber ?? profile.barNumber ?? ""}
-            className={inputClass(!!errs.barNumber, "md")}
           />
         </Field>
         <Field

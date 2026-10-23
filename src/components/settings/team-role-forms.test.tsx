@@ -84,7 +84,7 @@ const MEMBER: FirmUserRow = {
   initials: "PP",
   jobTitle: "Paralegal",
   phone: null,
-  barNumber: null,
+  barAdmissions: [],
   isActive: true,
   hasSignedIn: true,
   roles: [ROLES[1]],
@@ -224,7 +224,6 @@ describe("MemberEditForm", () => {
       status: "error",
       errors: {
         phone: ["String must contain at most 40 character(s)"],
-        barNumber: ["Too long"],
       },
       values: {},
     });
@@ -234,7 +233,6 @@ describe("MemberEditForm", () => {
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
     await waitFor(() => expect(screen.getByText(/at most 40 character/i)).toBeTruthy());
-    expect(screen.getByText("Too long")).toBeTruthy();
     expect((screen.getByLabelText(/^phone/i) as HTMLInputElement).value).toBe("555-0100 ext 12");
   });
 
@@ -479,7 +477,6 @@ describe("FirmEditForm — rejected save", () => {
     submitFirmForm();
 
     await waitFor(() => expect(screen.getByText(/at most 40 character/i)).toBeTruthy());
-    expect(screen.getByText("Too long")).toBeTruthy();
     expect((screen.getByLabelText(/^firm name/i) as HTMLInputElement).value).toBe("Renamed LLP");
     expect((screen.getByLabelText(/^phone/i) as HTMLInputElement).value).toBe("555-0100 ext 12");
   });

@@ -57,7 +57,6 @@ const buildForm = (overrides: Partial<Record<string, string>> = {}) => {
   fd.set("name", overrides.name ?? "Updated Name");
   fd.set("initials", overrides.initials ?? "UN");
   fd.set("phone", overrides.phone ?? "");
-  fd.set("barNumber", overrides.barNumber ?? "");
   fd.set("avatarUrl", overrides.avatarUrl ?? "");
   fd.set("timeZone", overrides.timeZone ?? "America/Chicago");
   fd.set("defaultEventVisibility", overrides.defaultEventVisibility ?? "default");
@@ -193,5 +192,49 @@ describe("updateEmailSignatureAction", () => {
     await updateEmailSignatureAction("<p>Mine</p>");
     expect(await stored()).toBe("<p>Mine</p>");
     expect(await stored(other.userId)).toBeNull();
+  });
+});
+
+describe("updateProfileAction — bar admissions", () => {
+  const admissions = () =>
+    prisma.barAdmission.findMany({ where: { userId }, orderBy: { state: "asc" } });
+
+  test("omitted field leaves existing rows alone", async () => {
+    await prisma.barAdmission.create({ data: { userId, state: "CO", number: "111" } });
+    const res = await updateProfileAction(profileInitialState, buildForm());
+    expect(res.status).toBe("ok");
+    expect((await admissions()).map((a) => a.number)).toEqual(["111"]);
+  });
+
+  test("rows replace the existing set and the log omits numbers", async () => {
+    await prisma.barAdmission.create({ data: { userId, state: "CO", number: "111" } });
+    const fd = buildForm();
+    fd.set("barAdmissions", JSON.stringify([{ state: "tx", number: "98765" }]));
+    const res = await updateProfileAction(profileInitialState, fd);
+    expect(res.status).toBe("ok");
+    expect((await admissions()).map((a) => [a.state, a.number])).toEqual([["TX", "98765"]]);
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { userId, type: "settings" },
+    });
+    expect(`${log.title} ${log.detail}`).toContain("bar admissions updated");
+    expect(`${log.title} ${log.detail}`).not.toMatch(/98765|111/);
+  });
+
+  test("[] clears them", async () => {
+    await prisma.barAdmission.create({ data: { userId, state: "CO", number: "111" } });
+    const fd = buildForm();
+    fd.set("barAdmissions", "[]");
+    await updateProfileAction(profileInitialState, fd);
+    expect(await admissions()).toEqual([]);
+  });
+
+  test("a bad payload errors under fieldErrors.barAdmissions and writes nothing", async () => {
+    const fd = buildForm({ name: "Should Not Persist" });
+    fd.set("barAdmissions", JSON.stringify([{ state: "Narnia", number: "1" }]));
+    const res = await updateProfileAction(profileInitialState, fd);
+    expect(res.status).toBe("error");
+    expect(res.errors?.barAdmissions?.length).toBeGreaterThan(0);
+    const row = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    expect(row.name).not.toBe("Should Not Persist");
   });
 });

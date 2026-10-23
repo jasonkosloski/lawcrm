@@ -85,7 +85,6 @@ function inviteForm(): FormData {
   fd.set("initials", "NH");
   fd.set("jobTitle", "Paralegal");
   fd.set("phone", "");
-  fd.set("barNumber", "");
   return fd;
 }
 
@@ -95,7 +94,6 @@ function updateForm(active: boolean): FormData {
   fd.set("initials", "ME");
   fd.set("jobTitle", "Attorney");
   fd.set("phone", "");
-  fd.set("barNumber", "");
   if (active) fd.set("isActive", "on");
   fd.append("roleId", defaultRoleId);
   return fd;

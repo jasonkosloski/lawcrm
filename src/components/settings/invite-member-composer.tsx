@@ -181,17 +181,6 @@ export function InviteMemberComposer({
                 />
               )}
             </Field>
-            <Field label="Bar number" hint="Attorneys only." error={errs.barNumber?.[0]}>
-              {(c) => (
-                <input
-                  {...c}
-                  name="barNumber"
-                  type="text"
-                  defaultValue={v.barNumber ?? ""}
-                  className={inputClass(!!errs.barNumber)}
-                />
-              )}
-            </Field>
           </div>
 
           <RoleMultiSelect

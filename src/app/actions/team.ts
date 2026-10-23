@@ -54,6 +54,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { logActivity } from "@/lib/activity-log";
+import { parseBarAdmissions, replaceBarAdmissions } from "@/lib/bar-admissions";
 import { logAuthEvent } from "@/lib/auth-events";
 import {
   banStaff,
@@ -156,7 +157,6 @@ const inviteSchema = z.object({
     .max(3, "Initials should be 1–3 characters"),
   jobTitle: z.string().trim().min(1, "Pick a job title").max(60),
   phone: z.string().trim().max(40).optional().or(z.literal("")),
-  barNumber: z.string().trim().max(40).optional().or(z.literal("")),
 });
 
 export async function inviteFirmMember(
@@ -171,6 +171,14 @@ export async function inviteFirmMember(
     return {
       status: "error",
       errors: parsed.error.flatten().fieldErrors,
+      values: raw,
+    };
+  }
+  const admissions = parseBarAdmissions(formData.get("barAdmissions"));
+  if (!admissions.ok) {
+    return {
+      status: "error",
+      errors: { barAdmissions: [admissions.error] },
       values: raw,
     };
   }
@@ -233,7 +241,6 @@ export async function inviteFirmMember(
         initials: parsed.data.initials.toUpperCase(),
         jobTitle: parsed.data.jobTitle,
         phone: parsed.data.phone || null,
-        barNumber: parsed.data.barNumber || null,
         isActive: true,
       },
       select: { id: true },
@@ -245,6 +252,7 @@ export async function inviteFirmMember(
         assignedById: currentUserId,
       })),
     });
+    if (admissions.value) await replaceBarAdmissions(tx, user.id, admissions.value);
   });
 
   // Audit trail — an invite grants roles; a firm needs to be able to
@@ -272,7 +280,7 @@ export async function inviteFirmMember(
   };
 }
 
-// ── Update (name / initials / jobTitle / phone / barNumber / roles / isActive)
+// ── Update (name / initials / jobTitle / phone / roles / isActive)
 
 const updateSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
@@ -283,7 +291,6 @@ const updateSchema = z.object({
     .max(3, "Initials should be 1–3 characters"),
   jobTitle: z.string().trim().min(1, "Pick a job title").max(60),
   phone: z.string().trim().max(40).optional().or(z.literal("")),
-  barNumber: z.string().trim().max(40).optional().or(z.literal("")),
   isActive: z.literal("on").optional(),
 });
 
@@ -300,6 +307,15 @@ export async function updateFirmMember(
     return {
       status: "error",
       errors: parsed.error.flatten().fieldErrors,
+      values: raw,
+    };
+  }
+  // Absent field = leave the admissions alone.
+  const admissions = parseBarAdmissions(formData.get("barAdmissions"));
+  if (!admissions.ok) {
+    return {
+      status: "error",
+      errors: { barAdmissions: [admissions.error] },
       values: raw,
     };
   }
@@ -407,6 +423,7 @@ export async function updateFirmMember(
   // the rows it read) — the audit entry lists them.
   let addedRoleIds: string[] = [];
   let removedRoleIds: string[] = [];
+  let admissionsChanged = false;
 
   try {
     await prisma.$transaction(
@@ -440,10 +457,12 @@ export async function updateFirmMember(
             initials: parsed.data.initials.toUpperCase(),
             jobTitle: parsed.data.jobTitle,
             phone: parsed.data.phone || null,
-            barNumber: parsed.data.barNumber || null,
             isActive: newIsActive,
           },
         });
+        if (admissions.value) {
+          admissionsChanged = await replaceBarAdmissions(tx, target.id, admissions.value);
+        }
         // Apply only the DIFF: rewriting every row would stamp
         // assignedById / assignedAt of unchanged roles with whoever
         // last edited an unrelated field, erasing who really granted
@@ -514,7 +533,8 @@ export async function updateFirmMember(
     title: `Updated team member ${parsed.data.name}`,
     detail:
       `Roles: ${roleNames.join(", ")} — ${newIsActive ? "active" : "deactivated"}` +
-      roleDiffSuffix(addedRoleIds, removedRoleIds, roleMap.byId),
+      roleDiffSuffix(addedRoleIds, removedRoleIds, roleMap.byId) +
+      (admissionsChanged ? "; bar admissions updated" : ""),
   });
 
   // Mirror the status change into Clerk AFTER the commit. The DB is

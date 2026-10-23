@@ -127,17 +127,6 @@ export function MemberEditForm({
             />
           )}
         </Field>
-        <Field label="Bar number" hint="Attorneys only." error={errs.barNumber?.[0]}>
-          {(c) => (
-            <input
-              {...c}
-              name="barNumber"
-              type="text"
-              defaultValue={member.barNumber ?? ""}
-              className={inputClass(!!errs.barNumber)}
-            />
-          )}
-        </Field>
         <div className="flex flex-col gap-1.5 pt-5">
           {activeLocked ? (
             // Locked row (yourself, or an Admin-class member you may

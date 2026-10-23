@@ -24,7 +24,7 @@ export type FirmUserRow = {
   initials: string;
   jobTitle: string;
   phone: string | null;
-  barNumber: string | null;
+  barAdmissions: { state: string; number: string }[];
   isActive: boolean;
   /** True once the member has signed in with Clerk. The Clerk id
    *  itself never leaves the server. */
@@ -57,7 +57,7 @@ function shapeRow(
     initials: string;
     jobTitle: string;
     phone: string | null;
-    barNumber: string | null;
+    barAdmissions: { state: string; number: string }[];
     isActive: boolean;
     clerkUserId: string | null;
     createdAt: Date;
@@ -83,7 +83,7 @@ function shapeRow(
     initials: r.initials,
     jobTitle: r.jobTitle,
     phone: r.phone,
-    barNumber: r.barNumber,
+    barAdmissions: r.barAdmissions,
     isActive: r.isActive,
     hasSignedIn: r.clerkUserId != null,
     roles,
@@ -110,7 +110,10 @@ export async function listFirmUsers(currentUserId: string): Promise<FirmUserRow[
       initials: true,
       jobTitle: true,
       phone: true,
-      barNumber: true,
+      barAdmissions: {
+        orderBy: { state: "asc" },
+        select: { state: true, number: true },
+      },
       isActive: true,
       clerkUserId: true,
       createdAt: true,

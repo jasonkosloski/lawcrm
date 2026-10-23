@@ -32,6 +32,7 @@ import {
   normalizeEmailSignature,
 } from "@/lib/email-signature";
 import { logSettingsChange } from "@/lib/audit-entry";
+import { parseBarAdmissions, replaceBarAdmissions } from "@/lib/bar-admissions";
 
 const profileSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
@@ -41,7 +42,6 @@ const profileSchema = z.object({
     .min(1, "Initials are required")
     .max(3, "Initials should be 1–3 characters"),
   phone: z.string().trim().max(40).optional().or(z.literal("")),
-  barNumber: z.string().trim().max(40).optional().or(z.literal("")),
   avatarUrl: z
     .string()
     .trim()
@@ -94,18 +94,34 @@ export async function updateProfileAction(
     };
   }
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      name: parsed.data.name,
-      initials: parsed.data.initials.toUpperCase(),
-      phone: parsed.data.phone || null,
-      barNumber: parsed.data.barNumber || null,
-      avatarUrl: parsed.data.avatarUrl || null,
-      timeZone: parsed.data.timeZone,
-      defaultEventVisibility: parsed.data.defaultEventVisibility,
-    },
+  // Absent field = leave the admissions alone (older forms never post it).
+  const admissions = parseBarAdmissions(formData.get("barAdmissions"));
+  if (!admissions.ok) {
+    return {
+      status: "error",
+      errors: { barAdmissions: [admissions.error] },
+      values: raw,
+    };
+  }
+
+  const admissionsChanged = await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: {
+        name: parsed.data.name,
+        initials: parsed.data.initials.toUpperCase(),
+        phone: parsed.data.phone || null,
+        avatarUrl: parsed.data.avatarUrl || null,
+        timeZone: parsed.data.timeZone,
+        defaultEventVisibility: parsed.data.defaultEventVisibility,
+      },
+    });
+    return admissions.value ? replaceBarAdmissions(tx, userId, admissions.value) : false;
   });
+  // Numbers are deliberately left out of the log.
+  if (admissionsChanged) {
+    await logSettingsChange(userId, "Profile updated", ["bar admissions updated"]);
+  }
 
   revalidatePath("/settings/profile");
   // Sidebar reads from the User row (name, initials, role); bust the

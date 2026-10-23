@@ -76,7 +76,6 @@ function updateForm(opts: { name?: string; roleIds?: string[]; active?: boolean 
   fd.set("initials", "EN");
   fd.set("jobTitle", "Attorney");
   fd.set("phone", "");
-  fd.set("barNumber", "");
   if (opts.active !== false) fd.set("isActive", "on");
   for (const id of opts.roleIds ?? []) fd.append("roleId", id);
   return fd;
@@ -96,7 +95,6 @@ function inviteForm(overrides: Record<string, string> = {}): FormData {
     initials: "NH",
     jobTitle: "Paralegal",
     phone: "",
-    barNumber: "",
   };
   for (const [k, v] of Object.entries({ ...defaults, ...overrides })) {
     fd.set(k, v);
@@ -481,5 +479,64 @@ describe("escalation guard — non-Admin directory manager", () => {
       withRoles(inviteForm(), [adminRoleId]),
     );
     expect(invited.status).toBe("ok");
+  });
+});
+
+describe("bar admissions", () => {
+  test("update: omitted leaves rows, [] clears, rows replace and log without numbers", async () => {
+    const actor = await seedUser({ firmId, roleIds: [adminRoleId, defaultRoleId] });
+    const member = await seedUser({ firmId, name: "Member", roleIds: [defaultRoleId] });
+    mockedGetUser.mockResolvedValue(actor.userId);
+    await prisma.barAdmission.create({
+      data: { userId: member.userId, state: "CO", number: "111" },
+    });
+    const numbers = async () =>
+      (await prisma.barAdmission.findMany({ where: { userId: member.userId } })).map(
+        (a) => a.number,
+      );
+
+    await updateFirmMember(member.userId, teamInitialState, updateForm({}));
+    expect(await numbers()).toEqual(["111"]);
+
+    const fd = updateForm({});
+    fd.set("barAdmissions", JSON.stringify([{ state: "NY", number: "55555" }]));
+    const res = await updateFirmMember(member.userId, teamInitialState, fd);
+    expect(res.status).toBe("ok");
+    expect(await numbers()).toEqual(["55555"]);
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { userId: actor.userId, type: "auth", detail: { contains: "bar admissions updated" } },
+    });
+    expect(log.detail).toContain("bar admissions updated");
+    expect(log.detail).not.toMatch(/55555|111/);
+
+    const clear = updateForm({});
+    clear.set("barAdmissions", "[]");
+    await updateFirmMember(member.userId, teamInitialState, clear);
+    expect(await numbers()).toEqual([]);
+  });
+
+  test("update: a bad payload surfaces under errors.barAdmissions", async () => {
+    const actor = await seedUser({ firmId, roleIds: [adminRoleId, defaultRoleId] });
+    mockedGetUser.mockResolvedValue(actor.userId);
+    const fd = updateForm({});
+    fd.set("barAdmissions", "not json");
+    const res = await updateFirmMember(actor.userId, teamInitialState, fd);
+    expect(res.status).toBe("error");
+    expect(res.errors?.barAdmissions?.length).toBeGreaterThan(0);
+  });
+
+  test("invite creates admissions for the new user", async () => {
+    const actor = await seedUser({ firmId, roleIds: [adminRoleId, defaultRoleId] });
+    mockedGetUser.mockResolvedValue(actor.userId);
+    const res = await inviteFirmMember(
+      teamInitialState,
+      inviteForm({ barAdmissions: JSON.stringify([{ state: "co", number: "123" }]) }),
+    );
+    expect(res.status).toBe("ok");
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { email: "new.hire@example.com" },
+      include: { barAdmissions: true },
+    });
+    expect(user.barAdmissions.map((a) => [a.state, a.number])).toEqual([["CO", "123"]]);
   });
 });

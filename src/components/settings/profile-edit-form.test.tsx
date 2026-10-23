@@ -16,7 +16,7 @@ const profile: EditableProfile = {
   name: "Pat Lawyer",
   initials: "PL",
   phone: "555-0100",
-  barNumber: "12345",
+  barAdmissions: [],
   avatarUrl: null,
   timeZone: "America/Denver",
   defaultEventVisibility: "default",
@@ -92,23 +92,15 @@ describe("ProfileEditForm", () => {
 
   test("every text field is labelled and the visibility radios form a named group", () => {
     render(<ProfileEditForm profile={profile} />);
-    for (const label of [
-      /display name/i,
-      /initials/i,
-      /phone/i,
-      /bar number/i,
-      /avatar url/i,
-      /time zone/i,
-    ]) {
+    for (const label of [/display name/i, /initials/i, /phone/i, /avatar url/i, /time zone/i]) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
     expect(screen.getByRole("group", { name: /default event visibility/i })).toBeInTheDocument();
   });
 
-  test("phone and bar number are capped at the server's 40 characters", () => {
+  test("phone is capped at the server's 40 characters", () => {
     render(<ProfileEditForm profile={profile} />);
     expect(screen.getByLabelText(/phone/i)).toHaveAttribute("maxlength", "40");
-    expect(screen.getByLabelText(/bar number/i)).toHaveAttribute("maxlength", "40");
   });
 
   test("visibility copy does not promise a per-event override that doesn't exist", () => {
