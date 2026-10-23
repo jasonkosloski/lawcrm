@@ -147,7 +147,7 @@ async function graphError(
     const path = loopPath(selfId, doc, blocks);
     if (path && path.length === 0) return `${name} can't include itself.`;
     if (path) {
-      const a = blocks.get(path[path.length - 1])!.name;
+      const a = blocks.get(path[0])!.name;
       return `${a} already includes ${name}, so ${name} can't include ${a}.`;
     }
   }

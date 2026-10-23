@@ -411,10 +411,10 @@ describe("nested blocks: save rules", () => {
     const c = await mk("C");
     const b = await mk("B", { content: docWith(c) });
     const a = await mk("A", { content: docWith(b) });
-    // C → A would close A → B → C → A; B is the block that includes C.
+    // C → A would close A → B → C → A; A, the inserted child, already includes C.
     expect(await setChildren(c, a)).toEqual({
       ok: false,
-      error: "B already includes C, so C can't include B.",
+      error: "A already includes C, so C can't include A.",
     });
   });
 
