@@ -21,7 +21,7 @@
 
 "use client";
 
-import { useEditor, useEditorState, EditorContent, type Editor } from "@tiptap/react";
+import { useEditor, useEditorState, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
   Bold,
@@ -34,6 +34,7 @@ import {
   Strikethrough,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EDITOR_CONTENT_CLASS, EditorShell } from "@/components/editor/editor-shell";
 
 /**
  * The editor's extension set. Exported so a test can feed everything
@@ -81,10 +82,8 @@ export function RichTextEditor({
           "[&_p]:my-1 [&_p]:text-xs [&_p]:text-ink",
           "[&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1",
           "[&_h3]:text-xs [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-0.5",
+          EDITOR_CONTENT_CLASS,
           "[&_ul]:my-1 [&_ol]:my-1 [&_li]:text-xs",
-          "[&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-3 [&_blockquote]:text-ink-3 [&_blockquote]:italic",
-          "[&_code]:bg-paper-2 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[11px] [&_code]:font-mono",
-          "[&_pre]:bg-paper-2 [&_pre]:p-2 [&_pre]:rounded [&_pre]:text-[11px]",
         ),
         ...(placeholder ? { "aria-placeholder": placeholder } : {}),
       },
@@ -119,30 +118,11 @@ export function RichTextEditor({
         className,
       )}
     >
-      <EditorToolbar editor={editor} />
-      <div className="relative">
-        <EditorPlaceholder editor={editor} text={placeholder} />
-        <EditorContent editor={editor} />
-      </div>
-    </div>
-  );
-}
-
-/** Hint text shown while the document is empty. Tiptap's Placeholder
- *  extension lives in @tiptap/extensions (not a direct dependency), so
- *  this is a plain overlay driven by the editor's empty state. */
-function EditorPlaceholder({ editor, text }: { editor: Editor; text?: string }) {
-  const isEmpty = useEditorState({
-    editor,
-    selector: ({ editor }) => editor.isEmpty,
-  });
-  if (!text || !isEmpty) return null;
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none absolute left-3 top-3 text-xs text-ink-4"
-    >
-      {text}
+      <EditorShell
+        editor={editor}
+        placeholder={placeholder}
+        toolbar={<EditorToolbar editor={editor} />}
+      />
     </div>
   );
 }

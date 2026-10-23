@@ -13,15 +13,13 @@ import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import type { ParagraphStyle } from "@/lib/templates/paragraph-styles";
 import type { TemplateDoc, TemplateKind } from "@/lib/templates/schema";
 import { cn } from "@/lib/utils";
+import { EDITOR_CONTENT_CLASS } from "@/components/editor/editor-shell";
 import { createTemplateExtensions, templateJSON } from "./extensions";
 import { FitHighlight } from "./fit-highlight";
 
 export const BODY_CLASS = cn(
   "prose prose-sm max-w-none min-h-[420px] px-6 py-5 text-xs text-ink focus:outline-none",
-  // `prose` is inert (no typography plugin), so Tailwind's reset would hide
-  // list markers; draw them as the preview does (bullets, decimals, 2em).
-  "[&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-[2em] [&_ol]:pl-[2em] [&_ul]:my-0 [&_ol]:my-0",
-  "[&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:p-1 [&_th]:border [&_th]:border-line [&_th]:p-1",
+  EDITOR_CONTENT_CLASS,
   // Full-width tables fill the line (columns keep their proportions);
   // fit tables size to content. !important beats the resize view's inline width.
   "[&_table[data-width=full]]:!w-full [&_table[data-width=full]]:table-fixed [&_table[data-width=fit]]:!w-auto [&_table]:my-0",
