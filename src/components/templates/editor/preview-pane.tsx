@@ -23,6 +23,7 @@ import {
 import { SAMPLE_TEMPLATE_DATA } from "@/lib/templates/catalog";
 import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templates/render";
 import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
+import type { ParagraphStyle } from "@/lib/templates/paragraph-styles";
 import type { AppliesTo, TemplateDoc, TemplateKind } from "@/lib/templates/schema";
 import { resolvedToHtml } from "@/lib/templates/to-html";
 import { resolvedToText } from "@/lib/templates/to-text";
@@ -52,13 +53,14 @@ export function renderSample(
   kind: TemplateKind = "letter",
   pageStyle: FirmPageStyle | null = null,
   court: CourtContext | null = null,
+  paragraphStyles: ParagraphStyle[] | null = null,
 ): Rendered {
   const data = {
     ...SAMPLE_TEMPLATE_DATA,
     scope: appliesTo === "lead" ? "lead" : "matter",
   } as const;
   const map = new Map(blocks.map((b) => [b.id, b]));
-  const styles = pageStyle?.values.paragraphStyles ?? DEFAULT_PARAGRAPH_STYLES;
+  const styles = paragraphStyles ?? pageStyle?.values.paragraphStyles ?? DEFAULT_PARAGRAPH_STYLES;
   const subj = subject ? renderTemplate(subject, { data, blocks: map, styles }) : null;
   if (pageStyle && isPageKind(kind)) {
     const { page, report } = renderPageView({
@@ -117,6 +119,7 @@ export function PreviewPane({
   appliesTo,
   blocks,
   pageStyle = null,
+  styles = null,
   courtFormats = [],
   allowRecord,
 }: {
@@ -127,6 +130,8 @@ export function PreviewPane({
   blocks: BlockSource[];
   /** Firm document style; letters/filings then preview as a page. */
   pageStyle?: FirmPageStyle | null;
+  /** The firm's paragraph styles when there is no page style (the block editor). */
+  styles?: ParagraphStyle[] | null;
   /** Active court formats for "Preview as" (filings, sample data). */
   courtFormats?: SerializedCourtContext[];
   /** Offer the real-record preview (desktop editors only). */
@@ -140,8 +145,8 @@ export function PreviewPane({
     return f ? fromSerializedCourt(f) : null;
   }, [courtFormats, courtId]);
   const sample = useMemo(
-    () => renderSample(doc, subject, appliesTo, blocks, kind, pageStyle, court),
-    [doc, subject, appliesTo, blocks, kind, pageStyle, court],
+    () => renderSample(doc, subject, appliesTo, blocks, kind, pageStyle, court, styles),
+    [doc, subject, appliesTo, blocks, kind, pageStyle, court, styles],
   );
   const [picking, setPicking] = useState(false);
   const [record, setRecord] = useState<PickedRecord | null>(null);

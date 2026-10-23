@@ -79,4 +79,15 @@ describe("ParagraphDialog", () => {
     expect(attrsOf(editor).firstLine).toEqual({ kind: "hanging", in: 0.5 });
     expect(attrsOf(editor).keepWithNext).toBe(true);
   });
+
+  it("clearing the Exactly box never stores 0 pt", async () => {
+    const editor = setup();
+    await open();
+    await userEvent.selectOptions(screen.getByLabelText("Line spacing"), "exact");
+    const box = screen.getByLabelText("Exact line spacing (pt)");
+    await userEvent.clear(box);
+    expect(box).toHaveValue(null);
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(attrsOf(editor).lineSpacing).toEqual({ exactPt: 12 });
+  });
 });

@@ -87,6 +87,8 @@ function ParagraphForm({
   const uid = useId();
   const [current] = useState(() => selectedParagraphAttrs(editor)[0] ?? {});
   const [draft, setDraft] = useState<Draft>({});
+  // What the Exactly box shows while typing; null = mirror the draft value.
+  const [exactText, setExactText] = useState<string | null>(null);
   const base = resolveParagraph(
     typeof current.style === "string" ? current.style : undefined,
     {},
@@ -201,6 +203,7 @@ function ParagraphForm({
           value={lsKind}
           onChange={(e) => {
             const v = e.target.value;
+            setExactText(null);
             put("lineSpacing", v === "" ? null : v === "exact" ? { exactPt: 12 } : v);
           }}
         >
@@ -217,8 +220,14 @@ function ParagraphForm({
             type="number"
             aria-label="Exact line spacing (pt)"
             className={inputCls}
-            value={(ls as { exactPt: number }).exactPt}
-            onChange={(e) => put("lineSpacing", { exactPt: Number(e.target.value) })}
+            value={exactText ?? (ls as { exactPt: number }).exactPt}
+            onChange={(e) => {
+              // An emptied box is "no change", never 0 pt.
+              setExactText(e.target.value);
+              const raw = e.target.value.trim();
+              if (raw !== "" && Number.isFinite(Number(raw)))
+                put("lineSpacing", { exactPt: Number(raw) });
+            }}
           />
         )}
       </Field>

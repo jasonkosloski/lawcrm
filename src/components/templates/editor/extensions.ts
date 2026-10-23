@@ -406,7 +406,13 @@ export function createTemplateExtensions(opts: TemplateExtensionOptions): Extens
     ListFieldNode.configure({ onEditField: opts.onEditField }),
     ...(hasPageBreak ? [PageBreak] : []),
     ...(hasBlockRef
-      ? [BlockNode.configure({ blocks: opts.blocks, onEditBlock: opts.onEditBlock })]
+      ? [
+          BlockNode.configure({
+            blocks: opts.blocks,
+            styles: opts.styles,
+            onEditBlock: opts.onEditBlock,
+          }),
+        ]
       : []),
     ShowIfNode.configure(sectionOpts),
     RepeatNode.configure(sectionOpts),

@@ -13,10 +13,13 @@ import { cn } from "@/lib/utils";
 import { SAMPLE_TEMPLATE_DATA } from "@/lib/templates/catalog";
 import { renderTemplate, type BlockSource } from "@/lib/templates/render";
 import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
+import type { ParagraphStyle } from "@/lib/templates/paragraph-styles";
 import { resolvedToHtml } from "@/lib/templates/to-html";
 
 export type BlockOptions = {
   blocks: BlockSource[];
+  /** The firm's styles; defaults when absent. */
+  styles?: ParagraphStyle[];
   onEditBlock?: (id: string) => void;
 };
 
@@ -24,6 +27,7 @@ export type BlockOptions = {
 export function blockPreview(
   blockId: string,
   blocks: BlockSource[],
+  styles: ParagraphStyle[] = DEFAULT_PARAGRAPH_STYLES,
 ): { name: string; html: string; archived: boolean } | null {
   const block = blocks.find((b) => b.id === blockId);
   if (!block) return null;
@@ -32,9 +36,9 @@ export function blockPreview(
     const { doc } = renderTemplate(block.content, {
       data: SAMPLE_TEMPLATE_DATA,
       blocks: map,
-      // Client-only chip preview: defaults, and the report (unknownStyles) is
-      // discarded so firm custom styles are never flagged as unknown here.
-      styles: DEFAULT_PARAGRAPH_STYLES,
+      // Client-only chip preview with the editor's styles; the report
+      // (unknownStyles) is discarded.
+      styles,
     });
     return { name: block.name, html: resolvedToHtml(doc), archived: !block.isActive };
   } catch {
@@ -49,7 +53,10 @@ export function blockPreview(
 function BlockView(props: NodeViewProps) {
   const blockId = String(props.node.attrs.blockId);
   const opts = props.extension.options as BlockOptions;
-  const preview = useMemo(() => blockPreview(blockId, opts.blocks), [blockId, opts.blocks]);
+  const preview = useMemo(
+    () => blockPreview(blockId, opts.blocks, opts.styles),
+    [blockId, opts.blocks, opts.styles],
+  );
   return (
     <NodeViewWrapper
       data-block-ref=""
