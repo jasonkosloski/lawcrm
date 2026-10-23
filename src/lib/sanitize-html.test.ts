@@ -12,6 +12,7 @@
 import { describe, expect, test } from "vitest";
 import {
   BLOCKED_IMAGE_PLACEHOLDER,
+  cleanOutgoingStyleValue,
   isEffectivelyEmpty,
   sanitizeDocumentHtml,
   sanitizeEmailHtml,
@@ -850,6 +851,21 @@ describe("sanitizeOutgoingEmailHtml - CSS comments cannot defeat style bounds", 
   test("uppercase units are normalised", () => {
     expect(sanitizeOutgoingEmailHtml('<p style="MARGIN-TOP:12PT;Font-Size:11PT">x</p>')).toBe(
       '<p style="margin-top:12pt;font-size:11pt">x</p>',
+    );
+  });
+});
+
+describe("cleanOutgoingStyleValue", () => {
+  test("bounds values and, with a tag, drops properties that tag would lose", () => {
+    expect(cleanOutgoingStyleValue("margin-bottom:12pt;font-size:999pt;color:red")).toBe(
+      "margin-bottom:12pt;color:red",
+    );
+    expect(cleanOutgoingStyleValue("margin-bottom:12pt;color:red", "p")).toBe("margin-bottom:12pt");
+    expect(cleanOutgoingStyleValue("margin-bottom:12pt;font-size:11pt", "span")).toBe(
+      "font-size:11pt",
+    );
+    expect(cleanOutgoingStyleValue("text-align:center;font-size:11pt", "td")).toBe(
+      "text-align:center",
     );
   });
 });

@@ -6,12 +6,12 @@
  */
 import { describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
-import { sanitizeUserHtml } from "@/lib/sanitize-html";
+import { sanitizeOutgoingEmailHtml, sanitizeUserHtml } from "@/lib/sanitize-html";
 import { validateTemplateContent } from "@/lib/templates/schema";
 import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { templateJSON } from "@/components/templates/editor/extensions";
 import { FULL_DOC, NO_ATTRS, cell, p, t } from "@/components/templates/editor/test-fixtures";
-import { documentExtensions, notesExtensions } from "./presets";
+import { documentExtensions, emailExtensions, notesExtensions } from "./presets";
 
 describe("notes preset", () => {
   const make = (content: string) => new Editor({ extensions: notesExtensions(), content });
@@ -183,5 +183,109 @@ describe("document preset", () => {
     // Non-null input values must reach the editor JSON (nothing lost on load).
     expect(stripNulls(json)).toEqual(stripNulls(doc));
     editor.destroy();
+  });
+});
+
+describe("email preset", () => {
+  const make = (content: string) => new Editor({ extensions: emailExtensions(), content });
+  const norm = (h: string) =>
+    h
+      .replace(/<br ?\/?>/g, "<br>")
+      .replace(/;\s*"/g, '"')
+      .replace(/:\s+/g, ":")
+      .replace(/;\s+/g, ";");
+  const stable = (html: string) => {
+    const editor = make(html);
+    const out = norm(editor.getHTML());
+    editor.destroy();
+    return { out, clean: norm(sanitizeOutgoingEmailHtml(out)) };
+  };
+
+  it("everything the editor can emit survives sanitizeOutgoingEmailHtml unchanged", () => {
+    const { out, clean } = stable(
+      [
+        "<h2>H</h2><h3>S</h3>",
+        "<p><strong>b</strong> <em>i</em> <s>s</s> <code>c</code> <u>u</u></p>",
+        '<p style="text-align:center">c</p>',
+        '<p style="margin-bottom:12pt;line-height:1.5">spaced</p>',
+        '<p><span style="font-size:14pt">big</span></p>',
+        '<p><a href="https://example.com/x">l</a> <a href="mailto:a@b.co">m</a></p>',
+        "<blockquote><p>q</p></blockquote><ul><li><p>a</p></li></ul><ol><li><p>b</p></li></ol>",
+        "<pre><code>x</code></pre>",
+        '<table><tbody><tr><th style="text-align:right"><p>h</p></th><td colspan="2"><p>c</p></td></tr></tbody></table>',
+      ].join(""),
+    );
+    expect(out).toContain("<table");
+    expect(out).toContain('target="_blank"');
+    expect(out).toContain("font-size:14pt");
+    expect(out).toContain("text-align:center");
+    expect(clean).toBe(out);
+  });
+
+  it("a pasted column width is not carried (the sanitizer would strip it)", () => {
+    const { out, clean } = stable(
+      '<table><tbody><tr><td colwidth="100" data-colwidth="100"><p>a</p></td></tr></tbody></table>',
+    );
+    expect(out).not.toContain("colwidth");
+    expect(clean).toBe(out);
+  });
+
+  it("pasted paragraph style keeps only allowed declarations", () => {
+    const editor = make('<p style="margin-bottom:12pt;color:red;position:absolute">x</p>');
+    const html = norm(editor.getHTML());
+    expect(html).toContain("margin-bottom:12pt");
+    expect(html).not.toContain("color");
+    expect(html).not.toContain("position");
+    editor.destroy();
+  });
+
+  it("out-of-bounds values are dropped like the server does", () => {
+    const editor = make('<p style="font-size:999pt;margin-left:-5pt;line-height:2">x</p>');
+    const html = norm(editor.getHTML());
+    expect(html).not.toContain("font-size");
+    expect(html).not.toContain("margin-left");
+    expect(html).toContain("line-height:2");
+    editor.destroy();
+  });
+
+  it("refuses javascript:, data: and relative links", () => {
+    const editor = make("<p>text</p>");
+    editor.commands.selectAll();
+    for (const href of ["javascript:alert(1)", "data:text/html,x", "/relative", "tel:123"]) {
+      editor.commands.setLink({ href });
+      expect(editor.getHTML()).not.toContain("<a");
+    }
+    editor.commands.setLink({ href: "https://example.com" });
+    expect(editor.getHTML()).toContain('href="https://example.com"');
+    editor.destroy();
+  });
+
+  it("drops a javascript: link on parse", () => {
+    expect(make('<p><a href="javascript:alert(1)">x</a></p>').getHTML()).not.toContain(
+      "javascript",
+    );
+  });
+
+  it("TextAlign applies to paragraphs only", () => {
+    const editor = make("<h2>h</h2>");
+    editor.commands.setTextAlign("center");
+    expect(editor.getHTML()).not.toContain("text-align");
+    editor.destroy();
+  });
+
+  it("template-style HTML loads and re-serialises with its styles intact", () => {
+    const html =
+      '<p style="margin-top:6pt;margin-bottom:12pt;text-indent:36pt;text-align:justify">' +
+      '<span style="font-size:11pt;text-transform:uppercase">Dear</span> Sir</p>';
+    const { out, clean } = stable(html);
+    for (const frag of [
+      "margin-top:6pt",
+      "text-indent:36pt",
+      "text-align:justify",
+      "font-size:11pt",
+      "text-transform:uppercase",
+    ])
+      expect(out).toContain(frag);
+    expect(clean).toBe(out);
   });
 });

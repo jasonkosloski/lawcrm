@@ -9,8 +9,11 @@
  * (a temporary dependency direction; only table commands move later).
  */
 
-import type { Extensions } from "@tiptap/core";
+import { mergeAttributes, type Extensions } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
+import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
+import TextAlign from "@tiptap/extension-text-align";
+import { StylePassthrough, StyledSpan } from "./style-passthrough";
 import {
   createTemplateExtensions,
   type TemplateExtensionOptions,
@@ -30,6 +33,53 @@ export function notesExtensions(): Extensions {
       heading: { levels: [2, 3] },
       horizontalRule: false,
     }),
+  ];
+}
+
+function withoutColwidth(this: { parent?: () => Record<string, unknown> }) {
+  return {
+    ...this.parent?.(),
+    colwidth: { default: null, parseHTML: () => null, renderHTML: () => ({}) },
+  };
+}
+
+/**
+ * Email: Notes plus text alignment (paragraphs only), plain tables, a
+ * strict Link, and the style passthrough. Mirrors
+ * `sanitizeOutgoingEmailHtml`: links are http/https/mailto only with a
+ * forced rel/target; style survives only as the server would keep it.
+ */
+export function emailExtensions(): Extensions {
+  return [
+    StarterKit.configure({
+      heading: { levels: [2, 3] },
+      horizontalRule: false,
+      link: {
+        protocols: ["http", "https", "mailto"],
+        autolink: true,
+        openOnClick: false,
+        HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },
+        isAllowedUri: (url) =>
+          /^(https?:\/\/[^/]|mailto:.)/i.test(url.replace(/[\u0000-\u0020]/g, "")),
+      },
+    }),
+    TextAlign.configure({ types: ["paragraph"] }),
+    // Plain tables: no <colgroup>/min-width markup and no column widths,
+    // which the outgoing sanitizer would strip.
+    Table.extend({
+      renderHTML({ HTMLAttributes }) {
+        return [
+          "table",
+          mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
+          ["tbody", 0],
+        ];
+      },
+    }).configure({ resizable: false }),
+    TableRow,
+    TableCell.extend({ addAttributes: withoutColwidth }),
+    TableHeader.extend({ addAttributes: withoutColwidth }),
+    StylePassthrough,
+    StyledSpan,
   ];
 }
 

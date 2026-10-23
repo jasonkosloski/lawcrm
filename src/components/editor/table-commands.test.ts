@@ -9,7 +9,7 @@ import { Editor } from "@tiptap/core";
 import { CellSelection, TableMap } from "@tiptap/pm/tables";
 import { validateTemplateContent } from "@/lib/templates/schema";
 import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
-import { createTemplateExtensions, templateJSON } from "./extensions";
+import { createTemplateExtensions, templateJSON } from "@/components/templates/editor/extensions";
 import {
   bordersAre,
   mergeCheck,

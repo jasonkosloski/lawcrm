@@ -450,13 +450,17 @@ function outgoingMargin(v: string): boolean {
   return pt !== null && pt >= 0 && pt <= 144;
 }
 
-/** Strip `!important` and drop declarations that break the outgoing bounds. */
-function cleanOutgoingStyle(attribs: Record<string, string>): Record<string, string> {
-  if (!("style" in attribs)) return attribs;
+/**
+ * Strip `!important` and drop declarations that break the outgoing bounds.
+ * Pure on the style string so the email editor's style passthrough filters
+ * with this exact definition (client-safe: no server-only imports here).
+ * Pass `tag` to also drop properties that tag's allowlist would strip.
+ */
+export function cleanOutgoingStyleValue(style: string, tag?: "p" | "span" | "td" | "th"): string {
   const kept: string[] = [];
   // Comments first: postcss strips them later, so `font-size/**/:999pt` must
   // be bounded as `font-size:999pt`. An unterminated `/*` runs to the end.
-  const text = attribs.style.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, "");
+  const text = style.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, "");
   for (const decl of text.split(";")) {
     const i = decl.indexOf(":");
     if (i < 0) continue;
@@ -469,10 +473,22 @@ function cleanOutgoingStyle(attribs: Record<string, string>): Record<string, str
     if (!/^[a-z-]+$/.test(prop) || !value || /!/.test(value)) continue;
     const bound = OUTGOING_STYLE_BOUNDS[prop];
     if (bound && !bound(value)) continue;
+    // With a tag, also apply that tag's property allowlist (what the
+    // sanitizer would drop later), so the editor can filter identically.
+    if (tag) {
+      const allowed = OUTGOING_OPTIONS.allowedStyles?.[tag]?.[prop];
+      if (!allowed || !allowed.some((re) => re.test(value))) continue;
+    }
     kept.push(`${prop}:${value}`);
   }
+  return kept.join(";");
+}
+
+function cleanOutgoingStyle(attribs: Record<string, string>): Record<string, string> {
+  if (!("style" in attribs)) return attribs;
   const next = { ...attribs };
-  if (kept.length) next.style = kept.join(";");
+  const cleaned = cleanOutgoingStyleValue(attribs.style);
+  if (cleaned) next.style = cleaned;
   else delete next.style;
   return next;
 }

@@ -40,7 +40,7 @@ import {
   type MergeCheck,
   type TableWidth,
   type Weight,
-} from "@/components/templates/editor/table-commands";
+} from "../table-commands";
 import { ToolButton } from "./tool-button";
 
 const SIDES: CellSide[] = ["top", "bottom", "left", "right"];

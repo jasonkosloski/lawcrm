@@ -37,7 +37,7 @@ import { PageBreak } from "./page-break";
 import { RepeatEmptyNode, RepeatNode, ShowIfNode } from "./section-nodes";
 import { SmallCaps } from "./small-caps";
 import { AllCaps, FontSize } from "./text-marks";
-import { fillColumnWidths } from "./table-commands";
+import { fillColumnWidths } from "@/components/editor/table-commands";
 
 export type TemplateExtensionOptions = {
   /** The firm's paragraph styles: the editor draws each paragraph in its effective look. */
