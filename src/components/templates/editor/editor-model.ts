@@ -41,6 +41,8 @@ export type EditorBlock = {
   key: string;
   name: string;
   description: string | null;
+  /** Absent (a new block) means "both". */
+  appliesTo?: AppliesTo;
   content: TemplateDoc | null;
   updatedAt: string | null;
 };
@@ -89,6 +91,7 @@ export const blockMeta = (b: EditorBlock): BlockMeta => ({
   name: b.name,
   key: b.key,
   description: b.description ?? "",
+  appliesTo: b.appliesTo ?? "both",
 });
 
 export function titleOf(p: EditorProps): string {

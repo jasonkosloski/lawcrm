@@ -71,6 +71,7 @@ beforeEach(() => {
     key: "sig",
     name: "Sig",
     description: null,
+    appliesTo: "both",
     content: { type: "doc" },
     updatedAt: "2026-10-01T00:00:00.000Z",
   });

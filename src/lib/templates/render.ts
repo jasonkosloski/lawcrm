@@ -23,6 +23,7 @@ import {
   type ResolvedParagraphStyle,
 } from "./resolve-styles";
 import type {
+  AppliesTo,
   BlockNode,
   FieldNode,
   InlineNode,
@@ -37,7 +38,14 @@ import type {
   TextAlign,
 } from "./schema";
 
-export type BlockSource = { id: string; name: string; isActive: boolean; content: TemplateDoc };
+/** `appliesTo` absent means "both". */
+export type BlockSource = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  content: TemplateDoc;
+  appliesTo?: AppliesTo;
+};
 
 export type RenderReport = {
   /** Labels of fields with no value. */

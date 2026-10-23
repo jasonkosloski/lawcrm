@@ -2399,6 +2399,8 @@ model TemplateBlock {
   description String?
   /// TipTap/ProseMirror JSON document.
   content     Json
+  /// "matter" | "lead" | "both": which records the block's fields may use.
+  appliesTo   String   @default("both")
   isActive    Boolean  @default(true)
   createdById String?
   createdAt   DateTime @default(now())

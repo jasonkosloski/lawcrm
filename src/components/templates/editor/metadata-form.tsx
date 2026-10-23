@@ -32,7 +32,7 @@ export type TemplateMeta = {
   appliesTo: AppliesTo;
 };
 
-export type BlockMeta = { name: string; key: string; description: string };
+export type BlockMeta = { name: string; key: string; description: string; appliesTo: AppliesTo };
 
 const input = cn(inputClass(false, "sm"), "w-full");
 
@@ -81,6 +81,37 @@ function DescriptionField({
           disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
         />
+      )}
+    </Field>
+  );
+}
+
+function AppliesToField({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: AppliesTo;
+  disabled: boolean;
+  onChange: (appliesTo: AppliesTo) => void;
+}) {
+  return (
+    <Field label="Applies to">
+      {(c) => (
+        <NativeSelect
+          {...c}
+          className="w-full"
+          size="sm"
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value as AppliesTo)}
+        >
+          {APPLIES_TO.map((a) => (
+            <NativeSelectOption key={a} value={a}>
+              {APPLIES_TO_LABEL[a]}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
       )}
     </Field>
   );
@@ -138,24 +169,11 @@ export function TemplateMetaFields({
           </NativeSelect>
         )}
       </Field>
-      <Field label="Applies to">
-        {(c) => (
-          <NativeSelect
-            {...c}
-            className="w-full"
-            size="sm"
-            value={meta.appliesTo}
-            disabled={disabled}
-            onChange={(e) => onChange({ appliesTo: e.target.value as AppliesTo })}
-          >
-            {APPLIES_TO.map((a) => (
-              <NativeSelectOption key={a} value={a}>
-                {APPLIES_TO_LABEL[a]}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        )}
-      </Field>
+      <AppliesToField
+        value={meta.appliesTo}
+        disabled={disabled}
+        onChange={(appliesTo) => onChange({ appliesTo })}
+      />
       <DescriptionField
         value={meta.description}
         disabled={disabled}
@@ -175,7 +193,7 @@ export function BlockMetaFields({
   onChange: (patch: Partial<BlockMeta>) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-3 gap-3">
       <NameField value={meta.name} disabled={disabled} onChange={(name) => onChange({ name })} />
       <Field label="Key" hint="Lowercase letters, digits and underscores, e.g. signature_block.">
         {(c) => (
@@ -189,6 +207,11 @@ export function BlockMetaFields({
           />
         )}
       </Field>
+      <AppliesToField
+        value={meta.appliesTo}
+        disabled={disabled}
+        onChange={(appliesTo) => onChange({ appliesTo })}
+      />
       <DescriptionField
         value={meta.description}
         disabled={disabled}

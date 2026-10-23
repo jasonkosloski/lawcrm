@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialDoc, type EditorProps } from "./editor-model";
+import { blockMeta, initialDoc, type EditorBlock, type EditorProps } from "./editor-model";
 
 describe("initialDoc heading conversion", () => {
   const content = {
@@ -17,5 +17,13 @@ describe("initialDoc heading conversion", () => {
       block: { id: "1", content },
     } as unknown as EditorProps);
     expect(JSON.stringify(blk.doc)).not.toContain('"heading"');
+  });
+});
+
+describe("blockMeta", () => {
+  const block = { id: "1", key: "k", name: "N", description: null } as EditorBlock;
+  it("carries the scope and defaults it to both", () => {
+    expect(blockMeta({ ...block, appliesTo: "lead" }).appliesTo).toBe("lead");
+    expect(blockMeta(block).appliesTo).toBe("both");
   });
 });

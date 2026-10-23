@@ -18,8 +18,14 @@ import { requirePermission } from "@/lib/permission-check";
 import { logTemplateChange } from "@/lib/template-activity";
 import { isUniqueViolation } from "@/lib/prisma-errors";
 import { MAX_TEMPLATE_DESCRIPTION, MAX_TEMPLATE_NAME } from "@/lib/template-constants";
-import { collectBlockIds } from "@/lib/templates/inspect";
-import { validateTemplateContent, type TemplateDoc } from "@/lib/templates/schema";
+import { SCOPE_WORD } from "@/lib/templates/block-graph";
+import { checkTemplateFit, collectBlockIds } from "@/lib/templates/inspect";
+import {
+  APPLIES_TO,
+  validateTemplateContent,
+  type AppliesTo,
+  type TemplateDoc,
+} from "@/lib/templates/schema";
 
 type Result = { ok: true; id: string; updatedAt: string } | { ok: false; error: string };
 
@@ -31,6 +37,7 @@ const blockSchema = z.object({
   key: z.string().regex(KEY_RE, "Key must be 2-40 lowercase letters, digits or underscores."),
   name: z.string().trim().min(1, "Name is required.").max(MAX_TEMPLATE_NAME),
   description: z.string().trim().max(MAX_TEMPLATE_DESCRIPTION).optional(),
+  appliesTo: z.enum(APPLIES_TO).optional(),
   expectedUpdatedAt: z
     .string()
     .datetime({ message: "Invalid save timestamp — reload." })
@@ -78,6 +85,8 @@ export async function saveTemplateBlock(input: {
   key: string;
   name: string;
   description?: string;
+  /** Absent: unchanged on update, "both" on create. */
+  appliesTo?: AppliesTo;
   content: unknown;
   expectedUpdatedAt?: string;
 }): Promise<Result> {
@@ -90,6 +99,23 @@ export async function saveTemplateBlock(input: {
   }
   const v = validateTemplateContent("letter", input.content, { isBlock: true });
   if (!v.ok) return { ok: false, error: v.error };
+
+  // Absent scope: keep the stored one on update, "both" on create.
+  const existing = input.id
+    ? await prisma.templateBlock.findUnique({
+        where: { id: input.id },
+        select: { id: true, appliesTo: true },
+      })
+    : null;
+  if (input.id && !existing) return { ok: false, error: "Block not found." };
+  const scope = parsed.data.appliesTo ?? (existing?.appliesTo as AppliesTo | undefined) ?? "both";
+
+  // Rule 1: the block's own fields must fit its scope.
+  const fit = checkTemplateFit(v.doc, scope);
+  if (!fit.ok) {
+    const names = fit.invalid.map((i) => i.label ?? i.path).join(", ");
+    return { ok: false, error: `These fields don't fit a ${SCOPE_WORD[scope]} block: ${names}.` };
+  }
 
   const { key, name } = parsed.data;
   const description = parsed.data.description?.trim() || null;
@@ -105,7 +131,7 @@ export async function saveTemplateBlock(input: {
     let created: { id: string; updatedAt: Date };
     try {
       created = await prisma.templateBlock.create({
-        data: { key, name, description, content, createdById: userId },
+        data: { key, name, description, content, appliesTo: scope, createdById: userId },
         select: { id: true, updatedAt: true },
       });
     } catch (e) {
@@ -116,12 +142,6 @@ export async function saveTemplateBlock(input: {
     revalidatePath("/settings/templates");
     return { ok: true, id: created.id, updatedAt: created.updatedAt.toISOString() };
   }
-
-  const existing = await prisma.templateBlock.findUnique({
-    where: { id: input.id },
-    select: { id: true },
-  });
-  if (!existing) return { ok: false, error: "Block not found." };
 
   // Set explicitly so the new version can be handed back to the editor.
   const updatedAt = new Date();
@@ -134,7 +154,7 @@ export async function saveTemplateBlock(input: {
           ? { updatedAt: new Date(parsed.data.expectedUpdatedAt) }
           : {}),
       },
-      data: { key, name, description, content, updatedAt },
+      data: { key, name, description, content, updatedAt, appliesTo: parsed.data.appliesTo },
     }));
   } catch (e) {
     if (isUniqueViolation(e)) return { ok: false, error: KEY_TAKEN };

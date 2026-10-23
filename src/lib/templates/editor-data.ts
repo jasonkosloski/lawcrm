@@ -17,9 +17,13 @@ import type { AppliesTo, TemplateDoc, TemplateKind } from "./schema";
 export async function loadBlockSources(): Promise<BlockSource[]> {
   const rows = await prisma.templateBlock.findMany({
     orderBy: { name: "asc" },
-    select: { id: true, name: true, isActive: true, content: true },
+    select: { id: true, name: true, isActive: true, content: true, appliesTo: true },
   });
-  return rows.map((r) => ({ ...r, content: r.content as unknown as TemplateDoc }));
+  return rows.map((r) => ({
+    ...r,
+    content: r.content as unknown as TemplateDoc,
+    appliesTo: r.appliesTo as AppliesTo,
+  }));
 }
 
 export async function loadEditorTemplate(id: string) {
@@ -52,11 +56,20 @@ export async function loadEditorTemplate(id: string) {
 export async function loadEditorBlock(id: string) {
   const b = await prisma.templateBlock.findUnique({
     where: { id },
-    select: { id: true, key: true, name: true, description: true, content: true, updatedAt: true },
+    select: {
+      id: true,
+      key: true,
+      name: true,
+      description: true,
+      appliesTo: true,
+      content: true,
+      updatedAt: true,
+    },
   });
   if (!b) return null;
   return {
     ...b,
+    appliesTo: b.appliesTo as AppliesTo,
     content: b.content as unknown as TemplateDoc,
     updatedAt: b.updatedAt.toISOString(),
   };

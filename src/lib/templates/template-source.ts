@@ -10,7 +10,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { convertLegacyBody } from "./legacy";
 import { collectBlockIds } from "./inspect";
 import type { BlockSource } from "./render";
-import type { TemplateDoc } from "./schema";
+import type { AppliesTo, TemplateDoc } from "./schema";
 
 /** The blocks a doc references (plus `extraIds`, e.g. the firm style's
  *  letterhead/continuation), active AND archived (archived ones render a
@@ -25,9 +25,15 @@ export async function loadBlockMap(
   if (ids.length === 0) return map;
   const rows = await prisma.templateBlock.findMany({
     where: { id: { in: ids } },
-    select: { id: true, name: true, isActive: true, content: true },
+    select: { id: true, name: true, isActive: true, content: true, appliesTo: true },
   });
-  for (const r of rows) map.set(r.id, { ...r, content: r.content as unknown as TemplateDoc });
+  for (const r of rows) {
+    map.set(r.id, {
+      ...r,
+      content: r.content as unknown as TemplateDoc,
+      appliesTo: r.appliesTo as AppliesTo,
+    });
+  }
   return map;
 }
 

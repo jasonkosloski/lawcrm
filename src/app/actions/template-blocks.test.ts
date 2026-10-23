@@ -71,6 +71,51 @@ describe("saveTemplateBlock", () => {
     expect(await logCount('Block "Closing" created')).toBe(1);
   });
 
+  test("creates a block with appliesTo both by default and saves matter", async () => {
+    const c = await saveTemplateBlock(blockInput());
+    if (!c.ok) throw new Error(c.error);
+    expect((await prisma.templateBlock.findUnique({ where: { id: c.id } }))?.appliesTo).toBe(
+      "both",
+    );
+    const u = await saveTemplateBlock(blockInput({ id: c.id, appliesTo: "matter" }));
+    expect(u.ok).toBe(true);
+    expect((await prisma.templateBlock.findUnique({ where: { id: c.id } }))?.appliesTo).toBe(
+      "matter",
+    );
+    // Absent on update leaves the scope unchanged.
+    await saveTemplateBlock(blockInput({ id: c.id, name: "Closing v2" }));
+    expect((await prisma.templateBlock.findUnique({ where: { id: c.id } }))?.appliesTo).toBe(
+      "matter",
+    );
+  });
+
+  test("refuses a block whose own fields don't fit its scope", async () => {
+    const r = await saveTemplateBlock(
+      blockInput({
+        appliesTo: "both",
+        content: {
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              content: [{ type: "field", attrs: { path: "matter.caseNumber" } }],
+            },
+          ],
+        },
+      }),
+    );
+    expect(r).toEqual({
+      ok: false,
+      error: "These fields don't fit a matter-and-lead block: Case number.",
+    });
+    expect(await prisma.templateBlock.count()).toBe(0);
+  });
+
+  test("refuses an invalid appliesTo", async () => {
+    const r = await saveTemplateBlock(blockInput({ appliesTo: "client" }));
+    expect(r.ok).toBe(false);
+  });
+
   test("update asks for edit key and logs once", async () => {
     const c = await saveTemplateBlock(blockInput());
     if (!c.ok) throw new Error(c.error);

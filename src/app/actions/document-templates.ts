@@ -97,14 +97,9 @@ import {
   templateCategoryLabel,
 } from "@/lib/template-constants";
 import { globalSearch } from "@/lib/queries/search";
+import { SCOPE_WORD } from "@/lib/templates/block-graph";
 
 // ── Library CRUD ───────────────────────────────────────────────────────
-
-const SCOPE_WORD: Record<AppliesTo, string> = {
-  matter: "matter",
-  lead: "lead",
-  both: "matter-and-lead",
-};
 
 const saveTemplateSchema = z.object({
   id: z.string().min(1).optional(),
