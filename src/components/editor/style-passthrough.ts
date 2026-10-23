@@ -24,6 +24,7 @@ function clean(style: string | null | undefined, tag: StyleTag): string | null {
   if (tag === "p") {
     value = value
       .split(";")
+      // Relies on the cleaner's normalised `prop:value` form (no spaces).
       .filter((d) => !d.startsWith("text-align:"))
       .join(";");
   }
@@ -53,6 +54,9 @@ export const StylePassthrough = Extension.create({
 /** `<span style>` (font-size / uppercase from templates) as a mark. */
 export const StyledSpan = Mark.create({
   name: "styledSpan",
+  // Nested styled spans must coexist (default excludes self-type and would
+  // drop the outer style); each keeps its own style and re-nests on render.
+  excludes: "",
   addAttributes() {
     return { style: { default: null } };
   },

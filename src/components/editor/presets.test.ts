@@ -288,4 +288,22 @@ describe("email preset", () => {
       expect(out).toContain(frag);
     expect(clean).toBe(out);
   });
+
+  it("nested styled spans keep every style", () => {
+    const { out, clean } = stable(
+      '<p><span style="font-size:11pt"><span style="text-transform:uppercase">A</span></span></p>',
+    );
+    expect(out).toContain("font-size:11pt");
+    expect(out).toContain("text-transform:uppercase");
+    expect(clean).toBe(out);
+  });
+
+  it("template output with size and caps on one span survives", () => {
+    const { out, clean } = stable(
+      '<p><span style="font-size:11pt;text-transform:uppercase"><strong>A</strong></span></p>',
+    );
+    expect(out).toContain("font-size:11pt");
+    expect(out).toContain("text-transform:uppercase");
+    expect(clean).toBe(out);
+  });
 });

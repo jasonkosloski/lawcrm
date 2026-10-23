@@ -4,9 +4,6 @@
  * Each preset must stay in lockstep with its server-side gate (notes:
  * the note-profile sanitizer; document: `validateTemplateContent`).
  * `presets.test.ts` pins that parity.
- *
- * NOTE: `documentExtensions` imports from `templates/editor/extensions`
- * (a temporary dependency direction; only table commands move later).
  */
 
 import { mergeAttributes, type Extensions } from "@tiptap/core";
