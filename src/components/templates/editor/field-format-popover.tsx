@@ -1,7 +1,8 @@
 /**
- * Properties of a clicked field chip: the format (dates, names,
- * addresses, text case) for a `field`, the item field and join style for
- * a `listField`, and Remove. Changes apply immediately.
+ * Properties of a clicked field chip. A `field` has its format (dates,
+ * names, addresses, text case) and what prints when it has no value; a
+ * `listField` has its item field and join style. Both have Remove.
+ * Changes apply immediately.
  */
 
 "use client";
@@ -73,6 +74,22 @@ export function FieldFormatPopover({
                     {FORMAT_LABELS[f] ?? f}
                   </NativeSelectOption>
                 ))}
+              </NativeSelect>
+            )}
+          </Field>
+        )}
+        {field && (
+          <Field label="If missing">
+            {(c) => (
+              <NativeSelect
+                {...c}
+                size="sm"
+                className="w-full"
+                value={node.attrs.ifMissing === "hide" ? "hide" : "show"}
+                onChange={(e) => set({ ifMissing: e.target.value === "hide" ? "hide" : null })}
+              >
+                <NativeSelectOption value="show">Show as missing</NativeSelectOption>
+                <NativeSelectOption value="hide">Leave blank</NativeSelectOption>
               </NativeSelect>
             )}
           </Field>

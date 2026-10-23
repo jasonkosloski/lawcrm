@@ -62,7 +62,13 @@ describe("fields", () => {
     expect(r.doc.content![0]).toMatchObject({
       content: [{ type: "text", text: "Smith", marks: [{ type: "bold" }] }],
     });
-    expect(r.report).toEqual({ missing: [], invalid: [], archivedBlocks: [], unknownStyles: [] });
+    expect(r.report).toEqual({
+      missing: [],
+      blank: [],
+      invalid: [],
+      archivedBlocks: [],
+      unknownStyles: [],
+    });
   });
 
   it("missing value renders a labelled placeholder", () => {
@@ -73,6 +79,44 @@ describe("fields", () => {
       ],
     });
     expect(r.report.missing).toEqual(["Client address"]);
+  });
+
+  it("a field set to leave blank prints nothing and is listed as blank, not missing", () => {
+    const blank: InlineNode = {
+      type: "field",
+      attrs: { path: "client.address", format: "one_line", ifMissing: "hide" },
+    };
+    const r = render(doc(p(t("At "), blank, t("."))), data({ client: null }));
+    expect(paras(r)).toEqual(["At ."]);
+    expect(r.report.missing).toEqual([]);
+    expect(r.report.blank).toEqual(["Client address"]);
+  });
+
+  it("drops a paragraph emptied only by blank fields, but keeps empty ones", () => {
+    const blank: InlineNode = {
+      type: "field",
+      attrs: { path: "client.address", format: null, ifMissing: "hide" },
+    };
+    const r = render(
+      doc(p(t("one")), p(blank), p(t("  "), blank, { type: "hardBreak" }), p(), p(t("two"))),
+      data({ client: null }),
+    );
+    expect(paras(r)).toEqual(["one", "", "two"]);
+  });
+
+  it("a field set to leave blank still prints its value", () => {
+    const r = render(
+      doc(p({ type: "field", attrs: { path: "client.name", format: null, ifMissing: "hide" } })),
+    );
+    expect(paras(r)[0]).toBe(SAMPLE_TEMPLATE_DATA.client!.name);
+  });
+
+  it("leave blank does not hide an unknown path", () => {
+    const r = render(
+      doc(p({ type: "field", attrs: { path: "nope.nothing", format: null, ifMissing: "hide" } })),
+    );
+    expect(paras(r)).toEqual(["{{nope.nothing}}"]);
+    expect(r.report.invalid).toEqual(["nope.nothing"]);
   });
 
   it("dedupes report entries", () => {

@@ -238,11 +238,12 @@ class TemplateTableView extends TableView {
  * refuse to serialize, so anything sent to the server goes through this.
  */
 export const templateJSON = (editor: Editor): TemplateDoc =>
-  stripUnsetParagraphAttrs(JSON.parse(JSON.stringify(editor.getJSON()))) as TemplateDoc;
+  stripUnsetAttrs(JSON.parse(JSON.stringify(editor.getJSON()))) as TemplateDoc;
 
-/** Unset (null) paragraph style and settings are left out: the content
- *  contract says absent, and renderers read the JSON before validation. */
-function stripUnsetParagraphAttrs(node: {
+/** Unset (null) paragraph style and settings, and a field's unset
+ *  `ifMissing`, are left out: the content contract says absent, and
+ *  renderers read the JSON before validation. */
+function stripUnsetAttrs(node: {
   type?: string;
   attrs?: Record<string, unknown>;
   content?: unknown[];
@@ -250,7 +251,8 @@ function stripUnsetParagraphAttrs(node: {
   if (node.type === "paragraph" && node.attrs) {
     for (const k of ["style", ...SETTING_KEYS]) if (node.attrs[k] === null) delete node.attrs[k];
   }
-  node.content?.forEach((c) => stripUnsetParagraphAttrs(c as typeof node));
+  if (node.type === "field" && node.attrs?.ifMissing === null) delete node.attrs.ifMissing;
+  node.content?.forEach((c) => stripUnsetAttrs(c as typeof node));
   return node;
 }
 

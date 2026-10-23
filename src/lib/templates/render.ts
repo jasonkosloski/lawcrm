@@ -42,6 +42,9 @@ export type BlockSource = { id: string; name: string; isActive: boolean; content
 export type RenderReport = {
   /** Labels of fields with no value. */
   missing: string[];
+  /** Labels of fields with no value set to print nothing ("Leave blank").
+   *  Shown to the author while editing; not a warning when generating. */
+  blank: string[];
   /** Paths that are unknown, out of scope, or `item.*` outside a repeat. */
   invalid: string[];
   /** Names of archived blocks; "(deleted)" for unknown ids. */
@@ -119,6 +122,9 @@ type Engine = {
   blocks: Map<string, BlockSource>;
   report: RenderReport;
   styles: ParagraphStyle[];
+  /** Count of empty fields left blank so far (lets a paragraph tell it
+   *  was emptied by them). */
+  blanked: number;
 };
 
 const MISSING: ResolvedMark = { type: "missing" };
@@ -177,6 +183,11 @@ function field(e: Engine, n: FieldNode, s: Scope): ResolvedInline[] {
   }
   const text = formatted(e, l, n.attrs.format);
   if (text === null) {
+    if (n.attrs.ifMissing === "hide") {
+      note(e.report.blank, l.field.label);
+      e.blanked++;
+      return [];
+    }
     note(e.report.missing, l.field.label);
     return textNodes(`[${l.field.label} — not on file]`, [...marks, MISSING]);
   }
@@ -297,7 +308,13 @@ function blocks(e: Engine, nodes: readonly BlockNode[] | undefined, s: Scope): R
   return (nodes ?? []).flatMap((n): ResolvedBlock[] => {
     switch (n.type) {
       case "paragraph": {
+        const before = e.blanked;
         const content = inline(e, n.content, s);
+        // A line that is empty only because its fields were left blank
+        // goes away, so optional lines (e.g. address line 2) leave no gap.
+        if (e.blanked > before && content.every((c) => c.type !== "text" || !c.text.trim())) {
+          return [];
+        }
         return [
           {
             type: "paragraph",
@@ -366,8 +383,14 @@ export function renderTemplate(
   doc: TemplateDoc,
   ctx: { data: TemplateData; blocks: Map<string, BlockSource>; styles: ParagraphStyle[] },
 ): { doc: ResolvedDoc; report: RenderReport } {
-  const report: RenderReport = { missing: [], invalid: [], archivedBlocks: [], unknownStyles: [] };
-  const e: Engine = { data: ctx.data, blocks: ctx.blocks, report, styles: ctx.styles };
+  const report: RenderReport = {
+    missing: [],
+    blank: [],
+    invalid: [],
+    archivedBlocks: [],
+    unknownStyles: [],
+  };
+  const e: Engine = { data: ctx.data, blocks: ctx.blocks, report, styles: ctx.styles, blanked: 0 };
   const content = blocks(e, convertHeadings(doc).content, {
     item: null,
     itemFields: [],

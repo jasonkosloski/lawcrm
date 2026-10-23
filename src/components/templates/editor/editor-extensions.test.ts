@@ -129,7 +129,7 @@ describe("commands", () => {
     const para = editor.getJSON().content?.[0];
     expect(para?.content?.[0]).toEqual({
       type: "field",
-      attrs: { path: "client.name", format: "full" },
+      attrs: { path: "client.name", format: "full", ifMissing: null },
     });
     editor.destroy();
   });
@@ -221,6 +221,17 @@ describe("templateJSON", () => {
     expect(protos.length).toBeGreaterThan(0);
     expect(protos.every((pr) => pr === Object.prototype)).toBe(true);
     expect(validateTemplateContent("letter", templateJSON(editor)).ok).toBe(true);
+  });
+
+  it("leaves a field's unset ifMissing out and keeps hide", () => {
+    const editor = make("letter", FULL_DOC);
+    const [first, last] = (
+      templateJSON(editor).content?.[1] as { content: { type: string }[] }
+    ).content.filter((n) => n.type === "field");
+    expect(first).toMatchObject({ attrs: { path: "client.name" } });
+    expect(first).not.toHaveProperty("attrs.ifMissing");
+    expect(last).toMatchObject({ attrs: { path: "matter.name", ifMissing: "hide" } });
+    editor.destroy();
   });
 });
 

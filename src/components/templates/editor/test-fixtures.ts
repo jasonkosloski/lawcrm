@@ -37,11 +37,15 @@ export const FULL_DOC = {
     },
     p(
       t("Dear "),
-      { type: "field", attrs: { path: "client.name", format: "full" }, marks: [{ type: "bold" }] },
+      {
+        type: "field",
+        attrs: { path: "client.name", format: "full", ifMissing: null },
+        marks: [{ type: "bold" }],
+      },
       { type: "hardBreak" },
       t("styled", [{ type: "italic" }, { type: "underline" }]),
       t(" Plaintiff", [{ type: "smallCaps" }]),
-      { type: "field", attrs: { path: "matter.name", format: null } },
+      { type: "field", attrs: { path: "matter.name", format: null, ifMissing: "hide" } },
     ),
     p({
       type: "listField",
@@ -72,7 +76,7 @@ export const FULL_DOC = {
       type: "repeat",
       attrs: { list: "parties.clients" },
       content: [
-        p({ type: "field", attrs: { path: "item.name", format: null } }),
+        p({ type: "field", attrs: { path: "item.name", format: null, ifMissing: null } }),
         { type: "repeatEmpty", content: [p(t("none"))] },
       ],
     },

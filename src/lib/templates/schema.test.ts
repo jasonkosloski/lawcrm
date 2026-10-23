@@ -10,9 +10,9 @@ const text = (t: string, marks?: { type: string }[]) => ({
 });
 const para = (...content: unknown[]) => ({ type: "paragraph", content });
 const doc = (...content: unknown[]) => ({ type: "doc", content });
-const field = (path = "client.name", format: string | null = null) => ({
+const field = (path = "client.name", format: string | null = null, ifMissing?: "hide") => ({
   type: "field",
-  attrs: { path, format },
+  attrs: { path, format, ...(ifMissing ? { ifMissing } : {}) },
 });
 
 const everything = doc(
@@ -333,6 +333,21 @@ describe("seeded default blocks", () => {
     expect(run({ start: 0 })).not.toHaveProperty("attrs");
     expect(run({ start: 1.5 })).not.toHaveProperty("attrs");
     expect(run({ type: "a" })).not.toHaveProperty("attrs");
+  });
+
+  it("keeps a field's ifMissing hide, drops null, and rejects other values", () => {
+    const run = (ifMissing: unknown) => {
+      const r = validateTemplateContent(
+        "letter",
+        doc(para({ type: "field", attrs: { path: "client.name", format: null, ifMissing } })),
+      );
+      return r.ok ? (r.doc.content?.[0] as { content: unknown[] }).content[0] : r;
+    };
+    expect(run("hide")).toEqual(field("client.name", null, "hide"));
+    for (const v of [null, undefined]) expect(run(v)).toEqual(field());
+    expect(run("show")).toMatchObject({ ok: false });
+    expect(run("blank")).toMatchObject({ ok: false });
+    expect(run(1)).toMatchObject({ ok: false });
   });
 });
 

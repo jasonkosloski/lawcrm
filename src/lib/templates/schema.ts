@@ -34,7 +34,9 @@ export type HardBreakNode = { type: "hardBreak" };
 export type FieldNode = {
   type: "field";
   // Narrowed to FieldFormat once catalog.ts defines it.
-  attrs: { path: string; format: string | null };
+  /** `ifMissing: "hide"` prints nothing when the field has no value;
+   *  absent means the `[Label — not on file]` placeholder. */
+  attrs: { path: string; format: string | null; ifMissing?: "hide" };
   marks?: TemplateMark[];
 };
 export type ListFieldNode = {
@@ -280,8 +282,13 @@ function inline(raw: unknown, depth: number, ctx: Ctx): InlineNode {
       if (f !== undefined && f !== null && typeof f !== "string") {
         return fail("Field format must be a string.");
       }
+      const im = a.ifMissing;
+      if (im !== undefined && im !== null && im !== "hide") {
+        return fail("Invalid field missing-value option.");
+      }
       const m = marks(n, ctx);
       const out: FieldNode = { type: "field", attrs: { path, format: f ?? null } };
+      if (im === "hide") out.attrs.ifMissing = "hide";
       if (m) out.marks = m;
       return out;
     }

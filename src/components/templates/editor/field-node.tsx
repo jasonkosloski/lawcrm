@@ -18,10 +18,12 @@ export function fieldChipText(
   path: string,
   format: string | null,
   repeatList?: string | null,
+  ifMissing?: string | null,
 ): string {
-  const label = pathLabel(path, repeatList);
-  const fmt = format ? (FORMAT_LABELS[format] ?? format) : null;
-  return fmt ? `${label} · ${fmt}` : label;
+  const parts = [pathLabel(path, repeatList)];
+  if (format) parts.push(FORMAT_LABELS[format] ?? format);
+  if (ifMissing === "hide") parts.push("blank if missing");
+  return parts.join(" · ");
 }
 
 export function listFieldChipText(a: {
@@ -59,7 +61,11 @@ const chipClass = (selected: boolean, bad: boolean) =>
   );
 
 function FieldView(props: NodeViewProps) {
-  const { path, format } = props.node.attrs as { path: string; format: string | null };
+  const { path, format, ifMissing } = props.node.attrs as {
+    path: string;
+    format: string | null;
+    ifMissing: string | null;
+  };
   const repeatList = enclosingRepeatList(props);
   const unknown = !resolveField(path, repeatList);
   const onEdit = (props.extension.options as FieldOptions).onEditField;
@@ -75,7 +81,7 @@ function FieldView(props: NodeViewProps) {
         if (typeof pos === "number") onEdit?.(pos);
       }}
     >
-      {fieldChipText(path, format, repeatList)}
+      {fieldChipText(path, format, repeatList, ifMissing)}
     </NodeViewWrapper>
   );
 }
@@ -112,13 +118,14 @@ export const FieldNode = Node.create<FieldOptions>({
     return {
       path: { default: "" },
       format: { default: null },
+      ifMissing: { default: null },
     };
   },
   parseHTML: () => [{ tag: "span[data-field]" }],
   renderHTML: ({ node, HTMLAttributes }) => [
     "span",
     mergeAttributes(HTMLAttributes, { "data-field": "" }),
-    fieldChipText(node.attrs.path, node.attrs.format),
+    fieldChipText(node.attrs.path, node.attrs.format, null, node.attrs.ifMissing),
   ],
   addNodeView: () => ReactNodeViewRenderer(FieldView),
   addCommands() {

@@ -96,6 +96,7 @@ function Report({ report }: { report: RenderReport }) {
     { label: "Fields that don't fit", items: report.invalid },
     { label: "Archived or missing blocks", items: report.archivedBlocks },
     { label: "Styles that no longer exist", items: report.unknownStyles },
+    { label: "Empty, left blank", items: report.blank },
   ].filter((r) => r.items.length > 0);
   if (rows.length === 0) return null;
   return (

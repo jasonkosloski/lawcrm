@@ -46,7 +46,7 @@ const setupUser = () => userEvent.setup({ pointerEventsCheck: 0 });
 const field = (name: string) =>
   document.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLTextAreaElement;
 
-const REPORT = { missing: [], invalid: [], archivedBlocks: [], unknownStyles: [] };
+const REPORT = { missing: [], blank: [], invalid: [], archivedBlocks: [], unknownStyles: [] };
 
 beforeEach(() => {
   vi.clearAllMocks();

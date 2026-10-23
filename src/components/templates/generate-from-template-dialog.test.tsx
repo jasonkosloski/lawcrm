@@ -53,14 +53,21 @@ const okPreview = (over: Record<string, unknown> = {}) => {
     text,
     html: `<p>${text}</p>`,
     page: pageOf(text),
-    report: { missing: [], invalid: [], archivedBlocks: [], unknownStyles: [] },
+    report: { missing: [], blank: [], invalid: [], archivedBlocks: [], unknownStyles: [] },
     templateUpdatedAt: "2026-10-22T00:00:00.000Z",
     needsSigner: false,
     needsRecipient: false,
     ...over,
   };
 };
-const REPORT = { missing: [], invalid: [], archivedBlocks: [], unknownStyles: [], warnings: [] };
+const REPORT = {
+  missing: [],
+  blank: [],
+  invalid: [],
+  archivedBlocks: [],
+  unknownStyles: [],
+  warnings: [],
+};
 const saved = (...names: string[]) => ({
   ok: true,
   documents: names.map((name, i) => ({ id: `d${i}`, name })),
@@ -83,6 +90,7 @@ describe("GenerateFromTemplateDialog", () => {
       okPreview({
         report: {
           missing: ["client.phone"],
+          blank: [],
           invalid: ["made.up"],
           archivedBlocks: [],
           unknownStyles: [],
@@ -457,7 +465,9 @@ describe("GenerateFromTemplateDialog", () => {
 
   it("lists archived blocks in the report", async () => {
     previewMock.mockResolvedValue(
-      okPreview({ report: { missing: [], invalid: [], archivedBlocks: ["Old footer"] } }),
+      okPreview({
+        report: { missing: [], blank: [], invalid: [], archivedBlocks: ["Old footer"] },
+      }),
     );
     const user = userEvent.setup();
     render(<GenerateFromTemplateDialog scope={M1} templates={TEMPLATES} canUpload />);

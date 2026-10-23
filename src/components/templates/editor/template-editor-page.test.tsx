@@ -222,7 +222,7 @@ describe("TemplateEditorPage — templates", () => {
       html: "<p>Hello 2026-CV-00481</p>",
       text: "Hello 2026-CV-00481",
       subjectText: null,
-      report: { missing: ["Court"], invalid: [], archivedBlocks: [], unknownStyles: [] },
+      report: { missing: ["Court"], blank: [], invalid: [], archivedBlocks: [], unknownStyles: [] },
     });
     render(<TemplateEditorPage template={tpl()} blocks={[]} canSave />);
     await user.click(screen.getByRole("button", { name: "Preview with a real matter or lead" }));
@@ -292,7 +292,7 @@ describe("TemplateEditorPage — templates", () => {
         style: resolvePageStyle("letter", PAGE_STYLE.values, null),
         logoUrl: null,
       },
-      report: { missing: [], invalid: [], archivedBlocks: [], unknownStyles: [] },
+      report: { missing: [], blank: [], invalid: [], archivedBlocks: [], unknownStyles: [] },
     });
     render(<TemplateEditorPage template={tpl()} blocks={[]} pageStyle={PAGE_STYLE} canSave />);
     await user.click(screen.getByRole("button", { name: "Preview with a real matter or lead" }));
@@ -433,7 +433,7 @@ describe("TemplateEditorPage — templates", () => {
           style: resolvePageStyle("filing", PAGE_STYLE.values, null),
           logoUrl: null,
         },
-        report: { missing: [], invalid: [], archivedBlocks: [], unknownStyles: [] },
+        report: { missing: [], blank: [], invalid: [], archivedBlocks: [], unknownStyles: [] },
       });
       render(
         <TemplateEditorPage
@@ -529,7 +529,7 @@ describe("TemplateEditorPage — templates", () => {
       html: `<p>${t}</p>`,
       text: t,
       subjectText: null,
-      report: { missing: [], invalid: [], archivedBlocks: [], unknownStyles: [] },
+      report: { missing: [], blank: [], invalid: [], archivedBlocks: [], unknownStyles: [] },
     });
     previewDraft
       .mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)))
