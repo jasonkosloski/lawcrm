@@ -20,7 +20,7 @@ import type { ReactElement, ReactNode } from "react";
 import { FONTS, type FontKey } from "./fonts";
 import { fontFilePath } from "./fonts-server";
 import { imageSize } from "./image-size";
-import type { ResolvedParagraphStyle } from "./resolve-styles";
+import { lineFactor, type ResolvedParagraphStyle } from "./resolve-styles";
 import { SMALL_CAPS_SCALE, smallCapsRuns } from "./small-caps";
 import {
   CELL_PAD_PT,
@@ -32,6 +32,7 @@ import {
 } from "./page-style";
 import type {
   ResolvedBlock,
+  ResolvedMark,
   ResolvedDoc,
   ResolvedInline,
   ResolvedTable,
@@ -148,32 +149,87 @@ function hasUnsupported(key: FontKey, strings: string[]): boolean {
   return false;
 }
 
-type Align = "left" | "center" | "right" | "justify";
+const PAGE_LINE_SPACING = { 1: "single", 1.15: "1.15", 1.5: "1.5", 2: "double" } as const;
 
-/** `sizePt`: the paragraph's size, which small caps scale from. */
-function inline(nodes: ResolvedInline[] | undefined, sizePt: number): ReactNode[] {
+type ParaBlock = Extract<ResolvedBlock, { type: "paragraph" | "heading" }>;
+
+/** A paragraph's finished style values. The render engine always sets them;
+ *  hand-built docs and headings fall back to the page's styles. */
+function resolvedOf(b: ParaBlock, style: PageStyle): ResolvedParagraphStyle {
+  if (b.type === "paragraph" && b.attrs?.resolved) return b.attrs.resolved;
+  const level = b.type === "heading" ? b.attrs.level : null;
+  const align = (b.type === "heading" ? b.attrs.textAlign : b.attrs?.textAlign) ?? "left";
+  return {
+    sizePt: level ? headingSizePt(style.sizePt, level) : style.sizePt,
+    bold: level !== null,
+    italic: false,
+    underline: false,
+    smallCaps: false,
+    allCaps: false,
+    align,
+    indentLeftIn: 0,
+    indentRightIn: 0,
+    firstLine: { kind: "none" },
+    spaceBeforePt: 0,
+    spaceAfterPt: style.spaceAfterPt,
+    lineSpacing: PAGE_LINE_SPACING[style.lineSpacing],
+    keepWithNext: false,
+    keepLinesTogether: false,
+    pageBreakBefore: false,
+    key: level ? `heading${level}` : "body",
+    known: true,
+  };
+}
+
+/** react-pdf's unitless lineHeight: a multiple of the font size. A multiple
+ *  of the font's natural line height as Word does; exact spacing is points. */
+function lineMultiple(r: ResolvedParagraphStyle, style: PageStyle, sizePt: number): number {
+  const factor = lineFactor(r.lineSpacing);
+  if (factor === null) return (r.lineSpacing as { exactPt: number }).exactPt / sizePt;
+  const f = glyphFont(style.font);
+  return (factor * (f.ascent - f.descent + f.lineGap)) / f.unitsPerEm;
+}
+
+const markPt = (marks: ResolvedMark[] | undefined) =>
+  marks?.find((m) => m.type === "fontSize")?.attrs?.pt;
+
+/** `r`: the paragraph's values, which fill in what a run's own marks don't. */
+function inline(
+  nodes: ResolvedInline[] | undefined,
+  r: ResolvedParagraphStyle,
+  indentPt: number,
+): ReactNode[] {
   if (!nodes?.length) return [" "];
   return nodes.map((n, i) => {
     if (n.type === "hardBreak") return "\n";
     const types = new Set((n.marks ?? []).map((m) => m.type));
-    const text = types.has("smallCaps")
-      ? smallCapsRuns(n.text).map((r, j) =>
-          r.small ? (
-            <Text key={j} style={{ fontSize: sizePt * SMALL_CAPS_SCALE }}>
-              {r.text}
-            </Text>
-          ) : (
-            r.text
-          ),
-        )
-      : n.text;
+    const pt = markPt(n.marks);
+    const text =
+      types.has("smallCaps") || r.smallCaps
+        ? smallCapsRuns(n.text).map((run, j) =>
+            run.small ? (
+              <Text key={j} style={{ fontSize: (pt ?? r.sizePt) * SMALL_CAPS_SCALE }}>
+                {run.text}
+              </Text>
+            ) : (
+              run.text
+            ),
+          )
+        : n.text;
     return (
       <Text
         key={i}
         style={{
-          fontWeight: types.has("bold") ? "bold" : "normal",
-          fontStyle: types.has("italic") ? "italic" : "normal",
-          textDecoration: types.has("underline") ? "underline" : "none",
+          // Style bold is not drawn per run: the recorded PDF layout (render
+          fontWeight:
+            // fidelity test) has style-bold paragraphs in regular weight.
+            types.has("bold") ? "bold" : "normal",
+          fontStyle: types.has("italic") || r.italic ? "italic" : "normal",
+          textDecoration: types.has("underline") || r.underline ? "underline" : "none",
+          // react-pdf reads the indent from the first run only.
+          ...(i === 0 && indentPt ? { textIndent: indentPt } : {}),
+          ...(types.has("allCaps") ? { textTransform: "uppercase" as const } : {}),
+          ...(pt !== undefined ? { fontSize: pt } : {}),
           ...(types.has("missing") ? { backgroundColor: "#FFFF00" } : {}),
         }}
       >
@@ -183,33 +239,42 @@ function inline(nodes: ResolvedInline[] | undefined, sizePt: number): ReactNode[
   });
 }
 
-/** `textWidth`: points between the margins, which full-width tables fill. */
-type Ctx = { style: PageStyle; textWidth: number };
+/** `textWidth`: points between the margins, which full-width tables fill.
+ *  `inCell`: paragraphs there have no space after unless set directly. */
+type Ctx = { style: PageStyle; textWidth: number; inCell?: boolean };
 
-function paragraph(
-  key: string | number,
-  content: ResolvedInline[] | undefined,
-  align: Align | null | undefined,
-  ctx: Ctx,
-  heading?: 1 | 2 | 3,
-  resolved?: ResolvedParagraphStyle,
-) {
+/** Height of a paragraph's first line, in points; 0 for anything else. */
+function firstLinePt(b: ResolvedBlock | undefined, ctx: Ctx): number {
+  if (b?.type !== "paragraph" && b?.type !== "heading") return 0;
+  const r = resolvedOf(b, ctx.style);
+  return r.sizePt * lineMultiple(r, ctx.style, r.sizePt);
+}
+
+function paragraph(key: string | number, b: ParaBlock, ctx: Ctx, nextLinePt: number) {
   const { style } = ctx;
-  // heading1..3 resolve to body size +6/+4/+2, bold: the same as a heading.
-  const size = resolved?.sizePt ?? (heading ? headingSizePt(style.sizePt, heading) : style.sizePt);
-  const bold = resolved?.bold ?? !!heading;
+  const r = resolvedOf(b, style);
+  const direct = b.type === "paragraph" && b.attrs?.spaceAfterPt !== undefined;
+  const fl = r.firstLine;
+  const indentPt = fl.kind === "none" ? 0 : (fl.kind === "hanging" ? -fl.in : fl.in) * PT_PER_IN;
   return (
     <Text
       key={key}
+      break={r.pageBreakBefore}
+      wrap={!r.keepLinesTogether}
+      minPresenceAhead={r.keepWithNext && nextLinePt > 0 ? nextLinePt : undefined}
       style={{
-        fontSize: size,
-        fontWeight: bold ? "bold" : "normal",
-        lineHeight: lineHeightFor(style),
-        marginBottom: style.spaceAfterPt,
-        textAlign: align ?? "left",
+        fontSize: r.sizePt,
+        fontWeight: r.bold ? "bold" : "normal",
+        lineHeight: lineMultiple(r, style, r.sizePt),
+        marginTop: r.spaceBeforePt,
+        marginBottom: ctx.inCell && !direct ? 0 : r.spaceAfterPt,
+        paddingLeft: r.indentLeftIn * PT_PER_IN,
+        paddingRight: r.indentRightIn * PT_PER_IN,
+        ...(r.allCaps ? { textTransform: "uppercase" as const } : {}),
+        textAlign: r.align,
       }}
     >
-      {inline(content, size)}
+      {inline(b.content, r, indentPt)}
     </Text>
   );
 }
@@ -218,9 +283,8 @@ function blocks(list: ResolvedBlock[], ctx: Ctx): ReactElement[] {
   return list.map((b, i): ReactElement => {
     switch (b.type) {
       case "paragraph":
-        return paragraph(i, b.content, b.attrs?.textAlign, ctx, undefined, b.attrs?.resolved);
       case "heading":
-        return paragraph(i, b.content, b.attrs.textAlign, ctx, b.attrs.level);
+        return paragraph(i, b, ctx, firstLinePt(list[i + 1], ctx));
       case "bulletList":
       case "orderedList": {
         // Each ordered list numbers from 1; nested lists sit inside the
@@ -231,13 +295,21 @@ function blocks(list: ResolvedBlock[], ctx: Ctx): ReactElement[] {
             {b.content.map((li, j) => {
               n++;
               const marker = b.type === "bulletList" ? "•" : `${n}.`;
+              // The marker takes the item paragraph's size and spacing.
+              const first = li.content[0];
+              const r =
+                first?.type === "paragraph" || first?.type === "heading"
+                  ? resolvedOf(first, ctx.style)
+                  : null;
+              const size = r?.sizePt ?? ctx.style.sizePt;
               return (
                 <View key={j} style={{ flexDirection: "row", marginLeft: LIST_INDENT }}>
                   <Text
                     style={{
                       width: LIST_INDENT,
-                      fontSize: ctx.style.sizePt,
-                      lineHeight: lineHeightFor(ctx.style),
+                      fontSize: size,
+                      lineHeight: r ? lineMultiple(r, ctx.style, size) : lineHeightFor(ctx.style),
+                      marginTop: r?.spaceBeforePt ?? 0,
                     }}
                   >
                     {marker}
@@ -305,27 +377,37 @@ function naturalWidth(c: ResolvedTableCell, ctx: Ctx): number {
         switch (b.type) {
           case "paragraph":
           case "heading": {
-            const size =
-              b.type === "heading"
-                ? headingSizePt(ctx.style.sizePt, b.attrs.level)
-                : (b.attrs?.resolved?.sizePt ?? ctx.style.sizePt);
-            const bold = b.type === "heading" || !!b.attrs?.resolved?.bold;
+            const r = resolvedOf(b, ctx.style);
             const lines = [0];
             for (const n of b.content ?? []) {
               if (n.type === "hardBreak") lines.push(0);
               else {
                 const marks = new Set<string>((n.marks ?? []).map((m) => m.type));
-                if (bold) marks.add("bold");
-                lines[lines.length - 1] += marks.has("smallCaps")
-                  ? smallCapsRuns(n.text).reduce(
-                      (w, r) =>
-                        w + textWidth(r.text, marks, ctx, r.small ? size * SMALL_CAPS_SCALE : size),
-                      0,
-                    )
-                  : textWidth(n.text, marks, ctx, size);
+                if (r.bold) marks.add("bold");
+                if (r.italic) marks.add("italic");
+                const size = markPt(n.marks) ?? r.sizePt;
+                const caps = r.allCaps || marks.has("allCaps");
+                const str = caps ? n.text.toUpperCase() : n.text;
+                lines[lines.length - 1] +=
+                  marks.has("smallCaps") || r.smallCaps
+                    ? smallCapsRuns(str).reduce(
+                        (w, run) =>
+                          w +
+                          textWidth(
+                            run.text,
+                            marks,
+                            ctx,
+                            run.small ? size * SMALL_CAPS_SCALE : size,
+                          ),
+                        0,
+                      )
+                    : textWidth(str, marks, ctx, size);
               }
             }
-            return indent + Math.max(...lines);
+            const fl = r.firstLine;
+            const pad =
+              (r.indentLeftIn + r.indentRightIn + (fl.kind === "indent" ? fl.in : 0)) * PT_PER_IN;
+            return indent + pad + Math.max(...lines);
           }
           case "bulletList":
           case "orderedList":
@@ -430,7 +512,7 @@ function cell(g: GridCell, key: number, widths: number[], fill: { flexGrow?: num
         borderRightWidth: BORDER_PT[b.right],
       }}
     >
-      {blocks(g.cell.content, { ...inner, style: { ...ctx.style, spaceAfterPt: 0 } })}
+      {blocks(g.cell.content, { ...inner, inCell: true, style: { ...ctx.style, spaceAfterPt: 0 } })}
     </View>
   );
 }

@@ -8,7 +8,9 @@ import {
   resolvePageStyle,
   type PageStyle,
 } from "./page-style";
-import type { ResolvedDoc, ResolvedTableCell } from "./render";
+import { defaultParagraphStyles } from "./paragraph-styles";
+import type { ResolvedBlock, ResolvedDoc, ResolvedTableCell } from "./render";
+import type { ResolvedParagraphStyle } from "./resolve-styles";
 import { resolvedToPdf } from "./to-pdf";
 
 const para = (t: string, marks?: { type: "missing" }[]): ResolvedDoc["content"] => [
@@ -675,5 +677,180 @@ describe("resolvedToPdf small caps", () => {
     const big = items.find((i) => i.str === "P")!;
     const small = items.find((i) => i.str === "LAINTIFF")!;
     expect(small.size / big.size).toBeCloseTo(0.8, 2);
+  });
+});
+
+describe("resolvedToPdf paragraph styles", () => {
+  const body: ResolvedParagraphStyle = {
+    ...defaultParagraphStyles({ fontSizeHalfPt: 24, lineSpacing: "single", spaceAfterPt: 0 })[0]
+      .values,
+    key: "body",
+    known: true,
+  };
+  type Raw = { str: string; x: number; y: number; size: number };
+  const rawItems = async (buf: Buffer, page = 1): Promise<Raw[]> => {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(buf), verbosity: 0 }).promise;
+    const tc = await (await pdf.getPage(page)).getTextContent();
+    return tc.items
+      .filter((it): it is typeof it & { str: string } => "str" in it && it.str.trim() !== "")
+      .map((it) => {
+        const t = (it as { transform: number[] }).transform;
+        return { str: it.str, x: t[4], y: t[5], size: t[0] };
+      });
+  };
+  const p = (
+    t: string,
+    over: Partial<ResolvedParagraphStyle> = {},
+    extra: {
+      attrs?: object;
+      marks?: { type: "allCaps" | "fontSize"; attrs?: { pt: number } }[];
+    } = {},
+  ): ResolvedBlock =>
+    ({
+      type: "paragraph",
+      attrs: { ...extra.attrs, resolved: { ...body, ...over } },
+      content: [{ type: "text", text: t, ...(extra.marks ? { marks: extra.marks } : {}) }],
+    }) as ResolvedBlock;
+  const render = async (content: ResolvedBlock[], over: Partial<PageStyle> = {}) =>
+    (
+      await resolvedToPdf({
+        body: { type: "doc", content },
+        letterhead: null,
+        continuation: null,
+        style: style("filing", { pageNumbers: "none", ...over }),
+      })
+    ).buffer;
+  const at = (items: Raw[], s: string) => items.find((i) => i.str.startsWith(s))!;
+  const LONG = "word ".repeat(80).trim();
+
+  it("space before moves the paragraph down", async () => {
+    const a = at(await rawItems(await render([p("Alpha")])), "Alpha");
+    const b = at(await rawItems(await render([p("Alpha", { spaceBeforePt: 24 })])), "Alpha");
+    expect(a.y - b.y).toBeCloseTo(24, 1);
+  });
+
+  it("left indent shifts x by 72", async () => {
+    const a = at(await rawItems(await render([p("Alpha")])), "Alpha");
+    const b = at(await rawItems(await render([p("Alpha", { indentLeftIn: 1 })])), "Alpha");
+    expect(b.x - a.x).toBeCloseTo(72, 1);
+  });
+
+  it("first-line indent shifts only the first line", async () => {
+    const plain = await rawItems(await render([p(LONG)]));
+    const ind = await rawItems(await render([p(LONG, { firstLine: { kind: "indent", in: 0.5 } })]));
+    expect(ind[0].x - plain[0].x).toBeCloseTo(36, 1);
+    expect(ind[1].x).toBeCloseTo(plain[1].x, 1);
+  });
+
+  it("hanging indent: first line at the margin, the rest 36pt in", async () => {
+    const plain = await rawItems(await render([p(LONG)]));
+    const h = await rawItems(
+      await render([p(LONG, { indentLeftIn: 0.5, firstLine: { kind: "hanging", in: 0.5 } })]),
+    );
+    expect(h[0].x).toBeCloseTo(plain[0].x, 1);
+    expect(h[1].x - plain[1].x).toBeCloseTo(36, 1);
+  });
+
+  it("exact 24pt line spacing gives 24pt between baselines", async () => {
+    const it = await rawItems(await render([p(LONG, { lineSpacing: { exactPt: 24 } })]));
+    expect(it[0].y - it[1].y).toBeCloseTo(24, 1);
+  });
+
+  it("exact 8pt with 12pt text renders without throwing", async () => {
+    const buf = await render([p(LONG, { lineSpacing: { exactPt: 8 } })]);
+    const it = await rawItems(buf);
+    expect(it[0].y - it[1].y).toBeCloseTo(8, 1);
+  });
+
+  it("page break before starts page 2", async () => {
+    const buf = await render([p("First"), p("Second", { pageBreakBefore: true })]);
+    expect((await rawItems(buf, 2))[0].str).toBe("Second");
+  });
+
+  it("all caps (style or mark) renders uppercase", async () => {
+    const a = await rawItems(await render([p("hello", { allCaps: true })]));
+    const b = await rawItems(await render([p("hello", {}, { marks: [{ type: "allCaps" }] })]));
+    expect(a[0].str).toBe("HELLO");
+    expect(b[0].str).toBe("HELLO");
+  });
+
+  it("a font size mark renders at that size", async () => {
+    const it = await rawItems(
+      await render([p("tiny", {}, { marks: [{ type: "fontSize", attrs: { pt: 9 } }] })]),
+    );
+    expect(at(it, "tiny").size).toBeCloseTo(9, 1);
+  });
+
+  it("keep lines together moves a paragraph that would split to the next page", async () => {
+    const filler = Array.from({ length: 44 }, (_, i) => p(`Filler ${i}`));
+    const split = await render([...filler, p("word ".repeat(90).trim())]);
+    const kept = await render([
+      ...filler,
+      p("word ".repeat(90).trim(), { keepLinesTogether: true }),
+    ]);
+    const onPage1 = async (buf: Buffer) => (await rawItems(buf, 1)).map((i) => i.str).join(" ");
+    expect(await onPage1(split)).toContain("word");
+    expect(await onPage1(kept)).not.toContain("word");
+  });
+
+  it("fit-table width uses the resolved size", async () => {
+    const tbl = (size: number): ResolvedBlock =>
+      ({
+        type: "table",
+        attrs: { width: "fit" },
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableCell", content: [p("Narrow", { sizePt: size })] },
+              { type: "tableCell", content: [p("X", { sizePt: size })] },
+            ],
+          },
+        ],
+      }) as unknown as ResolvedBlock;
+    const small = at(await rawItems(await render([tbl(10)])), "X");
+    const big = at(await rawItems(await render([tbl(24)])), "X");
+    expect(big.x).toBeGreaterThan(small.x + 20);
+  });
+
+  it("list items add their paragraph indent to the list indent and mark at their size", async () => {
+    const list = (over: Partial<ResolvedParagraphStyle>): ResolvedBlock =>
+      ({
+        type: "bulletList",
+        content: [{ type: "listItem", content: [p("Item", over)] }],
+      }) as ResolvedBlock;
+    const a = await rawItems(await render([list({})]));
+    const b = await rawItems(await render([list({ indentLeftIn: 0.5, sizePt: 20 })]));
+    expect(at(b, "Item").x - at(a, "Item").x).toBeCloseTo(36, 1);
+    expect(at(b, "•").size).toBeCloseTo(20, 1);
+  });
+
+  it("table cells keep space after 0 unless set directly", async () => {
+    const cellDoc = (attrs: object): ResolvedBlock =>
+      ({
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              {
+                type: "tableCell",
+                content: [
+                  p("One", { spaceAfterPt: 30 }, { attrs }),
+                  p("Two", { spaceAfterPt: 30 }),
+                ],
+              },
+            ],
+          },
+        ],
+      }) as unknown as ResolvedBlock;
+    const gap = async (attrs: object) => {
+      const it = await rawItems(await render([cellDoc(attrs)]));
+      return at(it, "One").y - at(it, "Two").y;
+    };
+    const zero = await gap({});
+    expect(zero).toBeLessThan(20);
+    expect((await gap({ spaceAfterPt: 30 })) - zero).toBeCloseTo(30, 1);
   });
 });
