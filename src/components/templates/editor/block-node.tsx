@@ -75,7 +75,7 @@ function BlockView(props: NodeViewProps) {
       </div>
       {preview ? (
         <div
-          className="prose prose-sm max-w-none px-2 pb-1 text-xs"
+          className="prose prose-sm max-w-none px-2 pb-1 text-xs [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-[2em] [&_ol]:pl-[2em]"
           // Sanitized by resolvedToHtml (sanitizeDocumentHtml).
           dangerouslySetInnerHTML={{ __html: preview.html }}
         />

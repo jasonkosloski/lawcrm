@@ -283,7 +283,7 @@ export function PreviewPane({
               <p className="whitespace-pre-wrap text-xs text-ink">{shown.text}</p>
             ) : (
               <div
-                className="prose prose-sm max-w-none text-xs text-ink"
+                className="prose prose-sm max-w-none text-xs text-ink [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-[2em] [&_ol]:pl-[2em]"
                 // Sanitized by resolvedToHtml (sanitizeDocumentHtml).
                 dangerouslySetInnerHTML={{ __html: shown.html }}
               />

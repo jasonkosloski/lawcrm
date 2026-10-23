@@ -506,6 +506,12 @@ describe("paragraph styles and text marks", () => {
     expect(BODY_CLASS).not.toContain("li>p");
   });
 
+  it("BODY_CLASS draws list markers (prose is inert, the reset hides them)", () => {
+    expect(BODY_CLASS).toContain("[&_ul]:list-disc");
+    expect(BODY_CLASS).toContain("[&_ol]:list-decimal");
+    expect(BODY_CLASS).toContain("[&_ul]:pl-[2em]");
+  });
+
   it("setParagraphStyle('body') unsets the style", () => {
     const editor = make("letter", doc({ ...NO_ATTRS, style: "heading1" }, t("x")));
     editor.commands.selectAll();
