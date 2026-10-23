@@ -6,6 +6,7 @@
  * normalized copy (unknown attrs stripped) on success.
  */
 
+import { styleValuesSchema, type StyleValues } from "./paragraph-styles";
 import { placeTableCells, splitLayout } from "./table-split";
 
 export const TEMPLATE_KINDS = ["letter", "email", "sms", "filing"] as const;
@@ -23,8 +24,10 @@ export type JoinStyle = (typeof JOIN_STYLES)[number];
 export const SHOW_IF_OPS = ["present", "empty", "true", "false", "in"] as const;
 export type ShowIfOp = (typeof SHOW_IF_OPS)[number];
 
-export type MarkType = "bold" | "italic" | "underline" | "smallCaps";
-export type TemplateMark = { type: MarkType };
+export type MarkType = "bold" | "italic" | "underline" | "smallCaps" | "allCaps" | "fontSize";
+export type TemplateMark =
+  | { type: "bold" | "italic" | "underline" | "smallCaps" | "allCaps" }
+  | { type: "fontSize"; attrs: { pt: number } };
 
 export type TextNode = { type: "text"; text: string; marks?: TemplateMark[] };
 export type HardBreakNode = { type: "hardBreak" };
@@ -41,9 +44,27 @@ export type ListFieldNode = {
 };
 export type InlineNode = TextNode | HardBreakNode | FieldNode | ListFieldNode;
 
+/** Direct paragraph settings (they beat the style). Same ranges as style
+ *  values; `textAlign` is the content-side name of the style's `align`. */
+export type ParagraphSettingKey =
+  | "spaceBeforePt"
+  | "spaceAfterPt"
+  | "lineSpacing"
+  | "indentLeftIn"
+  | "indentRightIn"
+  | "firstLine"
+  | "keepWithNext"
+  | "keepLinesTogether"
+  | "pageBreakBefore";
+export type ParagraphAttrs = {
+  textAlign?: TextAlign | null;
+  /** A paragraph style key; absent means `body`. May name a deleted style. */
+  style?: string;
+} & Partial<Pick<StyleValues, ParagraphSettingKey>>;
+
 export type ParagraphNode = {
   type: "paragraph";
-  attrs?: { textAlign?: TextAlign | null };
+  attrs?: ParagraphAttrs;
   content?: InlineNode[];
 };
 export type HeadingNode = {
@@ -136,7 +157,24 @@ const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !
 type Ctx = { kind: TemplateKind; isBlock: boolean };
 
 const ALIGNS = ["left", "center", "right", "justify"];
-const MARKS: MarkType[] = ["bold", "italic", "underline", "smallCaps"];
+const MARKS: MarkType[] = ["bold", "italic", "underline", "smallCaps", "allCaps", "fontSize"];
+
+const STYLE_KEY = /^[a-z0-9-]+$/;
+const MAX_STYLE_KEY = 60;
+
+/** Setting -> the message for an out-of-range value, and the style value
+ *  that means "not set" (dropped on save). Ranges come from the style schema. */
+const PARAGRAPH_SETTINGS: Record<ParagraphSettingKey, { error: string; unset?: unknown }> = {
+  spaceBeforePt: { error: "Invalid paragraph spacing.", unset: 0 },
+  spaceAfterPt: { error: "Invalid paragraph spacing.", unset: 0 },
+  lineSpacing: { error: "Invalid paragraph spacing." },
+  indentLeftIn: { error: "Invalid paragraph indent.", unset: 0 },
+  indentRightIn: { error: "Invalid paragraph indent.", unset: 0 },
+  firstLine: { error: "Invalid paragraph indent." },
+  keepWithNext: { error: "Invalid paragraph option.", unset: false },
+  keepLinesTogether: { error: "Invalid paragraph option.", unset: false },
+  pageBreakBefore: { error: "Invalid paragraph option.", unset: false },
+};
 
 function str(v: unknown, what: string): string {
   if (typeof v !== "string" || v.length === 0) {
@@ -168,8 +206,41 @@ function marks(n: Obj, ctx: Ctx): TemplateMark[] | undefined {
     if (!isObj(m) || !MARKS.includes(m.type as MarkType)) {
       return fail(`Unknown mark "${isObj(m) ? String(m.type) : String(m)}".`);
     }
-    return { type: m.type as MarkType };
+    if (m.type === "fontSize") {
+      const pt = attrsOf(m).pt;
+      if (!styleValuesSchema.shape.sizePt.safeParse(pt).success) return fail("Invalid font size.");
+      return { type: "fontSize", attrs: { pt: pt as number } };
+    }
+    return { type: m.type as Exclude<MarkType, "fontSize"> };
   });
+}
+
+/** Style key, direct settings and alignment of a paragraph; defaults dropped. */
+function paragraphAttrs(a: Obj): ParagraphAttrs | undefined {
+  const out: ParagraphAttrs = {};
+  const al = align(a);
+  if (al !== undefined) out.textAlign = al;
+  if (a.style !== undefined && a.style !== null) {
+    if (typeof a.style !== "string" || a.style.length > MAX_STYLE_KEY || !STYLE_KEY.test(a.style)) {
+      return fail("Invalid paragraph style.");
+    }
+    out.style = a.style;
+  }
+  for (const [key, { error, unset }] of Object.entries(PARAGRAPH_SETTINGS) as [
+    ParagraphSettingKey,
+    { error: string; unset?: unknown },
+  ][]) {
+    const v = a[key];
+    if (v === undefined || v === null) continue;
+    const parsed = styleValuesSchema.shape[key].safeParse(v);
+    if (!parsed.success) return fail(error);
+    const value: unknown = parsed.data;
+    if (value === unset || (key === "firstLine" && (value as { kind: string }).kind === "none")) {
+      continue;
+    }
+    (out as Record<string, unknown>)[key] = value;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function children(n: Obj): unknown[] {
@@ -278,10 +349,10 @@ function block(raw: unknown, depth: number, ctx: Ctx): BlockNode {
   }
   switch (t) {
     case "paragraph": {
-      const al = align(attrsOf(n));
+      const attrs = paragraphAttrs(attrsOf(n));
       const content = inlineContent(n, depth, ctx);
       const out: ParagraphNode = { type: "paragraph" };
-      if (al !== undefined) out.attrs = { textAlign: al };
+      if (attrs) out.attrs = attrs;
       if (content.length) out.content = content;
       return out;
     }

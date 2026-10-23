@@ -84,6 +84,35 @@ describe("checkTemplateFit", () => {
   });
 });
 
+describe("checkTemplateFit paragraph styles", () => {
+  const styled = (style: string) => ({
+    type: "paragraph" as const,
+    attrs: { style },
+    content: [],
+  });
+  const d = doc(styled("old-style"), styled("body"), styled("old-style"));
+
+  it("reports unknown styles once each", () => {
+    const r = checkTemplateFit(d, "matter", null, new Set(["body"]));
+    expect(r).toEqual({
+      ok: false,
+      invalid: [],
+      unknownStyles: [{ kind: "style", key: "old-style", label: "Unknown style: old-style" }],
+    });
+  });
+  it("passes when styles are known, or when no style set is given", () => {
+    expect(checkTemplateFit(d, "matter", null, new Set(["body", "old-style"]))).toEqual({
+      ok: true,
+    });
+    expect(checkTemplateFit(d, "matter")).toEqual({ ok: true });
+  });
+  it("finds styles nested in containers", () => {
+    const nested = doc({ type: "showIf", attrs: { path: "x" }, content: [styled("gone")] });
+    const r = checkTemplateFit(nested, "matter", null, new Set(["body"]));
+    expect(r.ok).toBe(false);
+  });
+});
+
 describe("usesPrefix", () => {
   const block: BlockSource = {
     id: "b1",

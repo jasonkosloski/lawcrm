@@ -335,3 +335,117 @@ describe("seeded default blocks", () => {
     expect(run({ type: "a" })).not.toHaveProperty("attrs");
   });
 });
+
+describe("paragraph styles and settings", () => {
+  const p = (attrs: unknown, ...content: unknown[]) => ({ type: "paragraph", attrs, content });
+  const attrsOf = (attrs: unknown) => {
+    const r = validateTemplateContent("letter", doc(p(attrs, text("x"))));
+    return r.ok ? (r.doc.content?.[0] as { attrs?: unknown }).attrs : r.error;
+  };
+
+  it("keeps a style key and valid settings", () => {
+    const a = {
+      textAlign: "center",
+      style: "block-quote-2",
+      spaceBeforePt: 6,
+      spaceAfterPt: 12,
+      lineSpacing: { exactPt: 14 },
+      indentLeftIn: 0.5,
+      indentRightIn: 0.25,
+      firstLine: { kind: "hanging", in: 0.5 },
+      keepWithNext: true,
+      keepLinesTogether: true,
+      pageBreakBefore: true,
+    };
+    expect(attrsOf(a)).toEqual(a);
+  });
+
+  it("drops settings equal to absent", () => {
+    expect(
+      attrsOf({
+        spaceBeforePt: 0,
+        keepWithNext: false,
+        indentLeftIn: 0,
+        firstLine: { kind: "none" },
+        style: "title",
+      }),
+    ).toEqual({ style: "title" });
+    expect(attrsOf({ spaceBeforePt: 0 })).toBeUndefined();
+  });
+
+  it("rejects out-of-range settings with specific messages", () => {
+    expect(attrsOf({ spaceBeforePt: 73 })).toBe("Invalid paragraph spacing.");
+    expect(attrsOf({ lineSpacing: { exactPt: 2 } })).toBe("Invalid paragraph spacing.");
+    expect(attrsOf({ indentLeftIn: 5 })).toBe("Invalid paragraph indent.");
+    expect(attrsOf({ firstLine: { kind: "indent", in: -1 } })).toBe("Invalid paragraph indent.");
+    expect(attrsOf({ keepWithNext: "yes" })).toBe("Invalid paragraph option.");
+  });
+
+  it("accepts unknown style keys but rejects malformed ones", () => {
+    expect(attrsOf({ style: "deleted-style" })).toEqual({ style: "deleted-style" });
+    expect(attrsOf({ style: "Bad Key" })).toBe("Invalid paragraph style.");
+    expect(attrsOf({ style: "" })).toBe("Invalid paragraph style.");
+    expect(attrsOf({ style: 3 })).toBe("Invalid paragraph style.");
+  });
+
+  it("styles apply inside table cells and show-if", () => {
+    const r = validateTemplateContent(
+      "letter",
+      doc({
+        type: "showIf",
+        attrs: { path: "client.name", op: "present", values: [] },
+        content: [
+          {
+            type: "table",
+            content: [
+              {
+                type: "tableRow",
+                content: [{ type: "tableCell", content: [p({ style: "caption" })] }],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("allCaps and fontSize marks", () => {
+  const withMarks = (kind: TemplateKind, marks: unknown[]) =>
+    validateTemplateContent(kind, doc(para(text("x", marks as { type: string }[]))));
+
+  it("keeps allCaps and a valid fontSize", () => {
+    const r = withMarks("letter", [
+      { type: "allCaps" },
+      { type: "fontSize", attrs: { pt: 7 + 5.5 } },
+    ]);
+    expect(r).toEqual({
+      ok: true,
+      doc: doc(
+        para({
+          type: "text",
+          text: "x",
+          marks: [{ type: "allCaps" }, { type: "fontSize", attrs: { pt: 12.5 } }],
+        }),
+      ),
+    });
+  });
+
+  it("rejects fontSize outside 8-72 or off the 0.5 step", () => {
+    for (const pt of [7.5, 73, 10.25, "12", undefined]) {
+      const r = withMarks("letter", [{ type: "fontSize", attrs: { pt } }]);
+      expect(r).toEqual({ ok: false, error: "Invalid font size." });
+    }
+    expect(withMarks("letter", [{ type: "fontSize" }])).toEqual({
+      ok: false,
+      error: "Invalid font size.",
+    });
+  });
+
+  it("SMS rejects both new marks", () => {
+    for (const m of [{ type: "allCaps" }, { type: "fontSize", attrs: { pt: 12 } }]) {
+      expect(withMarks("sms", [m]).ok).toBe(false);
+    }
+  });
+});

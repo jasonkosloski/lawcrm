@@ -82,7 +82,11 @@ const SCOPES: Record<AppliesTo, Scope[]> = {
 
 type Invalid = { path: string; label: string | null };
 
-export type FitResult = { ok: true } | { ok: false; invalid: Invalid[] };
+/** A paragraph style key no longer in the firm's list. */
+export type UnknownStyle = { kind: "style"; key: string; label: string };
+
+export type FitResult =
+  { ok: true } | { ok: false; invalid: Invalid[]; unknownStyles?: UnknownStyle[] };
 
 function check(doc: TemplateDoc, required: Scope[], invalid: Map<string, Invalid>): void {
   const fits = (scopes: Scope[]) => required.every((s) => scopes.includes(s));
@@ -120,12 +124,24 @@ export function checkTemplateFit(
   doc: TemplateDoc,
   appliesTo: AppliesTo,
   subject?: TemplateDoc | null,
+  styleKeys?: Set<string>,
 ): FitResult {
   const invalid = new Map<string, Invalid>();
   const required = SCOPES[appliesTo];
   check(doc, required, invalid);
   if (subject) check(subject, required, invalid);
-  return invalid.size === 0 ? { ok: true } : { ok: false, invalid: [...invalid.values()] };
+  const unknown = new Map<string, UnknownStyle>();
+  if (styleKeys) {
+    walk(doc, null, (n) => {
+      const key = n.type === "paragraph" ? attr(n, "style") : null;
+      if (key && !styleKeys.has(key))
+        unknown.set(key, { kind: "style", key, label: `Unknown style: ${key}` });
+    });
+  }
+  if (invalid.size === 0 && unknown.size === 0) return { ok: true };
+  const result: FitResult = { ok: false, invalid: [...invalid.values()] };
+  if (unknown.size) result.unknownStyles = [...unknown.values()];
+  return result;
 }
 
 /** True when any field path starts with `prefix`, looking one level into

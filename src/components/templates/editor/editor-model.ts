@@ -12,6 +12,7 @@ import {
   type CatalogList,
   type TemplateData,
 } from "@/lib/templates/catalog";
+import { convertHeadings } from "@/lib/templates/headings";
 import { convertLegacyBody } from "@/lib/templates/legacy";
 import type { SerializedCourtContext } from "@/lib/templates/court-blocks";
 import type { FirmPageStyle } from "@/lib/templates/page-render";
@@ -67,9 +68,9 @@ export type EditorProps = { canSave: boolean } & (
 const EMPTY_DOC: TemplateDoc = { type: "doc", content: [{ type: "paragraph" }] };
 /** The doc a page opens with, and whether it came from a legacy body. */
 export function initialDoc(p: EditorProps): { doc: TemplateDoc; legacy: boolean } {
-  if (p.block) return { doc: p.block.content ?? EMPTY_DOC, legacy: false };
+  if (p.block) return { doc: convertHeadings(p.block.content ?? EMPTY_DOC), legacy: false };
   const t = p.template;
-  if (t.content) return { doc: t.content, legacy: false };
+  if (t.content) return { doc: convertHeadings(t.content), legacy: false };
   if (t.id) return { doc: convertLegacyBody(t.body ?? ""), legacy: true };
   return { doc: EMPTY_DOC, legacy: false };
 }
