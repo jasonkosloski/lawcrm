@@ -10,7 +10,10 @@ import {
   resolvePageStyle,
   type PageStyle,
 } from "./page-style";
-import type { ResolvedDoc } from "./render";
+import { renderTemplate, type ResolvedDoc } from "./render";
+import { SAMPLE_TEMPLATE_DATA } from "./catalog";
+import type { ParagraphAttrs, TemplateDoc, TemplateMark } from "./schema";
+import type { StyleValues } from "./paragraph-styles";
 
 const text = (t: string, marks?: { type: "missing" }[]): ResolvedDoc => ({
   type: "doc",
@@ -101,6 +104,11 @@ describe("resolvedToDocx", () => {
       sizePt: 12,
       lineSpacing: 1.5,
       spaceAfterPt: 12,
+      styles: letterStyle().styles.map((x) =>
+        x.key === "body"
+          ? { ...x, values: { ...x.values, lineSpacing: "1.5", spaceAfterPt: 12 } }
+          : x,
+      ),
     });
     const { doc, styles } = await build({ style });
     expect(doc).toContain('w:top="1440"');
@@ -439,5 +447,131 @@ describe("resolvedToDocx small caps", () => {
     };
     const { doc } = await build({ body, style: letterStyle() });
     expect(doc).toMatch(/<w:smallCaps\/>.*Plaintiff/);
+  });
+});
+
+describe("resolvedToDocx paragraph styles", () => {
+  const render = (content: TemplateDoc["content"], style: PageStyle) =>
+    renderTemplate(
+      { type: "doc", content },
+      { data: SAMPLE_TEMPLATE_DATA, blocks: new Map(), styles: style.styles },
+    ).doc;
+  const para = (t: string, attrs?: ParagraphAttrs, marks?: TemplateMark[]) => ({
+    type: "paragraph" as const,
+    ...(attrs ? { attrs } : {}),
+    content: [{ type: "text" as const, text: t, ...(marks ? { marks } : {}) }],
+  });
+  const styled = async (
+    content: TemplateDoc["content"],
+    edit?: (key: string, v: StyleValues) => StyleValues,
+  ) => {
+    const base = letterStyle();
+    const style = edit
+      ? { ...base, styles: base.styles.map((s) => ({ ...s, values: edit(s.key, s.values) })) }
+      : base;
+    return build({ body: render(content, style) as ResolvedDoc, style });
+  };
+  const styleXml = (xml: string, id: string) =>
+    xml.match(new RegExp(`<w:style [^>]*w:styleId="${id}".*?</w:style>`))?.[0] ?? "";
+
+  it("Normal carries Body; custom styles keep the firm's name; headings have outline levels", async () => {
+    const { styles } = await styled([para("x")]);
+    expect(styleXml(styles, "Normal")).toContain('<w:name w:val="Normal"/>');
+    expect(styleXml(styles, "caption")).toContain('<w:name w:val="Caption"/>');
+    expect(styleXml(styles, "Heading1")).toContain('<w:outlineLvl w:val="0"/>');
+    expect(styleXml(styles, "Heading2")).toContain('<w:outlineLvl w:val="1"/>');
+    expect(styleXml(styles, "Heading3")).toContain('<w:outlineLvl w:val="2"/>');
+    expect(styleXml(styles, "Heading1")).toContain("<w:keepNext/>");
+    expect(styleXml(styles, "Title")).toContain("<w:caps/>");
+    expect(styleXml(styles, "blockquote")).toContain('w:left="720"');
+    expect(styles.match(/w:styleId="Heading1"/g)).toHaveLength(1);
+  });
+
+  it("a paragraph references its style and writes only direct settings", async () => {
+    const { doc } = await styled([
+      para("a", { style: "caption" }),
+      para("b", { style: "caption", spaceAfterPt: 6, textAlign: "right" }),
+      para("c", { style: "heading1" }),
+      para("d"),
+    ]);
+    const pprs = [...doc.matchAll(/<w:p>(<w:pPr>.*?<\/w:pPr>)?/g)].map((m) => m[1] ?? "");
+    expect(pprs[0]).toBe('<w:pPr><w:pStyle w:val="caption"/></w:pPr>');
+    expect(pprs[1]).toContain('<w:pStyle w:val="caption"/>');
+    expect(pprs[1]).toContain('w:after="120"');
+    expect(pprs[1]).toContain('<w:jc w:val="right"/>');
+    expect(pprs[2]).toBe('<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>');
+    expect(pprs[3]).toBe("");
+  });
+
+  it("writes exact, hanging and page flow in a style", async () => {
+    const { styles } = await styled([para("x")], (key, v) =>
+      key === "caption"
+        ? {
+            ...v,
+            lineSpacing: { exactPt: 14 },
+            firstLine: { kind: "hanging", in: 0.5 },
+            indentLeftIn: 1,
+            keepWithNext: true,
+            keepLinesTogether: true,
+            pageBreakBefore: true,
+          }
+        : v,
+    );
+    const x = styleXml(styles, "caption");
+    expect(x).toContain('w:lineRule="exact"');
+    expect(x).toContain('w:line="280"');
+    expect(x).toContain('w:hanging="720"');
+    expect(x).toContain('w:left="1440"');
+    expect(x).toContain("<w:keepNext/>");
+    expect(x).toContain("<w:keepLines/>");
+    expect(x).toContain("<w:pageBreakBefore/>");
+  });
+
+  it("direct settings override: explicit zero, first line, exact spacing", async () => {
+    const { doc } = await styled([
+      para("a", {
+        style: "blockquote",
+        indentLeftIn: 0,
+        firstLine: { kind: "indent", in: 0.5 },
+        spaceBeforePt: 0,
+        lineSpacing: { exactPt: 14 },
+        keepWithNext: true,
+      }),
+    ]);
+    expect(doc).toContain('w:left="0"');
+    expect(doc).toContain('w:firstLine="720"');
+    expect(doc).toContain('w:before="0"');
+    expect(doc).toContain('w:lineRule="exact"');
+    expect(doc).toContain('w:line="280"');
+    expect(doc).toContain("<w:keepNext/>");
+  });
+
+  it("marks: all caps and font size", async () => {
+    const { doc } = await styled([
+      para("a", undefined, [{ type: "allCaps" }, { type: "fontSize", attrs: { pt: 9 } }]),
+    ]);
+    expect(doc).toContain("<w:caps/>");
+    expect(doc).toContain('<w:sz w:val="18"/>');
+  });
+
+  it("exact 8pt line spacing with 12pt text produces a valid file", async () => {
+    const { zip, styles } = await styled([para("a", { style: "caption" })], (key, v) =>
+      key === "caption" ? { ...v, sizePt: 12, lineSpacing: { exactPt: 8 } } : v,
+    );
+    expect(styleXml(styles, "caption")).toContain('w:line="160"');
+    expect(zip.file("word/document.xml")).toBeTruthy();
+  });
+
+  it("table cell paragraphs keep zero space after unless they set their own", async () => {
+    const cell = (p: ReturnType<typeof para>) => ({
+      type: "table" as const,
+      content: [
+        { type: "tableRow" as const, content: [{ type: "tableCell" as const, content: [p] }] },
+      ],
+    });
+    const { doc } = await styled([cell(para("a")), cell(para("b", { spaceAfterPt: 6 }))]);
+    const pprs = [...doc.matchAll(/<w:p>(<w:pPr>.*?<\/w:pPr>)?/g)].map((m) => m[1] ?? "");
+    expect(pprs[0]).toContain('w:after="0"');
+    expect(pprs[1]).toContain('w:after="120"');
   });
 });

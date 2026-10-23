@@ -24,16 +24,21 @@ import {
 } from "docx";
 import { FONTS } from "./fonts";
 import { imageSize } from "./image-size";
-import { headingLevelOf } from "./style-basics";
+import type { ParagraphStyle, StyleValues } from "./paragraph-styles";
 import {
   CELL_PAD_TWIPS,
   HEADER_DISTANCE_TWIPS,
-  headingSizePt,
   PAGE_DIMENSIONS,
   type LoadedLogo,
   type PageStyle,
 } from "./page-style";
-import type { ResolvedBlock, ResolvedDoc, ResolvedInline, ResolvedTable } from "./render";
+import type {
+  ResolvedBlock,
+  ResolvedDoc,
+  ResolvedInline,
+  ResolvedParagraph,
+  ResolvedTable,
+} from "./render";
 import type { BorderWeight } from "./schema";
 import {
   BORDER_PT,
@@ -52,6 +57,108 @@ const ALIGN = {
   justify: AlignmentType.JUSTIFIED,
 } as const;
 
+/** Word's own ids for the built-ins (navigation pane, tables of contents and
+ *  outline view key off them); every other style's id is its key. */
+const BUILT_IN_IDS: Record<string, { id: string; name: string; outline?: number }> = {
+  body: { id: "Normal", name: "Normal" },
+  title: { id: "Title", name: "Title" },
+  heading1: { id: "Heading1", name: "heading 1", outline: 0 },
+  heading2: { id: "Heading2", name: "heading 2", outline: 1 },
+  heading3: { id: "Heading3", name: "heading 3", outline: 2 },
+};
+const styleId = (key: string) => BUILT_IN_IDS[key]?.id ?? key;
+
+const twips = (inches: number) => Math.round(inches * 1440);
+
+/** Multiples are `auto` lines of 240 per single; exact is in twips. */
+function lineProps(ls: StyleValues["lineSpacing"]): { line: number; lineRule: "auto" | "exact" } {
+  if (typeof ls === "string") {
+    const factor = ls === "single" ? 1 : ls === "double" ? 2 : Number(ls);
+    return { line: Math.round(240 * factor), lineRule: "auto" };
+  }
+  return { line: Math.round(ls.exactPt * 20), lineRule: "exact" };
+}
+
+function firstLineProps(fl: StyleValues["firstLine"]): { firstLine?: number; hanging?: number } {
+  if (fl.kind === "indent") return { firstLine: twips(fl.in) };
+  if (fl.kind === "hanging") return { hanging: twips(fl.in) };
+  return {};
+}
+
+const runOf = (v: StyleValues) => ({
+  size: Math.round(v.sizePt * 2),
+  bold: v.bold || undefined,
+  italics: v.italic || undefined,
+  underline: v.underline ? {} : undefined,
+  smallCaps: v.smallCaps || undefined,
+  allCaps: v.allCaps || undefined,
+});
+
+const paragraphOf = (v: StyleValues) => ({
+  alignment: ALIGN[v.align],
+  spacing: {
+    before: v.spaceBeforePt * 20,
+    after: v.spaceAfterPt * 20,
+    ...lineProps(v.lineSpacing),
+  },
+  indent: {
+    left: twips(v.indentLeftIn),
+    right: twips(v.indentRightIn),
+    ...firstLineProps(v.firstLine),
+  },
+  keepNext: v.keepWithNext || undefined,
+  keepLines: v.keepLinesTogether || undefined,
+  pageBreakBefore: v.pageBreakBefore || undefined,
+});
+
+/** Every effective style as a Word paragraph style (independent: no basedOn). */
+function paragraphStyles(list: ParagraphStyle[]) {
+  return list.map((s) => {
+    const b = BUILT_IN_IDS[s.key];
+    return {
+      id: styleId(s.key),
+      name: b?.name ?? s.name,
+      quickFormat: true,
+      run: runOf(s.values),
+      paragraph: {
+        ...paragraphOf(s.values),
+        ...(b?.outline !== undefined ? { outlineLevel: b.outline } : {}),
+      },
+    };
+  });
+}
+
+/** What a paragraph sets itself, on top of its style. Explicit 0/false/none
+ *  are real overrides, so only `undefined` means "not set". */
+function directProps(p: ResolvedParagraph, ctx: Ctx) {
+  const a = p.attrs;
+  const r = a?.resolved;
+  const spacing: { before?: number; after?: number; line?: number; lineRule?: "auto" | "exact" } =
+    {};
+  if (a?.spaceBeforePt !== undefined) spacing.before = a.spaceBeforePt * 20;
+  if (a?.spaceAfterPt !== undefined) spacing.after = a.spaceAfterPt * 20;
+  else if (ctx.inCell) spacing.after = 0;
+  if (a?.lineSpacing !== undefined && r) Object.assign(spacing, lineProps(r.lineSpacing));
+  const indent: { left?: number; right?: number; firstLine?: number; hanging?: number } = {};
+  if (a?.indentLeftIn !== undefined && r) indent.left = twips(r.indentLeftIn);
+  if (a?.indentRightIn !== undefined && r) indent.right = twips(r.indentRightIn);
+  if (a?.firstLine !== undefined && r) {
+    Object.assign(
+      indent,
+      r.firstLine.kind === "none" ? { firstLine: 0 } : firstLineProps(r.firstLine),
+    );
+  }
+  return {
+    ...(r && r.key !== "body" ? { style: styleId(r.known ? r.key : "body") } : {}),
+    alignment: a?.textAlign ? ALIGN[a.textAlign] : undefined,
+    ...(Object.keys(spacing).length ? { spacing } : {}),
+    ...(Object.keys(indent).length ? { indent } : {}),
+    ...(a?.keepWithNext !== undefined ? { keepNext: a.keepWithNext } : {}),
+    ...(a?.keepLinesTogether !== undefined ? { keepLines: a.keepLinesTogether } : {}),
+    ...(a?.pageBreakBefore !== undefined ? { pageBreakBefore: a.pageBreakBefore } : {}),
+  };
+}
+
 const HEADINGS = [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3];
 
 const BULLET_REF = "bullets";
@@ -62,12 +169,15 @@ function runs(nodes: ResolvedInline[] | undefined): ParagraphChild[] {
   return (nodes ?? []).map((n) => {
     if (n.type === "hardBreak") return new TextRun({ break: 1 });
     const types = new Set((n.marks ?? []).map((m) => m.type));
+    const size = (n.marks ?? []).find((m) => m.type === "fontSize")?.attrs?.pt;
     return new TextRun({
       text: n.text,
       bold: types.has("bold") || undefined,
       italics: types.has("italic") || undefined,
       underline: types.has("underline") ? {} : undefined,
       smallCaps: types.has("smallCaps") || undefined,
+      allCaps: types.has("allCaps") || undefined,
+      size: size ? Math.round(size * 2) : undefined,
       highlight: types.has("missing") ? "yellow" : undefined,
     });
   });
@@ -83,15 +193,7 @@ function blocks(list: ResolvedBlock[], ctx: Ctx, level: number): (Paragraph | Ta
   return list.flatMap((b): (Paragraph | Table)[] => {
     switch (b.type) {
       case "paragraph": {
-        const headingLevel = headingLevelOf(b.attrs?.style);
-        return [
-          new Paragraph({
-            children: runs(b.content),
-            ...(headingLevel ? { heading: HEADINGS[headingLevel - 1] } : {}),
-            alignment: b.attrs?.textAlign ? ALIGN[b.attrs.textAlign] : undefined,
-            ...cellSpacing(ctx),
-          }),
-        ];
+        return [new Paragraph({ children: runs(b.content), ...directProps(b, ctx) })];
       }
       case "heading":
         return [
@@ -273,19 +375,7 @@ export async function resolvedToDocx(input: {
   // pageNumbers. Either way the first page needs its own (empty) header/footer.
   const footerNumber = !isLetter && style.pageNumbers !== "none";
   const font = FONTS[style.font].wordName;
-  const headingRun = (level: 1 | 2 | 3) => ({
-    font,
-    bold: true,
-    size: headingSizePt(style.sizePt, level) * 2,
-  });
-  const headingPara = {
-    spacing: {
-      after: style.spaceAfterPt * 20,
-      line: Math.round(240 * style.lineSpacing),
-      lineRule: "auto" as const,
-    },
-  };
-
+  const body = style.styles.find((x) => x.key === "body")?.values;
   const headers: { first?: Header; default?: Header } = {};
   if (style.letterhead) {
     const parts: (Paragraph | Table)[] = [];
@@ -316,17 +406,17 @@ export async function resolvedToDocx(input: {
         document: {
           run: { font, size: style.sizePt * 2 },
           paragraph: {
-            spacing: {
-              after: style.spaceAfterPt * 20,
-              line: Math.round(240 * style.lineSpacing),
-              lineRule: "auto",
-            },
+            spacing: body
+              ? paragraphOf(body).spacing
+              : {
+                  after: style.spaceAfterPt * 20,
+                  line: Math.round(240 * style.lineSpacing),
+                  lineRule: "auto",
+                },
           },
         },
-        heading1: { run: headingRun(1), paragraph: headingPara },
-        heading2: { run: headingRun(2), paragraph: headingPara },
-        heading3: { run: headingRun(3), paragraph: headingPara },
       },
+      paragraphStyles: paragraphStyles(style.styles),
     },
     numbering: {
       config: [

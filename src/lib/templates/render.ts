@@ -33,6 +33,7 @@ import type {
   TableCellNode,
   TableNode,
   TemplateDoc,
+  TemplateMark,
   TextAlign,
 } from "./schema";
 
@@ -51,7 +52,7 @@ export type RenderReport = {
 
 // ── Output types ───────────────────────────────────────────────────────
 
-export type ResolvedMark = { type: MarkType | "missing" };
+export type ResolvedMark = { type: MarkType | "missing"; attrs?: { pt: number } };
 export type ResolvedText = { type: "text"; text: string; marks?: ResolvedMark[] };
 export type ResolvedHardBreak = { type: "hardBreak" };
 export type ResolvedInline = ResolvedText | ResolvedHardBreak;
@@ -151,8 +152,10 @@ function textNodes(text: string, marks: ResolvedMark[]): ResolvedInline[] {
   return out;
 }
 
-const marksOf = (n: { marks?: { type: MarkType }[] }): ResolvedMark[] =>
-  (n.marks ?? []).map((m) => ({ type: m.type }));
+const marksOf = (n: { marks?: TemplateMark[] }): ResolvedMark[] =>
+  (n.marks ?? []).map((m) =>
+    m.type === "fontSize" ? { type: m.type, attrs: m.attrs } : { type: m.type },
+  );
 
 function formatOf(field: CatalogField, requested: string | null): FieldFormat | null {
   return requested && field.formats.includes(requested as FieldFormat)
