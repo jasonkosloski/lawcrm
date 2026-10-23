@@ -12,11 +12,13 @@
  * implementation originally lived) and the email compose / reply
  * composers (Email v1.1).
  *
- * Toolbar exposes the handful of marks/nodes we care about
- * (headings, bold, italic, strike, inline code, block code,
- * blockquote, lists). No images/tables — this is workspace prose,
- * not a document editor. Keep the tag surface in lockstep with the
- * sanitizer's note-profile allowlist.
+ * Presets (`preset` prop, default "notes"):
+ *   - notes: headings, bold, italic, strike, inline code, block code,
+ *     blockquote, lists. Lockstep with the note-profile sanitizer.
+ *   - email: notes plus underline, paragraph alignment, links and
+ *     plain tables, with template paragraph styles kept. Lockstep with
+ *     `sanitizeOutgoingEmailHtml`, which the send actions and the
+ *     signature save use. Used by compose, reply and the signature.
  */
 
 "use client";
@@ -24,8 +26,16 @@
 import { useEditor, useEditorState, type Editor } from "@tiptap/react";
 import { Heading2, Quote } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Divider, ListButtons, MarkButtons, ToolButton } from "@/components/editor/controls";
-import { notesExtensions } from "@/components/editor/presets";
+import {
+  AlignButtons,
+  Divider,
+  LinkButton,
+  ListButtons,
+  MarkButtons,
+  TableMenu,
+  ToolButton,
+} from "@/components/editor/controls";
+import { emailExtensions, notesExtensions } from "@/components/editor/presets";
 import { EDITOR_CONTENT_CLASS, EditorShell } from "@/components/editor/editor-shell";
 
 export function RichTextEditor({
@@ -34,15 +44,17 @@ export function RichTextEditor({
   placeholder,
   className,
   autoFocus,
+  preset = "notes",
 }: {
   initialHTML?: string;
   onChange: (html: string) => void;
   placeholder?: string;
   className?: string;
   autoFocus?: boolean;
+  preset?: "notes" | "email";
 }) {
   const editor = useEditor({
-    extensions: notesExtensions(),
+    extensions: preset === "email" ? emailExtensions() : notesExtensions(),
     content: initialHTML ?? "",
     autofocus: autoFocus,
     editorProps: {
@@ -94,13 +106,14 @@ export function RichTextEditor({
       <EditorShell
         editor={editor}
         placeholder={placeholder}
-        toolbar={<EditorToolbar editor={editor} />}
+        toolbar={<EditorToolbar editor={editor} preset={preset} />}
       />
     </div>
   );
 }
 
-function EditorToolbar({ editor }: { editor: Editor }) {
+function EditorToolbar({ editor, preset }: { editor: Editor; preset: "notes" | "email" }) {
+  const email = preset === "email";
   // Tiptap 3 does not re-render on transactions by default, so reading
   // editor.isActive() during render leaves the buttons (and
   // aria-pressed) stale after a selection change or a stored-mark
@@ -122,7 +135,14 @@ function EditorToolbar({ editor }: { editor: Editor }) {
         <Heading2 size={13} />
       </ToolButton>
       <Divider />
-      <MarkButtons editor={editor} marks={["bold", "italic", "strike", "code"]} />
+      <MarkButtons
+        editor={editor}
+        marks={
+          email
+            ? ["bold", "italic", "underline", "strike", "code"]
+            : ["bold", "italic", "strike", "code"]
+        }
+      />
       <Divider />
       <ListButtons editor={editor} bulletLabel="Bullet list" />
       <ToolButton
@@ -132,6 +152,17 @@ function EditorToolbar({ editor }: { editor: Editor }) {
       >
         <Quote size={13} />
       </ToolButton>
+      {email && (
+        <>
+          <Divider />
+          <AlignButtons editor={editor} />
+          <LinkButton editor={editor} />
+          <TableMenu
+            editor={editor}
+            features={{ merge: false, borders: false, width: false, valign: false }}
+          />
+        </>
+      )}
     </div>
   );
 }

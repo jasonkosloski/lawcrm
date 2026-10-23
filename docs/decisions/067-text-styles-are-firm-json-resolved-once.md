@@ -30,6 +30,6 @@
 - (+) Expand-only migration; existing templates and courts render as before
 - (-) Independent styles mean changing the size everywhere takes editing each style
 - (-) PDF keep-with-next is an approximation (react-pdf `minPresenceAhead` of the next paragraph's first line), so a heading can occasionally strand
-- (-) Sent emails carry no template styles: the outgoing-mail sanitizer is a deliberate security boundary and was not widened. Preview shows spacing the email lacks
+- (resolved) Sent emails now carry template paragraph styles: a separate strict outgoing profile (`sanitizeOutgoingEmailHtml`) keeps bounded paragraph/span styles; the inbound and note profiles were not widened.
 - (-) The legacy-column mirror is extra writes until the drop migration
 - (-) JSON is validated by code, not the database, so reads parse defensively

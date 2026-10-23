@@ -44,10 +44,11 @@ export function EmailSignatureForm({
     <section className="mt-8">
       <h2 className="text-sm font-semibold text-ink">Email signature</h2>
       <p className="mt-1 mb-3 text-xs text-ink-3">
-        Added below a &ldquo;--&rdquo; line when you compose or reply. Text and links only; images
-        aren&apos;t supported.
+        Added below a &ldquo;--&rdquo; line when you compose or reply. Text, links and simple
+        tables; images aren&apos;t supported.
       </p>
       <RichTextEditor
+        preset="email"
         initialHTML={signature ?? ""}
         onChange={(next) => {
           setHtml(next);

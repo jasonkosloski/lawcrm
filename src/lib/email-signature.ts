@@ -1,7 +1,8 @@
 /**
  * Per-user email signatures (Settings → Profile).
  *
- * Stored on `User.emailSignature` as note-profile HTML. It is
+ * Stored on `User.emailSignature` as outgoing-profile HTML
+ * (`sanitizeOutgoingEmailHtml`, the same allowlist sent mail uses). It is
  * sanitized on save (`normalizeEmailSignature`) and again on read, so
  * a row written by anything other than the profile action still can't
  * smuggle markup into mail wearing our From. The send actions sanitize
@@ -14,7 +15,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { sanitizeUserHtml } from "@/lib/sanitize-html";
+import { sanitizeOutgoingEmailHtml } from "@/lib/sanitize-html";
 import { htmlToText } from "@/lib/html-to-text";
 
 /** Longest signature HTML we store, measured after sanitizing. Generous
@@ -28,7 +29,7 @@ export const EMAIL_SIGNATURE_MAX_INPUT_LENGTH = 200_000;
 /** Sanitize a submitted signature; null when nothing visible is left
  *  (Tiptap's empty document is `<p></p>`). */
 export function normalizeEmailSignature(html: string): string | null {
-  const clean = sanitizeUserHtml(html);
+  const clean = sanitizeOutgoingEmailHtml(html);
   return htmlToText(clean).trim() === "" ? null : clean;
 }
 

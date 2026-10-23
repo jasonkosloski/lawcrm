@@ -180,7 +180,7 @@ export function ComposeEmailButton({
           cc: ccParsed.addresses,
           subject: subject.trim(),
           // Editor HTML goes up as-is — the action sanitizes it
-          // (note profile) before it reaches the MIME builder.
+          // (outgoing profile) before it reaches the MIME builder.
           bodyText,
           bodyHtml: body,
           scope,
@@ -367,6 +367,7 @@ export function ComposeEmailButton({
               }}
             />
             <RichTextEditor
+              preset="email"
               key={editorKey}
               initialHTML={body}
               onChange={setBody}

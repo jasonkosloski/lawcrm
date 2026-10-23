@@ -123,7 +123,7 @@ export async function updateProfileAction(
 
 /** Save the caller's email signature. Same self-edit model as the
  *  profile: the row comes from the session, never the client. The HTML
- *  is sanitized here (note profile) and an empty editor clears it. */
+ *  is sanitized here (outgoing profile) and an empty editor clears it. */
 export async function updateEmailSignatureAction(html: string): Promise<EmailSignatureResult> {
   const userId = await getCurrentUserId();
   if (typeof html !== "string") {

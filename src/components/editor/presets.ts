@@ -10,6 +10,7 @@ import { mergeAttributes, type Extensions } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
+import { isAllowedEmailLink } from "./link-uri";
 import { StylePassthrough, StyledSpan } from "./style-passthrough";
 import {
   createTemplateExtensions,
@@ -56,8 +57,7 @@ export function emailExtensions(): Extensions {
         autolink: true,
         openOnClick: false,
         HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },
-        isAllowedUri: (url) =>
-          /^(https?:\/\/[^/]|mailto:.)/i.test(url.replace(/[\u0000-\u0020]/g, "")),
+        isAllowedUri: isAllowedEmailLink,
       },
     }),
     TextAlign.configure({ types: ["paragraph"] }),

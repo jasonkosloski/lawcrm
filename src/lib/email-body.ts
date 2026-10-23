@@ -3,7 +3,7 @@
  *
  *   - Gmail-synced / CRM-sent messages: sanitized HTML. Two writers
  *     produce it, both allowlist sanitizers: `sanitizeEmailHtml` at
- *     the Gmail sync boundary and `sanitizeUserHtml` /
+ *     the Gmail sync boundary and `sanitizeOutgoingEmailHtml` /
  *     `plainTextToHtml` at the CRM send boundary (actions/email-send).
  *     Rendering it via dangerouslySetInnerHTML is safe by
  *     construction.

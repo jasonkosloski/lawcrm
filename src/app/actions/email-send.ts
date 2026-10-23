@@ -14,11 +14,13 @@
  * Outbound HTML boundary (Email v1.1): the composers send the rich
  * editor's raw HTML; it is SANITIZED HERE, server-side, before it
  * reaches the MIME builder — never trust the client. The profile is
- * `sanitizeUserHtml` (note profile): it's the exact allowlist for
- * our own Tiptap editor's output and stricter than the email
- * profile, which exists for hostile INBOUND mail and additionally
- * tolerates div-soup/inline styles/data-images a hostile client
- * could otherwise smuggle into mail wearing our From header. If
+ * `sanitizeOutgoingEmailHtml` (outgoing profile): the exact
+ * allowlist for the Email editor preset's output (links, tables,
+ * bounded paragraph/span styles) and stricter than the inbound email
+ * profile, which tolerates div-soup/data-images a hostile client
+ * could otherwise smuggle into mail wearing our From header. The
+ * signature is seeded into the editor body, so body + signature
+ * pass this once. If
  * sanitizing leaves nothing, the text/plain body is upgraded via
  * `plainTextToHtml` (also sanitizer-shaped by construction).
  *
@@ -57,7 +59,7 @@ import { optionalScopeOf, scopeWhere, type RecordScope } from "@/lib/record-scop
 import { fileEmailThread, revalidationPathsFor, sameScope } from "@/lib/email-filing";
 import { logActivity } from "@/lib/activity-log";
 import { currentUserHasPermission, requirePermission } from "@/lib/permission-check";
-import { sanitizeUserHtml } from "@/lib/sanitize-html";
+import { sanitizeOutgoingEmailHtml } from "@/lib/sanitize-html";
 import { statFile } from "@/lib/file-storage";
 import { isSendableStatus, REPLY_NEEDS_FILER_ERROR } from "@/lib/email-send-status";
 import { GmailAuthError, gmailFetch } from "@/lib/google/gmail-client";
@@ -234,9 +236,9 @@ export async function sendEmail(
 
   const subject = input.subject.trim();
   const sentAt = new Date();
-  // Outbound boundary: strip anything the note profile disallows
+  // Outbound boundary: strip anything the outgoing profile disallows
   // BEFORE the MIME builder sees it (see module header).
-  const bodyHtml = sanitizeUserHtml(input.bodyHtml) || plainTextToHtml(input.bodyText);
+  const bodyHtml = sanitizeOutgoingEmailHtml(input.bodyHtml) || plainTextToHtml(input.bodyText);
   const raw = tryBuildRaw({
     from: { name: account.user.name, email: account.emailAddress },
     to: to.addresses,
@@ -456,7 +458,7 @@ export async function replyToThread(
   const attachments = loaded.attachments;
   const sentAt = new Date();
   // Same outbound sanitize boundary as sendEmail (module header).
-  const bodyHtml = sanitizeUserHtml(input.bodyHtml) || plainTextToHtml(input.bodyText);
+  const bodyHtml = sanitizeOutgoingEmailHtml(input.bodyHtml) || plainTextToHtml(input.bodyText);
   const raw = tryBuildRaw({
     from: {
       name: thread.account.user.name,

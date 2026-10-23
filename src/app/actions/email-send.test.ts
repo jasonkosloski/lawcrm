@@ -585,6 +585,45 @@ describe("sendEmail — outbound HTML sanitization (Email v1.1)", () => {
   });
 });
 
+describe("sendEmail — outgoing profile (Email editor)", () => {
+  test("keeps links, tables and allowed paragraph styles; drops the rest", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    mockedGmailFetch.mockResolvedValue(gmailOk());
+
+    await sendEmail(accountId, {
+      ...BASE_SEND,
+      bodyHtml:
+        '<p style="margin-bottom:12pt;color:red;position:absolute">x</p>' +
+        '<p style="text-align:center">c <a href="https://example.com/a">link</a></p>' +
+        "<table><tbody><tr><td><p>cell</p></td></tr></tbody></table>",
+    });
+
+    const html = wireHtml(sentPayload().mime);
+    expect(html).toContain('<p style="margin-bottom:12pt">x</p>');
+    expect(html).not.toContain("color");
+    expect(html).not.toContain("position");
+    expect(html).toContain("text-align:center");
+    expect(html).toContain('href="https://example.com/a"');
+    expect(html).toContain("<table>");
+    const msg = await prisma.emailMessage.findFirst();
+    expect(msg?.body).toBe(html);
+  });
+
+  test("current-profile body with appended signature round-trips unchanged", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    mockedGmailFetch.mockResolvedValue(gmailOk());
+    const body =
+      '<p>Hi <a href="https://example.com" target="_blank" rel="noopener noreferrer">site</a></p>' +
+      "<ul><li><p>a</p></li></ul><blockquote><p>q</p></blockquote><pre><code>c</code></pre>" +
+      "<p>-- </p><p><strong>Jane</strong></p>";
+
+    await sendEmail(accountId, { ...BASE_SEND, bodyHtml: body });
+    expect(wireHtml(sentPayload().mime)).toBe(body);
+  });
+});
+
 describe("sendEmail — failure paths preserve the draft contract", () => {
   test("GmailAuthError → its reconnect message, no local rows", async () => {
     const { userId } = await seedActor();
@@ -897,6 +936,34 @@ describe("replyToThread — outbound HTML sanitization (Email v1.1)", () => {
       where: { fromEmail: "me@firm.com" },
     });
     expect(msg?.body).toBe("<p>Done.</p>");
+  });
+});
+
+describe("replyToThread — outgoing profile (Email editor)", () => {
+  test("keeps links, tables and allowed paragraph styles; drops the rest", async () => {
+    const { userId } = await seedActor();
+    const { accountId } = await seedEmailAccount({ userId });
+    const { threadId } = await seedThread({ accountId });
+    await seedMessage({
+      threadId,
+      fromEmail: "alice@example.com",
+      to: [{ email: "me@firm.com" }],
+    });
+    mockedGmailFetch.mockResolvedValue(gmailOk("gm-2", "gt-1"));
+
+    await replyToThread(threadId, {
+      ...BASE_REPLY,
+      bodyHtml:
+        '<p style="margin-bottom:12pt;color:red">x</p>' +
+        '<p><a href="https://example.com/a">l</a></p>' +
+        "<table><tbody><tr><td><p>cell</p></td></tr></tbody></table>",
+    });
+
+    const html = wireHtml(sentPayload().mime);
+    expect(html).toContain('<p style="margin-bottom:12pt">x</p>');
+    expect(html).not.toContain("color");
+    expect(html).toContain('href="https://example.com/a"');
+    expect(html).toContain("<table>");
   });
 });
 
