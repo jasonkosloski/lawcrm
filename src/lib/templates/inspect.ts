@@ -85,8 +85,10 @@ type Invalid = { path: string; label: string | null };
 /** A paragraph style key no longer in the firm's list. */
 export type UnknownStyle = { kind: "style"; key: string; label: string };
 
+/** `ok` is field fit only: unknown styles are reported but never fail it. */
 export type FitResult =
-  { ok: true } | { ok: false; invalid: Invalid[]; unknownStyles?: UnknownStyle[] };
+  | { ok: true; unknownStyles?: UnknownStyle[] }
+  | { ok: false; invalid: Invalid[]; unknownStyles?: UnknownStyle[] };
 
 function check(doc: TemplateDoc, required: Scope[], invalid: Map<string, Invalid>): void {
   const fits = (scopes: Scope[]) => required.every((s) => scopes.includes(s));
@@ -138,10 +140,11 @@ export function checkTemplateFit(
         unknown.set(key, { kind: "style", key, label: `Unknown style: ${key}` });
     });
   }
-  if (invalid.size === 0 && unknown.size === 0) return { ok: true };
-  const result: FitResult = { ok: false, invalid: [...invalid.values()] };
-  if (unknown.size) result.unknownStyles = [...unknown.values()];
-  return result;
+  const unknownStyles = unknown.size ? [...unknown.values()] : undefined;
+  if (invalid.size === 0) return unknownStyles ? { ok: true, unknownStyles } : { ok: true };
+  return unknownStyles
+    ? { ok: false, invalid: [...invalid.values()], unknownStyles }
+    : { ok: false, invalid: [...invalid.values()] };
 }
 
 /** True when any field path starts with `prefix`, looking one level into

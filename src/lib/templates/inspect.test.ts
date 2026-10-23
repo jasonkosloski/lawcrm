@@ -95,8 +95,7 @@ describe("checkTemplateFit paragraph styles", () => {
   it("reports unknown styles once each", () => {
     const r = checkTemplateFit(d, "matter", null, new Set(["body"]));
     expect(r).toEqual({
-      ok: false,
-      invalid: [],
+      ok: true,
       unknownStyles: [{ kind: "style", key: "old-style", label: "Unknown style: old-style" }],
     });
   });
@@ -107,9 +106,24 @@ describe("checkTemplateFit paragraph styles", () => {
     expect(checkTemplateFit(d, "matter")).toEqual({ ok: true });
   });
   it("finds styles nested in containers", () => {
-    const nested = doc({ type: "showIf", attrs: { path: "x" }, content: [styled("gone")] });
+    const nested = doc({
+      type: "showIf",
+      attrs: { path: "matter.caseNumber" },
+      content: [styled("gone")],
+    });
     const r = checkTemplateFit(nested, "matter", null, new Set(["body"]));
+    expect(r.ok).toBe(true);
+    expect(r.unknownStyles).toHaveLength(1);
+  });
+  it("keeps field misfits failing, with unknown styles alongside", () => {
+    const r = checkTemplateFit(
+      doc(para(f("matter.caseNumber")), styled("gone")),
+      "lead",
+      null,
+      new Set(["body"]),
+    );
     expect(r.ok).toBe(false);
+    expect(r.unknownStyles).toHaveLength(1);
   });
 });
 

@@ -162,18 +162,19 @@ const MARKS: MarkType[] = ["bold", "italic", "underline", "smallCaps", "allCaps"
 const STYLE_KEY = /^[a-z0-9-]+$/;
 const MAX_STYLE_KEY = 60;
 
-/** Setting -> the message for an out-of-range value, and the style value
- *  that means "not set" (dropped on save). Ranges come from the style schema. */
-const PARAGRAPH_SETTINGS: Record<ParagraphSettingKey, { error: string; unset?: unknown }> = {
-  spaceBeforePt: { error: "Invalid paragraph spacing.", unset: 0 },
-  spaceAfterPt: { error: "Invalid paragraph spacing.", unset: 0 },
-  lineSpacing: { error: "Invalid paragraph spacing." },
-  indentLeftIn: { error: "Invalid paragraph indent.", unset: 0 },
-  indentRightIn: { error: "Invalid paragraph indent.", unset: 0 },
-  firstLine: { error: "Invalid paragraph indent." },
-  keepWithNext: { error: "Invalid paragraph option.", unset: false },
-  keepLinesTogether: { error: "Invalid paragraph option.", unset: false },
-  pageBreakBefore: { error: "Invalid paragraph option.", unset: false },
+/** Setting -> the message for an out-of-range value. Ranges come from the
+ *  style schema. Settings are overrides: any present value is kept, even
+ *  0, false or `{ kind: "none" }`. */
+const PARAGRAPH_SETTINGS: Record<ParagraphSettingKey, string> = {
+  spaceBeforePt: "Invalid paragraph spacing.",
+  spaceAfterPt: "Invalid paragraph spacing.",
+  lineSpacing: "Invalid paragraph spacing.",
+  indentLeftIn: "Invalid paragraph indent.",
+  indentRightIn: "Invalid paragraph indent.",
+  firstLine: "Invalid paragraph indent.",
+  keepWithNext: "Invalid paragraph option.",
+  keepLinesTogether: "Invalid paragraph option.",
+  pageBreakBefore: "Invalid paragraph option.",
 };
 
 function str(v: unknown, what: string): string {
@@ -215,7 +216,7 @@ function marks(n: Obj, ctx: Ctx): TemplateMark[] | undefined {
   });
 }
 
-/** Style key, direct settings and alignment of a paragraph; defaults dropped. */
+/** Style key, direct settings and alignment of a paragraph. */
 function paragraphAttrs(a: Obj): ParagraphAttrs | undefined {
   const out: ParagraphAttrs = {};
   const al = align(a);
@@ -226,19 +227,15 @@ function paragraphAttrs(a: Obj): ParagraphAttrs | undefined {
     }
     out.style = a.style;
   }
-  for (const [key, { error, unset }] of Object.entries(PARAGRAPH_SETTINGS) as [
+  for (const [key, error] of Object.entries(PARAGRAPH_SETTINGS) as [
     ParagraphSettingKey,
-    { error: string; unset?: unknown },
+    string,
   ][]) {
     const v = a[key];
     if (v === undefined || v === null) continue;
     const parsed = styleValuesSchema.shape[key].safeParse(v);
     if (!parsed.success) return fail(error);
-    const value: unknown = parsed.data;
-    if (value === unset || (key === "firstLine" && (value as { kind: string }).kind === "none")) {
-      continue;
-    }
-    (out as Record<string, unknown>)[key] = value;
+    (out as Record<string, unknown>)[key] = parsed.data;
   }
   return Object.keys(out).length ? out : undefined;
 }

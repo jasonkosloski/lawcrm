@@ -360,17 +360,19 @@ describe("paragraph styles and settings", () => {
     expect(attrsOf(a)).toEqual(a);
   });
 
-  it("drops settings equal to absent", () => {
-    expect(
-      attrsOf({
-        spaceBeforePt: 0,
-        keepWithNext: false,
-        indentLeftIn: 0,
-        firstLine: { kind: "none" },
-        style: "title",
-      }),
-    ).toEqual({ style: "title" });
-    expect(attrsOf({ spaceBeforePt: 0 })).toBeUndefined();
+  it("keeps explicit overrides equal to the defaults", () => {
+    const a = {
+      spaceBeforePt: 0,
+      spaceAfterPt: 0,
+      indentLeftIn: 0,
+      keepWithNext: false,
+      pageBreakBefore: false,
+      firstLine: { kind: "none" },
+      style: "title",
+    };
+    expect(attrsOf(a)).toEqual(a);
+    expect(attrsOf({ spaceBeforePt: 0 })).toEqual({ spaceBeforePt: 0 });
+    expect(attrsOf({ spaceBeforePt: null, keepWithNext: null })).toBeUndefined();
   });
 
   it("rejects out-of-range settings with specific messages", () => {
