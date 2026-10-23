@@ -109,3 +109,17 @@ describe("ProfileEditForm", () => {
     expect(document.body.textContent).toMatch(/ALL of your events, past and future/);
   });
 });
+
+describe("ProfileEditForm bar admissions", () => {
+  test("shows a returned barAdmissions error", async () => {
+    vi.mocked(updateProfileAction).mockResolvedValue({
+      status: "error",
+      errors: { barAdmissions: ["Each state can be listed only once."] },
+      values: {},
+    });
+    const user = userEvent.setup();
+    render(<ProfileEditForm profile={profile} />);
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    await screen.findByText(/each state can be listed only once/i);
+  });
+});

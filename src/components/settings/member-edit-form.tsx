@@ -32,6 +32,7 @@ import { DEFAULT_ROLE_NAME } from "@/lib/role-constants";
 import type { FirmUserRow, RoleChip } from "@/lib/queries/team";
 import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
+import { BarAdmissionsField } from "./bar-admissions-field";
 
 export function MemberEditForm({
   member,
@@ -127,6 +128,9 @@ export function MemberEditForm({
             />
           )}
         </Field>
+        <div className="sm:col-span-2">
+          <BarAdmissionsField defaultValue={member.barAdmissions} error={errs.barAdmissions?.[0]} />
+        </div>
         <div className="flex flex-col gap-1.5 pt-5">
           {activeLocked ? (
             // Locked row (yourself, or an Admin-class member you may

@@ -201,6 +201,23 @@ describe("InviteMemberComposer", () => {
     }
   });
 
+  test("shows a returned barAdmissions error", async () => {
+    mockedInvite.mockResolvedValue({
+      status: "error",
+      errors: { barAdmissions: ["Each state can be listed only once."] },
+      values: {},
+    });
+    const user = userEvent.setup();
+    render(<InviteMemberComposer rolePickerOptions={ROLES} />);
+    await user.click(screen.getByRole("button", { name: /invite member/i }));
+    await user.type(screen.getByLabelText(/^name/i), "X");
+    await user.type(screen.getByLabelText(/^email/i), "a@example.com");
+    await user.type(screen.getByLabelText(/^initials/i), "X");
+    await user.type(screen.getByLabelText(/^job title/i), "Paralegal");
+    await user.click(screen.getByRole("button", { name: /send invite/i }));
+    await waitFor(() => expect(screen.getByText(/listed only once/i)).toBeTruthy());
+  });
+
   test("shows the warning when the invitation email failed", async () => {
     mockedInvite.mockResolvedValue({
       status: "ok",
@@ -234,6 +251,18 @@ describe("MemberEditForm", () => {
 
     await waitFor(() => expect(screen.getByText(/at most 40 character/i)).toBeTruthy());
     expect((screen.getByLabelText(/^phone/i) as HTMLInputElement).value).toBe("555-0100 ext 12");
+  });
+
+  test("shows a returned barAdmissions error", async () => {
+    mockedUpdateMember.mockResolvedValue({
+      status: "error",
+      errors: { barAdmissions: ["Each state can be listed only once."] },
+      values: {},
+    });
+    const user = userEvent.setup();
+    render(<MemberEditForm member={MEMBER} rolePickerOptions={ROLES} onDone={() => {}} />);
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(screen.getByText(/listed only once/i)).toBeTruthy());
   });
 
   test("renders the concurrent-edit (_form) error instead of failing silently", async () => {

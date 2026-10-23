@@ -1,7 +1,7 @@
 /**
  * Profile Edit Form — current user edits their own row.
  *
- * Editable: name, initials, phone, bar number, avatar URL, time zone,
+ * Editable: name, initials, phone, bar admissions, avatar URL, time zone,
  * default event visibility.
  * Identity / governance fields (email, role, admin status, active
  * state) are surfaced read-only on the surrounding page so the user
@@ -28,6 +28,7 @@ import { profileInitialState, type ProfileFormState } from "@/lib/profile-form";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { inputClass, labelClass } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
+import { BarAdmissionsField } from "./bar-admissions-field";
 
 export type EditableProfile = {
   name: string;
@@ -125,6 +126,12 @@ export function ProfileEditForm({ profile }: { profile: EditableProfile }) {
             className={inputClass(!!errs.phone, "md")}
           />
         </Field>
+        <div className="sm:col-span-2">
+          <BarAdmissionsField
+            defaultValue={profile.barAdmissions}
+            error={errs.barAdmissions?.[0]}
+          />
+        </div>
         <Field
           label="Avatar URL"
           name="avatarUrl"

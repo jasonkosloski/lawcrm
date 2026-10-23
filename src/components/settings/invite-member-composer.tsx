@@ -2,7 +2,7 @@
  * Invite Member Composer — admin-only.
  *
  * Collapsed: a single "Invite member" button. Expanded: inline form
- * for name, email, initials, jobTitle, optional phone + bar number,
+ * for name, email, initials, jobTitle, optional phone + bar admissions,
  * and a roles multi-select. The "default" role is always granted
  * server-side regardless of form state. On success Clerk emails the
  * invitation (sign-in is Google); if that email failed the action
@@ -24,6 +24,7 @@ import { RoleMultiSelect } from "./member-edit-form";
 import type { RoleChip } from "@/lib/queries/team";
 import { Field, FormErrorBanner, formErrorMessage, inputClass } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
+import { BarAdmissionsField } from "./bar-admissions-field";
 
 // No roles checked by default — server adds "default" automatically.
 const NONE_SELECTED = new Set<string>();
@@ -181,6 +182,9 @@ export function InviteMemberComposer({
                 />
               )}
             </Field>
+            <div className="sm:col-span-2">
+              <BarAdmissionsField defaultValue={[]} error={errs.barAdmissions?.[0]} />
+            </div>
           </div>
 
           <RoleMultiSelect
