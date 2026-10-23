@@ -71,7 +71,7 @@ describe("/settings/venues", () => {
   test("with a key: lists all venues including archived, with counts", async () => {
     vi.mocked(currentUserHasAnyPermission).mockResolvedValue(true);
     render(await VenuesPage());
-    expect(listVenues).toHaveBeenCalledWith({ activeOnly: false });
+    expect(listVenues).toHaveBeenCalledWith({ activeOnly: false, withAddress: true });
     expect(screen.getByText("Aurora 3")).toBeInTheDocument();
     expect(document.querySelector("ul")).toHaveAttribute("data-state", "WY");
   });

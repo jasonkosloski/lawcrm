@@ -543,9 +543,14 @@ model Venue {
   name          String
   /// lower(trim(name)); case-insensitive uniqueness, includes archived rows
   nameKey       String   @unique
+  /// Street address; with city, state and zip it is the venue's one
+  /// address (the courthouse), as the firm's is.
+  addressLine1  String?
+  addressLine2  String?
   city          String?
   county        String?
   state         String
+  zip           String?
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

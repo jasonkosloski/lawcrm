@@ -81,14 +81,19 @@ describe("VenueEditor", () => {
     render(<VenueEditor venues={[]} {...all} defaultState="CO" />);
     await userEvent.click(screen.getByRole("button", { name: /add venue/i }));
     await userEvent.type(screen.getByLabelText(/^name/i), "Boulder");
+    await userEvent.type(screen.getByLabelText("Address line 1"), "1777 6th St");
+    await userEvent.type(screen.getByLabelText("ZIP"), "80302");
     expect(screen.getByLabelText(/^state/i)).toHaveValue("CO");
     await userEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() =>
       expect(actions.createVenue).toHaveBeenCalledWith({
         name: "Boulder",
+        addressLine1: "1777 6th St",
+        addressLine2: "",
         city: "",
         county: "",
         state: "CO",
+        zip: "80302",
         courtFormatId: null,
         captionName: "",
       }),
@@ -124,9 +129,12 @@ describe("VenueEditor", () => {
     await waitFor(() =>
       expect(actions.updateVenue).toHaveBeenCalledWith("v1", {
         name: "Aurora",
+        addressLine1: "",
+        addressLine2: "",
         city: "Aurora",
         county: "Arapahoe",
         state: "CO",
+        zip: "",
         courtFormatId: "f1",
         captionName: "CITY COURT",
       }),

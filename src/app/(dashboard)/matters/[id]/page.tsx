@@ -9,6 +9,7 @@
  * Each preview card links to its dedicated tab for the full list.
  */
 
+import { addressLines } from "@/lib/address";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -269,6 +270,19 @@ export default async function MatterOverviewPage({ params }: PageProps<"/matters
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <dl className="grid grid-cols-2 gap-y-3 gap-x-6 text-xs">
+                {matter.venue && (
+                  <div className="col-span-2">
+                    <dt className="text-ink-4 mb-0.5">Venue</dt>
+                    <dd className="text-ink">
+                      {matter.venue.name}
+                      {addressLines(matter.venue).map((line, i) => (
+                        <span key={i} className="block text-ink-3">
+                          {line}
+                        </span>
+                      ))}
+                    </dd>
+                  </div>
+                )}
                 <Fact label="Court" value={matter.court} />
                 <Fact label="Case number" value={matter.caseNumber} mono />
                 <Fact label="Filed" value={formatDateOnly(matter.filedDate)} />

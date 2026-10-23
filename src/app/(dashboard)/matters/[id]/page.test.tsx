@@ -9,7 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 
 vi.mock("@/lib/matter-access", () => ({
   assertMatterAccess: vi.fn(async () => "user_1"),
@@ -197,6 +197,31 @@ afterEach(() => {
 });
 
 describe("MatterOverviewPage", () => {
+  test("shows the venue with its address in Case facts, and no Venue row without one", async () => {
+    vi.mocked(getMatterById).mockResolvedValue({
+      ...matter,
+      venue: {
+        name: "Denver District Court",
+        addressLine1: "1437 Bannock St",
+        addressLine2: null,
+        city: "Denver",
+        state: "CO",
+        zip: "80202",
+      },
+    } as unknown as NonNullable<Awaited<ReturnType<typeof getMatterById>>>);
+    const caseFacts = () =>
+      within(screen.getByText("Case facts").closest<HTMLElement>('[data-slot="card"]')!);
+    const { unmount } = await renderPage();
+    const venue = caseFacts().getByText("Venue").parentElement!;
+    expect(within(venue).getByText("Denver District Court", { exact: false })).toBeTruthy();
+    expect(within(venue).getByText("1437 Bannock St")).toBeTruthy();
+    expect(within(venue).getByText("Denver, CO 80202")).toBeTruthy();
+    unmount();
+    vi.mocked(getMatterById).mockResolvedValue(matter);
+    await renderPage();
+    expect(caseFacts().queryByText("Venue")).toBeNull();
+  });
+
   test("wires the agreement card from the matter load and its area label", async () => {
     vi.mocked(getMatterById).mockResolvedValue({
       ...matter,

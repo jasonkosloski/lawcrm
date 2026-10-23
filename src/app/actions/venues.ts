@@ -27,6 +27,11 @@ export type VenueInput = {
   courtFormatId?: string | null;
   /** Name printed in the caption; undefined leaves it unchanged. */
   captionName?: string | null;
+  /** Street address and ZIP (with city/state, the venue's address);
+   *  undefined leaves each unchanged, empty clears it. */
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  zip?: string | null;
 };
 
 type Invalid = { ok: false; code: "invalid"; errors: Record<string, string[]> };
@@ -43,7 +48,22 @@ const schema = z.object({
     .max(300, "Caption name is too long (300 max).")
     .nullable()
     .optional(),
+  addressLine1: z
+    .string()
+    .trim()
+    .max(120, "Address line is too long (120 max).")
+    .nullable()
+    .optional(),
+  addressLine2: z
+    .string()
+    .trim()
+    .max(120, "Address line is too long (120 max).")
+    .nullable()
+    .optional(),
+  zip: z.string().trim().max(20, "ZIP is too long (20 max).").nullable().optional(),
 });
+
+const ADDRESS_KEYS = ["addressLine1", "addressLine2", "zip"] as const;
 
 type VenueData = {
   name: string;
@@ -52,6 +72,9 @@ type VenueData = {
   state: string;
   courtFormatId?: string | null;
   captionName?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  zip?: string | null;
 };
 
 const SELECT = {
@@ -82,6 +105,9 @@ function parse(input: VenueInput): { ok: true; data: VenueData } | Invalid {
       state: v.state,
       ...(v.courtFormatId !== undefined ? { courtFormatId: v.courtFormatId } : {}),
       ...(v.captionName !== undefined ? { captionName: v.captionName?.trim() || null } : {}),
+      ...Object.fromEntries(
+        ADDRESS_KEYS.filter((k) => v[k] !== undefined).map((k) => [k, v[k] || null]),
+      ),
     },
   };
 }
@@ -114,6 +140,8 @@ const FORMAT_GONE: Invalid = {
 function revalidate() {
   revalidatePath("/settings/venues");
   revalidatePath("/matters/new");
+  // Matter overviews show the venue's address; edit pages list venues.
+  revalidatePath("/matters/[id]", "layout");
 }
 
 export async function createVenue(

@@ -21,7 +21,7 @@ export default async function VenuesPage() {
   }
 
   const [venues, courtFormats, firm, canAdd, canEdit, canDelete] = await Promise.all([
-    listVenues({ activeOnly: false }),
+    listVenues({ activeOnly: false, withAddress: true }),
     prisma.courtFormat.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true, isActive: true },

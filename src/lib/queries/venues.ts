@@ -11,12 +11,17 @@ export type VenueOption = {
   isActive: boolean;
 };
 
-/** Venues ordered by name, with the number of matters using each. */
-export async function listVenues(opts: { activeOnly: boolean }): Promise<
+/** Venues ordered by name, with the number of matters using each.
+ *  `withAddress` adds the street lines and ZIP (Settings edits them;
+ *  the matter pickers don't need them). */
+export async function listVenues(opts: { activeOnly: boolean; withAddress?: boolean }): Promise<
   (VenueOption & {
     matterCount: number;
     courtFormatId?: string | null;
     captionName?: string | null;
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    zip?: string | null;
   })[]
 > {
   const rows = await prisma.venue.findMany({
@@ -31,6 +36,7 @@ export async function listVenues(opts: { activeOnly: boolean }): Promise<
       isActive: true,
       courtFormatId: true,
       captionName: true,
+      ...(opts.withAddress ? { addressLine1: true, addressLine2: true, zip: true } : {}),
       _count: { select: { matters: true } },
     },
   });

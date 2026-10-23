@@ -12,7 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { assertScopeAccess } from "@/lib/scope-access";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { getCurrentFirm } from "@/lib/firm";
-import { composeCityStateZip } from "./format";
+import { addressLines } from "@/lib/address";
 import type {
   ContactData,
   CounselData,
@@ -69,9 +69,7 @@ export function composeContactAddress(c: {
   state: string | null;
   zip: string | null;
 }): string | null {
-  return (
-    [c.address, composeCityStateZip(c.city, c.state, c.zip)].filter(Boolean).join(", ") || null
-  );
+  return contactAddressLines(c).join(", ") || null;
 }
 
 // ── Contact shaping ────────────────────────────────────────────────────
@@ -105,10 +103,8 @@ const contactSelect = {
  *  provider...) may be people, so they are treated as people. */
 const isOrganizationType = (type: string) => type === "court" || type === "government";
 
-function addressLines(c: Pick<ContactRow, "address" | "city" | "state" | "zip">): string[] {
-  return [c.address, composeCityStateZip(c.city, c.state, c.zip)].filter((l): l is string =>
-    Boolean(l),
-  );
+function contactAddressLines(c: Pick<ContactRow, "address" | "city" | "state" | "zip">): string[] {
+  return addressLines({ addressLine1: c.address, city: c.city, state: c.state, zip: c.zip });
 }
 
 function toContactData(c: ContactRow): ContactData {
@@ -118,7 +114,7 @@ function toContactData(c: ContactRow): ContactData {
     organization: c.organization,
     email: c.email,
     phone: c.phone,
-    addressLines: addressLines(c),
+    addressLines: contactAddressLines(c),
   };
 }
 
@@ -147,7 +143,7 @@ function counselOf(mc: MatterContactRow): CounselData | null {
       name: c.name,
       email: c.email,
       phone: c.phone,
-      addressLines: addressLines(c),
+      addressLines: contactAddressLines(c),
     };
   }
   if (mc.representationName) {
@@ -167,7 +163,7 @@ function toPartyItem(c: ContactRow, role: string | null, counsel: CounselData | 
     isOrganization: isOrganizationType(c.type),
     email: c.email,
     phone: c.phone,
-    addressLines: addressLines(c),
+    addressLines: contactAddressLines(c),
     role: humanizeRole(role),
     counsel,
   };
@@ -315,7 +311,16 @@ export async function loadTemplateData(
         practiceArea: { select: { name: true } },
         stage: { select: { name: true } },
         venue: {
-          select: { name: true, city: true, county: true, state: true, captionName: true },
+          select: {
+            name: true,
+            addressLine1: true,
+            addressLine2: true,
+            city: true,
+            county: true,
+            state: true,
+            zip: true,
+            captionName: true,
+          },
         },
         client: { select: contactSelect },
         contacts: {
@@ -361,9 +366,12 @@ export async function loadTemplateData(
         caseNumber: matter.caseNumber,
         court: matter.court,
         venueName: matter.venue?.name ?? null,
+        venueAddressLine1: matter.venue?.addressLine1 ?? null,
+        venueAddressLine2: matter.venue?.addressLine2 ?? null,
         venueCity: matter.venue?.city ?? null,
         venueCounty: matter.venue?.county ?? null,
         venueState: matter.venue?.state ?? null,
+        venueZip: matter.venue?.zip ?? null,
         courtCaption: matter.venue?.captionName ?? matter.venue?.name ?? null,
         practiceArea: matter.practiceArea?.name ?? null,
         stage: matter.stage?.name ?? null,
@@ -418,7 +426,7 @@ export async function loadTemplateData(
         organization: c?.organization ?? null,
         email: c?.email ?? lead.email,
         phone: c?.phone ?? lead.phone,
-        addressLines: c ? addressLines(c) : [],
+        addressLines: c ? contactAddressLines(c) : [],
       },
       parties: emptyParties(),
     };

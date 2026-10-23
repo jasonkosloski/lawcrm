@@ -473,6 +473,16 @@ export const getMatterById = cache(async (id: string) => {
         select: { id: true, name: true, order: true, isTerminal: true },
       },
       client: true,
+      venue: {
+        select: {
+          name: true,
+          addressLine1: true,
+          addressLine2: true,
+          city: true,
+          state: true,
+          zip: true,
+        },
+      },
       agreement: {
         select: {
           status: true,

@@ -92,15 +92,3 @@ export function formatFieldValue(
   if (fmt === "last") return splitName(name).last;
   return name;
 }
-
-/** "Denver, CO 80202" — joins whatever city/state/zip parts exist,
- *  null when none do. */
-export function composeCityStateZip(
-  city: string | null,
-  state: string | null,
-  zip: string | null,
-): string | null {
-  const locality = [city, state].filter(Boolean).join(", ");
-  const line = [locality, zip].filter(Boolean).join(" ").trim();
-  return line.length > 0 ? line : null;
-}

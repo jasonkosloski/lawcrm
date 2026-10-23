@@ -7,6 +7,7 @@
  * `{{token}}` conversion is the identity mapping.
  */
 
+import { addressLines, cityStateZip } from "@/lib/address";
 import type { AppliesTo } from "./schema";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -115,9 +116,12 @@ export type TemplateData = {
     caseNumber: string | null;
     court: string | null;
     venueName: string | null;
+    venueAddressLine1: string | null;
+    venueAddressLine2: string | null;
     venueCity: string | null;
     venueCounty: string | null;
     venueState: string | null;
+    venueZip: string | null;
     /** Venue caption name, else venue name. */
     courtCaption: string | null;
     practiceArea: string | null;
@@ -203,16 +207,6 @@ const address = (lines: string[] | null | undefined): AddressValue | null => {
   const l = (lines ?? []).map((x) => x.trim()).filter(Boolean);
   return l.length > 0 ? { lines: l } : null;
 };
-
-/** "Denver, CO 80202" from whatever parts exist. */
-function cityStateZip(
-  city: string | null,
-  state: string | null,
-  zip: string | null,
-): string | null {
-  const locality = [city, state].filter(Boolean).join(", ");
-  return str([locality, zip].filter(Boolean).join(" "));
-}
 
 type Def = Omit<CatalogField, "scopes" | "formats" | "defaultFormat"> &
   Partial<Pick<CatalogField, "scopes" | "formats" | "defaultFormat">>;
@@ -309,12 +303,7 @@ export const FIELDS: readonly CatalogField[] = [
     label: "Firm address",
     group: "Firm",
     type: "address",
-    get: (d) =>
-      address([
-        d.firm.addressLine1 ?? "",
-        d.firm.addressLine2 ?? "",
-        cityStateZip(d.firm.city, d.firm.state, d.firm.zip) ?? "",
-      ]),
+    get: (d) => address(addressLines(d.firm)),
   }),
   text("firm.addressLine1", "Firm address line 1", "Firm", (d) => str(d.firm.addressLine1)),
   text("firm.addressLine2", "Firm address line 2", "Firm", (d) => str(d.firm.addressLine2)),
@@ -343,6 +332,50 @@ export const FIELDS: readonly CatalogField[] = [
   text("matter.venueCity", "Venue city", "Matter", (d) => str(m(d)?.venueCity), MATTER),
   text("matter.venueCounty", "Venue county", "Matter", (d) => str(m(d)?.venueCounty), MATTER),
   text("matter.venueState", "Venue state", "Matter", (d) => str(m(d)?.venueState), MATTER),
+  field({
+    path: "matter.venueAddress",
+    label: "Venue address",
+    group: "Matter",
+    type: "address",
+    get: (d) => {
+      const v = m(d);
+      if (!v) return null;
+      return address(
+        addressLines({
+          addressLine1: v.venueAddressLine1,
+          addressLine2: v.venueAddressLine2,
+          city: v.venueCity,
+          state: v.venueState,
+          zip: v.venueZip,
+        }),
+      );
+    },
+    scopes: MATTER,
+  }),
+  text(
+    "matter.venueAddressLine1",
+    "Venue address line 1",
+    "Matter",
+    (d) => str(m(d)?.venueAddressLine1),
+    MATTER,
+  ),
+  text(
+    "matter.venueAddressLine2",
+    "Venue address line 2",
+    "Matter",
+    (d) => str(m(d)?.venueAddressLine2),
+    MATTER,
+  ),
+  text(
+    "matter.venueCityStateZip",
+    "Venue city/state/zip",
+    "Matter",
+    (d) => {
+      const v = m(d);
+      return v ? cityStateZip(v.venueCity, v.venueState, v.venueZip) : null;
+    },
+    MATTER,
+  ),
   text(
     "matter.practiceArea",
     "Practice area",
@@ -558,9 +591,12 @@ export const SAMPLE_TEMPLATE_DATA: TemplateData = {
     caseNumber: "2026-CV-00000",
     court: "Sample District Court · Hon. A. Example",
     venueName: "Sample County District Court",
+    venueAddressLine1: "100 Sample Courthouse Plaza",
+    venueAddressLine2: "Room 000",
     venueCity: "Sampletown",
     venueCounty: "Sample County",
     venueState: "CO",
+    venueZip: "80000",
     courtCaption: "DISTRICT COURT, CITY AND COUNTY OF SAMPLE, STATE OF EXAMPLE",
     practiceArea: "Personal Injury (sample)",
     stage: "Discovery (sample)",

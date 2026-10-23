@@ -70,6 +70,30 @@ describe("catalog", () => {
     expect(fieldByPath("firm.address")?.formats).toContain("one_line");
   });
 
+  it("venue address: a block of street lines and city/state/zip, matter-only", () => {
+    const f = fieldByPath("matter.venueAddress")!;
+    expect(f.type).toBe("address");
+    expect(f.scopes).toEqual(["matter"]);
+    expect(f.get(SAMPLE_TEMPLATE_DATA)).toEqual({
+      lines: ["100 Sample Courthouse Plaza", "Room 000", "Sampletown, CO 80000"],
+    });
+    const bare = {
+      ...SAMPLE_TEMPLATE_DATA,
+      matter: {
+        ...SAMPLE_TEMPLATE_DATA.matter!,
+        venueAddressLine1: null,
+        venueAddressLine2: null,
+        venueZip: null,
+      },
+    };
+    // A venue with only city and state still has an address line.
+    expect(f.get(bare)).toEqual({ lines: ["Sampletown, CO"] });
+    expect(fieldByPath("matter.venueCityStateZip")!.get(SAMPLE_TEMPLATE_DATA)).toBe(
+      "Sampletown, CO 80000",
+    );
+    expect(fieldByPath("matter.venueAddressLine2")!.get(bare)).toBeNull();
+  });
+
   it("paths are unique", () => {
     const paths = FIELDS.map((f) => f.path);
     expect(new Set(paths).size).toBe(paths.length);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogField } from "./catalog";
-import { composeCityStateZip, formatFieldValue, joinList, splitName } from "./format";
+import { formatFieldValue, joinList, splitName } from "./format";
 
 const mk = (type: CatalogField["type"], extra: Partial<CatalogField> = {}): CatalogField => ({
   path: "x",
@@ -126,18 +126,5 @@ describe("formatFieldValue", () => {
 
   it("blank text is null", () => {
     expect(formatFieldValue(mk("text"), "   ", null, null)).toBeNull();
-  });
-});
-
-describe("composeCityStateZip", () => {
-  it("joins city, state and zip", () => {
-    expect(composeCityStateZip("Denver", "CO", "80202")).toBe("Denver, CO 80202");
-  });
-  it("skips missing parts", () => {
-    expect(composeCityStateZip("Denver", null, null)).toBe("Denver");
-    expect(composeCityStateZip(null, "CO", "80202")).toBe("CO 80202");
-  });
-  it("is null when nothing is on file", () => {
-    expect(composeCityStateZip(null, null, null)).toBeNull();
   });
 });

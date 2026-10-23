@@ -34,6 +34,9 @@ type VenueRow = VenueOption & {
   matterCount: number;
   courtFormatId?: string | null;
   captionName?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  zip?: string | null;
 };
 export type CourtFormatChoice = { id: string; name: string; isActive: boolean };
 
@@ -229,9 +232,12 @@ function VenueForm({
   onCancel: () => void;
 }) {
   const [name, setName] = useState(venue?.name ?? "");
+  const [addressLine1, setAddressLine1] = useState(venue?.addressLine1 ?? "");
+  const [addressLine2, setAddressLine2] = useState(venue?.addressLine2 ?? "");
   const [city, setCity] = useState(venue?.city ?? "");
   const [county, setCounty] = useState(venue?.county ?? "");
   const [state, setState] = useState(venue?.state ?? defaultState);
+  const [zip, setZip] = useState(venue?.zip ?? "");
   const [courtFormatId, setCourtFormatId] = useState(venue?.courtFormatId ?? "");
   const [captionName, setCaptionName] = useState(venue?.captionName ?? "");
   const [errors, setErrors] = useState<Record<string, string[]>>({});
@@ -245,9 +251,12 @@ function VenueForm({
     startSaving(async () => {
       const input = {
         name,
+        addressLine1,
+        addressLine2,
         city,
         county,
         state,
+        zip,
         courtFormatId: courtFormatId || null,
         captionName,
       };
@@ -285,6 +294,34 @@ function VenueForm({
         />
         {errP("name")}
       </div>
+      <div className="flex flex-col gap-1">
+        <label htmlFor="venue-address-1" className={labelClass}>
+          Address line 1
+        </label>
+        <input
+          id="venue-address-1"
+          maxLength={120}
+          autoComplete="off"
+          value={addressLine1}
+          onChange={(e) => setAddressLine1(e.target.value)}
+          className={inputClass()}
+        />
+        {errP("addressLine1")}
+      </div>
+      <div className="flex flex-col gap-1">
+        <label htmlFor="venue-address-2" className={labelClass}>
+          Address line 2
+        </label>
+        <input
+          id="venue-address-2"
+          maxLength={120}
+          autoComplete="off"
+          value={addressLine2}
+          onChange={(e) => setAddressLine2(e.target.value)}
+          className={inputClass()}
+        />
+        {errP("addressLine2")}
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1">
           <label htmlFor="venue-city" className={labelClass}>
@@ -313,19 +350,35 @@ function VenueForm({
           {errP("county")}
         </div>
       </div>
-      <div className="flex flex-col gap-1">
-        <label htmlFor="venue-state" className={labelClass}>
-          State <span className="text-warn">*</span>
-        </label>
-        <input
-          id="venue-state"
-          required
-          maxLength={60}
-          value={state}
-          onChange={(e) => setState(e.target.value)}
-          className={inputClass()}
-        />
-        {errP("state")}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1">
+          <label htmlFor="venue-state" className={labelClass}>
+            State <span className="text-warn">*</span>
+          </label>
+          <input
+            id="venue-state"
+            required
+            maxLength={60}
+            value={state}
+            onChange={(e) => setState(e.target.value)}
+            className={inputClass()}
+          />
+          {errP("state")}
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="venue-zip" className={labelClass}>
+            ZIP
+          </label>
+          <input
+            id="venue-zip"
+            maxLength={20}
+            autoComplete="off"
+            value={zip}
+            onChange={(e) => setZip(e.target.value)}
+            className={inputClass()}
+          />
+          {errP("zip")}
+        </div>
       </div>
       <div className="flex flex-col gap-1">
         <label htmlFor="venue-court-format" className={labelClass}>

@@ -222,3 +222,54 @@ describe("foreign-key races on courtFormatId", () => {
     update.mockRestore();
   });
 });
+
+describe("venue address", () => {
+  const address = { addressLine1: " 1437 Bannock St ", addressLine2: "Room 256", zip: "80202" };
+
+  test("saves trimmed, lists it, and leaves it alone when the input omits it", async () => {
+    const res = await createVenue({ ...aurora, ...address });
+    if (!res.ok) throw new Error("create failed");
+    expect(await prisma.venue.findUniqueOrThrow({ where: { id: res.venue.id } })).toMatchObject({
+      addressLine1: "1437 Bannock St",
+      addressLine2: "Room 256",
+      zip: "80202",
+    });
+    const [listed] = await listVenues({ activeOnly: true, withAddress: true });
+    expect(listed).toMatchObject({ addressLine1: "1437 Bannock St", zip: "80202" });
+
+    await updateVenue(res.venue.id, { ...aurora, county: "Adams" });
+    expect(await prisma.venue.findUniqueOrThrow({ where: { id: res.venue.id } })).toMatchObject({
+      county: "Adams",
+      addressLine1: "1437 Bannock St",
+    });
+  });
+
+  test("empty strings clear it", async () => {
+    const res = await createVenue({ ...aurora, ...address });
+    if (!res.ok) throw new Error("create failed");
+    await updateVenue(res.venue.id, { ...aurora, addressLine1: "", addressLine2: " ", zip: "" });
+    expect(await prisma.venue.findUniqueOrThrow({ where: { id: res.venue.id } })).toMatchObject({
+      addressLine1: null,
+      addressLine2: null,
+      zip: null,
+    });
+  });
+
+  test("rejects lines that are too long", async () => {
+    const res = await createVenue({
+      ...aurora,
+      addressLine1: "x".repeat(121),
+      zip: "1".repeat(21),
+    });
+    expect(res).toMatchObject({ ok: false, code: "invalid" });
+    if (!res.ok && res.code === "invalid") {
+      expect(Object.keys(res.errors).sort()).toEqual(["addressLine1", "zip"]);
+    }
+  });
+});
+
+test("listVenues leaves the address out unless asked", async () => {
+  await createVenue({ ...aurora, addressLine1: "1 Main St" });
+  const [row] = await listVenues({ activeOnly: true });
+  expect(row).not.toHaveProperty("addressLine1");
+});
