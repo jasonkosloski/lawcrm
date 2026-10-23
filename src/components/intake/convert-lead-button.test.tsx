@@ -275,7 +275,9 @@ describe("ConvertLeadButton — restricted intake (ADR-049)", () => {
     );
     await openDialog(user);
     expect(
-      screen.getByText(/matter will be restricted to Alice Attorney, Bob Paralegal/i),
+      screen.getByText(
+        /matter will be restricted to Alice Attorney, Bob Paralegal and the lead attorney/i,
+      ),
     ).toBeTruthy();
   });
 
@@ -346,7 +348,7 @@ describe("ConvertLeadButton — engagement block", () => {
     expect(screen.getByRole("option", { name: "retainer-signed.pdf" })).toBeInTheDocument();
   });
 
-  test("not required: no markers, and an empty block converts", async () => {
+  test("not required: only Lead attorney is marked, and an empty block converts", async () => {
     const user = userEvent.setup();
     vi.mocked(convertLeadToMatter).mockResolvedValue({ status: "error" });
     renderEngagement({ required: false });

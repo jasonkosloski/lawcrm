@@ -220,7 +220,8 @@ export function ConvertLeadButton({
               <Lock size={12} className="text-warn shrink-0 mt-0.5" aria-hidden />
               <span>
                 Restricted: the matter will be restricted to{" "}
-                {restrictedTo.length > 0 ? restrictedTo.join(", ") : "you"}.
+                {restrictedTo.length > 0 ? `${restrictedTo.join(", ")} and ` : ""}the lead attorney
+                you pick.
               </span>
             </div>
           )}

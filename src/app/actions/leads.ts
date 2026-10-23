@@ -41,6 +41,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { isAttorney, LEAD_NOT_ATTORNEY } from "@/lib/attorneys";
+import { matterAccessWhere } from "@/lib/matter-access";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
@@ -629,11 +630,6 @@ export async function convertLeadToMatter(
         });
       }
 
-      // Auto-pin so the new matter appears in the user's sidebar.
-      await tx.userMatterPin.create({
-        data: { userId, matterId: matter.id },
-      });
-
       // Roll intake time forward: every lead-scoped entry (evaluation
       // calls, conflict checks) re-homes onto the new matter — matterId
       // set, leadId cleared in one write, so the exactly-one-of scope
@@ -931,13 +927,28 @@ export async function convertLeadToMatter(
     revalidatePath(`/matters/${matterId}/time`);
   }
 
+  // The converter isn't on the team just for converting, so they may not
+  // be able to see the matter (restricted intake via view_restricted, or
+  // team-based visibility). Decided after the commit: the access helper
+  // reads through the global client, which can't see the uncommitted
+  // matter. Visible: pin it and open it; otherwise no pin and the lead
+  // page (it shows the converted state).
+  const canSeeMatter =
+    (await prisma.matter.findFirst({
+      where: { AND: [{ id: matterId }, await matterAccessWhere(userId)] },
+      select: { id: true },
+    })) !== null;
+  if (canSeeMatter) {
+    await prisma.userMatterPin.create({ data: { userId, matterId } });
+  }
+
   // Revalidate everything that displays leads or matters.
   revalidatePath("/intake");
   revalidatePath(`/intake/${leadId}`);
   revalidatePath("/matters");
   revalidatePath("/", "layout"); // sidebar pin list + dashboard
 
-  redirect(`/matters/${matterId}`);
+  redirect(canSeeMatter ? `/matters/${matterId}` : `/intake/${leadId}`);
 }
 
 // ── Decline ─────────────────────────────────────────────────────────────

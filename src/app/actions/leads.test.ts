@@ -1475,6 +1475,30 @@ describe("convertLeadToMatter — the dialog picks the lead attorney", () => {
     });
   });
 
+  test("the converter who can see the matter gets it pinned and opens it", async () => {
+    const { leadId } = await seedIntakeLead();
+    await expect(convertWith(leadId, userId)).rejects.toThrow(/^REDIRECT:\/matters\//);
+    const matter = await prisma.matter.findFirstOrThrow({ select: { id: true } });
+    expect(await prisma.userMatterPin.count({ where: { userId, matterId: matter.id } })).toBe(1);
+  });
+
+  test("a wall-holder converter who can't see the matter gets no pin and lands on the lead", async () => {
+    const picked = await seedOtherAttorney("Pick firm row");
+    // Sees the restricted lead via intake.view_restricted, but not every matter.
+    const { firmId } = await seedFirm({ name: "Wall firm row" });
+    const role = await prisma.role.create({ data: { firmId, name: "Wall holder" } });
+    await prisma.rolePermission.create({
+      data: { roleId: role.id, permission: "intake.view_restricted" },
+    });
+    await prisma.userRole.create({ data: { userId, roleId: role.id } });
+    const { leadId } = await seedIntakeLead();
+    await prisma.lead.update({ where: { id: leadId }, data: { restricted: true } });
+    await prisma.leadTeamMember.create({ data: { leadId, userId: picked, role: "lead" } });
+    await expect(convertWith(leadId, picked)).rejects.toThrow(`REDIRECT:/intake/${leadId}`);
+    expect(await prisma.matter.count()).toBe(1);
+    expect(await prisma.userMatterPin.count({ where: { userId } })).toBe(0);
+  });
+
   test.each([
     ["missing", null],
     ["not an attorney", "nobody"],
