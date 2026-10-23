@@ -16,7 +16,7 @@ import { prisma, type Tx } from "@/lib/prisma";
 import { requireUser } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logTemplateChange } from "@/lib/template-activity";
-import { isUniqueViolation } from "@/lib/prisma-errors";
+import { isTransactionTimeout, isUniqueViolation } from "@/lib/prisma-errors";
 import { MAX_TEMPLATE_DESCRIPTION, MAX_TEMPLATE_NAME } from "@/lib/template-constants";
 import {
   childIds,
@@ -29,6 +29,8 @@ import {
 } from "@/lib/templates/block-graph";
 import {
   childrenError,
+  BLOCK_GRAPH_BUSY,
+  BLOCK_GRAPH_TX,
   loadAllBlocks,
   lockBlockGraph,
   TOO_DEEP,
@@ -251,9 +253,10 @@ export async function saveTemplateBlock(input: {
         data: { key, name, description, content, updatedAt, appliesTo: parsed.data.appliesTo },
       });
       return count === 0 ? { ok: false, error: STALE } : { ok: true, id: input.id, updatedAt };
-    });
+    }, BLOCK_GRAPH_TX);
   } catch (e) {
     if (isUniqueViolation(e)) return { ok: false, error: KEY_TAKEN };
+    if (isTransactionTimeout(e)) return { ok: false, error: BLOCK_GRAPH_BUSY };
     throw e;
   }
   if (!saved.ok) return saved;

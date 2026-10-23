@@ -23,6 +23,11 @@ export function isForeignKeyViolation(err: unknown): boolean {
   return hasPrismaCode(err, "P2003");
 }
 
+/** P2028: an interactive transaction timed out or waited too long to start. */
+export function isTransactionTimeout(err: unknown): boolean {
+  return hasPrismaCode(err, "P2028");
+}
+
 /** P2025: the record to update/delete no longer exists. */
 export function isRecordNotFound(err: unknown): boolean {
   return hasPrismaCode(err, "P2025");

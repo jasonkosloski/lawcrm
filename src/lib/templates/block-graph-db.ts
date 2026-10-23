@@ -14,6 +14,16 @@ import type { AppliesTo, TemplateDoc } from "./schema";
  *  depth checks and together break them. */
 export const BLOCK_GRAPH_LOCK = 73010001;
 
+/** Interactive-transaction limits for saves that take the lock. Waiting
+ *  for the firm-wide lock counts against both, and Prisma's defaults
+ *  (2s maxWait, 5s timeout) would turn a queue of saves into 500s. Each
+ *  holder works for well under a second, so 10s to get a connection and
+ *  15s overall lets a realistic queue drain; past that, a busy message. */
+export const BLOCK_GRAPH_TX = { maxWait: 10_000, timeout: 15_000 } as const;
+
+/** What a save returns when it timed out waiting for the lock (P2028). */
+export const BLOCK_GRAPH_BUSY = "Someone else is saving blocks right now — try again.";
+
 /** Take the block graph lock until `tx` ends. */
 export async function lockBlockGraph(tx: Pick<Tx, "$executeRaw">): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${BLOCK_GRAPH_LOCK}::bigint)`;

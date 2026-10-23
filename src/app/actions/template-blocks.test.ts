@@ -550,3 +550,21 @@ describe("nested blocks: concurrency", () => {
     expect((await setChildren(b, a)).ok).toBe(true);
   });
 });
+
+describe("saveTemplateBlock: lock wait timeout", () => {
+  test("a transaction timeout (P2028) becomes a try-again refusal", async () => {
+    const spy = vi
+      .spyOn(prisma, "$transaction")
+      .mockRejectedValueOnce(Object.assign(new Error("timed out"), { code: "P2028" }) as never);
+    try {
+      const r = await saveTemplateBlock(blockInput());
+      expect(r).toEqual({
+        ok: false,
+        error: "Someone else is saving blocks right now — try again.",
+      });
+      expect(spy.mock.calls[0][1]).toEqual({ maxWait: 10_000, timeout: 15_000 });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

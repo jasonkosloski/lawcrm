@@ -45,4 +45,31 @@ describe("previews use the editor's styles", () => {
     expect(blockPreview("b", [block], FIRM)?.html).toContain("font-size:19pt");
     expect(blockPreview("b", [block])?.html).not.toContain("font-size:19pt");
   });
+
+  it("the block chip preview shows a nested block's text", () => {
+    const inner: BlockSource = {
+      id: "inner",
+      name: "Inner",
+      isActive: true,
+      content: {
+        type: "doc",
+        content: [{ type: "paragraph", content: [{ type: "text", text: "Inner words" }] }],
+      } as never,
+    };
+    const outer: BlockSource = {
+      id: "outer",
+      name: "Outer",
+      isActive: true,
+      content: {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Outer words" }] },
+          { type: "block", attrs: { blockId: "inner" } },
+        ],
+      } as never,
+    };
+    const html = blockPreview("outer", [outer, inner])?.html;
+    expect(html).toContain("Outer words");
+    expect(html).toContain("Inner words");
+  });
 });

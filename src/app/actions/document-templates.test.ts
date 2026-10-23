@@ -1400,3 +1400,27 @@ describe("court formats on filings", () => {
     expect(sample).toMatchObject({ ok: true, court: null });
   });
 });
+
+describe("saveDocumentTemplate: lock wait timeout", () => {
+  test("a transaction timeout (P2028) becomes a try-again refusal", async () => {
+    const block = await prisma.templateBlock.create({
+      data: { key: "sig", name: "Sig", content: jsonDoc(para(text("Sincerely"))) },
+    });
+    const spy = vi
+      .spyOn(prisma, "$transaction")
+      .mockRejectedValueOnce(Object.assign(new Error("timed out"), { code: "P2028" }) as never);
+    try {
+      const r = await saveDocumentTemplate(
+        saveInput({ content: docOf({ type: "block", attrs: { blockId: block.id } }) }),
+      );
+      expect(r).toEqual({
+        ok: false,
+        error: "Someone else is saving blocks right now — try again.",
+      });
+      // The save asked for explicit limits, not Prisma's 2s/5s defaults.
+      expect(spy.mock.calls[0][1]).toEqual({ maxWait: 10_000, timeout: 15_000 });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

@@ -98,8 +98,11 @@ import {
   templateCategoryLabel,
 } from "@/lib/template-constants";
 import { globalSearch } from "@/lib/queries/search";
+import { isTransactionTimeout } from "@/lib/prisma-errors";
 import { SCOPE_WORD } from "@/lib/templates/block-graph";
 import {
+  BLOCK_GRAPH_BUSY,
+  BLOCK_GRAPH_TX,
   childrenError,
   loadAllBlocks,
   lockBlockGraph,
@@ -219,17 +222,23 @@ export async function saveDocumentTemplate(input: {
   // their chains stay within the depth limit; checked under the block
   // graph lock so a racing block save can't change them first. Problems
   // further down a chain are the nested block's to fix, not refusals.
-  const saved: Saved =
-    blockIds.length === 0
-      ? await write(prisma)
-      : await prisma.$transaction(async (tx): Promise<Saved> => {
-          await lockBlockGraph(tx);
-          const blocks = await loadAllBlocks(tx);
-          const error = childrenError(blockIds, blocks, appliesTo, "template");
-          if (error) return { ok: false, error };
-          if (templateTooDeep(blockIds, blocks)) return { ok: false, error: TOO_DEEP };
-          return write(tx);
-        });
+  let saved: Saved;
+  try {
+    saved =
+      blockIds.length === 0
+        ? await write(prisma)
+        : await prisma.$transaction(async (tx): Promise<Saved> => {
+            await lockBlockGraph(tx);
+            const blocks = await loadAllBlocks(tx);
+            const error = childrenError(blockIds, blocks, appliesTo, "template");
+            if (error) return { ok: false, error };
+            if (templateTooDeep(blockIds, blocks)) return { ok: false, error: TOO_DEEP };
+            return write(tx);
+          }, BLOCK_GRAPH_TX);
+  } catch (e) {
+    if (isTransactionTimeout(e)) return { ok: false, error: BLOCK_GRAPH_BUSY };
+    throw e;
+  }
   if (!saved.ok) return saved;
 
   if (!input.id) {
