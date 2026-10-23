@@ -16,19 +16,20 @@ import { requirePermission } from "@/lib/permission-check";
 import { logSettingsChange } from "@/lib/audit-entry";
 import { isForeignKeyViolation, isUniqueViolation } from "@/lib/prisma-errors";
 import { MAX_TEMPLATE_NAME } from "@/lib/template-constants";
+import { getDocumentStyle } from "@/lib/templates/document-style";
 import {
   COURT_SYSTEMS,
   FONT_KEYS,
-  FONT_SIZE_HALF_PT_MAX,
-  FONT_SIZE_HALF_PT_MIN,
-  LINE_SPACINGS,
   MARGIN_IN_MAX,
   MARGIN_IN_MIN,
   PAGE_NUMBER_POSITIONS,
   PAPER_SIZES,
-  SPACE_AFTER_PT_MAX,
-  SPACE_AFTER_PT_MIN,
 } from "@/lib/templates/page-style";
+import {
+  legacyBodyColumns,
+  styleOverrideSchema,
+  type StyleValues,
+} from "@/lib/templates/paragraph-styles";
 
 const STALE = "Someone else saved this court format — reload to see their changes.";
 const NAME_TAKEN = "A court format with that name already exists.";
@@ -48,19 +49,8 @@ const schema = z.object({
   name: z.string().trim().min(1, "Name is required.").max(MAX_TEMPLATE_NAME),
   courtSystem: z.enum(COURT_SYSTEMS),
   fontKey: z.enum(FONT_KEYS).nullable(),
-  fontSizeHalfPt: z
-    .number()
-    .int()
-    .min(FONT_SIZE_HALF_PT_MIN, "Font size must be 10-14 pt.")
-    .max(FONT_SIZE_HALF_PT_MAX, "Font size must be 10-14 pt.")
-    .nullable(),
-  lineSpacing: z.enum(LINE_SPACINGS).nullable(),
-  spaceAfterPt: z
-    .number()
-    .int()
-    .min(SPACE_AFTER_PT_MIN, "Space after must be 0-24 pt.")
-    .max(SPACE_AFTER_PT_MAX, "Space after must be 0-24 pt.")
-    .nullable(),
+  /** Sparse per-style overrides; Body's size/spacing are mirrored to the legacy columns. */
+  styleOverrides: z.record(z.string(), z.unknown()).optional(),
   marginTopIn: margin,
   marginRightIn: margin,
   marginBottomIn: margin,
@@ -92,8 +82,25 @@ export async function saveCourtFormat(input: CourtFormatInput): Promise<SaveResu
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid court format." };
   }
-  const { id, expectedUpdatedAt, replacements, ...values } = parsed.data;
+  const {
+    id,
+    expectedUpdatedAt,
+    replacements,
+    styleOverrides: rawOverrides,
+    ...rest
+  } = parsed.data;
   if (id && !expectedUpdatedAt) return { ok: false, error: "Invalid save timestamp — reload." };
+
+  const firmKeys = new Set((await getDocumentStyle()).paragraphStyles.map((s) => s.key));
+  const styleOverrides: Record<string, Partial<StyleValues>> = {};
+  for (const [key, raw] of Object.entries(rawOverrides ?? {})) {
+    if (!firmKeys.has(key)) return { ok: false, error: `No style called ${key}.` };
+    const o = styleOverrideSchema.safeParse(raw);
+    if (!o.success) return { ok: false, error: o.error.issues[0]?.message ?? "Invalid style." };
+    // A style with nothing overridden sends nothing.
+    if (Object.keys(o.data).length > 0) styleOverrides[key] = o.data as Partial<StyleValues>;
+  }
+  const values = { ...rest, ...legacyBodyColumns(styleOverrides), styleOverrides };
 
   const seen = new Set<string>();
   for (const r of replacements) {

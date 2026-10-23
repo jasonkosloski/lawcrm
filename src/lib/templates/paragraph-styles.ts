@@ -256,3 +256,19 @@ export function readStyleOverrides(
   if (Object.keys(merged).length > 0) out.body = merged;
   return out;
 }
+
+/** The legacy court columns mirrored from the Body override, so the overlay
+ *  in readStyleOverrides and the stored overrides never disagree. Exact line
+ *  spacing has no legacy value (null). */
+export function legacyBodyColumns(overrides: Record<string, Partial<StyleValues>>): {
+  fontSizeHalfPt: number | null;
+  lineSpacing: LineSpacing | null;
+  spaceAfterPt: number | null;
+} {
+  const body = overrides.body ?? {};
+  return {
+    fontSizeHalfPt: body.sizePt === undefined ? null : Math.round(body.sizePt * 2),
+    lineSpacing: typeof body.lineSpacing === "string" ? body.lineSpacing : null,
+    spaceAfterPt: body.spaceAfterPt ?? null,
+  };
+}

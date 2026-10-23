@@ -35,7 +35,7 @@ Caveats worth knowing: matter-team access ships OFF (firm switch defaults to
 - [x] **Emails and texts from templates**: "Use template" in compose and reply; "Text from template" copies (or copies and logs) until an SMS provider exists. → [email](features/communication-email.md)
 - [x] **Court-aware filings**: firm-defined court formats (formatting, paper size, block swaps) chosen per venue. → [documents](features/documents.md)
 - [x] **Caption tables**: full/fit width, column widths, merged cells, per-side borders, vertical alignment, small caps in templates. → [documents](features/documents.md)
-- [~] **Text styles**: named paragraph styles; phases 1 (Settings → Styles), 2 (Word, PDF, preview output) and 3 (editor Style menu, Paragraph dialog) shipped, court overrides left. → [documents](features/documents.md)
+- [~] **Text styles**: named paragraph styles; all four phases shipped (Settings → Styles, Word/PDF/preview output, editor Style menu and Paragraph dialog, court-format overrides); the legacy-column drop migration is left. → [documents](features/documents.md)
 - [~] **Search follow-ups**: within-list keyword filters; Postgres FTS when ILIKE stops scaling. → [search](features/search.md)
 
 ## P2: polish and follow-ups

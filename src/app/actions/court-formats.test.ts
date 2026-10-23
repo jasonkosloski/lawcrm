@@ -6,8 +6,10 @@ import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/permission-check", () => ({ requirePermission: vi.fn() }));
+vi.mock("@/lib/firm", () => ({ getCurrentFirm: vi.fn() }));
 
 import { revalidatePath } from "next/cache";
+import { getCurrentFirm } from "@/lib/firm";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
 import {
@@ -43,6 +45,7 @@ beforeEach(async () => {
   const { firmId } = await seedFirm();
   userId = (await seedUser({ firmId, name: "Test Attorney" })).userId;
   vi.mocked(requirePermission).mockResolvedValue(userId);
+  vi.mocked(getCurrentFirm).mockResolvedValue({ id: firmId } as never);
   blockA = (await mkBlock("block_a")).id;
   blockB = (await mkBlock("block_b", false)).id;
   blockC = (await mkBlock("block_c")).id;
@@ -52,9 +55,6 @@ const base = {
   name: "Colorado District",
   courtSystem: "state" as const,
   fontKey: null,
-  fontSizeHalfPt: null,
-  lineSpacing: null,
-  spaceAfterPt: null,
   marginTopIn: null,
   marginRightIn: null,
   marginBottomIn: null,
@@ -73,7 +73,6 @@ async function create(over: Record<string, unknown> = {}) {
 describe("saveCourtFormat", () => {
   test("create gates on .add, stores rows, logs and revalidates", async () => {
     const r = await create({
-      fontSizeHalfPt: 24,
       marginTopIn: 1.5,
       paperSize: "legal",
       replacements: [{ blockId: blockA, replacementBlockId: blockB }],
@@ -109,13 +108,13 @@ describe("saveCourtFormat", () => {
   });
 
   test.each([
-    ["font size low", { fontSizeHalfPt: 19 }],
-    ["font size high", { fontSizeHalfPt: 29 }],
-    ["space after", { spaceAfterPt: 25 }],
+    ["body size low", { styleOverrides: { body: { sizePt: 7 } } }],
+    ["body size high", { styleOverrides: { body: { sizePt: 73 } } }],
+    ["space after", { styleOverrides: { body: { spaceAfterPt: 73 } } }],
     ["margin low", { marginLeftIn: 0.49 }],
     ["margin high", { marginRightIn: 2.01 }],
     ["margin decimals", { marginTopIn: 1.001 }],
-    ["line spacing", { lineSpacing: "triple" }],
+    ["line spacing", { styleOverrides: { body: { lineSpacing: "triple" } } }],
     ["paper", { paperSize: "a4" }],
     ["system", { courtSystem: "tribal" }],
     ["font", { fontKey: "comic" }],
@@ -129,12 +128,51 @@ describe("saveCourtFormat", () => {
   test("accepts range edges", async () => {
     const r = await saveCourtFormat({
       ...base,
-      fontSizeHalfPt: 20,
-      spaceAfterPt: 24,
+      styleOverrides: { body: { sizePt: 8, spaceAfterPt: 72 } },
       marginTopIn: 0.5,
       marginBottomIn: 2,
     });
     expect(r.ok).toBe(true);
+  });
+
+  test("a Body override is stored and mirrored to the legacy columns", async () => {
+    const r = await create({
+      styleOverrides: { body: { sizePt: 14, lineSpacing: "double", spaceAfterPt: 6 } },
+    });
+    const row = await prisma.courtFormat.findUniqueOrThrow({ where: { id: r.id } });
+    expect(row.styleOverrides).toEqual({
+      body: { sizePt: 14, lineSpacing: "double", spaceAfterPt: 6 },
+    });
+    expect([row.fontSizeHalfPt, row.lineSpacing, row.spaceAfterPt]).toEqual([28, "double", 6]);
+  });
+
+  test("exact Body line spacing and unset fields leave the legacy columns null; empty styles are dropped", async () => {
+    const r = await create({
+      styleOverrides: { body: { lineSpacing: { exactPt: 24 } }, caption: {} },
+    });
+    const row = await prisma.courtFormat.findUniqueOrThrow({ where: { id: r.id } });
+    expect(row.styleOverrides).toEqual({ body: { lineSpacing: { exactPt: 24 } } });
+    expect([row.fontSizeHalfPt, row.lineSpacing, row.spaceAfterPt]).toEqual([null, null, null]);
+  });
+
+  test("an override for a style the firm does not have is refused", async () => {
+    const r = await saveCourtFormat({ ...base, styleOverrides: { nope: { bold: true } } });
+    expect(r).toEqual({ ok: false, error: "No style called nope." });
+    expect(await prisma.courtFormat.count()).toBe(0);
+  });
+
+  test("clearing the Body override clears the legacy columns on update", async () => {
+    const c = await create({ styleOverrides: { body: { sizePt: 14 } } });
+    const r = await saveCourtFormat({
+      ...base,
+      id: c.id,
+      expectedUpdatedAt: c.updatedAt,
+      styleOverrides: {},
+    });
+    expect(r.ok).toBe(true);
+    const row = await prisma.courtFormat.findUniqueOrThrow({ where: { id: c.id } });
+    expect(row.styleOverrides).toEqual({});
+    expect(row.fontSizeHalfPt).toBeNull();
   });
 
   test("self-replacement and duplicate source refused", async () => {
@@ -186,7 +224,7 @@ describe("saveCourtFormat", () => {
       ...base,
       id: c.id,
       name: "Renamed",
-      fontSizeHalfPt: 26,
+      styleOverrides: { body: { sizePt: 13 } },
       expectedUpdatedAt: c.updatedAt,
       replacements: [{ blockId: blockC, replacementBlockId: blockA }],
     });

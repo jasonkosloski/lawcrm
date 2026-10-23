@@ -2,7 +2,8 @@
  * Court format editor — one court's layout overrides and block swaps,
  * with a live sample filing beside the form.
  *
- * Each layout setting has a "Use house style" checkbox: checked means
+ * Per-style overrides (Body carries the court's size and spacing) live in
+ * the Styles section. Each layout setting has a "Use house style" checkbox: checked means
  * null (the house value applies), unchecking seeds the field with the
  * current house value. The sample page is rendered client-side with the
  * house style as the base and the form's values applied, through the same
@@ -19,6 +20,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Plus, X } from "lucide-react";
 import { saveCourtFormat } from "@/app/actions/court-formats";
+import { CourtStyleOverrides } from "@/components/settings/court-style-overrides";
 import { PagePreview } from "@/components/templates/page-preview";
 import { Button } from "@/components/ui/button";
 import { Field, FormErrorBanner, inputClass } from "@/components/ui/field";
@@ -30,7 +32,6 @@ import { renderPageView } from "@/lib/templates/page-render";
 import {
   COURT_SYSTEMS,
   FONT_KEYS,
-  LINE_SPACINGS,
   MARGIN_IN_MAX,
   MARGIN_IN_MIN,
   PAGE_NUMBER_POSITIONS,
@@ -40,6 +41,7 @@ import {
   type DocumentStyleValues,
   type FontKey,
 } from "@/lib/templates/page-style";
+import { legacyBodyColumns } from "@/lib/templates/paragraph-styles";
 import type { BlockSource } from "@/lib/templates/render";
 import type { TemplateDoc } from "@/lib/templates/schema";
 import { pageFontFaceCss, previewFontFamily } from "@/lib/templates/to-html";
@@ -64,13 +66,11 @@ const SYSTEM_LABEL: Record<CourtSystem, string> = {
   other: "Other",
 };
 const PAPER_LABEL = { letter: "Letter (8.5 × 11 in)", legal: "Legal (8.5 × 14 in)" } as const;
-const LINE_LABEL = { single: "Single", "1.15": "1.15", "1.5": "1.5", double: "Double" } as const;
 const PAGE_NUMBER_LABEL = {
   none: "None",
   bottom_center: "Bottom center",
   bottom_right: "Bottom right",
 } as const;
-const SIZES = Array.from({ length: 9 }, (_, i) => 10 + i * 0.5);
 const STALE_PREFIX = "Someone else saved";
 const INCOMPLETE = "Choose both blocks for each replacement, or remove the row.";
 
@@ -147,7 +147,8 @@ export function CourtFormatEditor({
       id: id ?? "preview",
       name,
       isActive: true,
-      values,
+      // Body's size/spacing mirror into the legacy columns, as on save.
+      values: { ...values, ...legacyBodyColumns(values.styleOverrides) },
       replacements,
     };
     return renderPageView({
@@ -177,11 +178,16 @@ export function CourtFormatEditor({
       return;
     }
     startTransition(async () => {
+      // The server derives the legacy size/spacing columns from Body.
+      const { fontSizeHalfPt, lineSpacing, spaceAfterPt, ...sent } = values;
+      void fontSizeHalfPt;
+      void lineSpacing;
+      void spaceAfterPt;
       const res = await saveCourtFormat({
         ...(id ? { id } : {}),
         name,
         courtSystem,
-        ...values,
+        ...sent,
         replacements: rows,
         ...(id && updatedAt ? { expectedUpdatedAt: updatedAt } : {}),
       });
@@ -351,51 +357,6 @@ export function CourtFormatEditor({
             ),
             "col-span-2",
           )}
-          {setting("fontSizeHalfPt", "Font size", house.fontSizeHalfPt, (c) => (
-            <NativeSelect
-              id={c.id}
-              value={c.value}
-              disabled={c.disabled}
-              onChange={(e) => set("fontSizeHalfPt", Number(e.target.value))}
-              className="w-full"
-            >
-              {SIZES.map((pt) => (
-                <option key={pt} value={pt * 2}>
-                  {pt} pt
-                </option>
-              ))}
-            </NativeSelect>
-          ))}
-          {setting("lineSpacing", "Line spacing", house.lineSpacing, (c) => (
-            <NativeSelect
-              id={c.id}
-              value={c.value}
-              disabled={c.disabled}
-              onChange={(e) => set("lineSpacing", e.target.value as (typeof LINE_SPACINGS)[number])}
-              className="w-full"
-            >
-              {LINE_SPACINGS.map((l) => (
-                <option key={l} value={l}>
-                  {LINE_LABEL[l]}
-                </option>
-              ))}
-            </NativeSelect>
-          ))}
-          {setting("spaceAfterPt", "Space after paragraph (pt)", house.spaceAfterPt, (c) => (
-            <input
-              id={c.id}
-              type="number"
-              min={0}
-              max={24}
-              step={1}
-              value={c.value}
-              disabled={c.disabled}
-              onChange={(e) => {
-                if (e.target.value !== "") set("spaceAfterPt", Number(e.target.value));
-              }}
-              className={ctl()}
-            />
-          ))}
           {setting("pageNumbers", "Page numbers", house.pageNumbers, (c) => (
             <NativeSelect
               id={c.id}
@@ -418,6 +379,13 @@ export function CourtFormatEditor({
           {marginSetting("marginBottomIn", "Bottom margin (in)")}
           {marginSetting("marginLeftIn", "Left margin (in)")}
         </div>
+
+        <CourtStyleOverrides
+          styles={house.paragraphStyles}
+          overrides={values.styleOverrides}
+          onChange={(next) => set("styleOverrides", next)}
+          disabled={dis}
+        />
 
         <fieldset className="flex flex-col gap-2" disabled={dis}>
           <legend className="mb-1 text-xs font-medium text-ink-2">Block replacements</legend>

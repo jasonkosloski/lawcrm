@@ -38,6 +38,9 @@ const NULL_VALUES = {
   styleOverrides: {},
 };
 
+const { fontSizeHalfPt, lineSpacing, spaceAfterPt, ...SENT_NULLS } = NULL_VALUES;
+void [fontSizeHalfPt, lineSpacing, spaceAfterPt];
+
 const base = {
   initial: {
     id: "cf1",
@@ -83,7 +86,7 @@ describe("CourtFormatEditor", () => {
       id: "cf1",
       name: "Colorado District",
       courtSystem: "state",
-      ...NULL_VALUES,
+      ...SENT_NULLS,
       paperSize: "legal",
       replacements: [{ blockId: "cap", replacementBlockId: "cap2" }],
       expectedUpdatedAt: "2026-10-22T10:00:00.000Z",
@@ -96,28 +99,46 @@ describe("CourtFormatEditor", () => {
     expect(saveCourtFormat.mock.calls[1][0].expectedUpdatedAt).toBe("2026-10-22T11:00:00.000Z");
   });
 
-  test("unchecking Use house style seeds the house value; checking clears it to null", async () => {
+  test("Styles section shows firm values as placeholders and sends only set fields", async () => {
     saveCourtFormat.mockResolvedValue({
       ok: true,
       id: "cf1",
       updatedAt: "2026-10-22T11:00:00.000Z",
     });
     render(<CourtFormatEditor {...base} />);
-    const box = screen.getByLabelText("Use house style for Line spacing") as HTMLInputElement;
-    expect(box.checked).toBe(true);
-    expect((screen.getByLabelText("Line spacing") as HTMLSelectElement).disabled).toBe(true);
-    fireEvent.click(box);
-    const select = screen.getByLabelText("Line spacing") as HTMLSelectElement;
-    expect(select.disabled).toBe(false);
-    expect(select.value).toBe(DEFAULT_DOCUMENT_STYLE.lineSpacing);
-    fireEvent.change(select, { target: { value: "double" } });
+    const firmBody = DEFAULT_DOCUMENT_STYLE.paragraphStyles.find((s) => s.key === "body")!;
+    const size = screen.getByLabelText("Size (pt)") as HTMLInputElement;
+    expect(size.value).toBe("");
+    expect(size.placeholder).toBe(String(firmBody.values.sizePt));
+    expect(screen.queryByLabelText("Use house style for Font size")).toBeNull();
+    fireEvent.change(size, { target: { value: "14" } });
+    fireEvent.change(screen.getByLabelText("Line spacing"), { target: { value: "double" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(saveCourtFormat).toHaveBeenCalledTimes(1));
-    expect(saveCourtFormat.mock.calls[0][0].lineSpacing).toBe("double");
-    fireEvent.click(screen.getByLabelText("Use house style for Line spacing"));
+    const sent = saveCourtFormat.mock.calls[0][0];
+    expect(sent.styleOverrides).toEqual({ body: { sizePt: 14, lineSpacing: "double" } });
+    expect(sent).not.toHaveProperty("fontSizeHalfPt");
+    // Reset removes just that field; a style with nothing left sends nothing.
+    fireEvent.click(screen.getByRole("button", { name: "Reset Size (pt)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset Line spacing" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(saveCourtFormat).toHaveBeenCalledTimes(2));
-    expect(saveCourtFormat.mock.calls[1][0].lineSpacing).toBeNull();
+    expect(saveCourtFormat.mock.calls[1][0].styleOverrides).toEqual({});
+  });
+
+  test("overrides apply to the picked style and other styles' fields start unset", async () => {
+    render(
+      <CourtFormatEditor
+        {...base}
+        initial={{
+          ...base.initial,
+          values: { ...NULL_VALUES, styleOverrides: { body: { sizePt: 13 } } },
+        }}
+      />,
+    );
+    expect((screen.getByLabelText("Size (pt)") as HTMLInputElement).value).toBe("13");
+    fireEvent.change(screen.getByLabelText("Style"), { target: { value: "caption" } });
+    expect((screen.getByLabelText("Size (pt)") as HTMLInputElement).value).toBe("");
   });
 
   test("a margin override sends a number", async () => {

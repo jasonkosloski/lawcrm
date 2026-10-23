@@ -144,6 +144,18 @@ describe("court format layer", () => {
     expect(p.paperSize).toBe("letter");
   });
 
+  test("a court's Body override applies to filings but not letters", () => {
+    const court: CourtFormatValues = {
+      ...NULL_COURT,
+      styleOverrides: { body: { sizePt: 14, lineSpacing: "double", spaceAfterPt: 12 } },
+    };
+    const filing = resolvePageStyle("filing", STYLE, null, court);
+    expect([filing.sizePt, filing.lineSpacing, filing.spaceAfterPt]).toEqual([14, 2, 12]);
+    const letter = resolvePageStyle("letter", STYLE, null, court);
+    expect(letter).toEqual(resolvePageStyle("letter", STYLE, null));
+    expect(letter.sizePt).not.toBe(14);
+  });
+
   test("page dimensions", () => {
     expect(PAGE_DIMENSIONS.letter).toEqual({
       twips: { w: 12240, h: 15840 },
