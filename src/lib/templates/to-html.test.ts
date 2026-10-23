@@ -10,12 +10,14 @@ describe("resolvedToHtml", () => {
     expect(html).toContain("not on file");
   });
   it("keeps headings, alignment, tables, lists and marks", () => {
-    expect(html).toContain('<h2 style="text-align:center">');
-    expect(html).toContain('<p style="text-align:right">');
+    expect(html).toMatch(/<p style="[^"]*text-align:center[^"]*">Re: /);
+    expect(html).toMatch(/<p style="[^"]*text-align:right[^"]*">Dear /);
     expect(html).toContain('<table data-width="full">');
-    expect(html).toContain("<th><p>A</p></th>");
-    expect(html).toContain("<td><p>1</p></td>");
-    expect(html).toContain("<ul><li><p>one</p></li><li><p>two</p></li></ul>");
+    expect(html).toMatch(/<th><p style="[^"]*">A<\/p><\/th>/);
+    expect(html).toMatch(/<td><p style="[^"]*">1<\/p><\/td>/);
+    expect(html).toMatch(
+      /<ul><li><p style="[^"]*">one<\/p><\/li><li><p style="[^"]*">two<\/p><\/li><\/ul>/,
+    );
     expect(html).toContain("<ol><li>");
     expect(html).toContain("<strong>");
     expect(html).toContain("<em><u>End</u></em>");
@@ -193,5 +195,70 @@ describe("resolvedToHtml small caps", () => {
       ],
     });
     expect(html).toBe("<p><strong><span data-small-caps>Plaintiff</span></strong></p>");
+  });
+});
+
+import { renderTemplate } from "./render";
+import { SAMPLE_TEMPLATE_DATA } from "./catalog";
+import { DEFAULT_PARAGRAPH_STYLES } from "./page-style";
+import type { TemplateDoc } from "./schema";
+
+describe("paragraph styles in HTML", () => {
+  const run = (content: unknown[]) =>
+    resolvedToHtml(
+      renderTemplate({ type: "doc", content } as unknown as TemplateDoc, {
+        data: SAMPLE_TEMPLATE_DATA,
+        blocks: new Map(),
+        styles: DEFAULT_PARAGRAPH_STYLES,
+      }).doc,
+    );
+  const para = (text: string, attrs?: object, marks?: object[]) => ({
+    type: "paragraph",
+    attrs,
+    content: [{ type: "text", text, marks }],
+  });
+
+  it("a caption carries zero margins and survives the sanitizer", () => {
+    const html = run([para("cap", { style: "caption" })]);
+    expect(html).toContain("margin-top:0pt;margin-bottom:0pt");
+  });
+  it("headings are paragraphs with inline size and weight", () => {
+    const html = run([para("H", { style: "heading1" })]);
+    expect(html).toMatch(/^<p style="[^"]*font-weight:bold[^"]*">H<\/p>$/);
+    expect(html).not.toContain("<h1");
+  });
+  it("direct settings win: indents, first line, line spacing, page break", () => {
+    const html = run([
+      para("x", {
+        indentLeftIn: 1,
+        firstLine: { kind: "hanging", in: 0.5 },
+        lineSpacing: { exactPt: 24 },
+        pageBreakBefore: true,
+      }),
+    ]);
+    expect(html).toContain("margin-left:1in");
+    expect(html).toContain("text-indent:-0.5in");
+    expect(html).toContain("line-height:24pt");
+    expect(html).toContain("break-before:page");
+  });
+  it("allCaps and font size marks become spans", () => {
+    const html = run([
+      para("x", undefined, [{ type: "allCaps" }, { type: "fontSize", attrs: { pt: 9 } }]),
+    ]);
+    expect(html).toContain("text-transform:uppercase");
+    expect(html).toContain("font-size:9pt");
+  });
+  it("cell and list paragraphs have no spacing unless set directly", () => {
+    const cellDoc = (attrs?: object) => ({
+      type: "table",
+      content: [
+        {
+          type: "tableRow",
+          content: [{ type: "tableCell", content: [para("c", attrs)] }],
+        },
+      ],
+    });
+    expect(run([cellDoc()])).toContain("margin-bottom:0pt");
+    expect(run([cellDoc({ spaceAfterPt: 6 })])).toContain("margin-bottom:6pt");
   });
 });

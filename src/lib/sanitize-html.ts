@@ -149,7 +149,9 @@ export function sanitizeUserHtml(html: string): string {
 // sanitize the converter's output before it ever reaches
 // `dangerouslySetInnerHTML`. Script contexts stay impossible:
 // no <script>/<iframe>/<style>, no event handlers, and style attrs only
-// as a validated text-align on p/h1-h3/td/th or a numeric width on <col>
+// as a validated text-align on p/h1-h3/td/th, the paragraph-style
+// properties on <p> (see PARAGRAPH_STYLES), size/case on <span> or a numeric
+// width on <col>
 // (the template converters and the docx preview also keep <mark
 // data-missing>, <hr data-page-break> and table border/alignment data-*;
 // sanitize-html strips every other unlisted attribute), and image sources are
@@ -201,6 +203,33 @@ const DOCUMENT_ALLOWED_ATTRIBUTES: sanitizeHtml.IOptions["allowedAttributes"] = 
 const TEMPLATE_ALIGN_TAGS = ["p", "h1", "h2", "h3", "td", "th"];
 const TEMPLATE_CELL_ATTRS = [...Object.values(CELL_SIDE_ATTR), "data-valign"];
 
+// Paragraph styles (to-html.ts writes these inline so previews and emailed
+// templates carry real spacing). Each property is allowlisted with a strict
+// value pattern, on <p> only (text-align stays on the "*" rule), plus
+// font-size and text-transform on <span> for the size and all-caps marks.
+// Never a class, never any other property: no position, no url(), no
+// expression(), no em/rem units.
+const LENGTH = /^-?\d{1,3}(\.\d{1,2})?(pt|in|px|%)$/;
+const PARAGRAPH_STYLES: Record<string, RegExp[]> = {
+  "margin-top": [LENGTH],
+  "margin-bottom": [LENGTH],
+  "margin-left": [LENGTH],
+  "margin-right": [LENGTH],
+  "text-indent": [LENGTH],
+  // A length (exact spacing) or a unitless multiple.
+  "line-height": [LENGTH, /^\d{1,2}(\.\d{1,3})?$/],
+  "font-size": [/^\d{1,3}(\.\d{1,2})?pt$/],
+  "font-weight": [/^(normal|bold)$/],
+  "font-style": [/^(normal|italic)$/],
+  "text-transform": [/^(none|uppercase)$/],
+  "font-variant": [/^(normal|small-caps)$/],
+  "break-before": [/^(auto|page)$/],
+};
+const SPAN_STYLES: Record<string, RegExp[]> = {
+  "font-size": PARAGRAPH_STYLES["font-size"],
+  "text-transform": PARAGRAPH_STYLES["text-transform"],
+};
+
 const DOCUMENT_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: [...DOCUMENT_ALLOWED_TAGS, "mark"],
   allowedAttributes: {
@@ -215,13 +244,15 @@ const DOCUMENT_OPTIONS: sanitizeHtml.IOptions = {
     th: ["colspan", "rowspan", "style", ...TEMPLATE_CELL_ATTRS],
     table: ["data-width"],
     col: ["span", "style"],
-    span: ["data-small-caps"],
+    span: ["data-small-caps", "style"],
     mark: ["data-missing"],
     hr: ["data-page-break"],
   },
   allowedStyles: {
     "*": { "text-align": [/^(left|right|center|justify)$/] },
     col: { width: [/^\d{1,4}(\.\d{1,2})?(px|%)$/] },
+    p: PARAGRAPH_STYLES,
+    span: SPAN_STYLES,
   },
   allowedSchemes: ALLOWED_SCHEMES,
   // Images: data URIs only (mammoth inlines embedded media). No

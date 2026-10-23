@@ -2,12 +2,23 @@
 
 import type { ResolvedBlock, ResolvedDoc, ResolvedInline } from "./render";
 
-const inline = (nodes: ResolvedInline[] | undefined) =>
-  (nodes ?? []).map((n) => (n.type === "hardBreak" ? "\n" : n.text)).join("");
+/** `allCaps` (the paragraph's style or a mark on the run) uppercases; every
+ *  other style value is ignored in plain text. */
+const inline = (nodes: ResolvedInline[] | undefined, caps = false) =>
+  (nodes ?? [])
+    .map((n) =>
+      n.type === "hardBreak"
+        ? "\n"
+        : caps || n.marks?.some((m) => m.type === "allCaps")
+          ? n.text.toUpperCase()
+          : n.text,
+    )
+    .join("");
 
 function blockText(b: ResolvedBlock, indent = ""): string {
   switch (b.type) {
     case "paragraph":
+      return inline(b.content, b.attrs?.resolved?.allCaps);
     case "heading":
       return inline(b.content);
     case "bulletList":

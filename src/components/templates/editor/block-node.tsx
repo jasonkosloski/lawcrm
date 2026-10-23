@@ -32,6 +32,8 @@ export function blockPreview(
     const { doc } = renderTemplate(block.content, {
       data: SAMPLE_TEMPLATE_DATA,
       blocks: map,
+      // Client-only chip preview: defaults, and the report (unknownStyles) is
+      // discarded so firm custom styles are never flagged as unknown here.
       styles: DEFAULT_PARAGRAPH_STYLES,
     });
     return { name: block.name, html: resolvedToHtml(doc), archived: !block.isActive };

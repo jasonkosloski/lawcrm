@@ -42,6 +42,9 @@ export function smsTextWithSamples(doc: TemplateDoc, scope: Scope): string {
   const { doc: resolved } = renderTemplate(doc, {
     data: { ...SAMPLE_TEMPLATE_DATA, scope },
     blocks: new Map(),
+    // Client-side: the built-in defaults are enough for a character count
+    // (plain text ignores everything but all caps). Its report is discarded,
+    // so firm custom styles are never surfaced as unknown here.
     styles: DEFAULT_PARAGRAPH_STYLES,
   });
   return resolvedToText(resolved);

@@ -48,7 +48,6 @@ import { resolveRecordsRoleFolder } from "@/lib/records-requests/folder";
 import { loadRecordsRequest, loadTemplateData } from "@/lib/templates/load-data";
 import { SAMPLE_TEMPLATE_DATA, type TemplateData } from "@/lib/templates/catalog";
 import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templates/render";
-import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { contentOf, loadBlockMap } from "@/lib/templates/template-source";
 import { resolvedToHtml } from "@/lib/templates/to-html";
 import { resolvedToText } from "@/lib/templates/to-text";
@@ -725,7 +724,10 @@ export async function previewTemplateDraft(input: {
   }
 
   const kind = input.kind;
-  const style = isDocumentKind(kind) ? await getDocumentStyle() : null;
+  // Non-document kinds (email, SMS) need the firm's styles too, or its custom
+  // styles would be reported as unknown.
+  const house = await getDocumentStyle();
+  const style = isDocumentKind(kind) ? house : null;
   const blocks = await loadBlockMap(
     content.doc,
     style && isDocumentKind(kind) ? styleBlockIds(kind, style) : [],
@@ -755,7 +757,7 @@ export async function previewTemplateDraft(input: {
     ({ doc: resolved, report } = renderTemplate(content.doc, {
       data,
       blocks,
-      styles: DEFAULT_PARAGRAPH_STYLES,
+      styles: house.paragraphStyles,
     }));
   }
   let subjectText: string | null = null;
@@ -763,7 +765,7 @@ export async function previewTemplateDraft(input: {
     const rendered = renderTemplate(subjectDoc, {
       data,
       blocks,
-      styles: DEFAULT_PARAGRAPH_STYLES,
+      styles: house.paragraphStyles,
     });
     subjectText = resolvedToText(rendered.doc);
     mergeReport(report, rendered.report);

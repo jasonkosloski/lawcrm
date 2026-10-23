@@ -511,3 +511,59 @@ describe("sanitizeDocumentHtml — template converter output", () => {
     expect(out).toBe('<p style="text-align:left">a</p><span>b</span>');
   });
 });
+
+describe("sanitizeDocumentHtml — paragraph style properties", () => {
+  const p = (style: string) => sanitizeDocumentHtml(`<p style="${style}">x</p>`);
+
+  test("keeps the allowlisted paragraph properties", () => {
+    for (const s of [
+      "margin-top:0pt;margin-bottom:12pt",
+      "margin-left:0.5in;margin-right:0in",
+      "text-indent:-36pt",
+      "line-height:24pt",
+      "line-height:1.38",
+      "font-size:12pt",
+      "font-weight:bold",
+      "font-style:italic",
+      "text-transform:uppercase",
+      "font-variant:small-caps",
+      "text-align:justify",
+      "break-before:page",
+    ]) {
+      expect(p(s)).toBe(`<p style="${s}">x</p>`);
+    }
+  });
+
+  test("drops other properties and unsafe values", () => {
+    for (const s of [
+      "position:absolute",
+      "margin-top:expression(1)",
+      "font-size:9em",
+      "margin-left:url(javascript:1)",
+      "margin-top:1000pt",
+      "font-weight:900;color:red",
+      "break-before:avoid-page",
+      "line-height:calc(1pt)",
+    ]) {
+      expect(p(s)).toBe("<p>x</p>");
+    }
+  });
+
+  test("is limited to p, and span only takes size and case", () => {
+    expect(sanitizeDocumentHtml('<td style="margin-top:0pt">x</td>')).toBe("<td>x</td>");
+    expect(sanitizeDocumentHtml('<h2 style="margin-top:0pt;text-align:center">x</h2>')).toBe(
+      '<h2 style="text-align:center">x</h2>',
+    );
+    expect(
+      sanitizeDocumentHtml('<span style="font-size:9pt;text-transform:uppercase">x</span>'),
+    ).toBe('<span style="font-size:9pt;text-transform:uppercase">x</span>');
+    expect(sanitizeDocumentHtml('<span style="margin-top:0pt;font-size:9em">x</span>')).toBe(
+      "<span>x</span>",
+    );
+    expect(sanitizeDocumentHtml('<p class="fixed" style="left:0">x</p>')).toBe("<p>x</p>");
+  });
+
+  test("the email profile is not widened", () => {
+    expect(sanitizeEmailHtml('<p style="margin-top:0pt;text-indent:-36pt">x</p>')).toBe("<p>x</p>");
+  });
+});

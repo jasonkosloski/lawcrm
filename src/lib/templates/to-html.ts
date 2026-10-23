@@ -28,7 +28,8 @@ import type {
   ResolvedTable,
 } from "./render";
 import { CELL_SIDES } from "./schema";
-import { headingLevelOf } from "./style-basics";
+import { lineFactor } from "./resolve-styles";
+import type { StyleValues } from "./paragraph-styles";
 import {
   CELL_SIDE_ATTR,
   columnFractions,
@@ -56,12 +57,67 @@ const MARK_TAGS: [string, string, string][] = [
   ["smallCaps", "span data-small-caps", "span"],
 ];
 
+/** Where a paragraph sits. Body paragraphs take their style's spacing; list
+ *  and table-cell paragraphs have none unless set directly (Word and the PDF
+ *  draw cell paragraphs flush, and the preview always did). */
+type Where = "body" | "flush";
+
+/** Word's "single" is the font's natural leading, about 1.15 em in CSS. */
+const CSS_LINE_FACTOR = 1.15;
+const num = (n: number) => String(+n.toFixed(2));
+
+/** The inline style for a paragraph's resolved values. Every property is in
+ *  the sanitizer's allowlist; email clients never see the preview CSS, so
+ *  this is also what gives emailed templates their spacing. */
+function paragraphStyle(
+  v: StyleValues,
+  direct: { spaceBeforePt?: number; spaceAfterPt?: number } | undefined,
+  where: Where,
+): string {
+  const flush = where === "flush";
+  const before = flush ? (direct?.spaceBeforePt ?? 0) : v.spaceBeforePt;
+  const after = flush ? (direct?.spaceAfterPt ?? 0) : v.spaceAfterPt;
+  const factor = lineFactor(v.lineSpacing);
+  const lineHeight =
+    typeof v.lineSpacing === "object"
+      ? `${num(v.lineSpacing.exactPt)}pt`
+      : String(+((factor ?? 1) * CSS_LINE_FACTOR).toFixed(3));
+  const firstLine =
+    v.firstLine.kind === "indent"
+      ? `${num(v.firstLine.in)}in`
+      : v.firstLine.kind === "hanging"
+        ? `${num(-v.firstLine.in)}in`
+        : "0pt";
+  const parts = [
+    `margin-top:${num(before)}pt`,
+    `margin-bottom:${num(after)}pt`,
+    `margin-left:${num(v.indentLeftIn)}in`,
+    `margin-right:${num(v.indentRightIn)}in`,
+    `text-indent:${firstLine}`,
+    `line-height:${lineHeight}`,
+    `font-size:${num(v.sizePt)}pt`,
+    `font-weight:${v.bold ? "bold" : "normal"}`,
+    `font-style:${v.italic ? "italic" : "normal"}`,
+    `text-transform:${v.allCaps ? "uppercase" : "none"}`,
+    `font-variant:${v.smallCaps ? "small-caps" : "normal"}`,
+    `text-align:${v.align}`,
+  ];
+  if (v.pageBreakBefore) parts.push("break-before:page");
+  return parts.join(";");
+}
+
 function inline(nodes: ResolvedInline[] | undefined): string {
   return (nodes ?? [])
     .map((n) => {
       if (n.type === "hardBreak") return "<br />";
       const types = new Set((n.marks ?? []).map((m) => m.type));
       let out = esc(n.text);
+      const size = (n.marks ?? []).find((m) => m.type === "fontSize")?.attrs?.pt;
+      const css = [
+        typeof size === "number" ? `font-size:${num(size)}pt` : "",
+        types.has("allCaps") ? "text-transform:uppercase" : "",
+      ].filter(Boolean);
+      if (css.length) out = `<span style="${css.join(";")}">${out}</span>`;
       for (const [type, open, close] of [...MARK_TAGS].reverse()) {
         if (types.has(type as never)) out = `<${open}>${out}</${close}>`;
       }
@@ -72,8 +128,10 @@ function inline(nodes: ResolvedInline[] | undefined): string {
 
 const align = (a?: string | null) => (a ? ` style="text-align:${a}"` : "");
 
+const flushBlock = (b: ResolvedBlock) => block(b, "flush");
+
 function listItem(li: ResolvedListItem): string {
-  return `<li>${li.content.map(block).join("")}</li>`;
+  return `<li>${li.content.map(flushBlock).join("")}</li>`;
 }
 
 /** Borders and vertical alignment travel as data attributes the page
@@ -90,7 +148,7 @@ function cell(g: GridCell): string {
   }
   const va = verticalAlignOf(c);
   if (va !== "top") attrs += ` data-valign="${va}"`;
-  return `<${tag}${attrs}>${c.content.map(block).join("")}</${tag}>`;
+  return `<${tag}${attrs}>${c.content.map(flushBlock).join("")}</${tag}>`;
 }
 
 function table(t: ResolvedTable): string {
@@ -104,12 +162,15 @@ function table(t: ResolvedTable): string {
   return `<table data-width="${fit ? "fit" : "full"}"><colgroup>${cols.join("")}</colgroup>${rows}</table>`;
 }
 
-function block(b: ResolvedBlock): string {
+/** Headings are ordinary paragraphs here: their size and weight travel in
+ *  the inline style, so the page CSS's h1-h3 rules cannot double-apply. */
+function block(b: ResolvedBlock, where: Where = "body"): string {
   switch (b.type) {
     case "paragraph": {
-      const level = headingLevelOf(b.attrs?.style);
-      if (level) return `<h${level}${align(b.attrs?.textAlign)}>${inline(b.content)}</h${level}>`;
-      return `<p${align(b.attrs?.textAlign)}>${inline(b.content)}</p>`;
+      const v = b.attrs?.resolved;
+      if (!v) return `<p${align(b.attrs?.textAlign)}>${inline(b.content)}</p>`;
+      const body = v.underline ? `<u>${inline(b.content)}</u>` : inline(b.content);
+      return `<p style="${paragraphStyle(v, b.attrs, where)}">${body}</p>`;
     }
     case "heading":
       return `<h${b.attrs.level}${align(b.attrs.textAlign)}>${inline(b.content)}</h${b.attrs.level}>`;
@@ -125,7 +186,7 @@ function block(b: ResolvedBlock): string {
 }
 
 export function resolvedToHtml(doc: ResolvedDoc): string {
-  return sanitizeDocumentHtml((doc.content ?? []).map(block).join(""));
+  return sanitizeDocumentHtml((doc.content ?? []).map((b) => block(b)).join(""));
 }
 
 const PX_PER_IN = 96;

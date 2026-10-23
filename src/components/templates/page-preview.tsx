@@ -22,15 +22,16 @@ import {
   resolvedToPageParts,
 } from "@/lib/templates/to-html";
 
+// Paragraph spacing, size, weight and alignment are inline on each <p>
+// (to-html.ts), so only the legacy h1-h3 elements need rules here.
 const HEADING_PT = [6, 4, 2] as const;
 
 const PAGE_CSS = `
 [data-page]{box-sizing:border-box;background:#fff;color:#000;font-family:var(--page-family);font-size:var(--page-font-size);line-height:var(--page-line-height);}
-[data-page] p,[data-page] ul,[data-page] ol,[data-page] table{margin:0 0 var(--page-space-after);}
+[data-page] ul,[data-page] ol,[data-page] table{margin:0 0 var(--page-space-after);}
 [data-page] ul,[data-page] ol{padding-left:2em;}
 [data-page] ul{list-style:disc;}
 [data-page] ol{list-style:decimal;}
-[data-page] li>p{margin:0;}
 [data-page] td,[data-page] th{border:1px solid #999;padding:0 ${CELL_PAD_PX}px;vertical-align:top;text-align:left;font-weight:normal;}
 [data-page] table{border-collapse:collapse;table-layout:fixed;width:100%;}
 [data-page] table[data-width=fit]{table-layout:auto;width:auto;max-width:100%;}

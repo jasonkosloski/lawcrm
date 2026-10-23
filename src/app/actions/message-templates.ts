@@ -21,7 +21,7 @@ import type { RecordScope } from "@/lib/record-scope";
 import { loadTemplateData } from "@/lib/templates/load-data";
 import { contentOf, loadBlockMap } from "@/lib/templates/template-source";
 import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templates/render";
-import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
+import { getDocumentStyle } from "@/lib/templates/document-style";
 import { mergeReport } from "@/lib/templates/page-render";
 import { usesRecipient } from "@/lib/templates/inspect";
 import { resolvedToHtml } from "@/lib/templates/to-html";
@@ -155,13 +155,14 @@ export async function renderMessageTemplate(
   const content = contentOf(template);
   const subjectDoc =
     kind === "email" && template.subject ? (template.subject as unknown as TemplateDoc) : null;
-  const [blocks, loaded] = await Promise.all([
+  const [blocks, loaded, house] = await Promise.all([
     loadBlockMap(content),
     loadTemplateData({ scope, recipientContactId: opts.recipientContactId ?? null }),
+    getDocumentStyle(),
   ]);
   if (!loaded.ok) return { ok: false, error: loaded.error };
 
-  const ctx = { data: loaded.data, blocks, styles: DEFAULT_PARAGRAPH_STYLES };
+  const ctx = { data: loaded.data, blocks, styles: house.paragraphStyles };
   const body = renderTemplate(content, ctx);
   const subject = subjectDoc ? renderTemplate(subjectDoc, ctx) : null;
   const report = body.report;
