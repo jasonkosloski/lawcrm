@@ -31,6 +31,7 @@ function setup() {
       lists={[]}
       data={{} as TemplateData}
       blocks={[]}
+      styles={DEFAULT_PARAGRAPH_STYLES}
     />,
   );
   return editor;

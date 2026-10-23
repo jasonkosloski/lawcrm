@@ -138,6 +138,16 @@ describe("TemplateEditorPage — templates", () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  it("warns about styles that no longer exist without blocking Save", async () => {
+    const content = {
+      type: "doc",
+      content: [{ type: "paragraph", attrs: { style: "gone" }, content: [text("Hi")] }],
+    } as never;
+    render(<TemplateEditorPage template={tpl({ content })} blocks={[]} canSave />);
+    expect(await screen.findByText(/Styles that no longer exist/)).toHaveTextContent("gone");
+    expect(saveButton()).not.toBeDisabled();
+  });
+
   it("switching applies-to to lead flags the matter-only chip and blocks Save", async () => {
     const user = userEvent.setup();
     render(<TemplateEditorPage template={tpl()} blocks={[]} canSave />);

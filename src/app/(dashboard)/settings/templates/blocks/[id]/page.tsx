@@ -10,7 +10,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/current-user";
 import { getCurrentUserPermissions, requirePermission } from "@/lib/permission-check";
 import { listBlockUsage } from "@/app/actions/template-blocks";
-import { loadEditorBlock } from "@/lib/templates/editor-data";
+import { loadEditorBlock, loadEditorParagraphStyles } from "@/lib/templates/editor-data";
 import {
   TemplateEditorPage,
   type EditorBlock,
@@ -33,13 +33,22 @@ export default async function BlockEditorRoute({
   const isNew = id === "new";
   if (isNew) await requirePermission("documents.template.create");
 
-  const [{ isAdmin, granted }, block, usage] = await Promise.all([
+  const [{ isAdmin, granted }, block, usage, paragraphStyles] = await Promise.all([
     getCurrentUserPermissions(),
     isNew ? NEW_BLOCK : loadEditorBlock(id),
     isNew ? [] : listBlockUsage(id),
+    loadEditorParagraphStyles(),
   ]);
   if (!block) notFound();
   const canSave = isNew || isAdmin || granted.has("documents.template.edit");
 
-  return <TemplateEditorPage key={id} block={block} usage={usage} canSave={canSave} />;
+  return (
+    <TemplateEditorPage
+      key={id}
+      block={block}
+      usage={usage}
+      paragraphStyles={paragraphStyles}
+      canSave={canSave}
+    />
+  );
 }

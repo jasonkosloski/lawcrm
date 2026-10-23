@@ -23,8 +23,9 @@ import { Button } from "@/components/ui/button";
 import { saveDocumentTemplate } from "@/app/actions/document-templates";
 import { saveTemplateBlock } from "@/app/actions/template-blocks";
 import { cn } from "@/lib/utils";
-import { checkTemplateFit } from "@/lib/templates/inspect";
+import { checkTemplateFit, type FitResult } from "@/lib/templates/inspect";
 import type { BlockSource } from "@/lib/templates/render";
+import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import type { AppliesTo, TemplateDoc, TemplateKind } from "@/lib/templates/schema";
 import {
   blockMeta,
@@ -114,7 +115,11 @@ function Editor(props: EditorProps & { narrow: boolean }) {
 
   const editBodyField = useCallback((pos: number) => setFieldEdit({ subject: false, pos }), []);
   const editSubjectField = useCallback((pos: number) => setFieldEdit({ subject: true, pos }), []);
+  const styles =
+    props.paragraphStyles ?? props.pageStyle?.values.paragraphStyles ?? DEFAULT_PARAGRAPH_STYLES;
+  const styleKeys = useMemo(() => new Set(styles.map((x) => x.key)), [styles]);
   const editor = useBodyEditor({
+    styles,
     kind,
     isBlock,
     blocks,
@@ -130,8 +135,11 @@ function Editor(props: EditorProps & { narrow: boolean }) {
 
   const subjectDoc = kind === "email" ? subject : null;
   const fit = useMemo(
-    () => (isBlock ? ({ ok: true } as const) : checkTemplateFit(doc, appliesTo, subjectDoc)),
-    [isBlock, doc, appliesTo, subjectDoc],
+    () =>
+      isBlock
+        ? ({ ok: true } as FitResult)
+        : checkTemplateFit(doc, appliesTo, subjectDoc, styleKeys),
+    [isBlock, doc, appliesTo, subjectDoc, styleKeys],
   );
   const invalidKey = fit.ok ? "" : fit.invalid.map((i) => i.path).join("\n");
   useEffect(() => {
@@ -287,6 +295,7 @@ function Editor(props: EditorProps & { narrow: boolean }) {
                   lists={lists}
                   data={data}
                   blocks={blocks.filter((b) => b.isActive)}
+                  styles={styles}
                 />
               )}
               {editor ? (

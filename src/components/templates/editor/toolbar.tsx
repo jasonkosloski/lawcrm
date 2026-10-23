@@ -16,6 +16,7 @@ import {
   Blocks,
   Bold,
   Braces,
+  Eraser,
   Eye,
   Italic,
   List,
@@ -38,6 +39,10 @@ import type { TemplateKind } from "@/lib/templates/schema";
 import { FieldPicker } from "./field-picker";
 import { repeatListAt } from "./field-format-popover";
 import { RuleForm } from "./rule-popover";
+import type { ParagraphStyle } from "@/lib/templates/paragraph-styles";
+import { FontSizeField } from "./font-size-field";
+import { ParagraphDialog } from "./paragraph-dialog";
+import { StyleMenu } from "./style-menu";
 import { TableMenu } from "./table-menu";
 import { ToolButton } from "./toolbar-button";
 
@@ -52,6 +57,7 @@ export function Toolbar({
   lists,
   data,
   blocks,
+  styles,
 }: {
   /** The body editor. */
   editor: Editor;
@@ -64,6 +70,8 @@ export function Toolbar({
   data: TemplateData;
   /** Active blocks offered by "Insert block". */
   blocks: BlockSource[];
+  /** The firm's paragraph styles (the Style menu's options). */
+  styles: ParagraphStyle[];
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [ruleOpen, setRuleOpen] = useState(false);
@@ -74,8 +82,7 @@ export function Toolbar({
       italic: e.isActive("italic"),
       underline: e.isActive("underline"),
       smallCaps: e.isActive("smallCaps"),
-      h1: e.isActive("paragraph", { style: "heading1" }),
-      h2: e.isActive("paragraph", { style: "heading2" }),
+      allCaps: e.isActive("allCaps"),
       bullet: e.isActive("bulletList"),
       ordered: e.isActive("orderedList"),
       center: e.isActive({ textAlign: "center" }),
@@ -120,6 +127,7 @@ export function Toolbar({
         </PopoverContent>
       </Popover>
 
+      {rich && <StyleMenu editor={editor} styles={styles} />}
       {rich && (
         <>
           {!isBlock && blocks.length > 0 && (
@@ -208,27 +216,17 @@ export function Toolbar({
             <span className="text-xs font-semibold [font-variant:small-caps]">Sc</span>
           </ToolButton>
           <ToolButton
-            label="Heading 1"
-            active={s?.h1}
-            onClick={() =>
-              chain()
-                .setParagraphStyle(s?.h1 ? "body" : "heading1")
-                .run()
-            }
+            label="All caps"
+            active={s?.allCaps}
+            onClick={() => chain().toggleAllCaps().run()}
           >
-            <span className="text-2xs font-semibold">H1</span>
+            <span className="text-xs font-semibold">AA</span>
           </ToolButton>
-          <ToolButton
-            label="Heading 2"
-            active={s?.h2}
-            onClick={() =>
-              chain()
-                .setParagraphStyle(s?.h2 ? "body" : "heading2")
-                .run()
-            }
-          >
-            <span className="text-2xs font-semibold">H2</span>
+          <FontSizeField editor={editor} />
+          <ToolButton label="Clear formatting" onClick={() => chain().clearFormatting().run()}>
+            <Eraser size={13} />
           </ToolButton>
+          <ParagraphDialog editor={editor} styles={styles} />
           <Divider />
           <ToolButton
             label="Bulleted list"

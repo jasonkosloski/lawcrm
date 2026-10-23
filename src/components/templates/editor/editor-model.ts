@@ -15,6 +15,7 @@ import {
 import { convertHeadings } from "@/lib/templates/headings";
 import { convertLegacyBody } from "@/lib/templates/legacy";
 import type { SerializedCourtContext } from "@/lib/templates/court-blocks";
+import type { ParagraphStyle } from "@/lib/templates/paragraph-styles";
 import type { FirmPageStyle } from "@/lib/templates/page-render";
 import type { BlockSource } from "@/lib/templates/render";
 import type { AppliesTo, TemplateDoc, TemplateKind } from "@/lib/templates/schema";
@@ -44,7 +45,11 @@ export type EditorBlock = {
   updatedAt: string | null;
 };
 
-export type EditorProps = { canSave: boolean } & (
+export type EditorProps = {
+  canSave: boolean;
+  /** The firm's paragraph styles (blocks get them here; templates also via pageStyle). */
+  paragraphStyles?: ParagraphStyle[];
+} & (
   | {
       template: EditorTemplate;
       blocks: BlockSource[];

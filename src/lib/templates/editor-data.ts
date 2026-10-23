@@ -9,7 +9,7 @@ import { getDocumentStyle } from "./document-style";
 import type { FontKey } from "./fonts";
 import type { CourtFormatValues } from "./page-style";
 import { logoPreviewUrl, logoRefOf, type FirmPageStyle } from "./page-render";
-import { readStyleOverrides } from "./paragraph-styles";
+import { readStyleOverrides, type ParagraphStyle } from "./paragraph-styles";
 import type { BlockSource } from "./render";
 import type { AppliesTo, TemplateDoc, TemplateKind } from "./schema";
 
@@ -133,4 +133,9 @@ export async function loadEditorCourtFormats(): Promise<SerializedCourtContext[]
       replacements,
     });
   });
+}
+
+/** The firm's paragraph styles, for editors that don't load the whole page style (blocks). */
+export async function loadEditorParagraphStyles(): Promise<ParagraphStyle[]> {
+  return (await getDocumentStyle()).paragraphStyles;
 }
