@@ -79,8 +79,8 @@ One server helper, `isAttorney(userId)` / an `attorneyWhere` Prisma filter
   converter is on the intake team in another role or not at all, the
   existing carry-over rules still apply (the intake team joins; any intake
   `lead` other than the picked attorney joins as `co_counsel`). The SOL
-  deadline owner and the matter owner follow the picked lead, where they
-  followed the converter before.
+  deadline owner follows the picked lead, where it followed the converter
+  before.
 - Pickers (new matter lead select, edit matter lead select, team
   management "Lead attorney" role option, convert dialog) list only
   attorneys. Convert dialog default: the converter if an attorney, else
