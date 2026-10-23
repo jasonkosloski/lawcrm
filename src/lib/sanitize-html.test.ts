@@ -534,6 +534,13 @@ describe("sanitizeDocumentHtml — paragraph style properties", () => {
     }
   });
 
+  test("only text-indent may be negative; margins may not", () => {
+    for (const m of ["margin-left", "margin-right", "margin-top", "margin-bottom"]) {
+      expect(p(`${m}:-36pt`)).toBe("<p>x</p>");
+    }
+    expect(p("margin-left:-36pt;text-indent:-36pt")).toBe('<p style="text-indent:-36pt">x</p>');
+  });
+
   test("drops other properties and unsafe values", () => {
     for (const s of [
       "position:absolute",

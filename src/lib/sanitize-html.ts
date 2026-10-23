@@ -204,18 +204,21 @@ const TEMPLATE_ALIGN_TAGS = ["p", "h1", "h2", "h3", "td", "th"];
 const TEMPLATE_CELL_ATTRS = [...Object.values(CELL_SIDE_ATTR), "data-valign"];
 
 // Paragraph styles (to-html.ts writes these inline so the in-app preview
-// carries real spacing; sent mail is sanitized by a stricter profile). Each property is allowlisted with a strict
-// value pattern, on <p> only (text-align stays on the "*" rule), plus
-// font-size and text-transform on <span> for the size and all-caps marks.
-// Never a class, never any other property: no position, no url(), no
-// expression(), no em/rem units.
-const LENGTH = /^-?\d{1,3}(\.\d{1,2})?(pt|in|px|%)$/;
+// carries real spacing; sent mail is sanitized by a stricter profile). Each
+// property is allowlisted with a strict value pattern, on <p> only
+// (text-align stays on the "*" rule), plus font-size and text-transform on
+// <span> for the size and all-caps marks. Never a class, never any other
+// property: no position, no url(), no expression(), no em/rem units.
+// Only text-indent may be negative (hanging indents); margins may not, so a
+// document can't pull text outside its box.
+const LENGTH = /^\d{1,3}(\.\d{1,2})?(pt|in|px|%)$/;
+const SIGNED_LENGTH = /^-?\d{1,3}(\.\d{1,2})?(pt|in|px|%)$/;
 const PARAGRAPH_STYLES: Record<string, RegExp[]> = {
   "margin-top": [LENGTH],
   "margin-bottom": [LENGTH],
   "margin-left": [LENGTH],
   "margin-right": [LENGTH],
-  "text-indent": [LENGTH],
+  "text-indent": [SIGNED_LENGTH],
   // A length (exact spacing) or a unitless multiple.
   "line-height": [LENGTH, /^\d{1,2}(\.\d{1,3})?$/],
   "font-size": [/^\d{1,3}(\.\d{1,2})?pt$/],
