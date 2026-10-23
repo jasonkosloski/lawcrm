@@ -54,7 +54,8 @@ describe("DocumentStyleForm", () => {
       expectedUpdatedAt: "2026-10-22T10:00:00.000Z",
     });
     await screen.findByText("Saved");
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    // "Saved" renders before the transition settles ("Saving…", disabled).
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
     await waitFor(() => expect(saveDocumentStyle).toHaveBeenCalledTimes(2));
     expect(saveDocumentStyle.mock.calls[1][0].expectedUpdatedAt).toBe("2026-10-22T11:00:00.000Z");
   });

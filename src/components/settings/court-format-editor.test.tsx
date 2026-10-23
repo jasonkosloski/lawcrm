@@ -89,7 +89,9 @@ describe("CourtFormatEditor", () => {
       expectedUpdatedAt: "2026-10-22T10:00:00.000Z",
     });
     await screen.findByText("Saved");
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    // "Saved" renders while the transition is still pending (button reads
+    // "Saving…" and is disabled); wait for it to settle before saving again.
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
     await waitFor(() => expect(saveCourtFormat).toHaveBeenCalledTimes(2));
     expect(saveCourtFormat.mock.calls[1][0].expectedUpdatedAt).toBe("2026-10-22T11:00:00.000Z");
   });

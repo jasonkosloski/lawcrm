@@ -94,7 +94,8 @@ describe("ParagraphStylesForm", () => {
     expect(sent.expectedUpdatedAt).toBe("2026-10-22T10:00:00.000Z");
     expect(sent.styles).toHaveLength(9);
     expect(sent.styles[0].values.sizePt).toBe(13);
-    fireEvent.click(screen.getByRole("button", { name: "Save styles" }));
+    // "Saved" renders before the transition settles ("Saving…", disabled).
+    fireEvent.click(await screen.findByRole("button", { name: "Save styles" }));
     await waitFor(() => expect(saveParagraphStyles).toHaveBeenCalledTimes(2));
     expect(saveParagraphStyles.mock.calls[1][0].expectedUpdatedAt).toBe("2026-10-22T11:00:00.000Z");
   });

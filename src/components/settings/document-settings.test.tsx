@@ -43,11 +43,11 @@ describe("DocumentSettings", () => {
     await waitFor(() => expect(saveDocumentStyle).toHaveBeenCalledTimes(1));
     expect(saveDocumentStyle.mock.calls[0][0].expectedUpdatedAt).toBe("T1");
     await screen.findByText("Saved");
-    fireEvent.click(screen.getByRole("button", { name: "Save styles" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save styles" }));
     await waitFor(() => expect(saveParagraphStyles).toHaveBeenCalledTimes(1));
     expect(saveParagraphStyles.mock.calls[0][0].expectedUpdatedAt).toBe("T2");
     await waitFor(() => expect(screen.getAllByText("Saved").length).toBe(2));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
     await waitFor(() => expect(saveDocumentStyle).toHaveBeenCalledTimes(2));
     expect(saveDocumentStyle.mock.calls[1][0].expectedUpdatedAt).toBe("T3");
   });
