@@ -11,6 +11,8 @@ import { validateTemplateContent } from "@/lib/templates/schema";
 import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { templateJSON } from "@/components/templates/editor/extensions";
 import { FULL_DOC, NO_ATTRS, cell, p, t } from "@/components/templates/editor/test-fixtures";
+import { renderFixture } from "@/lib/templates/converters-fixture";
+import { resolvedToHtml } from "@/lib/templates/to-html";
 import { documentExtensions, emailExtensions, notesExtensions } from "./presets";
 
 describe("notes preset", () => {
@@ -187,6 +189,30 @@ describe("document preset", () => {
 });
 
 describe("email preset", () => {
+  it("real rendered template HTML keeps spacing, alignment and tables through editor and sanitizer", () => {
+    const editor = new Editor({
+      extensions: emailExtensions(),
+      content: resolvedToHtml(renderFixture()),
+    });
+    const out = editor.getHTML().replace(/:\s+/g, ":");
+    editor.destroy();
+    // The DOM style parser may fold the margins into a shorthand.
+    const spacing = /margin(-bottom)?:[^;"]*12pt/;
+    expect(out).toMatch(spacing);
+    expect(out).toContain("text-align:center");
+    expect(out).toContain("text-align:right");
+    expect(out).toContain("<table");
+    expect(out).toContain("<th");
+    expect(out).not.toContain("colgroup");
+    // Server side: the same rendered HTML, unfolded, keeps spacing through
+    // the outgoing sanitizer (happy-dom folds margins; the server never sees that).
+    const sent = sanitizeOutgoingEmailHtml(resolvedToHtml(renderFixture()));
+    expect(sent).toContain("margin-bottom:12pt");
+    expect(sent).toContain("line-height:1.15");
+    expect(sent).toContain("<table");
+    expect(sent).toContain("text-align:center");
+  });
+
   const make = (content: string) => new Editor({ extensions: emailExtensions(), content });
   const norm = (h: string) =>
     h
@@ -251,7 +277,12 @@ describe("email preset", () => {
   it("refuses javascript:, data: and relative links", () => {
     const editor = make("<p>text</p>");
     editor.commands.selectAll();
-    for (const href of ["javascript:alert(1)", "data:text/html,x", "/relative", "tel:123"]) {
+    for (const href of [
+      "javascript:alert(1)",
+      "data:text/html,x",
+      "/relative",
+      "ftp://x.example/f",
+    ]) {
       editor.commands.setLink({ href });
       expect(editor.getHTML()).not.toContain("<a");
     }

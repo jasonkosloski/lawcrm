@@ -20,6 +20,7 @@
  */
 
 import sanitizeHtml from "sanitize-html";
+import { isAllowedEmailLink } from "@/components/editor/link-uri";
 import { CELL_SIDE_ATTR } from "@/lib/templates/table-layout";
 
 /** Tags emitted by Tiptap StarterKit + a couple Tiptap extensions
@@ -401,7 +402,7 @@ export function sanitizeEmailHtml(html: string): string {
 //   - tables: table/thead/tbody/tr/td/th, colspan/rowspan only;
 //   - `style` only on p, span, td, th, with the per-tag property sets below
 //     (no colours, no position, no url(), no negative margins, no class);
-//   - links: http, https, mailto only (no tel:), never protocol-relative;
+//   - links: http, https, mailto, tel (`isAllowedEmailLink`), never protocol-relative;
 //     rel="noopener noreferrer" target="_blank" forced by TRANSFORM_TAGS;
 //   - no img, div, caption/col/tfoot, data-* or any other attribute.
 
@@ -518,7 +519,7 @@ const OUTGOING_TRANSFORM_TAGS: sanitizeHtml.IOptions["transformTags"] = {
   span: OUTGOING_STYLED,
   td: OUTGOING_CELL,
   th: OUTGOING_CELL,
-  // Absolute http(s) or mailto only: relative, schemeless and fragment-only
+  // Absolute http(s), mailto or tel only: relative, schemeless and fragment-only
   // hrefs mean nothing in a sent mail and are dropped.
   a: (tagName, attribs) => {
     const next: Record<string, string> = {
@@ -527,7 +528,7 @@ const OUTGOING_TRANSFORM_TAGS: sanitizeHtml.IOptions["transformTags"] = {
       target: "_blank",
     };
     const href = (attribs.href ?? "").replace(/[\u0000-\u0020]/g, "");
-    if (!/^(https?:\/\/[^/]|mailto:.)/i.test(href)) delete next.href;
+    if (!isAllowedEmailLink(href)) delete next.href;
     return { tagName, attribs: next };
   },
 };
@@ -547,7 +548,7 @@ const OUTGOING_OPTIONS: sanitizeHtml.IOptions = {
     td: { "text-align": TEXT_ALIGN },
     th: { "text-align": TEXT_ALIGN },
   },
-  allowedSchemes: ["http", "https", "mailto"],
+  allowedSchemes: ["http", "https", "mailto", "tel"],
   allowProtocolRelative: false,
   disallowedTagsMode: "discard",
   // sanitize-html's defaults plus the head-ish tags whose text must not leak.

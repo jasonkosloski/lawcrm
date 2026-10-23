@@ -193,8 +193,8 @@ describe("renderMessageTemplate", () => {
     const id = await template({
       kind: "email",
       content: jsonDoc({
-        type: "paragraph",
-        attrs: { textAlign: "center" },
+        type: "heading",
+        attrs: { level: 2, textAlign: "center" },
         content: [text("Centered")],
       }),
     });
@@ -253,6 +253,18 @@ describe("listMessageTemplateOptions", () => {
 });
 
 describe("renderMessageTemplate formatting note", () => {
+  test("centered paragraphs and underline are kept, so they do not warn", async () => {
+    const id = await template({
+      kind: "email",
+      content: jsonDoc({
+        type: "paragraph",
+        attrs: { textAlign: "center" },
+        content: [{ type: "text", text: "Hi", marks: [{ type: "underline" }] }],
+      }),
+    });
+    expect(await renderMessageTemplate(id, M)).toMatchObject({ ok: true, dropsFormatting: false });
+  });
+
   test("an H1 with left alignment still counts", async () => {
     const id = await template({
       kind: "email",

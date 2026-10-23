@@ -68,8 +68,7 @@ const num = (n: number) => String(+n.toFixed(2));
 
 /** The inline style for a paragraph's resolved values. Every property is in
  *  the sanitizer's allowlist, so the in-app preview needs no stylesheet for
- *  them. Sent emails do not keep these (the outgoing-mail sanitizer strips
- *  style attributes). */
+ *  them; sent emails keep them too, through the outgoing-mail sanitizer. */
 function paragraphStyle(
   v: StyleValues,
   direct: { spaceBeforePt?: number; spaceAfterPt?: number } | undefined,

@@ -87,9 +87,9 @@ export type RenderedMessage = {
 
 export type RenderMessageResult = RenderedMessage | { ok: false; error: string };
 
-/** Formatting the email editor (notes profile) can't keep: tables,
- *  non-left alignment, top-level headings, underline — in the template or
- *  any block it inserts. */
+/** Formatting the email editor (outgoing profile) still can't keep: table
+ *  borders and widths (any table), non-left heading alignment, top-level
+ *  headings — in the template or any block it inserts. */
 function usesUnsupportedEmailFormatting(
   doc: TemplateDoc,
   blocks: Map<string, BlockSource>,
@@ -104,9 +104,8 @@ function usesUnsupportedEmailFormatting(
     };
     if (n.type === "table") return true;
     const align = n.attrs?.textAlign;
-    if ((n.type === "paragraph" || n.type === "heading") && align && align !== "left") return true;
+    if (n.type === "heading" && align && align !== "left") return true;
     if (n.type === "heading" && n.attrs?.level === 1) return true;
-    if (n.marks?.some((m) => m.type === "underline")) return true;
     if (n.type === "block" && typeof n.attrs?.blockId === "string") {
       const block = blocks.get(n.attrs.blockId);
       if (block && unsupported(block.content)) return true;

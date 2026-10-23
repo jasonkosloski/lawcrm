@@ -39,8 +39,17 @@ describe("LinkButton", () => {
     await u.click(screen.getByRole("button", { name: "Link" }));
     await u.type(await screen.findByLabelText("Link URL"), "javascript:alert(1)");
     await u.click(screen.getByRole("button", { name: "Apply" }));
-    expect(await screen.findByText(/http\(s\) or mailto/)).toBeInTheDocument();
+    expect(await screen.findByText(/http\(s\), mailto or tel/)).toBeInTheDocument();
     expect(editor.getHTML()).not.toContain("<a");
+  });
+
+  it("accepts a tel: link", async () => {
+    const u = user();
+    const editor = setup();
+    await u.click(screen.getByRole("button", { name: "Link" }));
+    await u.type(await screen.findByLabelText("Link URL"), "tel:+15551234567");
+    await u.click(screen.getByRole("button", { name: "Apply" }));
+    expect(editor.getHTML()).toContain('href="tel:+15551234567"');
   });
 
   it("an empty URL removes the link", async () => {

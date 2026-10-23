@@ -636,6 +636,12 @@ describe("sanitizeOutgoingEmailHtml - allowed surface passes through", () => {
     );
   });
 
+  test("tel link survives", () => {
+    expect(sanitizeOutgoingEmailHtml('<a href="tel:+15551234567">c</a>')).toBe(
+      '<a href="tel:+15551234567" rel="noopener noreferrer" target="_blank">c</a>',
+    );
+  });
+
   test("mailto link survives", () => {
     expect(sanitizeOutgoingEmailHtml('<a href="mailto:a@b.example">m</a>')).toBe(
       '<a href="mailto:a@b.example" rel="noopener noreferrer" target="_blank">m</a>',
@@ -681,7 +687,6 @@ describe("sanitizeOutgoingEmailHtml - hostile content is stripped", () => {
     ["data: href", '<a href="data:text/html,<script>1</script>">x</a>'],
     ["vbscript: href", '<a href="vbscript:msgbox(1)">x</a>'],
     ["protocol-relative href", '<a href="//evil.example/x">x</a>'],
-    ["tel: href", '<a href="tel:+15551234">x</a>'],
     ["obfuscated javascript: href", '<a href="java&#115;cript:alert(1)">x</a>'],
   ])("%s loses its href", (_name, html) => {
     expect(sanitizeOutgoingEmailHtml(html)).not.toMatch(/href=/i);

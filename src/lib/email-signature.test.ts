@@ -87,3 +87,14 @@ describe("outgoing profile (Email editor)", () => {
     expect(sanitizeOutgoingEmailHtml(combined)).toBe(combined);
   });
 });
+
+describe("tel links", () => {
+  test("a signature saved under the old profile with a tel link round-trips unchanged", () => {
+    const stored = sanitizeUserHtml(
+      '<p>Call <a href="tel:+15551234567">555-123-4567</a> or <a href="https://firm.example">web</a></p>',
+    );
+    expect(stored).toContain("tel:+15551234567");
+    expect(normalizeEmailSignature(stored)).toBe(stored);
+    expect(wrapEmailSignature(stored)).toBe(`<p></p><p>-- </p>${stored}`);
+  });
+});

@@ -109,7 +109,7 @@ describe("Use template", () => {
         recipientContactId: "c1",
       }),
     );
-    expect(screen.getByText("Tables and alignment aren't kept in email.")).toBeInTheDocument();
+    expect(screen.getByText(/Table borders and widths/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^insert$/i }));
 
     expect(field("subject").value).toBe("Re: Smith v. Jones");

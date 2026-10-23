@@ -51,7 +51,7 @@ export function LinkButton({ editor }: { editor: Editor }) {
     if (!href) {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
     } else if (!isAllowedEmailLink(href)) {
-      setError("Enter an http(s) or mailto link.");
+      setError("Enter an http(s), mailto or tel link.");
       return;
     } else {
       editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
