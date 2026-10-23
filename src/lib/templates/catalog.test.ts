@@ -70,6 +70,30 @@ describe("catalog", () => {
     expect(fieldByPath("firm.address")?.formats).toContain("one_line");
   });
 
+  it("lead attorney fields and attorneys list are matter-scoped", () => {
+    for (const p of [
+      "matter.leadAttorney",
+      "matter.leadAttorneyEmail",
+      "matter.leadAttorneyPhone",
+      "matter.leadAttorneyBarNumber",
+    ]) {
+      expect(fieldByPath(p)?.scopes, p).toEqual(["matter"]);
+      expect(fieldByPath(p)?.get(SAMPLE_TEMPLATE_DATA), p).not.toBeNull();
+    }
+    expect(fieldByPath("matter.leadAttorney")?.type).toBe("person");
+    const list = listByPath("attorneys")!;
+    expect(list.scopes).toEqual(["matter"]);
+    expect(list.itemFields.map((f) => f.path)).toEqual([
+      "name",
+      "email",
+      "phone",
+      "role",
+      "barNumber",
+    ]);
+    expect(list.get(SAMPLE_TEMPLATE_DATA)).toHaveLength(2);
+    expect(listByPath("team")!.itemFields.some((f) => f.path === "barNumber")).toBe(false);
+  });
+
   it("venue address: a block of street lines and city/state/zip, matter-only", () => {
     const f = fieldByPath("matter.venueAddress")!;
     expect(f.type).toBe("address");

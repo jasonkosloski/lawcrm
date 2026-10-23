@@ -82,6 +82,8 @@ export type PersonItem = {
   email: string | null;
   phone: string | null;
   role: string | null;
+  /** Set on `attorneys` items only. */
+  barNumber?: string | null;
 };
 
 export type ListItem = PartyItem | PersonItem;
@@ -132,6 +134,13 @@ export type TemplateData = {
     filedDate: Date | null;
     trialDate: Date | null;
     opposingParty: string | null;
+    /** The active lead-role team member; bar number is for the venue state. */
+    leadAttorney: {
+      name: string;
+      email: string | null;
+      phone: string | null;
+      barNumber: string | null;
+    } | null;
   } | null;
   lead: {
     name: string;
@@ -146,6 +155,8 @@ export type TemplateData = {
   recipient: ContactData | null;
   parties: Record<PartyListKey, PartyItem[]>;
   team: PersonItem[];
+  /** Team members in an attorney role, lead first. */
+  attorneys: PersonItem[];
   request: {
     subject: string;
     description: string | null;
@@ -333,6 +344,35 @@ export const FIELDS: readonly CatalogField[] = [
   text("matter.venueCounty", "Venue county", "Matter", (d) => str(m(d)?.venueCounty), MATTER),
   text("matter.venueState", "Venue state", "Matter", (d) => str(m(d)?.venueState), MATTER),
   field({
+    path: "matter.leadAttorney",
+    label: "Lead attorney",
+    group: "Matter",
+    type: "person",
+    scopes: MATTER,
+    get: (d) => person(m(d)?.leadAttorney?.name),
+  }),
+  text(
+    "matter.leadAttorneyEmail",
+    "Lead attorney email",
+    "Matter",
+    (d) => str(m(d)?.leadAttorney?.email),
+    MATTER,
+  ),
+  text(
+    "matter.leadAttorneyPhone",
+    "Lead attorney phone",
+    "Matter",
+    (d) => str(m(d)?.leadAttorney?.phone),
+    MATTER,
+  ),
+  text(
+    "matter.leadAttorneyBarNumber",
+    "Lead attorney bar number",
+    "Matter",
+    (d) => str(m(d)?.leadAttorney?.barNumber),
+    MATTER,
+  ),
+  field({
     path: "matter.venueAddress",
     label: "Venue address",
     group: "Matter",
@@ -469,6 +509,9 @@ const ITEM_FIELDS: CatalogField[] = [
   text("email", "Email", "Parties", (_d, i) => str(i?.email)),
   text("phone", "Phone", "Parties", (_d, i) => str(i?.phone)),
   text("role", "Role", "Parties", (_d, i) => str(i?.role)),
+  text("barNumber", "Bar number", "Parties", (_d, i) =>
+    str((i as PersonItem | undefined)?.barNumber),
+  ),
   field({
     path: "counsel.name",
     label: "Counsel name",
@@ -491,7 +534,8 @@ const partyList = (key: PartyListKey, label: string): CatalogList => ({
   path: `parties.${key}`,
   label,
   scopes: MATTER,
-  itemFields: ITEM_FIELDS,
+  // Bar number belongs to attorneys only.
+  itemFields: ITEM_FIELDS.filter((f) => f.path !== "barNumber"),
   get: (d) => d.parties[key],
 });
 
@@ -510,6 +554,15 @@ export const LISTS: readonly CatalogList[] = [
     // Team members have no address or counsel.
     itemFields: ITEM_FIELDS.filter((f) => ["name", "email", "phone", "role"].includes(f.path)),
     get: (d) => d.team,
+  },
+  {
+    path: "attorneys",
+    label: "Attorneys",
+    scopes: MATTER,
+    itemFields: ITEM_FIELDS.filter((f) =>
+      ["name", "email", "phone", "role", "barNumber"].includes(f.path),
+    ),
+    get: (d) => d.attorneys,
   },
 ];
 
@@ -605,6 +658,12 @@ export const SAMPLE_TEMPLATE_DATA: TemplateData = {
     filedDate: new Date(Date.UTC(2026, 0, 15)),
     trialDate: new Date(Date.UTC(2027, 2, 1)),
     opposingParty: "Example Insurance Co.",
+    leadAttorney: {
+      name: "Alex Attorney (sample)",
+      email: "alex@yourfirm.example",
+      phone: "(555) 555-0199",
+      barNumber: "00000",
+    },
   },
   lead: {
     name: "Sam Sample (sample lead)",
@@ -656,6 +715,22 @@ export const SAMPLE_TEMPLATE_DATA: TemplateData = {
       email: "taylor@yourfirm.example",
       phone: "(555) 555-0197",
       role: "Paralegal",
+    },
+  ],
+  attorneys: [
+    {
+      name: "Alex Attorney (sample)",
+      email: "alex@yourfirm.example",
+      phone: "(555) 555-0199",
+      role: "Lead",
+      barNumber: "00000",
+    },
+    {
+      name: "Casey Cocounsel (sample)",
+      email: "casey@yourfirm.example",
+      phone: "(555) 555-0196",
+      role: "Co counsel",
+      barNumber: "11111",
     },
   ],
   request: {

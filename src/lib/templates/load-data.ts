@@ -13,6 +13,7 @@ import { assertScopeAccess } from "@/lib/scope-access";
 import { scopeWhere, type RecordScope } from "@/lib/record-scope";
 import { getCurrentFirm } from "@/lib/firm";
 import { addressLines } from "@/lib/address";
+import { ATTORNEY_ROLES, barNumberFor } from "@/lib/attorneys";
 import type {
   ContactData,
   CounselData,
@@ -244,7 +245,7 @@ const userSelect = {
   email: true,
   phone: true,
   jobTitle: true,
-  barNumber: true,
+  barAdmissions: { select: { state: true, number: true } },
   isActive: true,
 } as const;
 
@@ -254,13 +255,13 @@ type UserRow = {
   email: string;
   phone: string | null;
   jobTitle: string;
-  barNumber: string | null;
+  barAdmissions: { state: string; number: string }[];
 };
 
-const toSigner = (u: UserRow): SignerData => ({
+const toSigner = (u: UserRow, barState: string | null): SignerData => ({
   name: u.name,
   title: u.jobTitle || null,
-  barNumber: u.barNumber,
+  barNumber: barNumberFor(u.barAdmissions, barState),
   email: u.email,
   phone: u.phone,
 });
@@ -292,6 +293,7 @@ export async function loadTemplateData(
   // Record + team + party rows.
   let teamUsers: { role: string; user: UserRow & { id: string } }[];
   let recipientAllowed: (contactId: string) => boolean;
+  let venueState: string | null = null;
   let base: Pick<TemplateData, "matter" | "lead" | "client" | "parties" | "scope">;
   let recordName: string;
 
@@ -347,6 +349,7 @@ export async function loadTemplateData(
     });
     if (!matter) return { ok: false, error: "Record not found." };
     recordName = matter.name;
+    venueState = matter.venue?.state ?? null;
     teamUsers = matter.teamMembers;
     const linked = new Set(matter.contacts.map((c) => c.contactId));
     if (matter.clientId) linked.add(matter.clientId);
@@ -380,6 +383,7 @@ export async function loadTemplateData(
         filedDate: matter.filedDate,
         trialDate: matter.trialDate,
         opposingParty: matter.opposingParty,
+        leadAttorney: null, // filled once the bar state is known
       },
       client: matter.client ? toContactData(matter.client) : null,
       parties: buildParties(matter.contacts, matter.client, matter.clientId),
@@ -454,6 +458,37 @@ export async function loadTemplateData(
     recipient = toContactData(contact);
   }
 
+  // Bar numbers are per state: the venue's, else the firm's.
+  const barState = venueState ?? firm.state;
+  const attorneys: PersonItem[] =
+    scope.kind === "matter"
+      ? teamUsers
+          .filter((t) => (ATTORNEY_ROLES as readonly string[]).includes(t.role))
+          .sort(
+            (a, b) =>
+              Number(b.role === "lead") - Number(a.role === "lead") ||
+              a.user.name.localeCompare(b.user.name),
+          )
+          .map((t) => ({
+            name: t.user.name,
+            email: t.user.email,
+            phone: t.user.phone,
+            role: humanizeRole(t.role),
+            barNumber: barNumberFor(t.user.barAdmissions, barState),
+          }))
+      : [];
+  if (base.matter) {
+    const lead = teamUsers.find((t) => t.role === "lead");
+    base.matter.leadAttorney = lead
+      ? {
+          name: lead.user.name,
+          email: lead.user.email,
+          phone: lead.user.phone,
+          barNumber: barNumberFor(lead.user.barAdmissions, barState),
+        }
+      : null;
+  }
+
   const team: PersonItem[] = teamUsers.map((t) => ({
     name: t.user.name,
     email: t.user.email,
@@ -476,9 +511,10 @@ export async function loadTemplateData(
     user: { name: me.name },
     today: new Date(),
     timeZone: me.timeZone ?? null,
-    signer: toSigner(signerUser),
+    signer: toSigner(signerUser, barState),
     recipient,
     team,
+    attorneys,
     request: request
       ? {
           subject: request.subject,

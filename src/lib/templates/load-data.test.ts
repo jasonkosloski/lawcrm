@@ -55,8 +55,9 @@ beforeEach(async () => {
   ({ userId } = await seedUser({ firmId, name: "Test Attorney" }));
   await prisma.user.update({
     where: { id: userId },
-    data: { jobTitle: "Partner", barNumber: "12345", phone: "(303) 555-0111" },
+    data: { jobTitle: "Partner", phone: "(303) 555-0111" },
   });
+  await prisma.barAdmission.create({ data: { userId, state: "CO", number: "12345" } });
   vi.mocked(getCurrentUserId).mockResolvedValue(userId);
   vi.mocked(getCurrentFirm).mockResolvedValue(FIRM);
   ({ areaId, stageId } = await seedPracticeArea({ name: "Civil Rights" }));
@@ -264,5 +265,89 @@ describe("loadTemplateData — matter.courtCaption", () => {
     expect(await load()).toBe("Denver District");
     await prisma.venue.update({ where: { id: v.id }, data: { captionName: "DISTRICT COURT" } });
     expect(await load()).toBe("DISTRICT COURT");
+  });
+});
+
+describe("loadTemplateData — lead attorney and bar numbers", () => {
+  const admit = (uid: string, state: string, number: string) =>
+    prisma.barAdmission.upsert({
+      where: { userId_state: { userId: uid, state } },
+      create: { userId: uid, state, number },
+      update: { number },
+    });
+
+  async function attorneyMatter(venueState: string | null) {
+    const { matterId } = await seedMatter({
+      practiceAreaId: areaId,
+      stageId,
+      leadUserId: userId,
+      name: "Attorney Matter",
+    });
+    await admit(userId, "CO", "111");
+    await admit(userId, "WY", "222");
+    const { userId: co } = await seedUser({ firmId, name: "Anna CoCounsel" });
+    await admit(co, "CO", "333");
+    const { userId: para } = await seedUser({ firmId, name: "Para Legal" });
+    await admit(para, "CO", "444");
+    await prisma.matterTeamMember.create({ data: { matterId, userId: co, role: "co_counsel" } });
+    await prisma.matterTeamMember.create({ data: { matterId, userId: para, role: "paralegal" } });
+    if (venueState) {
+      const v = await prisma.venue.create({
+        data: { name: "V", nameKey: "v", state: venueState },
+      });
+      await prisma.matter.update({ where: { id: matterId }, data: { venueId: v.id } });
+    }
+    return { matterId, co };
+  }
+
+  test("lead attorney and attorneys list use the venue state's bar numbers", async () => {
+    const { matterId } = await attorneyMatter("Colorado");
+    vi.mocked(getCurrentFirm).mockResolvedValue({ ...FIRM, state: "WY" });
+    const r = await loadTemplateData({ scope: { kind: "matter", matterId } });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.data.matter?.leadAttorney).toMatchObject({
+      name: "Test Attorney",
+      barNumber: "111",
+    });
+    expect(r.data.attorneys.map((a) => a.name)).toEqual(["Test Attorney", "Anna CoCounsel"]);
+    expect(r.data.attorneys[1].barNumber).toBe("333");
+    expect(r.data.signer?.barNumber).toBe("111");
+  });
+
+  test("no venue falls back to the firm state; no admission there is null", async () => {
+    const { matterId } = await attorneyMatter(null);
+    vi.mocked(getCurrentFirm).mockResolvedValue({ ...FIRM, state: "WY" });
+    const r = await loadTemplateData({ scope: { kind: "matter", matterId } });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.data.matter?.leadAttorney?.barNumber).toBe("222");
+    expect(r.data.signer?.barNumber).toBe("222");
+    vi.mocked(getCurrentFirm).mockResolvedValue({ ...FIRM, state: "TX" });
+    const r2 = await loadTemplateData({ scope: { kind: "matter", matterId } });
+    if (!r2.ok) throw new Error(r2.error);
+    expect(r2.data.matter?.leadAttorney?.barNumber).toBeNull();
+    expect(r2.data.signer?.barNumber).toBeNull();
+  });
+
+  test("no lead on the team gives a null leadAttorney", async () => {
+    const { matterId } = await attorneyMatter(null);
+    await prisma.matterTeamMember.updateMany({
+      where: { matterId, role: "lead" },
+      data: { removedAt: new Date() },
+    });
+    const r = await loadTemplateData({ scope: { kind: "matter", matterId } });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.data.matter?.leadAttorney).toBeNull();
+    expect(r.data.attorneys.map((a) => a.name)).toEqual(["Anna CoCounsel"]);
+  });
+
+  test("lead scope: signer bar number by the firm's state", async () => {
+    await admit(userId, "CO", "111");
+    await admit(userId, "WY", "222");
+    const { leadId } = await seedLead({ name: "L" });
+    vi.mocked(getCurrentFirm).mockResolvedValue({ ...FIRM, state: "WY" });
+    const r = await loadTemplateData({ scope: { kind: "lead", leadId } });
+    if (!r.ok) throw new Error(r.error);
+    expect(r.data.signer?.barNumber).toBe("222");
+    expect(r.data.attorneys).toEqual([]);
   });
 });
