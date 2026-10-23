@@ -431,7 +431,7 @@ const OUTGOING_STYLE_BOUNDS: Record<string, (value: string) => boolean> = {
     return pt !== null && /pt$/.test(v) && pt >= 1 && pt <= 72;
   },
   "line-height": (v) => {
-    if (/^\d{1,2}(\.\d{1,3})?$/.test(v)) return Number(v) >= 0.5;
+    if (/^\d{1,2}(\.\d{1,3})?$/.test(v)) return Number(v) >= 0.5 && Number(v) <= 5;
     const pt = lengthInPoints(v);
     return pt !== null && pt >= 6 && pt <= 144;
   },
@@ -454,15 +454,19 @@ function outgoingMargin(v: string): boolean {
 function cleanOutgoingStyle(attribs: Record<string, string>): Record<string, string> {
   if (!("style" in attribs)) return attribs;
   const kept: string[] = [];
-  for (const decl of attribs.style.split(";")) {
+  // Comments first: postcss strips them later, so `font-size/**/:999pt` must
+  // be bounded as `font-size:999pt`. An unterminated `/*` runs to the end.
+  const text = attribs.style.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, "");
+  for (const decl of text.split(";")) {
     const i = decl.indexOf(":");
     if (i < 0) continue;
     const prop = decl.slice(0, i).trim().toLowerCase();
     const value = decl
       .slice(i + 1)
       .replace(/\s*!\s*important\s*$/i, "")
-      .trim();
-    if (!prop || !value || /!/.test(value)) continue;
+      .trim()
+      .toLowerCase();
+    if (!/^[a-z-]+$/.test(prop) || !value || /!/.test(value)) continue;
     const bound = OUTGOING_STYLE_BOUNDS[prop];
     if (bound && !bound(value)) continue;
     kept.push(`${prop}:${value}`);

@@ -817,3 +817,39 @@ describe("sanitizeOutgoingEmailHtml - hardening", () => {
     expect(out('<a href="mailto:a@b.example">x</a>')).toMatch(/href="mailto:a@b.example"/);
   });
 });
+
+describe("sanitizeOutgoingEmailHtml - CSS comments cannot defeat style bounds", () => {
+  test.each([
+    ["font-size/**/:999pt"],
+    ["/**/font-size:999pt"],
+    ["font-size /**/ :999pt"],
+    ["margin-left/**/:999in"],
+    ["margin-top/*x*/:50%"],
+    ["text-indent/**/:-999pt"],
+    ["line-height/**/:999pt"],
+    ["font-size/**/:999pt !important"],
+    ["font-size/*unterminated:999pt"],
+    ["font-si/**/ze:999pt"],
+  ])("%s is dropped", (style) => {
+    expect(sanitizeOutgoingEmailHtml(`<p style="${style}">x</p>`)).toBe("<p>x</p>");
+  });
+
+  test("a comment around a legitimate value is harmless", () => {
+    expect(sanitizeOutgoingEmailHtml('<p style="font-size/**/:12pt">x</p>')).toBe(
+      '<p style="font-size:12pt">x</p>',
+    );
+  });
+
+  test("unitless line-height is capped at 5", () => {
+    expect(sanitizeOutgoingEmailHtml('<p style="line-height:5">x</p>')).toBe(
+      '<p style="line-height:5">x</p>',
+    );
+    expect(sanitizeOutgoingEmailHtml('<p style="line-height:5.1">x</p>')).toBe("<p>x</p>");
+  });
+
+  test("uppercase units are normalised", () => {
+    expect(sanitizeOutgoingEmailHtml('<p style="MARGIN-TOP:12PT;Font-Size:11PT">x</p>')).toBe(
+      '<p style="margin-top:12pt;font-size:11pt">x</p>',
+    );
+  });
+});
