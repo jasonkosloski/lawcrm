@@ -228,6 +228,7 @@ const PARAGRAPH_STYLES: Record<string, RegExp[]> = {
   "font-variant": [/^(normal|small-caps)$/],
   "break-before": [/^(auto|page)$/],
 };
+const TEXT_ALIGN = [/^(left|right|center|justify)$/];
 const SPAN_STYLES: Record<string, RegExp[]> = {
   "font-size": PARAGRAPH_STYLES["font-size"],
   "text-transform": PARAGRAPH_STYLES["text-transform"],
@@ -252,7 +253,7 @@ const DOCUMENT_OPTIONS: sanitizeHtml.IOptions = {
     hr: ["data-page-break"],
   },
   allowedStyles: {
-    "*": { "text-align": [/^(left|right|center|justify)$/] },
+    "*": { "text-align": TEXT_ALIGN },
     col: { width: [/^\d{1,4}(\.\d{1,2})?(px|%)$/] },
     p: PARAGRAPH_STYLES,
     span: SPAN_STYLES,
@@ -387,6 +388,49 @@ const EMAIL_OPTIONS: sanitizeHtml.IOptions = {
  *  sanitizers. */
 export function sanitizeEmailHtml(html: string): string {
   return sanitizeHtml(html, EMAIL_OPTIONS).trim();
+}
+
+// ── Outgoing email profile ──────────────────────────────────────────────
+//
+// For HTML the CRM SENDS to recipients (compose, reply, signatures). The
+// recipient's mail client is the render target, so this is a security
+// boundary on our own users' (and pasted content's) markup. It is the note
+// profile plus underline, links, plain tables and the document profile's
+// anchored style allowlist (one definition: PARAGRAPH_STYLES / SPAN_STYLES /
+// TEXT_ALIGN above). Deltas vs. `sanitizeUserHtml`:
+//   - tables: table/thead/tbody/tr/td/th, colspan/rowspan only;
+//   - `style` only on p, span, td, th, with the per-tag property sets below
+//     (no colours, no position, no url(), no negative margins, no class);
+//   - links: http, https, mailto only (no tel:), never protocol-relative;
+//     rel="noopener noreferrer" target="_blank" forced by TRANSFORM_TAGS;
+//   - no img, div, caption/col/tfoot, data-* or any other attribute.
+
+const OUTGOING_ALLOWED_TAGS = [...ALLOWED_TAGS, "table", "thead", "tbody", "tr", "td", "th"];
+
+const OUTGOING_OPTIONS: sanitizeHtml.IOptions = {
+  allowedTags: OUTGOING_ALLOWED_TAGS,
+  allowedAttributes: {
+    ...ALLOWED_ATTRIBUTES,
+    p: ["style"],
+    span: ["style"],
+    td: ["colspan", "rowspan", "style"],
+    th: ["colspan", "rowspan", "style"],
+  },
+  allowedStyles: {
+    p: { ...PARAGRAPH_STYLES, "text-align": TEXT_ALIGN },
+    span: SPAN_STYLES,
+    td: { "text-align": TEXT_ALIGN },
+    th: { "text-align": TEXT_ALIGN },
+  },
+  allowedSchemes: ["http", "https", "mailto"],
+  allowProtocolRelative: false,
+  disallowedTagsMode: "discard",
+  transformTags: TRANSFORM_TAGS,
+};
+
+/** Sanitize HTML the CRM sends to recipients (compose, reply, signature). */
+export function sanitizeOutgoingEmailHtml(html: string): string {
+  return sanitizeHtml(html, OUTGOING_OPTIONS).trim();
 }
 
 /** True when the sanitized HTML has any non-whitespace visible text.

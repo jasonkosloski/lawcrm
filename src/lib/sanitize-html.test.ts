@@ -15,6 +15,7 @@ import {
   isEffectivelyEmpty,
   sanitizeDocumentHtml,
   sanitizeEmailHtml,
+  sanitizeOutgoingEmailHtml,
   sanitizeUserHtml,
 } from "./sanitize-html";
 
@@ -572,5 +573,177 @@ describe("sanitizeDocumentHtml — paragraph style properties", () => {
 
   test("the email profile is not widened", () => {
     expect(sanitizeEmailHtml('<p style="margin-top:0pt;text-indent:-36pt">x</p>')).toBe("<p>x</p>");
+  });
+});
+
+// ── Pinned behaviour: profiles that must not change when the outgoing
+// profile shares constants with the document profile ─────────────────────
+const PINNED_INPUTS = [
+  '<p style="color:red">x</p><h2>H</h2><ol start="3" type="a"><li value="2">a</li></ol>',
+  '<a href="https://x.example/a" onclick="x()">l</a><a href="tel:+15551234">t</a><a href="//evil.example">p</a><a href="javascript:alert(1)">j</a>',
+  '<div class="fixed" style="color:#fff;position:absolute;font-size:12px;text-align:center">d</div>',
+  '<table><tr><td colspan="2" style="text-align:right;margin-left:-5pt">c</td></tr></table><img src="https://t.example/p.gif" alt="a"><img src="data:image/png;base64,AAAA">',
+  "<script>alert(1)</script><title>T</title><p>ok <u>u</u> <code>c</code></p><hr>",
+];
+
+describe("sanitizeUserHtml / sanitizeEmailHtml outputs are pinned", () => {
+  test("sanitizeUserHtml", () => {
+    expect(PINNED_INPUTS.map(sanitizeUserHtml)).toMatchInlineSnapshot(`
+      [
+        "<p>x</p><h2>H</h2><ol start="3" type="a"><li value="2">a</li></ol>",
+        "<a href="https://x.example/a" rel="noopener noreferrer" target="_blank">l</a><a href="tel:+15551234" rel="noopener noreferrer" target="_blank">t</a><a rel="noopener noreferrer" target="_blank">p</a><a rel="noopener noreferrer" target="_blank">j</a>",
+        "d",
+        "c",
+        "T<p>ok <u>u</u> <code>c</code></p><hr />",
+      ]
+    `);
+  });
+  test("sanitizeEmailHtml", () => {
+    expect(PINNED_INPUTS.map(sanitizeEmailHtml)).toMatchInlineSnapshot(`
+      [
+        "<p style="color:red">x</p><h2>H</h2><ol start="3" type="a"><li value="2">a</li></ol>",
+        "<a href="https://x.example/a" rel="noopener noreferrer" target="_blank">l</a><a href="tel:+15551234" rel="noopener noreferrer" target="_blank">t</a><a rel="noopener noreferrer" target="_blank">p</a><a rel="noopener noreferrer" target="_blank">j</a>",
+        "<div style="color:#fff;font-size:12px;text-align:center">d</div>",
+        "<table><tr><td colspan="2" style="text-align:right">c</td></tr></table><span class="email-blocked-image">[image blocked: a]</span><img src="data:image/png;base64,AAAA" />",
+        "<p>ok <u>u</u> <code>c</code></p><hr />",
+      ]
+    `);
+  });
+  test("sanitizeDocumentHtml", () => {
+    expect(PINNED_INPUTS.map(sanitizeDocumentHtml)).toMatchInlineSnapshot(`
+      [
+        "<p>x</p><h2>H</h2><ol start="3" type="a"><li value="2">a</li></ol>",
+        "<a href="https://x.example/a" rel="noopener noreferrer" target="_blank">l</a><a href="tel:+15551234" rel="noopener noreferrer" target="_blank">t</a><a rel="noopener noreferrer" target="_blank">p</a><a rel="noopener noreferrer" target="_blank">j</a>",
+        "d",
+        "<table><tr><td colspan="2" style="text-align:right">c</td></tr></table><img alt="a" /><img src="data:image/png;base64,AAAA" />",
+        "T<p>ok <u>u</u> <code>c</code></p><hr />",
+      ]
+    `);
+  });
+});
+
+describe("sanitizeOutgoingEmailHtml - allowed surface passes through", () => {
+  const same = (html: string) => expect(sanitizeOutgoingEmailHtml(html)).toBe(html);
+
+  test("underline and starter-kit marks", () => {
+    same("<p><strong>b</strong> <em>i</em> <s>s</s> <u>u</u></p>");
+  });
+
+  test("https link gets forced rel and target", () => {
+    expect(sanitizeOutgoingEmailHtml('<a href="https://x.example/a">l</a>')).toBe(
+      '<a href="https://x.example/a" rel="noopener noreferrer" target="_blank">l</a>',
+    );
+  });
+
+  test("mailto link survives", () => {
+    expect(sanitizeOutgoingEmailHtml('<a href="mailto:a@b.example">m</a>')).toBe(
+      '<a href="mailto:a@b.example" rel="noopener noreferrer" target="_blank">m</a>',
+    );
+  });
+
+  test("caller-supplied rel/target cannot weaken the forced values", () => {
+    expect(
+      sanitizeOutgoingEmailHtml('<a href="https://x.example" rel="opener" target="_self">l</a>'),
+    ).toBe('<a href="https://x.example" rel="noopener noreferrer" target="_blank">l</a>');
+  });
+
+  test("tables with colspan and rowspan", () => {
+    same(
+      '<table><thead><tr><th colspan="2">h</th></tr></thead><tbody><tr><td rowspan="2">a</td><td>b</td></tr></tbody></table>',
+    );
+  });
+
+  test("paragraph styles", () => {
+    same('<p style="margin-bottom:12pt;text-align:center;line-height:1.15">x</p>');
+  });
+
+  test("span styles", () => {
+    same('<span style="font-size:9pt;text-transform:uppercase">x</span>');
+  });
+
+  test("cell text-align", () => {
+    same('<table><tbody><tr><td style="text-align:right">x</td></tr></tbody></table>');
+  });
+
+  test("signed text-indent is allowed", () => {
+    same('<p style="text-indent:-18pt">x</p>');
+  });
+
+  test("lists keep their numbering", () => {
+    same('<ol start="3"><li value="4">a</li></ol>');
+  });
+});
+
+describe("sanitizeOutgoingEmailHtml - hostile content is stripped", () => {
+  test.each([
+    ["javascript: href", '<a href="javascript:alert(1)">x</a>'],
+    ["data: href", '<a href="data:text/html,<script>1</script>">x</a>'],
+    ["vbscript: href", '<a href="vbscript:msgbox(1)">x</a>'],
+    ["protocol-relative href", '<a href="//evil.example/x">x</a>'],
+    ["tel: href", '<a href="tel:+15551234">x</a>'],
+    ["obfuscated javascript: href", '<a href="java&#115;cript:alert(1)">x</a>'],
+  ])("%s loses its href", (_name, html) => {
+    expect(sanitizeOutgoingEmailHtml(html)).not.toMatch(/href=/i);
+  });
+
+  test("class is dropped everywhere", () => {
+    const out = sanitizeOutgoingEmailHtml(
+      '<p class="fixed inset-0">a</p><span class="x">b</span><td class="y">c</td><a class="z" href="https://x.example">d</a>',
+    );
+    expect(out).not.toMatch(/class=/);
+  });
+
+  test("style only survives on p, span, td, th", () => {
+    const out = sanitizeOutgoingEmailHtml(
+      '<div style="text-align:center">d</div><a href="https://x.example" style="text-align:center">a</a><h2 style="text-align:center">h</h2><li style="text-align:center">l</li><table style="text-align:center"><tbody><tr><td style="text-align:center">c</td></tr></tbody></table>',
+    );
+    expect(out).not.toMatch(/<(div|a|h2|li|table)[^>]*style=/);
+    expect(out).toContain('<td style="text-align:center">');
+  });
+
+  test("disallowed style values and properties are dropped", () => {
+    expect(
+      sanitizeOutgoingEmailHtml(
+        '<p style="position:absolute;margin-left:-10pt;color:red;background:url(x);margin-top:4pt">x</p>',
+      ),
+    ).toBe('<p style="margin-top:4pt">x</p>');
+    expect(sanitizeOutgoingEmailHtml('<span style="color:red;font-size:2em">x</span>')).toBe(
+      "<span>x</span>",
+    );
+    expect(
+      sanitizeOutgoingEmailHtml('<p style="font-size:12pt;line-height:expression(1)">x</p>'),
+    ).toBe('<p style="font-size:12pt">x</p>');
+  });
+
+  test("paragraph-only properties are not accepted on span or cells", () => {
+    expect(sanitizeOutgoingEmailHtml('<span style="margin-left:4pt">x</span>')).toBe(
+      "<span>x</span>",
+    );
+    expect(
+      sanitizeOutgoingEmailHtml(
+        '<table><tbody><tr><td style="margin-left:4pt">x</td></tr></tbody></table>',
+      ),
+    ).toBe("<table><tbody><tr><td>x</td></tr></tbody></table>");
+  });
+
+  test("images, forms, scripts and handlers are gone", () => {
+    expect(sanitizeOutgoingEmailHtml('<img src="https://t.example/p.gif">')).toBe("");
+    expect(sanitizeOutgoingEmailHtml('<img src="data:image/png;base64,AAAA">')).toBe("");
+    expect(sanitizeOutgoingEmailHtml('<p onclick="x()" onmouseover="y()">a</p>')).toBe("<p>a</p>");
+    expect(
+      sanitizeOutgoingEmailHtml("<script>alert(1)</script><iframe src=x></iframe><p>ok</p>"),
+    ).toBe("<p>ok</p>");
+    expect(sanitizeOutgoingEmailHtml("<form><input></form><style>p{}</style>x")).toBe("x");
+  });
+
+  test("table extras are dropped", () => {
+    const out = sanitizeOutgoingEmailHtml(
+      '<table width="500" data-width="9"><caption>c</caption><colgroup><col span="2"></colgroup><tfoot><tr><td data-valign="top" width="3">x</td></tr></tfoot></table>',
+    );
+    expect(out).not.toMatch(/width|caption|colgroup|<col|tfoot|data-/);
+  });
+
+  test("div, center and small are not allowed (text kept)", () => {
+    expect(sanitizeOutgoingEmailHtml("<div>a</div><center>b</center><small>c</small>")).toBe("abc");
   });
 });
