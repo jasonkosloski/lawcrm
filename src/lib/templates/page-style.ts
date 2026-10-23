@@ -36,6 +36,10 @@ export const PAGE_DIMENSIONS: Record<
   legal: { twips: { w: 12240, h: 20160 }, pt: { w: 612, h: 1008 }, in: { w: 8.5, h: 14 } },
 };
 
+/** Inches between the side margins (both paper sizes are 8.5 in wide). */
+export const textWidthIn = (m: { marginLeftIn: number; marginRightIn: number }) =>
+  Math.round((PAGE_DIMENSIONS.letter.in.w - m.marginLeftIn - m.marginRightIn) * 100) / 100;
+
 export const FONT_SIZE_HALF_PT_MIN = 20;
 export const FONT_SIZE_HALF_PT_MAX = 28;
 export const SPACE_AFTER_PT_MIN = 0;

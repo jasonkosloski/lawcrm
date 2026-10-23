@@ -47,6 +47,7 @@ export function Toolbar({
   data,
   blocks,
   styles,
+  textWidth,
 }: {
   /** The body editor. */
   editor: Editor;
@@ -61,6 +62,8 @@ export function Toolbar({
   blocks: BlockSource[];
   /** The firm's paragraph styles (the Style menu's options). */
   styles: ParagraphStyle[];
+  /** Inches between the house margins, for column widths. */
+  textWidth?: number;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [ruleOpen, setRuleOpen] = useState(false);
@@ -183,7 +186,7 @@ export function Toolbar({
           <Divider />
           <ListButtons editor={editor} />
           <AlignButtons editor={editor} />
-          <TableMenu editor={editor} />
+          <TableMenu editor={editor} textWidth={textWidth} />
           {kind !== "email" && (
             <ToolButton label="Page break" onClick={() => chain().insertPageBreak().run()}>
               <Scissors size={13} />

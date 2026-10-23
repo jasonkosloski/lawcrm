@@ -5,6 +5,7 @@
  * step, so turning off a line removes it from both neighbours.
  */
 
+import type { Node as PMNode } from "@tiptap/pm/model";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import {
   CellSelection,
@@ -14,6 +15,7 @@ import {
   type TableRect,
 } from "@tiptap/pm/tables";
 import type { CellBorders, CellSide } from "@/lib/templates/schema";
+import { columnShares, EDITOR_PX_PER_IN } from "@/lib/templates/table-layout";
 import { splitLayout, type Box } from "@/lib/templates/table-split";
 
 export type TableWidth = "full" | "fit";
@@ -220,17 +222,7 @@ export function fillColumnWidths(
     if (node.type.name !== "table") return true;
     const map = TableMap.get(node);
     const start = pos + 1;
-    const known: (number | null)[] = Array(map.width).fill(null);
-    const single: (number | null)[] = Array(map.width).fill(null);
-    for (let row = 0; row < map.height; row++) {
-      for (let col = 0; col < map.width; col++) {
-        const cellPos = map.map[row * map.width + col];
-        const cell = node.nodeAt(cellPos)!;
-        const w = (cell.attrs.colwidth as number[] | null)?.[col - map.colCount(cellPos)];
-        if (w && w > 0 && known[col] === null) known[col] = w;
-        if (cell.attrs.colspan === 1 && single[col] === null) single[col] = cellPos;
-      }
-    }
+    const { known, single } = columnWidths(node, map);
     const unset = known.flatMap((w, col) => (w === null ? [col] : []));
     if (unset.length === 0 || unset.length === map.width) return true;
     for (const col of unset) {
@@ -251,4 +243,121 @@ export function fillColumnWidths(
     return true;
   });
   return tr.docChanged ? tr.setMeta("addToHistory", false) : null;
+}
+
+/** The narrowest column a typed width may leave. */
+export const MIN_COLUMN_IN = 0.25;
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Each column's set width (null where unset) and a single-column cell
+ *  in it to measure (null when every cell there spans columns). */
+function columnWidths(table: PMNode, map: TableMap) {
+  const known: (number | null)[] = Array(map.width).fill(null);
+  const single: (number | null)[] = Array(map.width).fill(null);
+  map.map.forEach((cellPos, i) => {
+    const col = i % map.width;
+    const cell = table.nodeAt(cellPos)!;
+    const w = (cell.attrs.colwidth as number[] | null)?.[col - map.colCount(cellPos)];
+    if (w && w > 0 && known[col] === null) known[col] = w;
+    if (cell.attrs.colspan === 1 && single[col] === null) single[col] = cellPos;
+  });
+  return { known, single };
+}
+
+/** The table around the cursor and the columns the selection covers. */
+function selectedColumns(state: EditorState) {
+  if (!isInTable(state)) return null;
+  const rect = selectedRect(state);
+  return { rect, ...columnWidths(rect.table, rect.map), full: rect.table.attrs.width !== "fit" };
+}
+
+/**
+ * The selected columns' width in inches as the outputs draw it (a
+ * full-width table at `textWidthIn`), or null when they differ or a fit
+ * table's column sizes to its content.
+ */
+export function columnWidthAt(state: EditorState, textWidthIn: number): number | null {
+  const s = selectedColumns(state);
+  if (!s) return null;
+  const { left, right } = s.rect;
+  const inches = s.full
+    ? columnShares(s.known).map((f) => f * textWidthIn)
+    : s.known.map((w) => (w === null ? null : w / EDITOR_PX_PER_IN));
+  const picked = inches.slice(left, right);
+  const first = picked[0];
+  if (first == null || picked.some((w) => w == null || Math.abs(w - first) > 0.005)) return null;
+  return round2(first);
+}
+
+/**
+ * Sets each selected column (or the cursor's) to `inches`, writing every
+ * column in one step so undo restores the table as it was. A fit table
+ * records its other columns as they measure on screen (`measure`, as for
+ * fillColumnWidths), which the fill plugin would do anyway. A full-width
+ * table always fills the text, so its other columns share what is left
+ * in their current proportions and the outputs land on the exact width
+ * at `textWidthIn` (the house margins; a court format's margins scale
+ * it). Returns the reason instead when the width can't be had.
+ */
+export function setColumnWidth(
+  state: EditorState,
+  inches: number,
+  textWidthIn: number,
+  measure: (cellPos: number) => number | null = () => null,
+): Transaction | { error: string } {
+  const s = selectedColumns(state);
+  if (!s) return { error: "Click in a table first." };
+  const text = `${round2(textWidthIn)} in`;
+  if (!isFinite(inches)) return { error: "Enter a width in inches." };
+  if (inches < MIN_COLUMN_IN) return { error: `Enter at least ${MIN_COLUMN_IN} in.` };
+  const { rect, known, single, full } = s;
+  const n = rect.map.width;
+  const picked = rect.right - rect.left;
+  const isPicked = (col: number) => col >= rect.left && col < rect.right;
+  const px = (inch: number) => round2(inch * EDITOR_PX_PER_IN);
+  let widths: (number | null)[];
+  if (full) {
+    if (picked === n) {
+      return {
+        error: `A full-width table's columns fill the text (${text}). Select fewer columns, or switch the table to Fit to content.`,
+      };
+    }
+    const rest = textWidthIn - inches * picked;
+    if (rest < MIN_COLUMN_IN * (n - picked)) {
+      return { error: `That leaves too little room for the other columns (the text is ${text}).` };
+    }
+    const f = columnShares(known);
+    const others = f.reduce((a, x, col) => (isPicked(col) ? a : a + x), 0);
+    widths = f.map((x, col) => px(isPicked(col) ? inches : (rest * x) / others));
+  } else {
+    widths = known.map((w, col) => {
+      if (isPicked(col)) return px(inches);
+      if (w !== null) return w;
+      const at = single[col];
+      const m = at === null ? null : measure(rect.tableStart + at);
+      return m && m > 0 ? Math.round(m) : null;
+    });
+    const total = widths.reduce<number>((a, w) => a + (w ?? 0), 0) / EDITOR_PX_PER_IN;
+    if (total > textWidthIn + 0.005) {
+      return {
+        error: `The columns would come to ${round2(total)} in, wider than the text (${text}).`,
+      };
+    }
+  }
+
+  const tr = state.tr;
+  const seen = new Set<number>();
+  rect.map.map.forEach((cellPos) => {
+    if (seen.has(cellPos)) return;
+    seen.add(cellPos);
+    const cell = rect.table.nodeAt(cellPos)!;
+    const first = rect.map.colCount(cellPos);
+    const colwidth = widths.slice(first, first + (cell.attrs.colspan as number)).map((w) => w ?? 0);
+    tr.setNodeMarkup(rect.tableStart + cellPos, undefined, {
+      ...cell.attrs,
+      colwidth: colwidth.some((w) => w > 0) ? colwidth : null,
+    });
+  });
+  return tr;
 }

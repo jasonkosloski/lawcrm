@@ -86,13 +86,55 @@ describe("TableMenu features", () => {
     menu();
     expect(screen.getByRole("button", { name: /^Borders/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Align top" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Width/ })).toBeInTheDocument();
   });
 
-  it("with every optional feature off, drops borders and vertical alignment", () => {
+  it("with every optional feature off, drops borders, column width and vertical alignment", () => {
     menu({ merge: false, borders: false, width: false, valign: false });
     expect(screen.getByRole("button", { name: /^Table/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Borders/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Width/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Align top" })).toBeNull();
+  });
+});
+
+describe("Column width", () => {
+  const colwidths = (editor: Editor) => {
+    const out: unknown[] = [];
+    editor.state.doc.descendants((n) => {
+      if (n.type.name === "tableCell") out.push(n.attrs.colwidth);
+    });
+    return out;
+  };
+
+  it("sets the cursor's column in inches; the other column fills the text", async () => {
+    const editor = setup();
+    expect(screen.getByRole("button", { name: /^Width/ })).toBeDisabled();
+    await act(async () => {
+      editor.commands.insertTable({ rows: 1, cols: 2, withHeaderRow: false });
+    });
+    await userEvent.click(screen.getByRole("button", { name: /^Width/ }));
+    const field = await screen.findByRole("spinbutton", { name: /Column width/ });
+    // Two even columns of 6.5 in of text.
+    expect(field).toHaveValue(3.25);
+    await userEvent.clear(field);
+    await userEvent.type(field, "2.5");
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(colwidths(editor)).toEqual([[240], [384]]);
+  });
+
+  it("says why a width can't be had and leaves the table alone", async () => {
+    const editor = setup();
+    await act(async () => {
+      editor.commands.insertTable({ rows: 1, cols: 2, withHeaderRow: false });
+    });
+    await userEvent.click(screen.getByRole("button", { name: /^Width/ }));
+    const field = await screen.findByRole("spinbutton", { name: /Column width/ });
+    await userEvent.clear(field);
+    await userEvent.type(field, "6.4");
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(await screen.findByText(/too little room/)).toBeInTheDocument();
+    expect(colwidths(editor)).toEqual([null, null]);
   });
 });
 

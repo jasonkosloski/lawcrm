@@ -12,9 +12,11 @@ import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { createTemplateExtensions, templateJSON } from "@/components/templates/editor/extensions";
 import {
   bordersAre,
+  columnWidthAt,
   mergeCheck,
   fillColumnWidths,
   setBorders,
+  setColumnWidth,
   setTableWidth,
   tableWidthAt,
   type BorderTarget,
@@ -300,5 +302,101 @@ describe("fillColumnWidths", () => {
     setWidth(e, 0, 300);
     e.view.dispatch(fillColumnWidths(e.state, () => 150)!);
     expect(widths(e)).toEqual([[300], [150], [300, 150]]);
+  });
+});
+
+describe("setColumnWidth", () => {
+  const apply = (
+    e: Editor,
+    inches: number,
+    textIn = 6.5,
+    measure?: (pos: number) => number | null,
+  ) => {
+    const r = setColumnWidth(e.state, inches, textIn, measure);
+    if ("error" in r) return r.error;
+    e.view.dispatch(r);
+    return null;
+  };
+  const widths = (e: Editor) => cells(e).map((c) => (c.attrs.colwidth as number[] | null) ?? null);
+
+  it("in a full-width table, sets the column exactly and the rest fill the text", () => {
+    const e = grid(2, 3);
+    select(e, 2);
+    expect(apply(e, 2.5)).toBeNull();
+    // 6.5 in of text: 2.5 in for the last column, the other two share 4 in evenly.
+    expect(widths(e).slice(0, 3)).toEqual([[192], [192], [240]]);
+    expect(widths(e).slice(3)).toEqual([[192], [192], [240]]);
+    expect(columnWidthAt(e.state, 6.5)).toBe(2.5);
+    select(e, 0);
+    expect(columnWidthAt(e.state, 6.5)).toBe(2);
+    expect(validateTemplateContent("filing", templateJSON(e)).ok).toBe(true);
+  });
+
+  it("keeps the other columns' proportions", () => {
+    const e = grid(1, 3);
+    select(e, 0);
+    apply(e, 1);
+    select(e, 2);
+    apply(e, 1.5);
+    // Column 0 was 1 in of 6.5, column 1 was 2.75; they share 5 in at 1 : 2.75.
+    const [a, b, c] = widths(e).map((w) => w![0]);
+    expect(c).toBe(144);
+    expect(a + b + c).toBeCloseTo(6.5 * 96, 1);
+    expect(a / b).toBeCloseTo(1 / 2.75, 2);
+  });
+
+  it("refuses widths a full-width table can't have", () => {
+    const e = grid(1, 2);
+    select(e, 0);
+    expect(apply(e, 6.4)).toMatch(/too little room/);
+    expect(apply(e, 0.1)).toMatch(/at least 0.25 in/);
+    select(e, 0, 1);
+    expect(apply(e, 3)).toMatch(/Fit to content/);
+    expect(widths(e)).toEqual([null, null]);
+  });
+
+  it("in a fit table, sets just the selected columns", () => {
+    const e = grid(1, 3);
+    select(e, 0);
+    e.view.dispatch(setTableWidth(e.state, "fit")!);
+    select(e, 1);
+    expect(apply(e, 1.25)).toBeNull();
+    expect(widths(e)).toEqual([null, [120], null]);
+    expect(columnWidthAt(e.state, 6.5)).toBe(1.25);
+    select(e, 0);
+    expect(columnWidthAt(e.state, 6.5)).toBeNull();
+    select(e, 0, 2);
+    expect(apply(e, 3)).toMatch(/wider than the text/);
+  });
+
+  it("in a fit table, records the other columns as measured, in the same step", () => {
+    const e = grid(1, 3);
+    e.view.dispatch(setTableWidth(e.state, "fit")!);
+    select(e, 1);
+    expect(apply(e, 1, 6.5, () => 150.4)).toBeNull();
+    expect(widths(e)).toEqual([[150], [96], [150]]);
+    e.commands.undo();
+    expect(widths(e)).toEqual([null, null, null]);
+    // Unsized columns still need room: 6 in plus two measured 1 in columns won't fit.
+    select(e, 0);
+    expect(apply(e, 6, 6.5, () => 96)).toMatch(/come to 8 in, wider than the text/);
+  });
+
+  it("sets each column a merged cell spans", () => {
+    const e = grid(2, 3);
+    select(e, 0, 1);
+    e.commands.mergeCells();
+    select(e, 0); // the merged cell
+    expect(apply(e, 2)).toBeNull();
+    // Both spanned columns get 2 in; the last takes the remaining 2.5 in.
+    expect(widths(e)[0]).toEqual([192, 192]);
+    expect(widths(e)[1]).toEqual([240]);
+    expect(widths(e).slice(2)).toEqual([[192], [192], [240]]);
+  });
+
+  it("does nothing outside a table", () => {
+    const e = grid();
+    e.commands.deleteTable();
+    expect(apply(e, 2)).toMatch(/Click in a table/);
   });
 });

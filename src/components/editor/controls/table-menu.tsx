@@ -1,8 +1,8 @@
 /**
  * The toolbar's table controls: insert a table, then (with the cursor in
- * one) rows, columns, merging, width, borders and
- * vertical alignment. Always shown, greyed out outside a table, so they
- * can be found. Horizontal alignment is the toolbar's own align
+ * one) rows, columns, merging, width (the table's, and a column's in
+ * inches), borders and vertical alignment. Always shown, greyed out
+ * outside a table, so they can be found. Horizontal alignment is the toolbar's own align
  * buttons, which apply to every selected cell.
  */
 
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { DEFAULT_DOCUMENT_STYLE, textWidthIn } from "@/lib/templates/page-style";
 import type { CellSide, VerticalAlign } from "@/lib/templates/schema";
 import {
   bordersAre,
@@ -41,6 +42,7 @@ import {
   type TableWidth,
   type Weight,
 } from "../table-commands";
+import { ColumnWidth } from "./column-width";
 import { ToolButton } from "./tool-button";
 
 const SIDES: CellSide[] = ["top", "bottom", "left", "right"];
@@ -131,8 +133,17 @@ export type TableFeatures = {
   valign?: boolean;
 };
 
-/** Every feature is on unless a caller turns it off. */
-export function TableMenu({ editor, features }: { editor: Editor; features?: TableFeatures }) {
+/** Every feature is on unless a caller turns it off. `textWidth`: inches
+ *  between the margins, which a full-width table fills. */
+export function TableMenu({
+  editor,
+  features,
+  textWidth = textWidthIn(DEFAULT_DOCUMENT_STYLE),
+}: {
+  editor: Editor;
+  features?: TableFeatures;
+  textWidth?: number;
+}) {
   const {
     merge = true,
     borders = true,
@@ -316,6 +327,10 @@ export function TableMenu({ editor, features }: { editor: Editor; features?: Tab
             </p>
           </PopoverContent>
         </Popover>
+      )}
+
+      {showWidth && (
+        <ColumnWidth editor={editor} table={t.inTable ? t.width : null} textWidthIn={textWidth} />
       )}
 
       {showValign && (

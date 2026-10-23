@@ -125,10 +125,16 @@ export function columnPx(grid: TableGrid): (number | null)[] {
   return out;
 }
 
+/** Editor pixels are CSS pixels, placed at 96 to the inch. */
+export const EDITOR_PX_PER_IN = 96;
+
 /** Each column's share of a full-width table (sums to 1). Unset columns
  *  take the average set width, so a table with no widths is even. */
-export function columnFractions(grid: TableGrid): number[] {
-  const px = columnPx(grid);
+export const columnFractions = (grid: TableGrid): number[] => columnShares(columnPx(grid));
+
+/** `columnFractions` from per-column widths (null where unset); the
+ *  editor uses it to show and set widths as the outputs will draw them. */
+export function columnShares(px: (number | null)[]): number[] {
   const set = px.filter((w): w is number => w !== null);
   const fill = set.length ? set.reduce((a, b) => a + b, 0) / set.length : 1;
   const widths = px.map((w) => w ?? fill);

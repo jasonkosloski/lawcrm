@@ -25,7 +25,7 @@ import { saveTemplateBlock } from "@/app/actions/template-blocks";
 import { cn } from "@/lib/utils";
 import { checkTemplateFit, type FitResult } from "@/lib/templates/inspect";
 import type { BlockSource } from "@/lib/templates/render";
-import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
+import { DEFAULT_PARAGRAPH_STYLES, textWidthIn } from "@/lib/templates/page-style";
 import type { AppliesTo, TemplateDoc, TemplateKind } from "@/lib/templates/schema";
 import {
   blockMeta,
@@ -305,6 +305,7 @@ function Editor(props: EditorProps & { narrow: boolean }) {
                       data={data}
                       blocks={blocks.filter((b) => b.isActive)}
                       styles={styles}
+                      textWidth={props.pageStyle ? textWidthIn(props.pageStyle.values) : undefined}
                     />
                   }
                 />
