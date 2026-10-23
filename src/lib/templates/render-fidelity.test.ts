@@ -18,7 +18,8 @@ const style = () => resolvePageStyle("letter", DEFAULT_DOCUMENT_STYLE, null);
 
 // [page, str, x, y, fontSize]
 const PDF_RECORDED = [
-  [1, "Re: <b>Notice</b>", 243.3, 705.7, 16],
+  // Re-recorded: 243.3 captured a bug (PDF headings drew regular weight).
+  [1, "Re: <b>Notice</b>", 240.9, 705.7, 16],
   [1, "Dear", 247, 678.8, 12],
   [1, "Sam Sample (sample client)", 273.3, 678.8, 12],
   [1, ", <script>alert(1)</script>", 415, 678.8, 12],

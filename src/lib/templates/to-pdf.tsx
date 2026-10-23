@@ -220,10 +220,7 @@ function inline(
       <Text
         key={i}
         style={{
-          // Style bold is not drawn per run: the recorded PDF layout (render
-          fontWeight:
-            // fidelity test) has style-bold paragraphs in regular weight.
-            types.has("bold") ? "bold" : "normal",
+          fontWeight: types.has("bold") || r.bold ? "bold" : "normal",
           fontStyle: types.has("italic") || r.italic ? "italic" : "normal",
           textDecoration: types.has("underline") || r.underline ? "underline" : "none",
           // react-pdf reads the indent from the first run only.

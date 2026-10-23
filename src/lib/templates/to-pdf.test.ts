@@ -775,6 +775,13 @@ describe("resolvedToPdf paragraph styles", () => {
     expect(b[0].str).toBe("HELLO");
   });
 
+  it("a bold style draws its runs in the bold face", async () => {
+    const h = await render([p("Heading text", { bold: true })]);
+    const r = await render([p("Heading text")]);
+    expect((await fontNames(h)).some((n) => /Bold/i.test(n))).toBe(true);
+    expect((await fontNames(r)).some((n) => /Bold/i.test(n))).toBe(false);
+  });
+
   it("a font size mark renders at that size", async () => {
     const it = await rawItems(
       await render([p("tiny", {}, { marks: [{ type: "fontSize", attrs: { pt: 9 } }] })]),
