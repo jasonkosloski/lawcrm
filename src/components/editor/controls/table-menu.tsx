@@ -40,8 +40,8 @@ import {
   type MergeCheck,
   type TableWidth,
   type Weight,
-} from "./table-commands";
-import { ToolButton } from "./toolbar-button";
+} from "@/components/templates/editor/table-commands";
+import { ToolButton } from "./tool-button";
 
 const SIDES: CellSide[] = ["top", "bottom", "left", "right"];
 const SIDE_LABEL: Record<CellSide, string> = {
@@ -124,7 +124,21 @@ const OUTSIDE = {
   thick: NO_SIDES as Record<CellSide, boolean>,
 };
 
-export function TableMenu({ editor }: { editor: Editor }) {
+export type TableFeatures = {
+  merge?: boolean;
+  borders?: boolean;
+  width?: boolean;
+  valign?: boolean;
+};
+
+/** Every feature is on unless a caller turns it off. */
+export function TableMenu({ editor, features }: { editor: Editor; features?: TableFeatures }) {
+  const {
+    merge = true,
+    borders = true,
+    width: showWidth = true,
+    valign: showValign = true,
+  } = features ?? {};
   const [weight, setWeight] = useState<Weight>("thin");
   const s = useEditorState({
     editor,
@@ -203,34 +217,45 @@ export function TableMenu({ editor }: { editor: Editor }) {
           <DropdownMenuItem disabled={off} onClick={() => chain().deleteColumn().run()}>
             Delete column
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem disabled={t.merge !== "ok"} onClick={() => chain().mergeCells().run()}>
-            Merge cells
-          </DropdownMenuItem>
-          {t.merge === "interlock" && (
-            <p className="max-w-52 px-1.5 py-1 text-2xs text-ink-4">
-              These cells would interlock with other merged cells in a way the PDF can&apos;t draw.
-              Split one of them first.
-            </p>
+          {merge && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={t.merge !== "ok"}
+                onClick={() => chain().mergeCells().run()}
+              >
+                Merge cells
+              </DropdownMenuItem>
+              {t.merge === "interlock" && (
+                <p className="max-w-52 px-1.5 py-1 text-2xs text-ink-4">
+                  These cells would interlock with other merged cells in a way the PDF can&apos;t
+                  draw. Split one of them first.
+                </p>
+              )}
+              <DropdownMenuItem disabled={!t.canSplit} onClick={() => chain().splitCell().run()}>
+                Split cell
+              </DropdownMenuItem>
+            </>
           )}
-          <DropdownMenuItem disabled={!t.canSplit} onClick={() => chain().splitCell().run()}>
-            Split cell
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuCheckboxItem
-            disabled={off}
-            checked={t.inTable && t.width === "full"}
-            onClick={() => width("full")}
-          >
-            Full width
-          </DropdownMenuCheckboxItem>
-          <DropdownMenuCheckboxItem
-            disabled={off}
-            checked={t.width === "fit"}
-            onClick={() => width("fit")}
-          >
-            Fit to content
-          </DropdownMenuCheckboxItem>
+          {showWidth && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                disabled={off}
+                checked={t.inTable && t.width === "full"}
+                onClick={() => width("full")}
+              >
+                Full width
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                disabled={off}
+                checked={t.width === "fit"}
+                onClick={() => width("fit")}
+              >
+                Fit to content
+              </DropdownMenuCheckboxItem>
+            </>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
@@ -242,76 +267,82 @@ export function TableMenu({ editor }: { editor: Editor }) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Popover>
-        <PopoverTrigger
-          render={
-            <Button variant="outline" size="xs" className="gap-1" disabled={off}>
-              <Grid2x2 size={12} />
-              Borders
-              <ChevronDown size={11} />
-            </Button>
-          }
-        />
-        <PopoverContent align="start" className="w-56">
-          <div className="flex gap-0.5 rounded bg-paper-2 p-0.5" role="group" aria-label="Line">
-            <Segment active={weight === "thin"} onClick={() => setWeight("thin")}>
-              Thin
-            </Segment>
-            <Segment active={weight === "thick"} onClick={() => setWeight("thick")}>
-              Thick
-            </Segment>
-          </div>
-          <div className="mt-2 grid grid-cols-4 gap-1">
-            {PRESETS.map((p) => (
-              <ToolButton
-                key={p.target}
-                label={p.label}
-                onClick={() => dispatch(setBorders(editor.state, p.target, weight))}
-              >
-                <BorderIcon target={p.target} />
-              </ToolButton>
-            ))}
-            {SIDES.map((side) => (
-              <ToolButton
-                key={side}
-                label={SIDE_LABEL[side]}
-                active={t[weight][side]}
-                onClick={() => dispatch(setBorders(editor.state, side, weight))}
-              >
-                <BorderIcon target={side} />
-              </ToolButton>
-            ))}
-          </div>
-          <p className="mt-2 text-2xs text-ink-4">
-            Applies to the selected cells. A side button turns that line on or off.
-          </p>
-        </PopoverContent>
-      </Popover>
+      {borders && (
+        <Popover>
+          <PopoverTrigger
+            render={
+              <Button variant="outline" size="xs" className="gap-1" disabled={off}>
+                <Grid2x2 size={12} />
+                Borders
+                <ChevronDown size={11} />
+              </Button>
+            }
+          />
+          <PopoverContent align="start" className="w-56">
+            <div className="flex gap-0.5 rounded bg-paper-2 p-0.5" role="group" aria-label="Line">
+              <Segment active={weight === "thin"} onClick={() => setWeight("thin")}>
+                Thin
+              </Segment>
+              <Segment active={weight === "thick"} onClick={() => setWeight("thick")}>
+                Thick
+              </Segment>
+            </div>
+            <div className="mt-2 grid grid-cols-4 gap-1">
+              {PRESETS.map((p) => (
+                <ToolButton
+                  key={p.target}
+                  label={p.label}
+                  onClick={() => dispatch(setBorders(editor.state, p.target, weight))}
+                >
+                  <BorderIcon target={p.target} />
+                </ToolButton>
+              ))}
+              {SIDES.map((side) => (
+                <ToolButton
+                  key={side}
+                  label={SIDE_LABEL[side]}
+                  active={t[weight][side]}
+                  onClick={() => dispatch(setBorders(editor.state, side, weight))}
+                >
+                  <BorderIcon target={side} />
+                </ToolButton>
+              ))}
+            </div>
+            <p className="mt-2 text-2xs text-ink-4">
+              Applies to the selected cells. A side button turns that line on or off.
+            </p>
+          </PopoverContent>
+        </Popover>
+      )}
 
-      <ToolButton
-        label="Align top"
-        disabled={off}
-        active={t.inTable && !t.middle && !t.bottom}
-        onClick={() => valign("top")}
-      >
-        <AlignVerticalJustifyStart size={13} />
-      </ToolButton>
-      <ToolButton
-        label="Align middle"
-        disabled={off}
-        active={t.middle}
-        onClick={() => valign("middle")}
-      >
-        <AlignVerticalJustifyCenter size={13} />
-      </ToolButton>
-      <ToolButton
-        label="Align bottom"
-        disabled={off}
-        active={t.bottom}
-        onClick={() => valign("bottom")}
-      >
-        <AlignVerticalJustifyEnd size={13} />
-      </ToolButton>
+      {showValign && (
+        <>
+          <ToolButton
+            label="Align top"
+            disabled={off}
+            active={t.inTable && !t.middle && !t.bottom}
+            onClick={() => valign("top")}
+          >
+            <AlignVerticalJustifyStart size={13} />
+          </ToolButton>
+          <ToolButton
+            label="Align middle"
+            disabled={off}
+            active={t.middle}
+            onClick={() => valign("middle")}
+          >
+            <AlignVerticalJustifyCenter size={13} />
+          </ToolButton>
+          <ToolButton
+            label="Align bottom"
+            disabled={off}
+            active={t.bottom}
+            onClick={() => valign("bottom")}
+          >
+            <AlignVerticalJustifyEnd size={13} />
+          </ToolButton>
+        </>
+      )}
     </>
   );
 }

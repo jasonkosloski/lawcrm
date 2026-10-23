@@ -9,22 +9,7 @@
 
 import { useState } from "react";
 import { useEditorState, type Editor } from "@tiptap/react";
-import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  Blocks,
-  Bold,
-  Braces,
-  Eraser,
-  Eye,
-  Italic,
-  List,
-  ListOrdered,
-  Repeat,
-  Scissors,
-  Underline,
-} from "lucide-react";
+import { Blocks, Braces, Eraser, Eye, Repeat, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -40,13 +25,17 @@ import { FieldPicker } from "./field-picker";
 import { repeatListAt } from "./field-format-popover";
 import { RuleForm } from "./rule-popover";
 import type { ParagraphStyle } from "@/lib/templates/paragraph-styles";
-import { FontSizeField } from "./font-size-field";
 import { ParagraphDialog } from "./paragraph-dialog";
 import { StyleMenu } from "./style-menu";
-import { TableMenu } from "./table-menu";
-import { ToolButton } from "./toolbar-button";
-
-const Divider = () => <span className="mx-1 h-4 w-px bg-line" aria-hidden="true" />;
+import {
+  AlignButtons,
+  Divider,
+  FontSizeField,
+  ListButtons,
+  MarkButtons,
+  TableMenu,
+  ToolButton,
+} from "@/components/editor/controls";
 
 export function Toolbar({
   editor,
@@ -78,15 +67,6 @@ export function Toolbar({
   const s = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
-      bold: e.isActive("bold"),
-      italic: e.isActive("italic"),
-      underline: e.isActive("underline"),
-      smallCaps: e.isActive("smallCaps"),
-      allCaps: e.isActive("allCaps"),
-      bullet: e.isActive("bulletList"),
-      ordered: e.isActive("orderedList"),
-      center: e.isActive({ textAlign: "center" }),
-      right: e.isActive({ textAlign: "right" }),
       repeatList: repeatListAt(e, e.state.selection.from),
     }),
   });
@@ -191,74 +171,18 @@ export function Toolbar({
           )}
 
           <Divider />
-          <ToolButton label="Bold" active={s?.bold} onClick={() => chain().toggleBold().run()}>
-            <Bold size={13} />
-          </ToolButton>
-          <ToolButton
-            label="Italic"
-            active={s?.italic}
-            onClick={() => chain().toggleItalic().run()}
-          >
-            <Italic size={13} />
-          </ToolButton>
-          <ToolButton
-            label="Underline"
-            active={s?.underline}
-            onClick={() => chain().toggleUnderline().run()}
-          >
-            <Underline size={13} />
-          </ToolButton>
-          <ToolButton
-            label="Small caps"
-            active={s?.smallCaps}
-            onClick={() => chain().toggleSmallCaps().run()}
-          >
-            <span className="text-xs font-semibold [font-variant:small-caps]">Sc</span>
-          </ToolButton>
-          <ToolButton
-            label="All caps"
-            active={s?.allCaps}
-            onClick={() => chain().toggleAllCaps().run()}
-          >
-            <span className="text-xs font-semibold">AA</span>
-          </ToolButton>
+          <MarkButtons
+            editor={editor}
+            marks={["bold", "italic", "underline", "smallCaps", "allCaps"]}
+          />
           <FontSizeField editor={editor} />
           <ToolButton label="Clear formatting" onClick={() => chain().clearFormatting().run()}>
             <Eraser size={13} />
           </ToolButton>
           <ParagraphDialog editor={editor} styles={styles} />
           <Divider />
-          <ToolButton
-            label="Bulleted list"
-            active={s?.bullet}
-            onClick={() => chain().toggleBulletList().run()}
-          >
-            <List size={13} />
-          </ToolButton>
-          <ToolButton
-            label="Numbered list"
-            active={s?.ordered}
-            onClick={() => chain().toggleOrderedList().run()}
-          >
-            <ListOrdered size={13} />
-          </ToolButton>
-          <ToolButton label="Align left" onClick={() => chain().setTextAlign("left").run()}>
-            <AlignLeft size={13} />
-          </ToolButton>
-          <ToolButton
-            label="Center"
-            active={s?.center}
-            onClick={() => chain().setTextAlign("center").run()}
-          >
-            <AlignCenter size={13} />
-          </ToolButton>
-          <ToolButton
-            label="Align right"
-            active={s?.right}
-            onClick={() => chain().setTextAlign("right").run()}
-          >
-            <AlignRight size={13} />
-          </ToolButton>
+          <ListButtons editor={editor} />
+          <AlignButtons editor={editor} />
           <TableMenu editor={editor} />
           {kind !== "email" && (
             <ToolButton label="Page break" onClick={() => chain().insertPageBreak().run()}>

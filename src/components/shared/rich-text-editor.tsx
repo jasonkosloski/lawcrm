@@ -23,17 +23,9 @@
 
 import { useEditor, useEditorState, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import {
-  Bold,
-  Code,
-  Heading2,
-  Italic,
-  List,
-  ListOrdered,
-  Quote,
-  Strikethrough,
-} from "lucide-react";
+import { Heading2, Quote } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Divider, ListButtons, MarkButtons, ToolButton } from "@/components/editor/controls";
 import { EDITOR_CONTENT_CLASS, EditorShell } from "@/components/editor/editor-shell";
 
 /**
@@ -136,112 +128,29 @@ function EditorToolbar({ editor }: { editor: Editor }) {
     editor,
     selector: ({ editor }) => ({
       heading: editor.isActive("heading", { level: 2 }),
-      bold: editor.isActive("bold"),
-      italic: editor.isActive("italic"),
-      strike: editor.isActive("strike"),
-      code: editor.isActive("code"),
-      bulletList: editor.isActive("bulletList"),
-      orderedList: editor.isActive("orderedList"),
       blockquote: editor.isActive("blockquote"),
     }),
   });
   return (
     <div className="flex items-center gap-0.5 px-1.5 py-1 border-b border-line bg-paper-2/40">
-      <ToolbarButton
+      <ToolButton
         label="Heading"
         active={active.heading}
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
       >
         <Heading2 size={13} />
-      </ToolbarButton>
+      </ToolButton>
       <Divider />
-      <ToolbarButton
-        label="Bold"
-        active={active.bold}
-        onClick={() => editor.chain().focus().toggleBold().run()}
-      >
-        <Bold size={13} />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Italic"
-        active={active.italic}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-      >
-        <Italic size={13} />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Strikethrough"
-        active={active.strike}
-        onClick={() => editor.chain().focus().toggleStrike().run()}
-      >
-        <Strikethrough size={13} />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Inline code"
-        active={active.code}
-        onClick={() => editor.chain().focus().toggleCode().run()}
-      >
-        <Code size={13} />
-      </ToolbarButton>
+      <MarkButtons editor={editor} marks={["bold", "italic", "strike", "code"]} />
       <Divider />
-      <ToolbarButton
-        label="Bullet list"
-        active={active.bulletList}
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-      >
-        <List size={13} />
-      </ToolbarButton>
-      <ToolbarButton
-        label="Numbered list"
-        active={active.orderedList}
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-      >
-        <ListOrdered size={13} />
-      </ToolbarButton>
-      <ToolbarButton
+      <ListButtons editor={editor} bulletLabel="Bullet list" />
+      <ToolButton
         label="Quote"
         active={active.blockquote}
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
       >
         <Quote size={13} />
-      </ToolbarButton>
+      </ToolButton>
     </div>
   );
-}
-
-function ToolbarButton({
-  active,
-  label,
-  onClick,
-  children,
-}: {
-  active?: boolean;
-  label: string;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      aria-pressed={active}
-      onMouseDown={(e) => {
-        // Prevent the editor losing focus when the toolbar is clicked
-        // so mark/node toggles apply to the active selection.
-        e.preventDefault();
-      }}
-      onClick={onClick}
-      className={cn(
-        "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors",
-        active ? "bg-brand-soft text-brand-700" : "text-ink-3 hover:bg-paper-2 hover:text-ink-2",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Divider() {
-  return <span className="w-px h-4 bg-line mx-0.5 shrink-0" />;
 }

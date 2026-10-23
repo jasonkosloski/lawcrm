@@ -1,4 +1,4 @@
-/** The template editor's icon button; keeps editor focus on click. */
+/** The shared editor icon button (keeps editor focus on click) and toolbar divider. */
 
 "use client";
 
@@ -35,4 +35,8 @@ export function ToolButton({
       {children}
     </button>
   );
+}
+
+export function Divider() {
+  return <span className="mx-1 h-4 w-px bg-line" aria-hidden="true" />;
 }
