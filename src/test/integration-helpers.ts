@@ -145,6 +145,7 @@ export const TABLES_IN_DELETE_ORDER = [
   // refills it, so it must be cleared after "documents".
   "transcript_purges",
   // Users + firm at the bottom
+  "bar_admissions",
   "users",
   "firms",
 ];
