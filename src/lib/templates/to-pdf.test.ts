@@ -752,6 +752,19 @@ describe("resolvedToPdf paragraph styles", () => {
     expect(h[1].x - plain[1].x).toBeCloseTo(36, 1);
   });
 
+  it("a leading hard break still gets the first-line indent", async () => {
+    const para = {
+      type: "paragraph",
+      attrs: { resolved: { ...body, firstLine: { kind: "indent", in: 0.5 } } },
+      content: [{ type: "hardBreak" }, { type: "text", text: "After break" }],
+    } as ResolvedBlock;
+    const a = await rawItems(await render([para]));
+    const b = await rawItems(await render([p("After break")]));
+    expect(a[0].x - b[0].x).toBeCloseTo(0, 1); // second line is not indented
+    const first = await rawItems(await render([p("x"), para]));
+    expect(first.length).toBeGreaterThan(0);
+  });
+
   it("exact 24pt line spacing gives 24pt between baselines", async () => {
     const it = await rawItems(await render([p(LONG, { lineSpacing: { exactPt: 24 } })]));
     expect(it[0].y - it[1].y).toBeCloseTo(24, 1);
@@ -773,6 +786,24 @@ describe("resolvedToPdf paragraph styles", () => {
     const b = await rawItems(await render([p("hello", {}, { marks: [{ type: "allCaps" }] })]));
     expect(a[0].str).toBe("HELLO");
     expect(b[0].str).toBe("HELLO");
+  });
+
+  it("keep with next moves a heading to the page its paragraph starts on", async () => {
+    // 45 filler lines leave room for the heading but not for its paragraph.
+    const doc = (keep: boolean) => [
+      ...Array.from({ length: 45 }, (_, i) => p(`Filler ${i}`)),
+      p("Heading text", { sizePt: 18, bold: true, keepWithNext: keep }),
+      p("Following paragraph"),
+    ];
+    const pageText = async (buf: Buffer, n: number) =>
+      (await rawItems(buf, n)).map((i) => i.str).join(" ");
+    const kept = await render(doc(true));
+    expect(await pageText(kept, 1)).not.toContain("Heading text");
+    expect(await pageText(kept, 2)).toContain("Heading text");
+    expect(await pageText(kept, 2)).toContain("Following paragraph");
+    const free = await render(doc(false));
+    expect(await pageText(free, 1)).toContain("Heading text");
+    expect(await pageText(free, 2)).not.toContain("Heading text");
   });
 
   it("a bold style draws its runs in the bold face", async () => {

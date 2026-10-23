@@ -201,7 +201,17 @@ function inline(
 ): ReactNode[] {
   if (!nodes?.length) return [" "];
   return nodes.map((n, i) => {
-    if (n.type === "hardBreak") return "\n";
+    if (n.type === "hardBreak") {
+      // react-pdf reads the first-line indent from the first run, so a
+      // leading break carries it.
+      return i === 0 && indentPt ? (
+        <Text key={i} style={{ textIndent: indentPt }}>
+          {"\n"}
+        </Text>
+      ) : (
+        "\n"
+      );
+    }
     const types = new Set((n.marks ?? []).map((m) => m.type));
     const pt = markPt(n.marks);
     const text =
@@ -247,6 +257,12 @@ function firstLinePt(b: ResolvedBlock | undefined, ctx: Ctx): number {
   return r.sizePt * lineMultiple(r, ctx.style, r.sizePt);
 }
 
+/**
+ * keepWithNext: `minPresenceAhead` on the paragraph's Text asks react-pdf to
+ * break before it unless the next `nextLinePt` points (the following
+ * paragraph's first line) also fit on the page. An approximation: only the
+ * next paragraph's first line is reserved. Covered by a to-pdf test.
+ */
 function paragraph(key: string | number, b: ParaBlock, ctx: Ctx, nextLinePt: number) {
   const { style } = ctx;
   const r = resolvedOf(b, style);
