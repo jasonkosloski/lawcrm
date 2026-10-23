@@ -12,14 +12,29 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "@/lib/prisma";
+import { prisma, type Tx } from "@/lib/prisma";
 import { requireUser } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logTemplateChange } from "@/lib/template-activity";
 import { isUniqueViolation } from "@/lib/prisma-errors";
 import { MAX_TEMPLATE_DESCRIPTION, MAX_TEMPLATE_NAME } from "@/lib/template-constants";
-import { SCOPE_WORD } from "@/lib/templates/block-graph";
+import {
+  childIds,
+  depthAbove,
+  height,
+  loopPath,
+  MAX_BLOCK_DEPTH,
+  SCOPE_WORD,
+  scopeCovers,
+} from "@/lib/templates/block-graph";
+import {
+  childrenError,
+  loadAllBlocks,
+  lockBlockGraph,
+  TOO_DEEP,
+} from "@/lib/templates/block-graph-db";
 import { checkTemplateFit, collectBlockIds } from "@/lib/templates/inspect";
+import type { BlockSource } from "@/lib/templates/render";
 import {
   APPLIES_TO,
   validateTemplateContent,
@@ -44,16 +59,36 @@ const blockSchema = z.object({
     .optional(),
 });
 
+type Parent = { id: string; name: string; appliesTo: AppliesTo };
+
+const referencing = <T extends { content: Prisma.JsonValue }>(rows: T[], blockId: string) =>
+  rows.filter((r) => collectBlockIds(r.content as unknown as TemplateDoc).includes(blockId));
+
 /** Templates (active and archived) whose content references the block. */
-async function usageOf(blockId: string): Promise<{ id: string; name: string }[]> {
-  const rows = await prisma.documentTemplate.findMany({
+async function usageOf(
+  blockId: string,
+  db: Pick<Tx, "documentTemplate"> = prisma,
+): Promise<Parent[]> {
+  const rows = await db.documentTemplate.findMany({
     where: { content: { not: Prisma.DbNull } },
+    select: { id: true, name: true, appliesTo: true, content: true },
+    orderBy: { name: "asc" },
+  });
+  return referencing(rows, blockId).map((t) => ({
+    id: t.id,
+    name: t.name,
+    appliesTo: t.appliesTo as AppliesTo,
+  }));
+}
+
+/** Blocks (active and archived) whose content references the block directly. */
+async function parentBlocksOf(blockId: string): Promise<{ id: string; name: string }[]> {
+  const rows = await prisma.templateBlock.findMany({
+    where: { id: { not: blockId } },
     select: { id: true, name: true, content: true },
     orderBy: { name: "asc" },
   });
-  return rows
-    .filter((t) => collectBlockIds(t.content as unknown as TemplateDoc).includes(blockId))
-    .map((t) => ({ id: t.id, name: t.name }));
+  return referencing(rows, blockId).map((b) => ({ id: b.id, name: b.name }));
 }
 
 /** Court formats (either side of a replacement) that use the block. */
@@ -68,16 +103,67 @@ async function courtFormatsUsing(blockId: string): Promise<{ id: string; name: s
 const courtFormatsInUse = (formats: { name: string }[]) =>
   `This block is used by court format(s): ${formats.map((f) => f.name).join(", ")}. Remove it there first.`;
 
-export type BlockUsage = { id: string; name: string; kind: "template" | "court_format" };
+export type BlockUsage = {
+  id: string;
+  name: string;
+  kind: "template" | "block" | "court_format";
+};
 
-/** Everything that references the block: templates, then court formats. */
+/** Everything that references the block: templates, then parent blocks,
+ *  then court formats. */
 export async function listBlockUsage(blockId: string): Promise<BlockUsage[]> {
   await requireUser();
-  const [templates, formats] = await Promise.all([usageOf(blockId), courtFormatsUsing(blockId)]);
+  const [templates, blocks, formats] = await Promise.all([
+    usageOf(blockId),
+    parentBlocksOf(blockId),
+    courtFormatsUsing(blockId),
+  ]);
   return [
-    ...templates.map((t) => ({ ...t, kind: "template" as const })),
+    ...templates.map((t) => ({ id: t.id, name: t.name, kind: "template" as const })),
+    ...blocks.map((b) => ({ ...b, kind: "block" as const })),
     ...formats.map((f) => ({ ...f, kind: "court_format" as const })),
   ];
+}
+
+/** Placeholder id for a block being created, so the graph helpers can
+ *  walk its content (nothing can reference it yet). */
+const NEW_BLOCK = "\u0000new";
+
+/** The nesting rules for saving `doc` as block `selfId` with `scope`,
+ *  checked against the stored graph (`blocks`, already holding the new
+ *  content): missing child, child scope (rule 2), loop, depth, then
+ *  parents broader than the new scope (rule 3). */
+async function graphError(
+  tx: Tx,
+  selfId: string,
+  name: string,
+  doc: TemplateDoc,
+  scope: AppliesTo,
+  blocks: Map<string, BlockSource>,
+): Promise<string | null> {
+  const childError = childrenError(childIds(doc), blocks, scope, "block");
+  if (childError) return childError;
+  if (selfId !== NEW_BLOCK) {
+    const path = loopPath(selfId, doc, blocks);
+    if (path && path.length === 0) return `${name} can't include itself.`;
+    if (path) {
+      const a = blocks.get(path[path.length - 1])!.name;
+      return `${a} already includes ${name}, so ${name} can't include ${a}.`;
+    }
+  }
+  if (depthAbove(selfId, blocks) + height(selfId, blocks) > MAX_BLOCK_DEPTH) return TOO_DEEP;
+  if (selfId === NEW_BLOCK || scope === "both") return null;
+  const parentBlocks = [...blocks.values()].filter(
+    (b) => b.id !== selfId && childIds(b.content).includes(selfId),
+  );
+  const parents: Parent[] = [
+    ...(await usageOf(selfId, tx)),
+    ...parentBlocks.map((b) => ({ id: b.id, name: b.name, appliesTo: b.appliesTo ?? "both" })),
+  ];
+  const broader = parents.find((p) => !scopeCovers(scope, p.appliesTo));
+  return broader
+    ? `${broader.name} applies to ${SCOPE_WORD[broader.appliesTo]} and uses this block — change it first.`
+    : null;
 }
 
 export async function saveTemplateBlock(input: {
@@ -100,72 +186,85 @@ export async function saveTemplateBlock(input: {
   const v = validateTemplateContent("letter", input.content, { isBlock: true });
   if (!v.ok) return { ok: false, error: v.error };
 
-  // Absent scope: keep the stored one on update, "both" on create.
-  const existing = input.id
-    ? await prisma.templateBlock.findUnique({
-        where: { id: input.id },
-        select: { id: true, appliesTo: true },
-      })
-    : null;
-  if (input.id && !existing) return { ok: false, error: "Block not found." };
-  const scope = parsed.data.appliesTo ?? (existing?.appliesTo as AppliesTo | undefined) ?? "both";
-
-  // Rule 1: the block's own fields must fit its scope.
-  const fit = checkTemplateFit(v.doc, scope);
-  if (!fit.ok) {
-    const names = fit.invalid.map((i) => i.label ?? i.path).join(", ");
-    return { ok: false, error: `These fields don't fit a ${SCOPE_WORD[scope]} block: ${names}.` };
-  }
-
   const { key, name } = parsed.data;
   const description = parsed.data.description?.trim() || null;
   const content = v.doc as unknown as Prisma.InputJsonValue;
+  const STALE = "Someone else saved this block — reload to see their changes.";
 
-  const clash = await prisma.templateBlock.findFirst({
-    where: { key, ...(input.id ? { id: { not: input.id } } : {}) },
-    select: { id: true },
-  });
-  if (clash) return { ok: false, error: KEY_TAKEN };
-
-  if (!input.id) {
-    let created: { id: string; updatedAt: Date };
-    try {
-      created = await prisma.templateBlock.create({
-        data: { key, name, description, content, appliesTo: scope, createdById: userId },
-        select: { id: true, updatedAt: true },
-      });
-    } catch (e) {
-      if (isUniqueViolation(e)) return { ok: false, error: KEY_TAKEN };
-      throw e;
-    }
-    await logTemplateChange(userId, `Block "${name}" created`, `Key: ${key} (id ${created.id})`);
-    revalidatePath("/settings/templates");
-    return { ok: true, id: created.id, updatedAt: created.updatedAt.toISOString() };
-  }
-
-  // Set explicitly so the new version can be handed back to the editor.
-  const updatedAt = new Date();
-  let count: number;
+  // Graph rules and the write run under the block graph lock, so racing
+  // saves see each other's committed content and take turns.
+  type Saved = { ok: true; id: string; updatedAt: Date } | { ok: false; error: string };
+  let saved: Saved;
   try {
-    ({ count } = await prisma.templateBlock.updateMany({
-      where: {
-        id: input.id,
-        ...(parsed.data.expectedUpdatedAt
-          ? { updatedAt: new Date(parsed.data.expectedUpdatedAt) }
-          : {}),
-      },
-      data: { key, name, description, content, updatedAt, appliesTo: parsed.data.appliesTo },
-    }));
+    saved = await prisma.$transaction(async (tx): Promise<Saved> => {
+      await lockBlockGraph(tx);
+      const blocks = await loadAllBlocks(tx);
+      const existing = input.id ? blocks.get(input.id) : undefined;
+      if (input.id && !existing) return { ok: false, error: "Block not found." };
+      // Absent scope: keep the stored one on update, "both" on create.
+      const scope = parsed.data.appliesTo ?? existing?.appliesTo ?? "both";
+
+      // Rule 1: the block's own fields must fit its scope.
+      const fit = checkTemplateFit(v.doc, scope);
+      if (!fit.ok) {
+        const names = fit.invalid.map((i) => i.label ?? i.path).join(", ");
+        return {
+          ok: false,
+          error: `These fields don't fit a ${SCOPE_WORD[scope]} block: ${names}.`,
+        };
+      }
+
+      const selfId = input.id ?? NEW_BLOCK;
+      blocks.set(selfId, {
+        id: selfId,
+        name,
+        isActive: existing?.isActive ?? true,
+        content: v.doc,
+        appliesTo: scope,
+      });
+      const graph = await graphError(tx, selfId, name, v.doc, scope, blocks);
+      if (graph) return { ok: false, error: graph };
+
+      const clash = await tx.templateBlock.findFirst({
+        where: { key, ...(input.id ? { id: { not: input.id } } : {}) },
+        select: { id: true },
+      });
+      if (clash) return { ok: false, error: KEY_TAKEN };
+
+      if (!input.id) {
+        const created = await tx.templateBlock.create({
+          data: { key, name, description, content, appliesTo: scope, createdById: userId },
+          select: { id: true, updatedAt: true },
+        });
+        return { ok: true, ...created };
+      }
+
+      // Set explicitly so the new version can be handed back to the editor.
+      const updatedAt = new Date();
+      const { count } = await tx.templateBlock.updateMany({
+        where: {
+          id: input.id,
+          ...(parsed.data.expectedUpdatedAt
+            ? { updatedAt: new Date(parsed.data.expectedUpdatedAt) }
+            : {}),
+        },
+        data: { key, name, description, content, updatedAt, appliesTo: parsed.data.appliesTo },
+      });
+      return count === 0 ? { ok: false, error: STALE } : { ok: true, id: input.id, updatedAt };
+    });
   } catch (e) {
     if (isUniqueViolation(e)) return { ok: false, error: KEY_TAKEN };
     throw e;
   }
-  if (count === 0) {
-    return { ok: false, error: "Someone else saved this block — reload to see their changes." };
-  }
-  await logTemplateChange(userId, `Block "${name}" updated`, `Key: ${key} (id ${input.id})`);
+  if (!saved.ok) return saved;
+
+  await logTemplateChange(
+    userId,
+    `Block "${name}" ${input.id ? "updated" : "created"}`,
+    `Key: ${key} (id ${saved.id})`,
+  );
   revalidatePath("/settings/templates");
-  return { ok: true, id: input.id, updatedAt: updatedAt.toISOString() };
+  return { ok: true, id: saved.id, updatedAt: saved.updatedAt.toISOString() };
 }
 
 /** Archive (false) or restore (true). Archiving is refused while a court
@@ -197,8 +296,8 @@ export async function setTemplateBlockActive(
   return { ok: true };
 }
 
-/** HARD delete, refused while any template references the block.
- *  Templates reference blocks by JSON id (no FK), so a template saved
+/** HARD delete, refused while any template or block references the block.
+ *  Templates and blocks reference blocks by JSON id (no FK), so one saved
  *  concurrently with this delete can still point at the removed block.
  *  That degrades visibly: the render engine shows `[Missing block]`
  *  and reports it. Accepted by design. */
@@ -222,11 +321,11 @@ export async function deleteTemplateBlock(
       error: "This block is used by the firm's document style. Choose another block there first.",
     };
   }
-  const used = await usageOf(id);
+  const used = [...(await usageOf(id)), ...(await parentBlocksOf(id))];
   if (used.length > 0) {
     return {
       ok: false,
-      error: `This block is used by: ${used.map((u) => u.name).join(", ")}. Archive it instead, or remove it from those templates first.`,
+      error: `This block is used by: ${used.map((u) => u.name).join(", ")}. Archive it instead, or remove it from those templates and blocks first.`,
     };
   }
   await prisma.templateBlock.delete({ where: { id } });

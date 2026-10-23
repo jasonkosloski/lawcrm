@@ -14,6 +14,28 @@ vi.mock("@/lib/permission-check", () => ({
   currentUserHasPermission: vi.fn().mockResolvedValue(true),
 }));
 
+/** When on, each graph load waits (up to 300ms) for a second save to load
+ *  too, so two racing saves overlap unless the lock makes them take turns. */
+const race = vi.hoisted(() => ({ on: false, waiting: [] as (() => void)[] }));
+vi.mock("@/lib/templates/block-graph-db", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/templates/block-graph-db")>();
+  return {
+    ...real,
+    loadAllBlocks: async (...args: Parameters<typeof real.loadAllBlocks>) => {
+      const blocks = await real.loadAllBlocks(...args);
+      if (race.on) {
+        if (race.waiting.length > 0) race.waiting.splice(0).forEach((go) => go());
+        else
+          await new Promise<void>((go) => {
+            race.waiting.push(go);
+            setTimeout(go, 300);
+          });
+      }
+      return blocks;
+    },
+  };
+});
+
 import { requirePermission } from "@/lib/permission-check";
 import { getCurrentUserId, requireUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -137,13 +159,13 @@ describe("saveTemplateBlock", () => {
     expect(r.ok).toBe(false);
   });
 
-  test("block content cannot contain a block ref", async () => {
+  test("a block ref to a missing block is refused", async () => {
     const r = await saveTemplateBlock(
       blockInput({
         content: { type: "doc", content: [{ type: "block", attrs: { blockId: "x" } }] },
       }),
     );
-    expect(r.ok).toBe(false);
+    expect(r).toEqual({ ok: false, error: "A referenced block no longer exists." });
   });
 
   test("stale expectedUpdatedAt is refused", async () => {
@@ -218,7 +240,7 @@ describe("archive and delete", () => {
     expect(r).toEqual({
       ok: false,
       error:
-        "This block is used by: Demand letter. Archive it instead, or remove it from those templates first.",
+        "This block is used by: Demand letter. Archive it instead, or remove it from those templates and blocks first.",
     });
     expect(await prisma.templateBlock.count()).toBe(1);
   });
@@ -322,5 +344,209 @@ describe("court format usage of a block", () => {
     }
     await prisma.templateBlock.update({ where: { id: a.id }, data: { isActive: false } });
     expect(await setTemplateBlockActive(a.id, true)).toEqual({ ok: true });
+  });
+});
+
+// ── Nested blocks ──────────────────────────────────────────────────────
+
+const ref = (blockId: string) => ({ type: "block", attrs: { blockId } });
+const docWith = (...ids: string[]) => ({ type: "doc", content: [para("x"), ...ids.map(ref)] });
+
+/** Create a block through the action; throws on refusal. */
+async function mk(name: string, over: Record<string, unknown> = {}): Promise<string> {
+  const r = await saveTemplateBlock(
+    blockInput({
+      key: `blk_${name.toLowerCase().replace(/\W/g, "_")}`,
+      name,
+      content: doc(),
+      ...over,
+    }),
+  );
+  if (!r.ok) throw new Error(r.error);
+  return r.id;
+}
+
+/** Save an existing block's content (keeping its key and name). */
+async function setChildren(id: string, ...ids: string[]) {
+  const b = await prisma.templateBlock.findUniqueOrThrow({ where: { id } });
+  return saveTemplateBlock({ id, key: b.key, name: b.name, content: docWith(...ids) });
+}
+
+const seedTemplate = (blockId: string, name: string, appliesTo: string, isActive = true) =>
+  prisma.documentTemplate.create({
+    data: {
+      name,
+      category: "general",
+      appliesTo,
+      isActive,
+      content: { type: "doc", content: [ref(blockId)] },
+      createdById: userId,
+    },
+  });
+
+describe("nested blocks: save rules", () => {
+  test("a block can contain a block", async () => {
+    const b = await mk("B");
+    const a = await mk("A", { content: docWith(b) });
+    const row = await prisma.templateBlock.findUniqueOrThrow({ where: { id: a } });
+    expect(JSON.stringify(row.content)).toContain(b);
+  });
+
+  test("refuses a block that includes itself", async () => {
+    const a = await mk("A");
+    expect(await setChildren(a, a)).toEqual({ ok: false, error: "A can't include itself." });
+  });
+
+  test("refuses a direct loop", async () => {
+    const b = await mk("B");
+    await mk("A", { content: docWith(b) });
+    const a = (await prisma.templateBlock.findFirstOrThrow({ where: { name: "A" } })).id;
+    expect(await setChildren(b, a)).toEqual({
+      ok: false,
+      error: "A already includes B, so B can't include A.",
+    });
+  });
+
+  test("refuses a loop through two levels", async () => {
+    const c = await mk("C");
+    const b = await mk("B", { content: docWith(c) });
+    const a = await mk("A", { content: docWith(b) });
+    // C → A would close A → B → C → A; B is the block that includes C.
+    expect(await setChildren(c, a)).toEqual({
+      ok: false,
+      error: "B already includes C, so C can't include B.",
+    });
+  });
+
+  test("refuses nesting more than 5 deep", async () => {
+    const b5 = await mk("B5");
+    const b4 = await mk("B4", { content: docWith(b5) });
+    const b3 = await mk("B3", { content: docWith(b4) });
+    const b2 = await mk("B2", { content: docWith(b3) });
+    const b1 = await mk("B1", { content: docWith(b2) });
+    const six = await mk("Six");
+    const deep = { ok: false, error: "This would nest blocks more than 5 deep." };
+    expect(await setChildren(b5, six)).toEqual(deep);
+    const top = await mk("Top");
+    expect(await setChildren(top, b1)).toEqual(deep);
+    // A new block above the top is refused too.
+    expect(
+      await saveTemplateBlock(blockInput({ key: "new_top", name: "New", content: docWith(b1) })),
+    ).toEqual(deep);
+  });
+
+  test("a new block skips the loop check but not depth or scope", async () => {
+    const m = await mk("M", { appliesTo: "matter" });
+    expect(
+      await saveTemplateBlock(blockInput({ key: "new_one", name: "New", content: docWith(m) })),
+    ).toEqual({
+      ok: false,
+      error: "M applies to matter only, so it can't go in a matter-and-lead block.",
+    });
+    const plain = await mk("Plain");
+    expect(
+      (
+        await saveTemplateBlock(
+          blockInput({ key: "new_two", name: "New", content: docWith(plain) }),
+        )
+      ).ok,
+    ).toBe(true);
+  });
+
+  test("refuses a matter block inside a both block", async () => {
+    const m = await mk("M", { appliesTo: "matter" });
+    const host = await mk("Host");
+    expect(await setChildren(host, m)).toEqual({
+      ok: false,
+      error: "M applies to matter only, so it can't go in a matter-and-lead block.",
+    });
+    // A matter host takes it.
+    const b = await prisma.templateBlock.findUniqueOrThrow({ where: { id: host } });
+    const r = await saveTemplateBlock({
+      id: host,
+      key: b.key,
+      name: b.name,
+      appliesTo: "matter",
+      content: docWith(m),
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  test("refuses narrowing a block used by a both template, archived ones included", async () => {
+    const c = await mk("Child");
+    await seedTemplate(c, "Old both", "both", false);
+    const r = await saveTemplateBlock(
+      blockInput({ id: c, key: "blk_child", name: "Child", appliesTo: "lead" }),
+    );
+    expect(r).toEqual({
+      ok: false,
+      error: "Old both applies to matter-and-lead and uses this block — change it first.",
+    });
+    // A matter template doesn't stop narrowing to matter.
+    await prisma.documentTemplate.deleteMany();
+    await seedTemplate(c, "Matter tpl", "matter");
+    const ok = await saveTemplateBlock(
+      blockInput({ id: c, key: "blk_child", name: "Child", appliesTo: "matter" }),
+    );
+    expect(ok.ok).toBe(true);
+  });
+
+  test("refuses narrowing a block used by a both block", async () => {
+    const c = await mk("Child");
+    const p = await mk("Parent", { content: docWith(c) });
+    await prisma.templateBlock.update({ where: { id: p }, data: { isActive: false } });
+    const r = await saveTemplateBlock(
+      blockInput({ id: c, key: "blk_child", name: "Child", appliesTo: "matter" }),
+    );
+    expect(r).toEqual({
+      ok: false,
+      error: "Parent applies to matter-and-lead and uses this block — change it first.",
+    });
+  });
+});
+
+describe("nested blocks: usage and delete", () => {
+  test("listBlockUsage lists parent blocks", async () => {
+    const c = await mk("Child");
+    const p = await mk("Parent", { content: docWith(c) });
+    const q = await mk("Archived parent", { content: docWith(c) });
+    await prisma.templateBlock.update({ where: { id: q }, data: { isActive: false } });
+    const t = await seedTemplateUsing(c, "Tpl");
+    expect(await listBlockUsage(c)).toEqual([
+      { id: t.id, name: "Tpl", kind: "template" },
+      { id: q, name: "Archived parent", kind: "block" },
+      { id: p, name: "Parent", kind: "block" },
+    ]);
+  });
+
+  test("delete is refused while another block uses it", async () => {
+    const c = await mk("Child");
+    const p = await mk("Parent", { content: docWith(c) });
+    await prisma.templateBlock.update({ where: { id: p }, data: { isActive: false } });
+    await seedTemplateUsing(c, "Tpl");
+    expect(await deleteTemplateBlock(c)).toEqual({
+      ok: false,
+      error:
+        "This block is used by: Tpl, Parent. Archive it instead, or remove it from those templates and blocks first.",
+    });
+    expect(await prisma.templateBlock.count({ where: { id: c } })).toBe(1);
+  });
+});
+
+describe("nested blocks: concurrency", () => {
+  test("two saves that would form a loop: exactly one succeeds", async () => {
+    const a = await mk("A");
+    const b = await mk("B");
+    race.on = true;
+    const rs = await Promise.all([setChildren(a, b), setChildren(b, a)]).finally(() => {
+      race.on = false;
+    });
+    expect(rs.filter((r) => r.ok)).toHaveLength(1);
+    const errs = rs.filter((r) => !r.ok).map((r) => (r as { error: string }).error);
+    expect(errs).toHaveLength(1);
+    expect(errs[0]).toMatch(/^(A|B) already includes (A|B), so (A|B) can't include (A|B)\.$/);
+    // Whichever won, dropping the edge from A and B saves.
+    expect((await setChildren(a)).ok).toBe(true);
+    expect((await setChildren(b, a)).ok).toBe(true);
   });
 });

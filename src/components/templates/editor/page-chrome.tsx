@@ -12,7 +12,14 @@ import { plural } from "@/lib/utils";
 /** Both save actions' stale-version refusal starts with this. */
 const STALE_PREFIX = "Someone else saved this";
 
-export type Usage = { id: string; name: string; kind?: "template" | "court_format" };
+export type Usage = { id: string; name: string; kind?: "template" | "block" | "court_format" };
+
+const usageHref = (u: Usage) =>
+  u.kind === "court_format"
+    ? `/settings/court-formats/${u.id}`
+    : u.kind === "block"
+      ? `/settings/templates/blocks/${u.id}`
+      : `/settings/templates/${u.id}`;
 
 export function EditorHeader({
   isBlock,
@@ -46,16 +53,21 @@ export function EditorHeader({
 
 function UsageLine({ usage }: { usage: Usage[] }) {
   if (usage.length === 0) {
-    return <p className="text-xs text-ink-4">Not used by any template or court format yet.</p>;
+    return (
+      <p className="text-xs text-ink-4">Not used by any template, block or court format yet.</p>
+    );
   }
   const formats = usage.filter((u) => u.kind === "court_format").length;
-  const templates = usage.length - formats;
+  const blocks = usage.filter((u) => u.kind === "block").length;
+  const templates = usage.length - formats - blocks;
   const label = [
     templates > 0 ? plural(templates, "template") : null,
+    blocks > 0 ? plural(blocks, "block") : null,
     formats > 0 ? plural(formats, "court format") : null,
   ]
     .filter(Boolean)
-    .join(" and ");
+    .join(", ")
+    .replace(/, ([^,]*)$/, " and $1");
   return (
     <p className="text-xs text-ink-3">
       <span>{`Used by ${label}`}</span>
@@ -63,14 +75,7 @@ function UsageLine({ usage }: { usage: Usage[] }) {
       {usage.map((u, i) => (
         <span key={u.id}>
           {i > 0 && ", "}
-          <Link
-            href={
-              u.kind === "court_format"
-                ? `/settings/court-formats/${u.id}`
-                : `/settings/templates/${u.id}`
-            }
-            className="text-brand-700 hover:underline"
-          >
+          <Link href={usageHref(u)} className="text-brand-700 hover:underline">
             {u.name}
           </Link>
         </span>

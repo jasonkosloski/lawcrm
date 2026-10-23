@@ -599,12 +599,17 @@ describe("TemplateEditorPage — blocks", () => {
         }}
         usage={[
           { id: "t1", name: "Demand letter", kind: "template" },
+          { id: "b2", name: "Letterhead", kind: "block" },
           { id: "f1", name: "CO District", kind: "court_format" },
         ]}
         canSave
       />,
     );
-    expect(screen.getByText("Used by 1 template and 1 court format")).toBeInTheDocument();
+    expect(screen.getByText("Used by 1 template, 1 block and 1 court format")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Letterhead" })).toHaveAttribute(
+      "href",
+      "/settings/templates/blocks/b2",
+    );
     expect(screen.getByRole("link", { name: "CO District" })).toHaveAttribute(
       "href",
       "/settings/court-formats/f1",

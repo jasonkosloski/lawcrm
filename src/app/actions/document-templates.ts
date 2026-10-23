@@ -31,7 +31,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { prisma, type Tx } from "@/lib/prisma";
 import {
   assertScopeAccess,
   assertScopeWritable,
@@ -99,6 +99,13 @@ import {
 } from "@/lib/template-constants";
 import { globalSearch } from "@/lib/queries/search";
 import { SCOPE_WORD } from "@/lib/templates/block-graph";
+import {
+  childrenError,
+  loadAllBlocks,
+  lockBlockGraph,
+  templateTooDeep,
+  TOO_DEEP,
+} from "@/lib/templates/block-graph-db";
 
 // ── Library CRUD ───────────────────────────────────────────────────────
 
@@ -169,12 +176,6 @@ export async function saveDocumentTemplate(input: {
   }
 
   const blockIds = collectBlockIds(content.doc);
-  if (blockIds.length > 0) {
-    const found = await prisma.templateBlock.count({ where: { id: { in: blockIds } } });
-    if (found !== blockIds.length) {
-      return { ok: false, error: "A referenced block no longer exists." };
-    }
-  }
 
   const data = {
     name,
@@ -187,39 +188,61 @@ export async function saveDocumentTemplate(input: {
     subject: subjectDoc ? (subjectDoc as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
   };
 
-  if (!input.id) {
-    const created = await prisma.documentTemplate.create({
-      data: { ...data, createdById: userId },
-      select: { id: true, updatedAt: true },
+  type Saved = { ok: true; id: string; updatedAt: Date } | { ok: false; error: string };
+  const write = async (db: Pick<Tx, "documentTemplate">): Promise<Saved> => {
+    if (!input.id) {
+      const created = await db.documentTemplate.create({
+        data: { ...data, createdById: userId },
+        select: { id: true, updatedAt: true },
+      });
+      return { ok: true, ...created };
+    }
+    // Atomic stale check: the write only matches the row version the
+    // editor loaded, so two concurrent saves cannot both win. The new
+    // version is set explicitly so it can be handed back to the editor.
+    const updatedAt = new Date();
+    const { count } = await db.documentTemplate.updateMany({
+      where: {
+        id: input.id,
+        ...(parsed.data.expectedUpdatedAt
+          ? { updatedAt: new Date(parsed.data.expectedUpdatedAt) }
+          : {}),
+      },
+      data: { ...data, updatedAt },
     });
+    return count === 0
+      ? { ok: false, error: "Someone else saved this template — reload to see their changes." }
+      : { ok: true, id: input.id, updatedAt };
+  };
+
+  // A template's own blocks must exist and fit its scope (rule 2), and
+  // their chains stay within the depth limit; checked under the block
+  // graph lock so a racing block save can't change them first. Problems
+  // further down a chain are the nested block's to fix, not refusals.
+  const saved: Saved =
+    blockIds.length === 0
+      ? await write(prisma)
+      : await prisma.$transaction(async (tx): Promise<Saved> => {
+          await lockBlockGraph(tx);
+          const blocks = await loadAllBlocks(tx);
+          const error = childrenError(blockIds, blocks, appliesTo, "template");
+          if (error) return { ok: false, error };
+          if (templateTooDeep(blockIds, blocks)) return { ok: false, error: TOO_DEEP };
+          return write(tx);
+        });
+  if (!saved.ok) return saved;
+
+  if (!input.id) {
     await logTemplateChange(
       userId,
       `Template "${name}" created`,
-      `Category: ${templateCategoryLabel(data.category)} (id ${created.id})`,
+      `Category: ${templateCategoryLabel(data.category)} (id ${saved.id})`,
     );
-    revalidatePath("/settings/templates");
-    return { ok: true, id: created.id, updatedAt: created.updatedAt.toISOString() };
+  } else {
+    await logTemplateChange(userId, `Template "${name}" updated`, `id ${input.id}`);
   }
-
-  // Atomic stale check: the write only matches the row version the
-  // editor loaded, so two concurrent saves cannot both win. The new
-  // version is set explicitly so it can be handed back to the editor.
-  const updatedAt = new Date();
-  const { count } = await prisma.documentTemplate.updateMany({
-    where: {
-      id: input.id,
-      ...(parsed.data.expectedUpdatedAt
-        ? { updatedAt: new Date(parsed.data.expectedUpdatedAt) }
-        : {}),
-    },
-    data: { ...data, updatedAt },
-  });
-  if (count === 0) {
-    return { ok: false, error: "Someone else saved this template — reload to see their changes." };
-  }
-  await logTemplateChange(userId, `Template "${name}" updated`, `id ${input.id}`);
   revalidatePath("/settings/templates");
-  return { ok: true, id: input.id, updatedAt: updatedAt.toISOString() };
+  return { ok: true, id: saved.id, updatedAt: saved.updatedAt.toISOString() };
 }
 
 /** Archive (isActive=false) or restore (true). Soft state only —

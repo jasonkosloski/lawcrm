@@ -1079,6 +1079,61 @@ describe("saveDocumentTemplate", () => {
     expect(r.ok).toBe(true);
   });
 
+  test("refuses a lead-only block in a matter template", async () => {
+    const b = await prisma.templateBlock.create({
+      data: {
+        key: "lead_blk",
+        name: "Lead intro",
+        content: jsonDoc(para(text("x"))),
+        appliesTo: "lead",
+      },
+    });
+    const r = await saveDocumentTemplate(
+      saveInput({ content: docOf({ type: "block", attrs: { blockId: b.id } }) }),
+    );
+    expect(r).toEqual({
+      ok: false,
+      error: "Lead intro applies to lead only, so it can't go in a matter template.",
+    });
+  });
+
+  test("refuses a template whose block chain is deeper than 5", async () => {
+    // Stored directly: the block save would refuse this chain.
+    let child: string | null = null;
+    for (let i = 6; i >= 1; i--) {
+      const content: Prisma.InputJsonValue = child
+        ? jsonDoc(para(text("x")), { type: "block", attrs: { blockId: child } })
+        : jsonDoc(para(text("x")));
+      child = (
+        await prisma.templateBlock.create({ data: { key: `lvl_${i}`, name: `L${i}`, content } })
+      ).id;
+    }
+    const r = await saveDocumentTemplate(
+      saveInput({ content: docOf({ type: "block", attrs: { blockId: child } }) }),
+    );
+    expect(r).toEqual({ ok: false, error: "This would nest blocks more than 5 deep." });
+  });
+
+  test("saves a template whose nested block has a misfit field", async () => {
+    const inner = await prisma.templateBlock.create({
+      data: { key: "inner", name: "Inner", content: jsonDoc(para(fieldNode("matter.caseNumber"))) },
+    });
+    const outer = await prisma.templateBlock.create({
+      data: {
+        key: "outer",
+        name: "Outer",
+        content: jsonDoc({ type: "block", attrs: { blockId: inner.id } }),
+      },
+    });
+    const r = await saveDocumentTemplate(
+      saveInput({
+        appliesTo: "lead",
+        content: docOf({ type: "block", attrs: { blockId: outer.id } }),
+      }),
+    );
+    expect(r.ok).toBe(true);
+  });
+
   test("stale expectedUpdatedAt is refused; fresh one saves", async () => {
     const created = await saveDocumentTemplate(saveInput());
     if (!created.ok) throw new Error(created.error);

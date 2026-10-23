@@ -428,7 +428,6 @@ function block(raw: unknown, depth: number, ctx: Ctx): BlockNode {
       noContent(n);
       return { type: "pageBreak" };
     case "block": {
-      if (ctx.isBlock) return fail("A block cannot contain other blocks.");
       noContent(n);
       return { type: "block", attrs: { blockId: str(attrsOf(n).blockId, "Block id") } };
     }

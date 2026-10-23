@@ -79,11 +79,9 @@ describe("validateTemplateContent", () => {
     expect(r).toMatchObject({ ok: true });
   });
 
-  it("rejects block nodes when isBlock", () => {
+  it("accepts block nodes when isBlock", () => {
     const r = validateTemplateContent("letter", everything, { isBlock: true });
-    expect(r.ok).toBe(false);
-    const ok = validateTemplateContent("letter", doc(para(text("x"))), { isBlock: true });
-    expect(ok.ok).toBe(true);
+    expect(r.ok).toBe(true);
   });
 
   it("restricts sms to paragraph/text/hardBreak/field with no marks", () => {
