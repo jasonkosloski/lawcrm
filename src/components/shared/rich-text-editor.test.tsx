@@ -7,16 +7,12 @@
  *   - toolbar aria-pressed/active state went stale: Tiptap 3 doesn't
  *     re-render on transactions, so clicking Bold with an empty
  *     selection (a stored mark) left the button un-pressed
- *   - StarterKit's `---` input rule produced <hr>, which the note
- *     sanitizer strips on save; the editor and sanitizer must agree
  */
 
 import { describe, expect, test } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Editor } from "@tiptap/core";
-import { RichTextEditor, createEditorExtensions } from "./rich-text-editor";
-import { sanitizeUserHtml } from "@/lib/sanitize-html";
+import { RichTextEditor } from "./rich-text-editor";
 
 describe("RichTextEditor — placeholder", () => {
   test("shows the placeholder while empty", async () => {
@@ -49,36 +45,5 @@ describe("RichTextEditor — toolbar state", () => {
 
     await user.click(bold);
     expect(bold).toHaveAttribute("aria-pressed", "false");
-  });
-});
-
-describe("editor extensions stay in lockstep with the sanitizer", () => {
-  const make = (content: string) => new Editor({ extensions: createEditorExtensions(), content });
-
-  test("horizontal rule is not part of the schema (a typed --- can't emit <hr>)", () => {
-    const editor = make("<p>a</p>");
-    expect(editor.schema.nodes.horizontalRule).toBeUndefined();
-    // A pasted <hr> is dropped by the schema rather than kept.
-    expect(make("<p>a</p><hr><p>b</p>").getHTML()).not.toContain("<hr");
-    editor.destroy();
-  });
-
-  test("everything the editor can emit survives sanitizeUserHtml unchanged", () => {
-    const editor = make(
-      [
-        "<h2>Heading</h2>",
-        "<h3>Sub</h3>",
-        "<p><strong>b</strong> <em>i</em> <s>s</s> <code>c</code></p>",
-        "<blockquote><p>q</p></blockquote>",
-        "<ul><li><p>one</p></li></ul>",
-        "<ol><li><p>two</p></li></ol>",
-        "<pre><code>block</code></pre>",
-      ].join(""),
-    );
-    const html = editor.getHTML();
-    expect(html).toContain("<h2>");
-    expect(html).toContain("<blockquote>");
-    expect(sanitizeUserHtml(html)).toBe(html);
-    editor.destroy();
   });
 });

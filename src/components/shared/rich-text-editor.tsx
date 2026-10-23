@@ -22,30 +22,11 @@
 "use client";
 
 import { useEditor, useEditorState, type Editor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
 import { Heading2, Quote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Divider, ListButtons, MarkButtons, ToolButton } from "@/components/editor/controls";
+import { notesExtensions } from "@/components/editor/presets";
 import { EDITOR_CONTENT_CLASS, EditorShell } from "@/components/editor/editor-shell";
-
-/**
- * The editor's extension set. Exported so a test can feed everything
- * it can emit through the sanitizer (`sanitizeUserHtml`) — the two
- * must stay in lockstep or user content silently disappears on save.
- *
- * `horizontalRule` is OFF: StarterKit would turn a typed `---` into
- * `<hr>`, which the note-profile sanitizer strips on save (the rule
- * showed in the editor, then vanished). A pasted `<hr>` is dropped by
- * ProseMirror's schema instead.
- */
-export function createEditorExtensions() {
-  return [
-    StarterKit.configure({
-      heading: { levels: [2, 3] },
-      horizontalRule: false,
-    }),
-  ];
-}
 
 export function RichTextEditor({
   initialHTML,
@@ -61,7 +42,7 @@ export function RichTextEditor({
   autoFocus?: boolean;
 }) {
   const editor = useEditor({
-    extensions: createEditorExtensions(),
+    extensions: notesExtensions(),
     content: initialHTML ?? "",
     autofocus: autoFocus,
     editorProps: {

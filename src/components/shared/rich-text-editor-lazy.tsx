@@ -7,7 +7,7 @@
  * lost on the server render.
  *
  * Use this from consumers; import `./rich-text-editor` directly only
- * for `createEditorExtensions` or in its own tests.
+ * in its own tests (extensions live in `@/components/editor/presets`).
  */
 
 "use client";
