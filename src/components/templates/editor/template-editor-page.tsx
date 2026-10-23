@@ -201,7 +201,9 @@ function Editor(props: EditorProps & { narrow: boolean }) {
     <PreviewPane
       doc={doc}
       subject={subjectDoc}
-      kind={kind}
+      // A block previews as a filing page: house font and margins, no
+      // letterhead around it, and "Preview as" a court.
+      kind={isBlock ? "filing" : kind}
       appliesTo={appliesTo}
       blocks={blocks}
       pageStyle={props.pageStyle ?? null}

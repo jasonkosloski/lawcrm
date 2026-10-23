@@ -47,16 +47,16 @@ export type EditorBlock = {
 
 export type EditorProps = {
   canSave: boolean;
-  /** The firm's paragraph styles (blocks get them here; templates also via pageStyle). */
+  /** The firm's paragraph styles; defaults to the page style's. */
   paragraphStyles?: ParagraphStyle[];
+  /** Firm document style: the preview is a styled page. */
+  pageStyle?: FirmPageStyle;
+  /** Active court formats, for the preview's "Preview as". */
+  courtFormats?: SerializedCourtContext[];
 } & (
   | {
       template: EditorTemplate;
       blocks: BlockSource[];
-      /** Firm document style: letters/filings preview as a styled page. */
-      pageStyle?: FirmPageStyle;
-      /** Active court formats, for the filing preview's "Preview as". */
-      courtFormats?: SerializedCourtContext[];
       block?: undefined;
       usage?: undefined;
     }
@@ -65,8 +65,6 @@ export type EditorProps = {
       usage: Usage[];
       template?: undefined;
       blocks?: undefined;
-      pageStyle?: undefined;
-      courtFormats?: undefined;
     }
 );
 

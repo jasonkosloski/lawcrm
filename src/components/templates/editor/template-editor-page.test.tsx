@@ -363,6 +363,33 @@ describe("TemplateEditorPage — templates", () => {
       expect(screen.getByRole("option", { name: "Colorado District" })).toBeInTheDocument();
     });
 
+    it("blocks preview as a page (no letterhead) and offer Preview as, like templates", async () => {
+      const user = userEvent.setup();
+      render(
+        <TemplateEditorPage
+          block={{
+            id: "b1",
+            key: "signature",
+            name: "Signature",
+            description: null,
+            content: { type: "doc", content: [para(text("Sincerely"))] } as never,
+            updatedAt: UPDATED,
+          }}
+          usage={[]}
+          pageStyle={PAGE_STYLE}
+          courtFormats={[COURT]}
+          canSave
+        />,
+      );
+      const page = screen.getByTestId("page-preview");
+      expect(page.querySelector("[data-page-body]")?.textContent).toContain("Sincerely");
+      expect(page.querySelector("[data-page-letterhead]")).toBeNull();
+      const before = minHeight();
+      await user.selectOptions(pane(), "Colorado District");
+      // Legal paper: the page grows.
+      expect(minHeight()).not.toBe(before);
+    });
+
     it("choosing a format swaps the caption and uses Legal paper; kind change resets it", async () => {
       const user = userEvent.setup();
       render(

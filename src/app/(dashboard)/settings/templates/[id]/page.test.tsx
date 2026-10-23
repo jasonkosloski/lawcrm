@@ -21,7 +21,6 @@ vi.mock("@/lib/templates/editor-data", () => ({
   loadEditorCourtFormats: vi.fn().mockResolvedValue([]),
   loadEditorTemplate: vi.fn(),
   loadEditorBlock: vi.fn(),
-  loadEditorParagraphStyles: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("@/app/actions/template-blocks", () => ({
   listBlockUsage: vi.fn().mockResolvedValue([{ id: "t1", name: "Demand" }]),
