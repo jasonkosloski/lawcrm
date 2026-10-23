@@ -152,7 +152,7 @@ const ParagraphCommands = Extension.create({
       setParagraphStyle:
         (key) =>
         ({ commands }) =>
-          commands.updateAttributes("paragraph", { style: key }),
+          commands.updateAttributes("paragraph", { style: key === "body" ? null : key }),
       setParagraphSettings:
         (s) =>
         ({ commands }) =>
@@ -418,7 +418,7 @@ export function createTemplateExtensions(opts: TemplateExtensionOptions): Extens
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     paragraphCommands: {
-      /** Gives the selected paragraphs a style (by key). */
+      /** Gives the selected paragraphs a style (by key); "body" is the unset default. */
       setParagraphStyle: (key: string) => ReturnType;
       /** Sets direct settings; null/undefined clears one. */
       setParagraphSettings: (s: {

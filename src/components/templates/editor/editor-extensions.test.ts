@@ -9,6 +9,7 @@ import { convertHeadings } from "@/lib/templates/headings";
 import { fieldByPath, listByPath } from "@/lib/templates/catalog";
 import { validateTemplateContent, type TemplateKind } from "@/lib/templates/schema";
 import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
+import { BODY_CLASS } from "./use-body-editor";
 import { createTemplateExtensions, templateJSON } from "./extensions";
 import { fieldChipText, listFieldChipText } from "./field-node";
 import { ruleHeaderText } from "./section-nodes";
@@ -428,6 +429,39 @@ describe("paragraph styles and text marks", () => {
     editor.commands.toggleAllCaps();
     editor.commands.setFontSize(null);
     expect(editor.getJSON().content?.[0]?.content?.[0]?.marks).toBeUndefined();
+    editor.destroy();
+  });
+
+  it("cell paragraphs only carry data-space-after for a direct value, and BODY_CLASS zeroes the rest", () => {
+    const cellDoc = (attrs: Record<string, unknown>) => ({
+      type: "doc",
+      content: [
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [cell("tableCell", { type: "paragraph", attrs, content: [t("c")] })],
+            },
+          ],
+        },
+      ],
+    });
+    const none = make("letter", cellDoc(NO_ATTRS));
+    expect(none.getHTML()).not.toContain("data-space-after");
+    none.destroy();
+    const zero = make("letter", cellDoc({ ...NO_ATTRS, spaceAfterPt: 0 }));
+    expect(zero.getHTML()).toContain('data-space-after="0"');
+    zero.destroy();
+    expect(BODY_CLASS).toContain("[&_td>p:not([data-space-after])]:!mb-0");
+    expect(BODY_CLASS).toContain("[&_li>p:not([data-space-after])]:!mb-0");
+  });
+
+  it("setParagraphStyle('body') unsets the style", () => {
+    const editor = make("letter", doc({ ...NO_ATTRS, style: "heading1" }, t("x")));
+    editor.commands.selectAll();
+    editor.commands.setParagraphStyle("body");
+    expect(templateJSON(editor).content?.[0]).not.toHaveProperty("attrs.style");
     editor.destroy();
   });
 });

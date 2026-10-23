@@ -44,7 +44,7 @@ export const FontSize = Mark.create({
   parseHTML: () => [
     {
       tag: "span[data-font-size]",
-      getAttrs: (el) => (Number.isFinite(Number(el.getAttribute("data-font-size"))) ? null : false),
+      getAttrs: (el) => (Number(el.getAttribute("data-font-size")) > 0 ? null : false),
     },
   ],
   renderHTML: ({ HTMLAttributes }) => ["span", HTMLAttributes, 0],
