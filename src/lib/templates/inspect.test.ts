@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  checkNestedFit,
   checkTemplateFit,
+  nestedMisfitText,
   collectBlockIds,
   collectFieldPaths,
   usesPrefix,
@@ -179,5 +181,51 @@ describe("usesPrefix", () => {
   });
   it("sees direct use", () => {
     expect(usesPrefix(doc(para(f("recipient.name"))), "recipient.")).toBe(true);
+  });
+});
+
+describe("checkNestedFit", () => {
+  const blk = (
+    id: string,
+    name: string,
+    content: TemplateDoc,
+    appliesTo?: "matter" | "lead" | "both",
+  ): BlockSource => ({ id, name, isActive: true, content, appliesTo });
+  const ref = (blockId: string) => ({ type: "block" as const, attrs: { blockId } });
+  const map = (...bs: BlockSource[]) => new Map(bs.map((b) => [b.id, b]));
+
+  it("reports a misfit two blocks down with its path", () => {
+    const blocks = map(
+      blk("a", "A", doc(para(ref("b")))),
+      blk("b", "B", doc(para(f("matter.caseNumber")))),
+    );
+    const r = checkNestedFit(doc(para(ref("a"))), "lead", blocks);
+    expect(r).toHaveLength(1);
+    expect(r[0].via).toEqual(["A", "B"]);
+    expect(nestedMisfitText(r[0])).toBe("Case number (in A → B)");
+  });
+
+  it("reports a nested block whose scope doesn't cover its parent", () => {
+    const blocks = map(
+      blk("a", "A", doc(para(ref("b"))), "lead"),
+      blk("b", "B", doc(para()), "matter"),
+    );
+    const r = checkNestedFit(doc(para(ref("a"))), "lead", blocks);
+    expect(r).toEqual([{ path: "block:b", label: "B applies to matter only", via: ["A"] }]);
+  });
+
+  it("is loop-safe", () => {
+    const blocks = map(
+      blk("a", "A", doc(para(ref("b")))),
+      blk("b", "B", doc(para(ref("a"), f("matter.caseNumber")))),
+    );
+    const r = checkNestedFit(doc(para(ref("a"))), "lead", blocks);
+    expect(r.map((m) => m.via)).toEqual([["A", "B"]]);
+  });
+
+  it("an empty list when everything fits", () => {
+    const blocks = map(blk("a", "A", doc(para(f("matter.caseNumber")))));
+    expect(checkNestedFit(doc(para(ref("a"))), "matter", blocks)).toEqual([]);
+    expect(checkNestedFit(doc(para(f("matter.caseNumber"))), "lead", blocks)).toEqual([]);
   });
 });

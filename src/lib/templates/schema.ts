@@ -15,6 +15,20 @@ export type TemplateKind = (typeof TEMPLATE_KINDS)[number];
 export const APPLIES_TO = ["matter", "lead", "both"] as const;
 export type AppliesTo = (typeof APPLIES_TO)[number];
 
+/** A template's own blocks are level 1; level 5 is the deepest. */
+export const MAX_BLOCK_DEPTH = 5;
+
+/** How a scope reads in refusal messages. */
+export const SCOPE_WORD: Record<AppliesTo, string> = {
+  matter: "matter",
+  lead: "lead",
+  both: "matter-and-lead",
+};
+
+/** Whether a block of scope `child` may sit in a `host`-scoped template or block. */
+export const scopeCovers = (child: AppliesTo, host: AppliesTo): boolean =>
+  child === "both" || child === host;
+
 export const MAX_CONTENT_BYTES = 256 * 1024;
 export const MAX_DEPTH = 12;
 

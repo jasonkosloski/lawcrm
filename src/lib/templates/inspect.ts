@@ -6,7 +6,13 @@
 
 import { fieldByPath, listByPath, type Scope } from "./catalog";
 import type { BlockSource } from "./render";
-import type { AppliesTo, TemplateDoc } from "./schema";
+import {
+  MAX_BLOCK_DEPTH,
+  SCOPE_WORD,
+  scopeCovers,
+  type AppliesTo,
+  type TemplateDoc,
+} from "./schema";
 
 type AnyNode = {
   type?: string;
@@ -145,6 +151,58 @@ export function checkTemplateFit(
   return unknownStyles
     ? { ok: false, invalid: [...invalid.values()], unknownStyles }
     : { ok: false, invalid: [...invalid.values()] };
+}
+
+export type NestedMisfit = {
+  path: string;
+  label: string | null;
+  /** Block names, outermost first. */
+  via: string[];
+};
+
+/** `"Case number (in Signature → Attorney contact)"`. */
+export const nestedMisfitText = (m: NestedMisfit): string =>
+  `${m.label ?? m.path} (in ${m.via.join(" → ")})`;
+
+/** Misfits inside blocks nested (at any depth) in `doc`, each with the
+ *  chain of block names leading to it. Content is checked against the
+ *  host's `appliesTo`; a nested block whose own scope doesn't cover its
+ *  parent block is reported as `block:<id>`. Misfits directly in `doc` are
+ *  `checkTemplateFit`'s. A block already on the chain is skipped, and
+ *  chains stop at MAX_BLOCK_DEPTH. */
+export function checkNestedFit(
+  doc: TemplateDoc,
+  appliesTo: AppliesTo,
+  blocks: ReadonlyMap<string, BlockSource>,
+): NestedMisfit[] {
+  const required = SCOPES[appliesTo];
+  const out = new Map<string, NestedMisfit>();
+  const add = (m: NestedMisfit) => {
+    const key = `${m.via.join("\u0000")}\u0001${m.path}`;
+    if (!out.has(key)) out.set(key, m);
+  };
+  const visit = (host: TemplateDoc, parentScope: AppliesTo | null, chain: BlockSource[]) => {
+    if (chain.length >= MAX_BLOCK_DEPTH) return;
+    for (const id of collectBlockIds(host)) {
+      const b = blocks.get(id);
+      if (!b || chain.some((c) => c.id === id)) continue;
+      const scope = b.appliesTo ?? "both";
+      const via = [...chain, b].map((c) => c.name);
+      if (parentScope && !scopeCovers(scope, parentScope)) {
+        add({
+          path: `block:${b.id}`,
+          label: `${b.name} applies to ${SCOPE_WORD[scope]} only`,
+          via: via.slice(0, -1),
+        });
+      }
+      const invalid = new Map<string, Invalid>();
+      check(b.content, required, invalid);
+      for (const m of invalid.values()) add({ ...m, via });
+      visit(b.content, scope, [...chain, b]);
+    }
+  };
+  visit(doc, null, []);
+  return [...out.values()];
 }
 
 /** True when any field path starts with `prefix`, looking through

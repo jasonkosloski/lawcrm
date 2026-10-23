@@ -8,17 +8,11 @@
 
 import { collectBlockIds } from "./inspect";
 import type { BlockSource } from "./render";
-import type { AppliesTo, TemplateDoc } from "./schema";
+import { MAX_BLOCK_DEPTH, SCOPE_WORD, scopeCovers, type TemplateDoc } from "./schema";
 
-/** A template's own blocks are level 1; level 5 is the deepest. */
-export const MAX_BLOCK_DEPTH = 5;
-
-/** How a scope reads in refusal messages. */
-export const SCOPE_WORD: Record<AppliesTo, string> = {
-  matter: "matter",
-  lead: "lead",
-  both: "matter-and-lead",
-};
+// Defined in schema.ts so inspect.ts can use them without importing this
+// file (which imports inspect.ts); re-exported as this module's API.
+export { MAX_BLOCK_DEPTH, SCOPE_WORD, scopeCovers };
 
 type Blocks = ReadonlyMap<string, BlockSource>;
 
@@ -116,7 +110,3 @@ export function loopPath(selfId: string, doc: TemplateDoc, blocks: Blocks): stri
   }
   return null;
 }
-
-/** Whether a block of scope `child` may sit in a `host`-scoped template or block. */
-export const scopeCovers = (child: AppliesTo, host: AppliesTo): boolean =>
-  child === "both" || child === host;
