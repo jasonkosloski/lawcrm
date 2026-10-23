@@ -19,7 +19,7 @@
 
 "use client";
 
-import { NO_ATTORNEYS } from "@/lib/attorney-messages";
+import { NoAttorneysNotice } from "@/components/settings/no-attorneys-notice";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
@@ -793,28 +793,35 @@ export function NewMatterForm({
 
           <Field label="Lead attorney" htmlFor="leadUserId" required error={errs.leadUserId}>
             {options.leadUsers.length === 0 ? (
-              <div className="text-xs text-warn">{NO_ATTORNEYS}</div>
+              <NoAttorneysNotice />
             ) : (
-              <NativeSelect
-                className="w-full"
-                id="leadUserId"
-                name="leadUserId"
-                value={leadUserId}
-                onChange={(e) => setLeadUserId(e.target.value)}
-                required
-                aria-invalid={!!errs.leadUserId || undefined}
-              >
-                {leadUserId === "" && (
-                  <NativeSelectOption value="" disabled>
-                    Choose a lead…
-                  </NativeSelectOption>
+              <>
+                <NativeSelect
+                  className="w-full"
+                  id="leadUserId"
+                  name="leadUserId"
+                  value={leadUserId}
+                  onChange={(e) => setLeadUserId(e.target.value)}
+                  required
+                  aria-invalid={!!errs.leadUserId || undefined}
+                >
+                  {leadUserId === "" && (
+                    <NativeSelectOption value="" disabled>
+                      Choose a lead…
+                    </NativeSelectOption>
+                  )}
+                  {options.leadUsers.map((u) => (
+                    <NativeSelectOption key={u.id} value={u.id}>
+                      {u.name} · {u.jobTitle}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                {!options.leadUsers.some((u) => u.id === options.currentUserId) && (
+                  <div className="text-2xs text-ink-4">
+                    Only people with a bar number can be lead attorney.
+                  </div>
                 )}
-                {options.leadUsers.map((u) => (
-                  <NativeSelectOption key={u.id} value={u.id}>
-                    {u.name} · {u.jobTitle}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+              </>
             )}
           </Field>
         </Row>

@@ -4,8 +4,9 @@
  * Posts as ONE hidden input, `barAdmissions`, holding a JSON array of
  * `{ state, number }`. The input is always rendered (zero rows posts
  * "[]") so removing every row actually clears the stored admissions;
- * the server treats an absent field as "leave unchanged". Rows missing
- * a state or a number are left out of the JSON.
+ * the server treats an absent field as "leave unchanged". Only rows with
+ * neither a state nor a number are left out; half-filled rows are posted
+ * so the server rejects them instead of silently dropping what was typed.
  */
 
 "use client";
@@ -35,7 +36,7 @@ export function BarAdmissionsField({
   const json = JSON.stringify(
     rows
       .map((r) => ({ state: r.state, number: r.number.trim() }))
-      .filter((r) => r.state && r.number),
+      .filter((r) => r.state || r.number),
   );
 
   return (

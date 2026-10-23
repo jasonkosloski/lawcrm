@@ -20,7 +20,6 @@ vi.mock("@/app/actions/leads", () => ({
 }));
 
 import { convertLeadToMatter } from "@/app/actions/leads";
-import { NO_ATTORNEYS } from "@/lib/attorney-messages";
 import { ConvertLeadButton } from "./convert-lead-button";
 import type { PracticeAreaOption } from "@/lib/queries/practice-area-options";
 
@@ -456,7 +455,7 @@ describe("ConvertLeadButton — lead attorney", () => {
     const user = userEvent.setup();
     renderButton({ attorneys: [] });
     await openDialog(user);
-    expect(screen.getByText(NO_ATTORNEYS)).toBeInTheDocument();
+    expect(screen.getByText(/No one has a bar number yet/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^convert$/i })).toBeDisabled();
   });
 });

@@ -14,6 +14,8 @@
 - Templates print the number for the matter's venue state, else the firm's state (also for lead-scoped records), else the usual "not on file" marker. `matter.leadAttorney`, the "Attorneys" list and `signer.barNumber` all follow this rule.
 - `User.barNumber` was backfilled into `BarAdmission` for the firm's state and is now unread and unwritten, kept until a drop migration ([SCHEMA_NOTES](../SCHEMA_NOTES.md)).
 
+Admissions are self-declared (anyone can add one in Profile), so "attorney" is not a verified credential; whoever picks leads still needs matter permissions.
+
 **Rejected:**
 
 - An `isAttorney` flag on `User`: it can disagree with the admissions and says nothing about which state.

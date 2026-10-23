@@ -263,7 +263,9 @@ export async function inviteFirmMember(
     userId: currentUserId,
     type: "auth",
     title: `Invited ${parsed.data.name} to the firm`,
-    detail: `${parsed.data.email} — roles: ${grantedRoleNames.join(", ")}`,
+    detail:
+      `${parsed.data.email} — roles: ${grantedRoleNames.join(", ")}` +
+      (admissions.value?.length ? "; bar admissions added" : ""),
   });
 
   // Clerk emails the invitation. The row is already committed, so a

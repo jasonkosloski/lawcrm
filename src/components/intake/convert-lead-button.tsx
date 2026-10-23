@@ -44,7 +44,7 @@ import { agreementGateErrors, originatingDocLabel } from "@/lib/originating-doc"
 import { BILLING_TYPE_OPTIONS } from "@/lib/billing-type";
 import type { PracticeAreaOption } from "@/lib/queries/practice-area-options";
 import { Field } from "@/components/ui/field";
-import { NO_ATTORNEYS } from "@/lib/attorney-messages";
+import { NoAttorneysNotice } from "@/components/settings/no-attorneys-notice";
 
 // Default stage for a freshly converted matter: terminal stages
 // ("Closed", "Declined", …) make no sense as a starting point, so skip
@@ -274,7 +274,7 @@ export function ConvertLeadButton({
                 error={errs.leadAttorneyId}
               >
                 {attorneys.length === 0 ? (
-                  <div className="text-xs text-warn">{NO_ATTORNEYS}</div>
+                  <NoAttorneysNotice />
                 ) : (
                   <NativeSelect
                     className="w-full"

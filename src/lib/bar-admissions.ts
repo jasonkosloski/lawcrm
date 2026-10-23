@@ -28,9 +28,14 @@ export function parseBarAdmissions(
   const seen = new Set<string>();
   const value: BarAdmissionInput[] = [];
   for (const item of data) {
-    const rawState = typeof item?.state === "string" ? item.state : "";
-    const number = typeof item?.number === "string" ? item.number.trim() : "";
+    if (typeof item !== "object" || item === null) {
+      return { ok: false, error: "Invalid bar admissions." };
+    }
+    const rawState = typeof item.state === "string" ? item.state : "";
+    const number = typeof item.number === "string" ? item.number.trim() : "";
     const state = stateCode(rawState);
+    if (!rawState.trim() && number)
+      return { ok: false, error: `Pick a state for bar number ${number}.` };
     if (!state) return { ok: false, error: `Unknown state "${rawState}".` };
     if (!number) return { ok: false, error: `Enter a bar number for ${state}.` };
     if (number.length > MAX_NUMBER) {

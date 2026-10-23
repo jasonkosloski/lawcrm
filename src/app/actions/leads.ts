@@ -939,7 +939,9 @@ export async function convertLeadToMatter(
       select: { id: true },
     })) !== null;
   if (canSeeMatter) {
-    await prisma.userMatterPin.create({ data: { userId, matterId } });
+    // Best-effort: the conversion already committed, so a failed pin
+    // must not surface as an error.
+    await prisma.userMatterPin.create({ data: { userId, matterId } }).catch(() => {});
   }
 
   // Revalidate everything that displays leads or matters.

@@ -538,5 +538,10 @@ describe("bar admissions", () => {
       include: { barAdmissions: true },
     });
     expect(user.barAdmissions.map((a) => [a.state, a.number])).toEqual([["CO", "123"]]);
+    const log = await prisma.activityLog.findFirstOrThrow({
+      where: { userId: actor.userId, type: "auth", title: { contains: "Invited" } },
+    });
+    expect(log.detail).toContain("; bar admissions added");
+    expect(log.detail).not.toContain("123");
   });
 });

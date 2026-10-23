@@ -34,6 +34,17 @@ describe("parseBarAdmissions", () => {
     expect(bad(many).ok).toBe(false);
   });
 
+  test("half-filled and malformed rows get specific messages", () => {
+    const msg = (v: unknown) => {
+      const r = parseBarAdmissions(JSON.stringify(v));
+      return r.ok ? null : r.error;
+    };
+    expect(msg([{ state: "", number: "555" }])).toBe("Pick a state for bar number 555.");
+    expect(msg([{ state: "CO", number: "" }])).toBe("Enter a bar number for CO.");
+    expect(msg([null])).toBe("Invalid bar admissions.");
+    expect(msg(["CO"])).toBe("Invalid bar admissions.");
+  });
+
   test("empty array is a valid clear", () => {
     expect(parseBarAdmissions("[]")).toEqual({ ok: true, value: [] });
   });

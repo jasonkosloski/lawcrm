@@ -13,7 +13,6 @@
  * silently dropped the user's typed Case location on round trip.
  */
 
-import { NO_ATTORNEYS } from "@/lib/attorney-messages";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
@@ -294,9 +293,32 @@ describe("NewMatterForm — lead attorney", () => {
     expect(leadSelect().value).toBe("");
   });
 
+  test("hints that only bar-number holders can lead when the user isn't one", () => {
+    render(
+      <NewMatterForm
+        options={{
+          ...options,
+          currentUserId: "nobody",
+          leadUsers: [{ id: "u2", name: "Ann Atty", jobTitle: "Attorney", initials: "AA" }],
+        }}
+      />,
+    );
+    expect(
+      screen.getByText("Only people with a bar number can be lead attorney."),
+    ).toBeInTheDocument();
+  });
+
   test("with no attorneys it explains why and disables Create matter", () => {
     render(<NewMatterForm options={{ ...options, leadUsers: [] }} />);
-    expect(screen.getByText(NO_ATTORNEYS)).toBeInTheDocument();
+    expect(screen.getByText(/No one has a bar number yet/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Settings → Profile" })).toHaveAttribute(
+      "href",
+      "/settings/profile",
+    );
+    expect(screen.getByRole("link", { name: "Settings → Team" })).toHaveAttribute(
+      "href",
+      "/settings/team",
+    );
     expect(screen.queryByLabelText(/lead attorney/i)).toBeNull();
     expect(screen.getByRole("button", { name: /create matter/i })).toBeDisabled();
   });

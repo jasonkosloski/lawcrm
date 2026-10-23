@@ -54,14 +54,20 @@ describe("BarAdmissionsField", () => {
     expect(posted(container)).toBe(JSON.stringify([{ state: "TX", number: "222" }]));
   });
 
-  test("rows missing a state or a number are left out", async () => {
+  test("empty rows are left out; half-filled rows are posted for the server to reject", async () => {
     const user = userEvent.setup();
     const { container } = render(
       <BarAdmissionsField defaultValue={[{ state: "CO", number: "1" }]} />,
     );
     await user.click(screen.getByRole("button", { name: /add admission/i }));
-    await user.type(screen.getAllByLabelText("Bar number")[1], "777");
     expect(posted(container)).toBe(JSON.stringify([{ state: "CO", number: "1" }]));
+    await user.type(screen.getAllByLabelText("Bar number")[1], "777");
+    expect(posted(container)).toBe(
+      JSON.stringify([
+        { state: "CO", number: "1" },
+        { state: "", number: "777" },
+      ]),
+    );
   });
 
   test("removing every row posts []", async () => {
