@@ -6,9 +6,10 @@
  * the page shows the sample preview only (the editor stays mounted,
  * hidden, so narrowing the window loses nothing). Saves always send the loaded
  * version (`expectedUpdatedAt`) and adopt the one a save returns; a
- * stale save offers Reload. A template whose fields don't fit its
- * applies-to cannot be saved until they are removed (the chips are
- * outlined).
+ * stale save offers Reload. A template or block whose own fields don't
+ * fit its applies-to cannot be saved until they are removed (the chips
+ * are outlined); misfits inside the blocks it includes are listed under
+ * the preview without blocking Save.
  */
 
 "use client";
@@ -23,14 +24,14 @@ import { Button } from "@/components/ui/button";
 import { saveDocumentTemplate } from "@/app/actions/document-templates";
 import { saveTemplateBlock } from "@/app/actions/template-blocks";
 import { cn } from "@/lib/utils";
-import { checkTemplateFit, type FitResult } from "@/lib/templates/inspect";
-import type { BlockSource } from "@/lib/templates/render";
+import { checkNestedFit, checkTemplateFit } from "@/lib/templates/inspect";
 import { DEFAULT_PARAGRAPH_STYLES, textWidthIn } from "@/lib/templates/page-style";
 import type { AppliesTo, TemplateDoc, TemplateKind } from "@/lib/templates/schema";
 import {
   blockMeta,
   catalogFor,
   initialDoc,
+  insertableBlocks,
   templateMeta,
   titleOf,
   type EditorProps,
@@ -50,7 +51,6 @@ import { Toolbar } from "./toolbar";
 import { EMAIL_FORMATTING_NOTE } from "@/lib/template-constants";
 import { useUnsavedChangesGuard } from "./use-unsaved-guard";
 
-const NO_BLOCKS: BlockSource[] = [];
 export const FIT_BLOCKED = "Remove or replace the highlighted fields to save.";
 
 /**
@@ -69,7 +69,7 @@ function Editor(props: EditorProps & { narrow: boolean }) {
   const { canSave } = props;
   const isBlock = !!props.block;
   const source = props.block ?? props.template;
-  const blocks = props.blocks ?? NO_BLOCKS;
+  const { blocks } = props;
   const [start] = useState(() => initialDoc(props));
 
   const [tMeta, setTMeta] = useState(() => (props.template ? templateMeta(props.template) : null));
@@ -108,10 +108,12 @@ function Editor(props: EditorProps & { narrow: boolean }) {
   }
 
   const kind: TemplateKind = tMeta?.kind ?? "letter";
-  const appliesTo: AppliesTo = tMeta?.appliesTo ?? "both";
-  const { fields, lists, data } = useMemo(
-    () => catalogFor(isBlock, appliesTo),
-    [isBlock, appliesTo],
+  const appliesTo: AppliesTo = tMeta?.appliesTo ?? bMeta?.appliesTo ?? "both";
+  const { fields, lists, data } = useMemo(() => catalogFor(appliesTo), [appliesTo]);
+  const blockMap = useMemo(() => new Map(blocks.map((b) => [b.id, b])), [blocks]);
+  const insertable = useMemo(
+    () => insertableBlocks(blocks, { id: isBlock ? savedId : null, appliesTo, isBlock }),
+    [blocks, isBlock, savedId, appliesTo],
   );
 
   const editBodyField = useCallback((pos: number) => setFieldEdit({ subject: false, pos }), []);
@@ -122,7 +124,6 @@ function Editor(props: EditorProps & { narrow: boolean }) {
   const editor = useBodyEditor({
     styles,
     kind,
-    isBlock,
     blocks,
     editable: canSave,
     content: seedHtml ?? doc,
@@ -136,11 +137,12 @@ function Editor(props: EditorProps & { narrow: boolean }) {
 
   const subjectDoc = kind === "email" ? subject : null;
   const fit = useMemo(
-    () =>
-      isBlock
-        ? ({ ok: true } as FitResult)
-        : checkTemplateFit(doc, appliesTo, subjectDoc, styleKeys),
-    [isBlock, doc, appliesTo, subjectDoc, styleKeys],
+    () => checkTemplateFit(doc, appliesTo, subjectDoc, styleKeys),
+    [doc, appliesTo, subjectDoc, styleKeys],
+  );
+  const nested = useMemo(
+    () => checkNestedFit(doc, appliesTo, blockMap),
+    [doc, appliesTo, blockMap],
   );
   const invalidKey = fit.ok ? "" : fit.invalid.map((i) => i.path).join("\n");
   useEffect(() => {
@@ -211,6 +213,7 @@ function Editor(props: EditorProps & { narrow: boolean }) {
       styles={styles}
       courtFormats={props.courtFormats}
       allowRecord={allowRecord}
+      nested={nested}
     />
   );
 
@@ -299,11 +302,10 @@ function Editor(props: EditorProps & { narrow: boolean }) {
                       editor={editor}
                       fieldTarget={subjectFocused && subjectEditor ? subjectEditor : editor}
                       kind={kind}
-                      isBlock={isBlock}
                       fields={fields}
                       lists={lists}
                       data={data}
-                      blocks={blocks.filter((b) => b.isActive)}
+                      blocks={insertable}
                       styles={styles}
                       textWidth={props.pageStyle ? textWidthIn(props.pageStyle.values) : undefined}
                     />
@@ -315,7 +317,7 @@ function Editor(props: EditorProps & { narrow: boolean }) {
             </div>
             {kind === "sms" && <SmsCounter doc={doc} appliesTo={appliesTo} />}
           </div>
-          <div className="sticky top-0">{!narrow && preview(canSave && !isBlock)}</div>
+          <div className="sticky top-0">{!narrow && preview(canSave)}</div>
         </div>
       </div>
 

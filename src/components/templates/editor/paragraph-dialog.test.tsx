@@ -13,7 +13,6 @@ function setup(attrs?: Record<string, unknown>) {
     extensions: createTemplateExtensions({
       styles: DEFAULT_PARAGRAPH_STYLES,
       kind: "filing",
-      isBlock: false,
       blocks: [],
     }),
     content: {

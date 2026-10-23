@@ -43,7 +43,6 @@ export type TemplateExtensionOptions = {
   /** The firm's paragraph styles: the editor draws each paragraph in its effective look. */
   styles: ParagraphStyle[];
   kind: TemplateKind;
-  isBlock: boolean;
   blocks: BlockSource[];
   onEditBlock?: (id: string) => void;
   onEditRule?: (pos: number) => void;
@@ -325,7 +324,6 @@ export function createTemplateExtensions(opts: TemplateExtensionOptions): Extens
     ];
   }
 
-  const hasBlockRef = !opts.isBlock;
   const hasPageBreak = kind !== "email";
   // Explicit alternatives, not the "block" group: the schema's `block`
   // node would shadow that group name in content expressions.
@@ -335,7 +333,7 @@ export function createTemplateExtensions(opts: TemplateExtensionOptions): Extens
     "orderedList",
     "table",
     ...(hasPageBreak ? ["pageBreak"] : []),
-    ...(hasBlockRef ? ["block"] : []),
+    "block",
     "showIf",
     "repeat",
   ].join("|");
@@ -407,15 +405,11 @@ export function createTemplateExtensions(opts: TemplateExtensionOptions): Extens
     field,
     ListFieldNode.configure({ onEditField: opts.onEditField }),
     ...(hasPageBreak ? [PageBreak] : []),
-    ...(hasBlockRef
-      ? [
-          BlockNode.configure({
-            blocks: opts.blocks,
-            styles: opts.styles,
-            onEditBlock: opts.onEditBlock,
-          }),
-        ]
-      : []),
+    BlockNode.configure({
+      blocks: opts.blocks,
+      styles: opts.styles,
+      onEditBlock: opts.onEditBlock,
+    }),
     ShowIfNode.configure(sectionOpts),
     RepeatNode.configure(sectionOpts),
     RepeatEmptyNode.configure(sectionOpts),

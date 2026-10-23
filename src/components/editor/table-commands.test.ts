@@ -33,7 +33,6 @@ function grid(rows = 2, cols = 2) {
     extensions: createTemplateExtensions({
       styles: DEFAULT_PARAGRAPH_STYLES,
       kind: "filing",
-      isBlock: false,
       blocks: [],
     }),
     content: { type: "doc", content: [{ type: "paragraph" }] } as never,
@@ -124,7 +123,6 @@ describe("setBorders", () => {
       extensions: createTemplateExtensions({
         styles: DEFAULT_PARAGRAPH_STYLES,
         kind: "letter",
-        isBlock: false,
         blocks: [],
       }),
       content: { type: "doc", content: [{ type: "paragraph" }] } as never,
@@ -252,7 +250,6 @@ describe("width and alignment", () => {
       extensions: createTemplateExtensions({
         styles: DEFAULT_PARAGRAPH_STYLES,
         kind: "filing",
-        isBlock: false,
         blocks: [],
       }),
       content: e.getHTML(),

@@ -26,7 +26,13 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh, replace, push: vi.fn() }),
 }));
 
-import { TemplateEditorPage, type EditorTemplate } from "./template-editor-page";
+import {
+  FIT_BLOCKED,
+  TemplateEditorPage,
+  type EditorBlock,
+  type EditorTemplate,
+} from "./template-editor-page";
+import type { BlockSource } from "@/lib/templates/render";
 import { DEFAULT_DOCUMENT_STYLE, resolvePageStyle } from "@/lib/templates/page-style";
 
 let viewport = { desktop: true, listeners: new Set<() => void>() };
@@ -377,6 +383,7 @@ describe("TemplateEditorPage — templates", () => {
             updatedAt: UPDATED,
           }}
           usage={[]}
+          blocks={[]}
           pageStyle={PAGE_STYLE}
           courtFormats={[COURT]}
           canSave
@@ -572,6 +579,7 @@ describe("TemplateEditorPage — blocks", () => {
           { id: "t1", name: "Demand letter" },
           { id: "t2", name: "Retainer" },
         ]}
+        blocks={[]}
         canSave
       />,
     );
@@ -602,6 +610,7 @@ describe("TemplateEditorPage — blocks", () => {
           { id: "b2", name: "Letterhead", kind: "block" },
           { id: "f1", name: "CO District", kind: "court_format" },
         ]}
+        blocks={[]}
         canSave
       />,
     );
@@ -630,6 +639,7 @@ describe("TemplateEditorPage — blocks", () => {
           updatedAt: UPDATED,
         }}
         usage={[]}
+        blocks={[]}
         canSave
       />,
     );
@@ -639,7 +649,130 @@ describe("TemplateEditorPage — blocks", () => {
       id: "b1",
       key: "signature",
       name: "Signature",
+      appliesTo: "both",
       expectedUpdatedAt: UPDATED,
     });
+  });
+
+  const blk = (over: Partial<EditorBlock> = {}): EditorBlock => ({
+    id: "b1",
+    key: "signature",
+    name: "Signature",
+    description: null,
+    appliesTo: "both",
+    content: { type: "doc", content: [para(text("Sincerely"))] } as never,
+    updatedAt: UPDATED,
+    ...over,
+  });
+  const source = (id: string, name: string, over: Partial<BlockSource> = {}): BlockSource => ({
+    id,
+    name,
+    isActive: true,
+    content: { type: "doc", content: [para(text(name))] } as never,
+    ...over,
+  });
+
+  it("shows Applies to, an Insert block menu without itself, its parents, misfits or archived", async () => {
+    const user = userEvent.setup();
+    const blocks = [
+      source("b1", "Signature"),
+      source("p1", "Closing", {
+        content: { type: "doc", content: [{ type: "block", attrs: { blockId: "b1" } }] } as never,
+      }),
+      source("m1", "Matter caption", { appliesTo: "matter" }),
+      source("a1", "Old footer", { isActive: false }),
+      source("ok", "Attorney contact"),
+    ];
+    render(<TemplateEditorPage block={blk()} usage={[]} blocks={blocks} canSave />);
+    expect(screen.getByLabelText("Applies to")).toHaveValue("both");
+    await user.click(await screen.findByRole("button", { name: "Insert block" }));
+    const items = (await screen.findAllByRole("menuitem")).map((i) => i.textContent);
+    expect(items).toEqual(["Attorney contact"]);
+  });
+
+  it("previews a block against a real record, as a filing in the block's scope", async () => {
+    const user = userEvent.setup();
+    searchRecords.mockResolvedValue([
+      { scope: { kind: "lead", leadId: "l1" }, label: "Dana Lead" },
+    ]);
+    previewDraft.mockResolvedValue({
+      ok: true,
+      html: "<p>Sincerely, Dana</p>",
+      text: "Sincerely, Dana",
+      subjectText: null,
+      page: null,
+      report: { missing: [], blank: [], invalid: [], archivedBlocks: [], unknownStyles: [] },
+    });
+    render(
+      <TemplateEditorPage block={blk({ appliesTo: "lead" })} usage={[]} blocks={[]} canSave />,
+    );
+    await user.click(screen.getByRole("button", { name: "Preview with a real matter or lead" }));
+    await user.type(screen.getByLabelText("Search for a lead"), "dan");
+    await user.click(await screen.findByRole("button", { name: /Dana Lead/ }));
+    expect(searchRecords).toHaveBeenCalledWith("dan", "lead");
+    await waitFor(() => expect(previewDraft).toHaveBeenCalled());
+    expect(previewDraft.mock.calls[0]![0]).toMatchObject({
+      kind: "filing",
+      appliesTo: "lead",
+      target: { scope: { kind: "lead", leadId: "l1" } },
+    });
+  });
+
+  it("a field that doesn't fit the block's scope is highlighted and blocks Save", async () => {
+    const user = userEvent.setup();
+    const content = { type: "doc", content: [para(text("No. "), field("matter.caseNumber"))] };
+    render(
+      <TemplateEditorPage
+        block={blk({ appliesTo: "matter", content: content as never })}
+        usage={[]}
+        blocks={[]}
+        canSave
+      />,
+    );
+    await waitFor(() => expect(document.querySelector("[data-field-chip]")).not.toBeNull());
+    expect(saveButton()).not.toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText("Applies to"), "lead");
+    expect(await screen.findByText(FIT_BLOCKED)).toBeInTheDocument();
+    expect(saveButton()).toBeDisabled();
+    await waitFor(() => expect(document.querySelector("[data-fit-invalid]")).not.toBeNull());
+  });
+});
+
+describe("TemplateEditorPage — blocks inside blocks", () => {
+  it("a template whose nested block misfits warns 'Inside blocks' but still saves", async () => {
+    const user = userEvent.setup();
+    saveTemplate.mockResolvedValue({ ok: true, id: "t1", updatedAt: "2026-10-02T00:00:00.000Z" });
+    const ref = (id: string) => ({ type: "block", attrs: { blockId: id } });
+    const blocks: BlockSource[] = [
+      {
+        id: "sig",
+        name: "Signature",
+        isActive: true,
+        content: { type: "doc", content: [para(text("By ")), ref("contact")] } as never,
+      },
+      {
+        id: "contact",
+        name: "Attorney contact",
+        isActive: true,
+        content: { type: "doc", content: [para(field("matter.caseNumber"))] } as never,
+      },
+    ];
+    render(
+      <TemplateEditorPage
+        template={tpl({
+          appliesTo: "lead",
+          content: { type: "doc", content: [para(text("Hi")), ref("sig")] } as never,
+        })}
+        blocks={blocks}
+        canSave
+      />,
+    );
+    expect(
+      await screen.findByText("Inside blocks: Case number (in Signature → Attorney contact)"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(FIT_BLOCKED)).not.toBeInTheDocument();
+    await user.click(saveButton());
+    await waitFor(() => expect(saveTemplate).toHaveBeenCalledTimes(1));
   });
 });

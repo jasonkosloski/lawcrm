@@ -41,7 +41,6 @@ export function Toolbar({
   editor,
   fieldTarget,
   kind,
-  isBlock,
   fields,
   lists,
   data,
@@ -54,11 +53,10 @@ export function Toolbar({
   /** Where "Insert field" goes: the body or the email subject. */
   fieldTarget: Editor;
   kind: TemplateKind;
-  isBlock: boolean;
   fields: CatalogField[];
   lists: CatalogList[];
   data: TemplateData;
-  /** Active blocks offered by "Insert block". */
+  /** The blocks "Insert block" offers (`insertableBlocks`). */
   blocks: BlockSource[];
   /** The firm's paragraph styles (the Style menu's options). */
   styles: ParagraphStyle[];
@@ -113,7 +111,7 @@ export function Toolbar({
       {rich && <StyleMenu editor={editor} styles={styles} />}
       {rich && (
         <>
-          {!isBlock && blocks.length > 0 && (
+          {blocks.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={

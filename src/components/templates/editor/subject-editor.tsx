@@ -73,7 +73,6 @@ export function SubjectEditor({
     ...documentExtensions({
       styles: DEFAULT_PARAGRAPH_STYLES,
       kind: "sms",
-      isBlock: false,
       blocks: [],
       onEditField,
     }),

@@ -14,7 +14,6 @@ function setup(content: unknown = { type: "doc", content: [{ type: "paragraph" }
     extensions: createTemplateExtensions({
       styles: DEFAULT_PARAGRAPH_STYLES,
       kind: "filing",
-      isBlock: false,
       blocks: [],
     }),
     content: content as never,
@@ -24,7 +23,6 @@ function setup(content: unknown = { type: "doc", content: [{ type: "paragraph" }
       editor={editor}
       fieldTarget={editor}
       kind="filing"
-      isBlock={false}
       fields={[]}
       lists={[]}
       data={{} as TemplateData}

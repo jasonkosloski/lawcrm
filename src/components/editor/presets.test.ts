@@ -167,7 +167,6 @@ describe("document preset", () => {
       extensions: documentExtensions({
         styles: DEFAULT_PARAGRAPH_STYLES,
         kind: "letter",
-        isBlock: false,
         blocks: [],
       }),
       content: doc as never,

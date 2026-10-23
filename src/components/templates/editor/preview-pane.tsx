@@ -7,6 +7,8 @@
  * Letters and filings show the page in the firm's document style
  * (<PagePreview/>) when the editor page loaded it (`pageStyle`); the
  * sample path renders the letterhead/continuation blocks from `blocks`.
+ * Fields inside included blocks that don't fit the draft's scope
+ * (`checkNestedFit`) are listed with the report as "Inside blocks".
  */
 
 "use client";
@@ -21,6 +23,7 @@ import {
   type SerializedCourtContext,
 } from "@/lib/templates/court-blocks";
 import { SAMPLE_TEMPLATE_DATA } from "@/lib/templates/catalog";
+import { nestedMisfitText, type NestedMisfit } from "@/lib/templates/inspect";
 import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templates/render";
 import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import type { ParagraphStyle } from "@/lib/templates/paragraph-styles";
@@ -90,8 +93,9 @@ export function renderSample(
   };
 }
 
-function Report({ report }: { report: RenderReport }) {
+function Report({ report, nested }: { report: RenderReport; nested: NestedMisfit[] }) {
   const rows = [
+    { label: "Inside blocks", items: nested.map(nestedMisfitText) },
     { label: "Not on file", items: report.missing },
     { label: "Fields that don't fit", items: report.invalid },
     { label: "Archived or missing blocks", items: report.archivedBlocks },
@@ -123,6 +127,7 @@ export function PreviewPane({
   styles = null,
   courtFormats = [],
   allowRecord,
+  nested = [],
 }: {
   doc: TemplateDoc;
   subject: TemplateDoc | null;
@@ -137,6 +142,8 @@ export function PreviewPane({
   courtFormats?: SerializedCourtContext[];
   /** Offer the real-record preview (desktop editors only). */
   allowRecord: boolean;
+  /** Misfits inside included blocks; shown, never blocking. */
+  nested?: NestedMisfit[];
 }) {
   const [courtId, setCourtId] = useState("");
   // Switching away from filing goes back to the house style.
@@ -290,7 +297,7 @@ export function PreviewPane({
               />
             )}
           </div>
-          <Report report={shown.report} />
+          <Report report={shown.report} nested={nested} />
         </>
       )}
     </div>

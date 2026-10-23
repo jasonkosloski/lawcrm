@@ -20,6 +20,8 @@ vi.mock("@/app/actions/template-blocks", () => ({
   deleteTemplateBlock: (...a: unknown[]) => deleteBlock(...a),
 }));
 
+import { checkTemplateFit } from "@/lib/templates/inspect";
+import type { TemplateDoc } from "@/lib/templates/schema";
 import { TemplateLibrary, type BlockListItem, type TemplateListItem } from "./template-library";
 
 const row = (over: Partial<TemplateListItem>): TemplateListItem => ({
@@ -50,6 +52,7 @@ const BLOCKS: BlockListItem[] = [
     description: null,
     isActive: true,
     updatedAtLabel: "Apr 15, 2026",
+    misfit: false,
   },
   {
     id: "b2",
@@ -58,6 +61,7 @@ const BLOCKS: BlockListItem[] = [
     description: null,
     isActive: false,
     updatedAtLabel: "Apr 1, 2026",
+    misfit: false,
   },
 ];
 
@@ -122,6 +126,24 @@ describe("TemplateLibrary", () => {
       "/settings/templates/blocks/new",
     );
     expect(screen.queryByRole("link", { name: "Demand one" })).not.toBeInTheDocument();
+  });
+
+  it("marks a block whose fields don't fit its scope", async () => {
+    const user = userEvent.setup();
+    // As the settings page computes it: a "both" block with a matter-only field.
+    const content = {
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "field", attrs: { path: "matter.caseNumber" } }] },
+      ],
+    } as TemplateDoc;
+    const misfit = !checkTemplateFit(content, "both").ok;
+    render(lib({ blocks: [{ ...BLOCKS[0]!, id: "b3", name: "Caption", misfit }, BLOCKS[0]!] }));
+    await user.click(screen.getByRole("tab", { name: "Blocks" }));
+    expect(screen.getAllByText("Fields don't fit its scope")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Caption" }).parentElement).toHaveTextContent(
+      "Fields don't fit its scope",
+    );
   });
 
   it("renders no manage affordances for a read-only viewer", () => {

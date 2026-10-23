@@ -14,7 +14,6 @@ function setup(attrs: Record<string, unknown>) {
     extensions: createTemplateExtensions({
       styles: DEFAULT_PARAGRAPH_STYLES,
       kind: "letter",
-      isBlock: false,
       blocks: [],
     }),
     content: {

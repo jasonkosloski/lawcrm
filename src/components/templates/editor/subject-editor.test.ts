@@ -14,7 +14,6 @@ describe("flattenPasted", () => {
       extensions: createTemplateExtensions({
         styles: DEFAULT_PARAGRAPH_STYLES,
         kind: "sms",
-        isBlock: false,
         blocks: [],
       }),
     });
@@ -51,7 +50,6 @@ describe("flattenPasted", () => {
       extensions: createTemplateExtensions({
         styles: DEFAULT_PARAGRAPH_STYLES,
         kind: "sms",
-        isBlock: false,
         blocks: [],
       }),
     });

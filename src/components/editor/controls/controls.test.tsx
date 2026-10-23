@@ -12,7 +12,6 @@ function templateEditor() {
     extensions: createTemplateExtensions({
       styles: DEFAULT_PARAGRAPH_STYLES,
       kind: "filing",
-      isBlock: false,
       blocks: [],
     }),
     content: "<p>hello</p>",

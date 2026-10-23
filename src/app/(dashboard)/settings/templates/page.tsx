@@ -23,6 +23,8 @@ import {
   type TemplateListItem,
 } from "@/components/templates/template-library";
 import { requireUser } from "@/lib/current-user";
+import { checkTemplateFit } from "@/lib/templates/inspect";
+import type { AppliesTo, TemplateDoc } from "@/lib/templates/schema";
 
 export default async function TemplatesSettingsPage({
   searchParams,
@@ -59,6 +61,8 @@ export default async function TemplatesSettingsPage({
         description: true,
         isActive: true,
         updatedAt: true,
+        appliesTo: true,
+        content: true,
       },
     }),
   ]);
@@ -81,6 +85,9 @@ export default async function TemplatesSettingsPage({
     description: b.description,
     isActive: b.isActive,
     updatedAtLabel: formatDate(b.updatedAt, "medium", tz),
+    // Legacy blocks may predate the scope rule (e.g. "both" with a
+    // matter-only field); flag them so someone fixes the scope or field.
+    misfit: !checkTemplateFit(b.content as unknown as TemplateDoc, b.appliesTo as AppliesTo).ok,
   }));
 
   return (

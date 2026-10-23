@@ -4,7 +4,6 @@
  */
 
 import {
-  FIELDS,
   LISTS,
   SAMPLE_TEMPLATE_DATA,
   fieldsForScope,
@@ -12,6 +11,13 @@ import {
   type CatalogList,
   type TemplateData,
 } from "@/lib/templates/catalog";
+import {
+  MAX_BLOCK_DEPTH,
+  ancestors,
+  depthAbove,
+  height,
+  scopeCovers,
+} from "@/lib/templates/block-graph";
 import { convertHeadings } from "@/lib/templates/headings";
 import { convertLegacyBody } from "@/lib/templates/legacy";
 import type { SerializedCourtContext } from "@/lib/templates/court-blocks";
@@ -55,10 +61,11 @@ export type EditorProps = {
   pageStyle?: FirmPageStyle;
   /** Active court formats, for the preview's "Preview as". */
   courtFormats?: SerializedCourtContext[];
+  /** Every block (active and archived): rendering, Insert block, fit checks. */
+  blocks: BlockSource[];
 } & (
   | {
       template: EditorTemplate;
-      blocks: BlockSource[];
       block?: undefined;
       usage?: undefined;
     }
@@ -66,7 +73,6 @@ export type EditorProps = {
       block: EditorBlock;
       usage: Usage[];
       template?: undefined;
-      blocks?: undefined;
     }
 );
 
@@ -99,17 +105,39 @@ export function titleOf(p: EditorProps): string {
   return p.template.id ? p.template.name : "New template";
 }
 
-/** What the field picker and rule forms offer, and the preview data.
- *  Blocks are shared across scopes, so they see the whole catalog. */
-export function catalogFor(
-  isBlock: boolean,
-  appliesTo: AppliesTo,
-): { fields: CatalogField[]; lists: CatalogList[]; data: TemplateData } {
+/** What the field picker and rule forms offer, and the preview data. */
+export function catalogFor(appliesTo: AppliesTo): {
+  fields: CatalogField[];
+  lists: CatalogList[];
+  data: TemplateData;
+} {
   const fits = (scopes: readonly string[]) =>
-    isBlock || (appliesTo === "both" ? scopes.length === 2 : scopes.includes(appliesTo));
+    appliesTo === "both" ? scopes.length === 2 : scopes.includes(appliesTo);
   return {
-    fields: isBlock ? [...FIELDS] : fieldsForScope(appliesTo),
+    fields: fieldsForScope(appliesTo),
     lists: LISTS.filter((l) => fits(l.scopes)),
     data: { ...SAMPLE_TEMPLATE_DATA, scope: appliesTo === "lead" ? "lead" : "matter" },
   };
+}
+
+/** What "Insert block" offers a template or block (`host.id` null for a
+ *  template or a new block): active blocks whose scope covers the host's,
+ *  leaving out the host, every block that contains it, and blocks that
+ *  would nest more than MAX_BLOCK_DEPTH deep. The save re-checks all of it. */
+export function insertableBlocks(
+  all: BlockSource[],
+  host: { id: string | null; appliesTo: AppliesTo; isBlock: boolean },
+): BlockSource[] {
+  const map = new Map(all.map((b) => [b.id, b]));
+  const above = host.id ? ancestors(host.id, map) : new Set<string>();
+  // Levels taken above a child: the host block's own level, at its deepest.
+  const offset = host.isBlock ? (host.id ? depthAbove(host.id, map) : 0) + 1 : 0;
+  return all.filter(
+    (b) =>
+      b.isActive &&
+      b.id !== host.id &&
+      !above.has(b.id) &&
+      scopeCovers(b.appliesTo ?? "both", host.appliesTo) &&
+      offset + height(b.id, map) <= MAX_BLOCK_DEPTH,
+  );
 }

@@ -29,7 +29,6 @@ function Harness({ content, blocks = [] }: { content: unknown; blocks?: BlockSou
     extensions: createTemplateExtensions({
       styles: DEFAULT_PARAGRAPH_STYLES,
       kind: "letter",
-      isBlock: false,
       blocks,
     }),
     content: content as never,

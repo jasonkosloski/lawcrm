@@ -43,7 +43,6 @@ const openBlock = (id: string) =>
 
 export function useBodyEditor(opts: {
   kind: TemplateKind;
-  isBlock: boolean;
   blocks: BlockSource[];
   editable: boolean;
   content: TemplateDoc | string;
@@ -58,14 +57,13 @@ export function useBodyEditor(opts: {
   onEditField: (pos: number) => void;
   onEditRule: (pos: number) => void;
 }) {
-  const { kind, isBlock, blocks, onEditField, onEditRule } = opts;
+  const { kind, blocks, onEditField, onEditRule } = opts;
   const styles = opts.styles ?? DEFAULT_PARAGRAPH_STYLES;
   const extensions = useMemo(
     () => [
       ...documentExtensions({
         styles,
         kind,
-        isBlock,
         blocks,
         onEditField,
         onEditRule,
@@ -73,7 +71,7 @@ export function useBodyEditor(opts: {
       }),
       FitHighlight,
     ],
-    [kind, isBlock, blocks, styles, onEditField, onEditRule],
+    [kind, blocks, styles, onEditField, onEditRule],
   );
   return useEditor(
     {

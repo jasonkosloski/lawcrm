@@ -17,12 +17,11 @@ import { ruleHeaderText } from "./section-nodes";
 
 import { FULL_DOC, NO_ATTRS, cell, p, t } from "./test-fixtures";
 
-const make = (kind: TemplateKind, content: unknown, isBlock = false) =>
+const make = (kind: TemplateKind, content: unknown) =>
   new Editor({
     extensions: createTemplateExtensions({
       styles: DEFAULT_PARAGRAPH_STYLES,
       kind,
-      isBlock,
       blocks: [],
     }),
     content: content as never,
@@ -59,14 +58,27 @@ describe("round trip", () => {
     editor.destroy();
   });
 
-  it("omits the block node inside a block and the page break in email", () => {
-    const names = (kind: TemplateKind, isBlock: boolean) =>
-      createTemplateExtensions({ styles: DEFAULT_PARAGRAPH_STYLES, kind, isBlock, blocks: [] }).map(
+  it("omits the page break in email", () => {
+    const names = (kind: TemplateKind) =>
+      createTemplateExtensions({ styles: DEFAULT_PARAGRAPH_STYLES, kind, blocks: [] }).map(
         (e) => e.name,
       );
-    expect(names("letter", true)).not.toContain("block");
-    expect(names("letter", false)).toContain("block");
-    expect(names("email", false)).not.toContain("pageBreak");
+    expect(names("letter")).toContain("block");
+    expect(names("email")).not.toContain("pageBreak");
+  });
+
+  it("a block's content loads and round trips a nested block node", () => {
+    const doc = {
+      type: "doc",
+      content: [
+        { type: "paragraph", attrs: { textAlign: null }, content: [t("Above")] },
+        { type: "block", attrs: { blockId: "b2" } },
+      ],
+    };
+    const editor = make("filing", doc);
+    const out = validateTemplateContent("filing", editor.getJSON(), { isBlock: true });
+    expect(out.ok && out.doc).toEqual(doc);
+    editor.destroy();
   });
 });
 
@@ -321,7 +333,6 @@ describe("paragraph styles and text marks", () => {
     const names = createTemplateExtensions({
       styles: DEFAULT_PARAGRAPH_STYLES,
       kind: "letter",
-      isBlock: false,
       blocks: [],
     }).map((e) => e.name);
     expect(names).not.toContain("heading");

@@ -19,7 +19,6 @@ function setup() {
     extensions: createTemplateExtensions({
       styles: DEFAULT_PARAGRAPH_STYLES,
       kind: "filing",
-      isBlock: false,
       blocks: [],
     }),
     content: { type: "doc", content: [{ type: "paragraph" }] } as never,
@@ -29,7 +28,6 @@ function setup() {
       editor={editor}
       fieldTarget={editor}
       kind="filing"
-      isBlock={false}
       fields={[]}
       lists={[]}
       data={{} as TemplateData}
@@ -74,7 +72,6 @@ describe("TableMenu features", () => {
       extensions: createTemplateExtensions({
         styles: DEFAULT_PARAGRAPH_STYLES,
         kind: "filing",
-        isBlock: false,
         blocks: [],
       }),
       content: { type: "doc", content: [{ type: "paragraph" }] } as never,

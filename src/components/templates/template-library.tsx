@@ -52,6 +52,8 @@ export type BlockListItem = {
   description: string | null;
   isActive: boolean;
   updatedAtLabel: string;
+  /** Its own fields don't fit its applies-to (a legacy block). */
+  misfit: boolean;
 };
 
 type Tab = "templates" | "blocks";
@@ -255,7 +257,16 @@ function BlocksTab({
       name={b.name}
       icon={Blocks}
       description={b.description}
-      tags={<span className="text-2xs text-ink-4 font-mono shrink-0">{b.key}</span>}
+      tags={
+        <>
+          <span className="text-2xs text-ink-4 font-mono shrink-0">{b.key}</span>
+          {b.misfit && (
+            <span className="shrink-0 rounded bg-warn-soft px-1.5 text-2xs text-warn">
+              Fields don&apos;t fit its scope
+            </span>
+          )}
+        </>
+      }
       meta={<span>updated {b.updatedAtLabel}</span>}
       isActive={b.isActive}
       canEdit={canEdit}
