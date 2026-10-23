@@ -188,6 +188,10 @@ function runs(nodes: ResolvedInline[] | undefined): ParagraphChild[] {
 type Ctx = { instance: { n: number }; textTwips: number; inCell?: boolean };
 
 const cellSpacing = (ctx: Ctx) => (ctx.inCell ? { spacing: { after: 0 } } : {});
+const cellSpacingOnly = (c: { attrs?: { textAlign?: keyof typeof ALIGN | null } }, ctx: Ctx) => ({
+  alignment: c.attrs?.textAlign ? ALIGN[c.attrs.textAlign] : undefined,
+  ...cellSpacing(ctx),
+});
 
 function blocks(list: ResolvedBlock[], ctx: Ctx, level: number): (Paragraph | Table)[] {
   return list.flatMap((b): (Paragraph | Table)[] => {
@@ -212,11 +216,24 @@ function blocks(list: ResolvedBlock[], ctx: Ctx, level: number): (Paragraph | Ta
         return b.content.flatMap((li) =>
           li.content.flatMap((c, i): (Paragraph | Table)[] => {
             if (c.type === "paragraph" || c.type === "heading") {
+              const r = c.type === "paragraph" ? c.attrs?.resolved : undefined;
+              const direct = c.type === "paragraph" ? directProps(c, ctx) : cellSpacingOnly(c, ctx);
+              // The paragraph's own indent adds to the list's level indent.
+              const base = 720 * (lvl + 1);
+              const left = base + twips(r?.indentLeftIn ?? 0);
+              const right = r ? twips(r.indentRightIn) : 0;
+              const first = r && i > 0 ? firstLineProps(r.firstLine) : {};
+              const indent =
+                i === 0
+                  ? r && (left !== base || right)
+                    ? { left, right, hanging: 360 }
+                    : undefined
+                  : { left, ...(right ? { right } : {}), ...first };
               return [
                 new Paragraph({
                   children: runs(c.content),
-                  alignment: c.attrs?.textAlign ? ALIGN[c.attrs.textAlign] : undefined,
-                  ...cellSpacing(ctx),
+                  ...direct,
+                  ...(indent ? { indent } : {}),
                   // Only the first paragraph of an item carries the marker.
                   ...(i === 0
                     ? {
@@ -226,7 +243,7 @@ function blocks(list: ResolvedBlock[], ctx: Ctx, level: number): (Paragraph | Ta
                           instance,
                         },
                       }
-                    : { indent: { left: 720 * (lvl + 1) } }),
+                    : {}),
                 }),
               ];
             }

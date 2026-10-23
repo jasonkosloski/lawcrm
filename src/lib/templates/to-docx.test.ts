@@ -574,4 +574,24 @@ describe("resolvedToDocx paragraph styles", () => {
     expect(pprs[0]).toContain('w:after="0"');
     expect(pprs[1]).toContain('w:after="120"');
   });
+
+  it("list items take their paragraph style and add their indent to the list indent", async () => {
+    const item = (p: ReturnType<typeof para>) => ({ type: "listItem" as const, content: [p] });
+    const { doc } = await styled([
+      {
+        type: "bulletList" as const,
+        content: [
+          item(para("a", { style: "blockquote" })),
+          item(para("b", { spaceAfterPt: 6, indentLeftIn: 0.5 })),
+        ],
+      },
+    ]);
+    const pprs = [...doc.matchAll(/<w:p>(<w:pPr>.*?<\/w:pPr>)?/g)].map((m) => m[1] ?? "");
+    expect(pprs[0]).toContain('<w:pStyle w:val="blockquote"/>');
+    expect(pprs[0]).toContain('w:left="1440"');
+    expect(pprs[0]).toContain('w:hanging="360"');
+    expect(pprs[1]).toContain('w:after="120"');
+    expect(pprs[1]).toContain('w:left="1440"');
+    expect(pprs[1]).toContain("<w:numPr>");
+  });
 });
