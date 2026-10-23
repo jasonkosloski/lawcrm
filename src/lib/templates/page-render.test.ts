@@ -77,3 +77,63 @@ describe("court replacements by kind", () => {
     expect(resolvedToText(page.continuation!)).toBe("CONT");
   });
 });
+
+describe("nested blocks on a page", () => {
+  const ref = (blockId: string) => ({ type: "block" as const, attrs: { blockId } });
+  const holding = (id: string, ...ids: string[]): BlockSource => ({
+    id,
+    name: id,
+    isActive: true,
+    content: { type: "doc", content: ids.map(ref) },
+  });
+  const courtWith = (replacements: [string, BlockSource][]) => ({
+    id: "c1",
+    name: "Court",
+    isActive: true,
+    values: {} as never,
+    replacements: new Map(replacements),
+  });
+  const body: TemplateDoc = { type: "doc", content: [ref("A")] };
+  const base = new Map<string, BlockSource>([
+    ["A", holding("A", "S")],
+    ["S", { id: "S", name: "S", isActive: true, content: doc("DEFAULT") }],
+  ]);
+  const filing = (court: ReturnType<typeof courtWith>) =>
+    renderPageView({
+      doc: body,
+      kind: "filing",
+      data,
+      blocks: base,
+      style,
+      logo: null,
+      logoUrl: null,
+      court,
+    });
+
+  it("a court swap applies inside a nested block", () => {
+    const r = { id: "R", name: "R", isActive: true, content: doc("COURT") };
+    expect(resolvedToText(filing(courtWith([["S", r]])).page.body)).toBe("COURT");
+  });
+
+  it("a swap that includes the swapped block loops safely", () => {
+    const { page, report } = filing(courtWith([["S", holding("R", "S")]]));
+    expect(resolvedToText(page.body)).toBe("[Block includes itself]");
+    expect(report.invalid).toEqual(["R (includes itself)"]);
+  });
+
+  it("letterhead may contain a nested block", () => {
+    const { page } = renderPageView({
+      doc: doc("Body"),
+      kind: "letter",
+      data,
+      blocks: new Map([
+        ["lh", holding("lh", "addr")],
+        ["addr", { id: "addr", name: "Address", isActive: true, content: doc("1 Main St") }],
+      ]),
+      style: { ...DEFAULT_DOCUMENT_STYLE, letterheadBlockId: "lh", continuationBlockId: null },
+      logo: null,
+      logoUrl: null,
+    });
+    expect(resolvedToText(page.letterhead!)).toBe("1 Main St");
+  });
+});

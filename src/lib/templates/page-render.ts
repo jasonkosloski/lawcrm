@@ -89,6 +89,13 @@ export function effectiveBlocks(
   return c ? applyCourtBlocks(blocks, c.replacements) : blocks;
 }
 
+/** The court's replacement block ids, for loading their nested blocks
+ *  (empty unless the court applies to this kind). */
+export function courtBlockIds(kind: PageKind, court?: CourtContext | null): string[] {
+  const c = activeCourt(kind, court);
+  return c ? [...c.replacements.values()].map((b) => b.id) : [];
+}
+
 const blockDoc = (blockId: string): TemplateDoc => ({
   type: "doc",
   content: [{ type: "block", attrs: { blockId } }],

@@ -7,6 +7,8 @@ describe("hasTemplatePlaceholders", () => {
     "Re {{client.nmae}}",
     "[Signature block — archived]",
     "Before [Missing block] after",
+    "[Block includes itself]",
+    "[Blocks nested too deep]",
   ])("finds %s", (t) => expect(hasTemplatePlaceholders(t)).toBe(true));
 
   test.each(["Dear Maria,", "See [1] and {{ not a key }}", "[note — draft]"])("ignores %s", (t) =>

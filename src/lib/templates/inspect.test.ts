@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { checkTemplateFit, collectBlockIds, collectFieldPaths, usesPrefix } from "./inspect";
+import {
+  checkTemplateFit,
+  collectBlockIds,
+  collectFieldPaths,
+  usesPrefix,
+  usesRecipient,
+  usesSigner,
+} from "./inspect";
 import type { BlockSource } from "./render";
 import type { TemplateDoc } from "./schema";
 
@@ -140,6 +147,35 @@ describe("usesPrefix", () => {
     expect(usesPrefix(d, "signer.", blocks)).toBe(true);
     expect(usesPrefix(d, "signer.")).toBe(false);
     expect(usesPrefix(d, "recipient.", blocks)).toBe(false);
+  });
+  it("sees signer two levels down", () => {
+    const outer: BlockSource = {
+      id: "b0",
+      name: "Outer",
+      isActive: true,
+      content: doc({ type: "block", attrs: { blockId: "b1" } }),
+    };
+    const nested = new Map([...blocks, ["b0", outer]]);
+    const top = doc({ type: "block", attrs: { blockId: "b0" } });
+    expect(usesSigner(top, nested)).toBe(true);
+    expect(usesRecipient(top, nested)).toBe(false);
+  });
+  it("terminates on a block loop", () => {
+    const a: BlockSource = {
+      ...block,
+      id: "a",
+      content: doc({ type: "block", attrs: { blockId: "b" } }),
+    };
+    const b: BlockSource = {
+      ...block,
+      id: "b",
+      content: doc({ type: "block", attrs: { blockId: "a" } }),
+    };
+    const loop = new Map([
+      ["a", a],
+      ["b", b],
+    ]);
+    expect(usesSigner(doc({ type: "block", attrs: { blockId: "a" } }), loop)).toBe(false);
   });
   it("sees direct use", () => {
     expect(usesPrefix(doc(para(f("recipient.name"))), "recipient.")).toBe(true);

@@ -172,10 +172,35 @@ describe("blocks", () => {
     expect(r.report.archivedBlocks).toEqual(["(deleted)"]);
   });
 
-  it("does not recurse into nested blocks", () => {
-    const nested: BlockSource = { ...sig, content: doc(blockRef("b1")) };
-    const r = render(doc(blockRef("b1")), data(), new Map([["b1", nested]]));
-    expect(paras(r)).toEqual(["[Missing block]"]);
+  const block = (id: string, ...content: BlockNode[]): [string, BlockSource] => [
+    id,
+    { id, name: `Block ${id}`, isActive: true, content: doc(...content) },
+  ];
+
+  it("expands blocks nested in blocks", () => {
+    const blocks = new Map([block("A", blockRef("B")), block("B", p(t("deep")))]);
+    const r = render(doc(blockRef("A")), data(), blocks);
+    expect(paras(r)).toEqual(["deep"]);
+    expect(r.report.invalid).toEqual([]);
+  });
+
+  it("a block loop prints [Block includes itself] once and reports it", () => {
+    const blocks = new Map([block("A", p(t("a")), blockRef("B")), block("B", blockRef("A"))]);
+    const r = render(doc(blockRef("A")), data(), blocks);
+    expect(paras(r)).toEqual(["a", "[Block includes itself]"]);
+    expect(r.doc.content![1]).toMatchObject({ content: [{ marks: [{ type: "missing" }] }] });
+    expect(r.report.invalid).toEqual(["Block A (includes itself)"]);
+  });
+
+  it("a sixth level prints [Blocks nested too deep]", () => {
+    // L1 → L2 → … → L6; levels 1–5 print their names, level 6 is refused.
+    const ids = ["L1", "L2", "L3", "L4", "L5", "L6"];
+    const blocks = new Map(
+      ids.map((id, i) => block(id, p(t(id)), ...(ids[i + 1] ? [blockRef(ids[i + 1])] : []))),
+    );
+    const r = render(doc(blockRef("L1")), data(), blocks);
+    expect(paras(r)).toEqual(["L1", "L2", "L3", "L4", "L5", "[Blocks nested too deep]"]);
+    expect(r.report.invalid).toEqual(["Block L6 (nested too deep)"]);
   });
 });
 

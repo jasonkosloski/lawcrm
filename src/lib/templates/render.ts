@@ -14,6 +14,7 @@ import {
   type ListItem,
   type TemplateData,
 } from "./catalog";
+import { MAX_BLOCK_DEPTH } from "./block-graph";
 import { formatFieldValue, joinList } from "./format";
 import { convertHeadings } from "./headings";
 import type { ParagraphStyle } from "./paragraph-styles";
@@ -121,8 +122,9 @@ export type ResolvedNode =
 type Scope = {
   item: ListItem | null;
   itemFields: CatalogField[];
-  /** Rendering inside a block's content: nested blocks do not expand. */
-  inBlock: boolean;
+  /** Ids of the blocks being expanded, outermost first (the loop and
+   *  depth guards). */
+  chain: string[];
 };
 
 type Engine = {
@@ -300,7 +302,6 @@ function placeholder(e: Engine, text: string): ResolvedParagraph {
 
 function blockRef(e: Engine, blockId: string, s: Scope): ResolvedBlock[] {
   const src = e.blocks.get(blockId);
-  if (s.inBlock) return [placeholder(e, "[Missing block]")];
   if (!src) {
     note(e.report.archivedBlocks, "(deleted)");
     return [placeholder(e, "[Missing block]")];
@@ -309,7 +310,15 @@ function blockRef(e: Engine, blockId: string, s: Scope): ResolvedBlock[] {
     note(e.report.archivedBlocks, src.name);
     return [placeholder(e, `[${src.name} block — archived]`)];
   }
-  return blocks(e, convertHeadings(src.content).content, { ...s, inBlock: true });
+  if (s.chain.includes(blockId)) {
+    note(e.report.invalid, `${src.name} (includes itself)`);
+    return [placeholder(e, "[Block includes itself]")];
+  }
+  if (s.chain.length === MAX_BLOCK_DEPTH) {
+    note(e.report.invalid, `${src.name} (nested too deep)`);
+    return [placeholder(e, "[Blocks nested too deep]")];
+  }
+  return blocks(e, convertHeadings(src.content).content, { ...s, chain: [...s.chain, blockId] });
 }
 
 function blocks(e: Engine, nodes: readonly BlockNode[] | undefined, s: Scope): ResolvedBlock[] {
@@ -402,7 +411,7 @@ export function renderTemplate(
   const content = blocks(e, convertHeadings(doc).content, {
     item: null,
     itemFields: [],
-    inBlock: false,
+    chain: [],
   });
   return { doc: content.length ? { type: "doc", content } : { type: "doc" }, report };
 }

@@ -59,6 +59,7 @@ import {
 import {
   logoPreviewUrl,
   logoRefOf,
+  courtBlockIds,
   effectiveBlocks,
   mergeReport,
   renderPage,
@@ -393,7 +394,8 @@ export async function previewDocumentFromTemplate(
   const doc = contentOf(template);
   const style = await getDocumentStyle();
   const styleIds = styleBlockIds(kind, style);
-  const blocks = await loadBlockMap(doc, styleIds);
+  const court = await courtFor(kind, scope);
+  const blocks = await loadBlockMap(doc, styleIds, courtBlockIds(kind, court));
   const loaded = await loadTemplateData({
     scope,
     signerId: opts?.signerId,
@@ -401,7 +403,6 @@ export async function previewDocumentFromTemplate(
     request,
   });
   if (!loaded.ok) return { ok: false, error: loaded.error };
-  const court = await courtFor(kind, scope);
 
   const { page, report } = previewPage(doc, kind, loaded.data, blocks, style, court);
   const whole = withStyleBlocks(doc, styleIds);
@@ -498,7 +499,8 @@ export async function generateDocumentFromTemplate(
   // One style + logo load per generation; every format renders from it.
   const doc = contentOf(template);
   const style = await getDocumentStyle();
-  const blocks = await loadBlockMap(doc, styleBlockIds(kind, style));
+  const court = await courtFor(kind, scope);
+  const blocks = await loadBlockMap(doc, styleBlockIds(kind, style), courtBlockIds(kind, court));
   const loaded = await loadTemplateData({
     scope,
     signerId: opts.signerId,
@@ -506,7 +508,6 @@ export async function generateDocumentFromTemplate(
     request,
   });
   if (!loaded.ok) return { ok: false, error: loaded.error };
-  const court = await courtFor(kind, scope);
 
   // Filings never show a letterhead, so their logo is never read.
   const { logo, warning } =
@@ -723,10 +724,6 @@ export async function previewTemplateDraft(input: {
   // styles would be reported as unknown.
   const house = await getDocumentStyle();
   const style = isDocumentKind(kind) ? house : null;
-  const blocks = await loadBlockMap(
-    content.doc,
-    style && isDocumentKind(kind) ? styleBlockIds(kind, style) : [],
-  );
 
   let data: TemplateData;
   let court: CourtContext | null = null;
@@ -741,6 +738,11 @@ export async function previewTemplateDraft(input: {
     data = loaded.data;
     if (isDocumentKind(kind)) court = await courtFor(kind, input.target.scope);
   }
+  const blocks = await loadBlockMap(
+    content.doc,
+    style && isDocumentKind(kind) ? styleBlockIds(kind, style) : [],
+    isDocumentKind(kind) ? courtBlockIds(kind, court) : [],
+  );
 
   let page: PageView | null = null;
   let resolved;

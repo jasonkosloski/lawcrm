@@ -147,8 +147,9 @@ export function checkTemplateFit(
     : { ok: false, invalid: [...invalid.values()] };
 }
 
-/** True when any field path starts with `prefix`, looking one level into
- *  referenced blocks (blocks cannot contain blocks). */
+/** True when any field path starts with `prefix`, looking through
+ *  referenced blocks at every level (each block visited once, so a loop
+ *  terminates). */
 export function usesPrefix(
   doc: TemplateDoc,
   prefix: "signer." | "recipient.",
@@ -157,10 +158,18 @@ export function usesPrefix(
   const hit = (d: TemplateDoc) => collectFieldPaths(d).some((p) => p.startsWith(prefix));
   if (hit(doc)) return true;
   if (!blocks) return false;
-  return collectBlockIds(doc).some((id) => {
+  const seen = new Set<string>();
+  const queue = collectBlockIds(doc);
+  while (queue.length) {
+    const id = queue.pop()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
     const b = blocks.get(id);
-    return b ? hit(b.content) : false;
-  });
+    if (!b) continue;
+    if (hit(b.content)) return true;
+    queue.push(...collectBlockIds(b.content));
+  }
+  return false;
 }
 
 export const usesSigner = (doc: TemplateDoc, blocks?: Map<string, BlockSource>) =>
