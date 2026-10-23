@@ -109,7 +109,9 @@ describe("Use template", () => {
         recipientContactId: "c1",
       }),
     );
-    expect(screen.getByText(/Table borders and widths/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Table borders, widths and cell vertical alignment/),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^insert$/i }));
 
     expect(field("subject").value).toBe("Re: Smith v. Jones");

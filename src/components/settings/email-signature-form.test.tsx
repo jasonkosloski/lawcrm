@@ -11,7 +11,7 @@ vi.mock("@/app/actions/profile", () => ({
   updateEmailSignatureAction: vi.fn(),
 }));
 
-vi.mock("@/components/shared/rich-text-editor-lazy", () => ({
+vi.mock("@/components/editor/rich-text-editor-lazy", () => ({
   RichTextEditor: ({
     initialHTML,
     onChange,

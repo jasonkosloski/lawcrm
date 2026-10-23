@@ -235,7 +235,7 @@ describe("email preset", () => {
         '<p style="text-align:center">c</p>',
         '<p style="margin-bottom:12pt;line-height:1.5">spaced</p>',
         '<p><span style="font-size:14pt">big</span></p>',
-        '<p><a href="https://example.com/x">l</a> <a href="mailto:a@b.co">m</a></p>',
+        '<p><a href="https://example.com/x">l</a> <a href="mailto:a@b.co">m</a> <a href="tel:+15551234567">t</a></p>',
         "<blockquote><p>q</p></blockquote><ul><li><p>a</p></li></ul><ol><li><p>b</p></li></ol>",
         "<pre><code>x</code></pre>",
         '<table><tbody><tr><th style="text-align:right"><p>h</p></th><td colspan="2"><p>c</p></td></tr></tbody></table>',
@@ -245,7 +245,26 @@ describe("email preset", () => {
     expect(out).toContain('target="_blank"');
     expect(out).toContain("font-size:14pt");
     expect(out).toContain("text-align:center");
+    expect(out).toContain('href="tel:+15551234567"');
     expect(clean).toBe(out);
+  });
+
+  it("small caps from a template survive the editor and the outgoing sanitizer", () => {
+    const html = resolvedToHtml({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Plaintiff", marks: [{ type: "smallCaps" }] }],
+        },
+      ],
+    });
+    const editor = new Editor({ extensions: emailExtensions(), content: html });
+    const out = editor.getHTML();
+    editor.destroy();
+    expect(out).toMatch(/font-variant:\s*small-caps/);
+    expect(sanitizeOutgoingEmailHtml(out)).toMatch(/font-variant:\s*small-caps/);
+    expect(sanitizeOutgoingEmailHtml(html)).toContain("font-variant:small-caps");
   });
 
   it("a pasted column width is not carried (the sanitizer would strip it)", () => {

@@ -30,6 +30,6 @@
 - (+) Expand-only migration; existing templates and courts render as before
 - (-) Independent styles mean changing the size everywhere takes editing each style
 - (-) PDF keep-with-next is an approximation (react-pdf `minPresenceAhead` of the next paragraph's first line), so a heading can occasionally strand
-- (resolved) Sent emails now carry template paragraph styles: a separate strict outgoing profile (`sanitizeOutgoingEmailHtml`) keeps bounded paragraph/span styles; the inbound and note profiles were not widened.
+- (resolved) Sent emails now carry template paragraph styles: a separate strict outgoing profile (`sanitizeOutgoingEmailHtml`) keeps bounded paragraph/span styles; the inbound and note profiles were not widened. Small caps ride as `font-variant:small-caps` on the span so they reach recipients ([ADR-068](068-one-editor-core-presets-paired-with-sanitizers.md)).
 - (-) The legacy-column mirror is extra writes until the drop migration
 - (-) JSON is validated by code, not the database, so reads parse defensively

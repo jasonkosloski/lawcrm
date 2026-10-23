@@ -13,7 +13,7 @@
 import { useState, useTransition } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { updateEmailSignatureAction } from "@/app/actions/profile";
-import { RichTextEditor } from "@/components/shared/rich-text-editor-lazy";
+import { RichTextEditor } from "@/components/editor/rich-text-editor-lazy";
 import { Button } from "@/components/ui/button";
 
 export function EmailSignatureForm({

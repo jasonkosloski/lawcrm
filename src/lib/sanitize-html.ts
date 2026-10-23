@@ -233,6 +233,7 @@ const TEXT_ALIGN = [/^(left|right|center|justify)$/];
 const SPAN_STYLES: Record<string, RegExp[]> = {
   "font-size": PARAGRAPH_STYLES["font-size"],
   "text-transform": PARAGRAPH_STYLES["text-transform"],
+  "font-variant": PARAGRAPH_STYLES["font-variant"],
 };
 
 const DOCUMENT_OPTIONS: sanitizeHtml.IOptions = {

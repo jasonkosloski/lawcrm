@@ -43,6 +43,17 @@ money and counts); `font-code` (JetBrains Mono) is for code only.
 
 ---
 
+## Editors
+
+All rich-text editing uses `src/components/editor/`:
+
+- Pick a preset from `presets.ts`: `notesExtensions` (notes, plain rich text), `emailExtensions` (compose, reply, signatures; paired with `sanitizeOutgoingEmailHtml`), `documentExtensions` (templates). Never write a new `StarterKit`/`useEditor` setup; a guard test fails on it.
+- Toolbar buttons come from `controls/` (marks, blocks, alignment, link popover, table menu). Compose them per surface; don't re-implement them.
+- Render through `EditorShell` (content CSS, aria label, placeholder, read-only). For notes and email use `RichTextEditor` via `@/components/editor/rich-text-editor-lazy`.
+- New preset or changed allowlist: add a parity test beside the others in `presets.test.ts` ([ADR-068](decisions/068-one-editor-core-presets-paired-with-sanitizers.md)).
+
+---
+
 ## Component Patterns
 
 ### Headline figures (`StatStrip`)

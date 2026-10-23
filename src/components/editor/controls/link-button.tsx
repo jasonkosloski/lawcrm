@@ -2,7 +2,7 @@
  * Link control: a toolbar button that opens a small popover to set,
  * change or remove (empty URL) the link on the selection. Validates
  * with the same rule the Email preset and the outgoing sanitizer use
- * (absolute http(s) or mailto), so the editor never holds a link the
+ * (absolute http(s), mailto or tel), so the editor never holds a link the
  * server would strip.
  */
 

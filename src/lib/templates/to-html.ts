@@ -54,7 +54,7 @@ const MARK_TAGS: [string, string, string][] = [
   ["bold", "strong", "strong"],
   ["italic", "em", "em"],
   ["underline", "u", "u"],
-  ["smallCaps", "span data-small-caps", "span"],
+  ["smallCaps", 'span data-small-caps style="font-variant:small-caps"', "span"],
 ];
 
 /** Where a paragraph sits. Body and list-item paragraphs take their style's

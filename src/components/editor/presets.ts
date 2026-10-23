@@ -44,7 +44,7 @@ function withoutColwidth(this: { parent?: () => Record<string, unknown> }) {
 /**
  * Email: Notes plus text alignment (paragraphs only), plain tables, a
  * strict Link, and the style passthrough. Mirrors
- * `sanitizeOutgoingEmailHtml`: links are http/https/mailto only with a
+ * `sanitizeOutgoingEmailHtml`: links are http/https/mailto/tel only with a
  * forced rel/target; style survives only as the server would keep it.
  */
 export function emailExtensions(): Extensions {
@@ -53,7 +53,7 @@ export function emailExtensions(): Extensions {
       heading: { levels: [2, 3] },
       horizontalRule: false,
       link: {
-        protocols: ["http", "https", "mailto"],
+        protocols: ["http", "https", "mailto", "tel"],
         autolink: true,
         openOnClick: false,
         HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },

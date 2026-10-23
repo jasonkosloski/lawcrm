@@ -196,7 +196,9 @@ describe("resolvedToHtml small caps", () => {
         },
       ],
     });
-    expect(html).toBe("<p><strong><span data-small-caps>Plaintiff</span></strong></p>");
+    expect(html).toBe(
+      '<p><strong><span data-small-caps style="font-variant:small-caps">Plaintiff</span></strong></p>',
+    );
   });
 });
 

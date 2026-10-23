@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { SelectField, TextField } from "@/components/matters/captures/primary-fields";
-import { RichTextEditor } from "@/components/shared/rich-text-editor-lazy";
+import { RichTextEditor } from "@/components/editor/rich-text-editor-lazy";
 import { parseAddressList } from "@/lib/google/mime";
 import { htmlToText } from "@/lib/html-to-text";
 import { isBodyEmpty } from "@/lib/email-signature-body";
