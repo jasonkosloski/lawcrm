@@ -747,3 +747,73 @@ describe("sanitizeOutgoingEmailHtml - hostile content is stripped", () => {
     expect(sanitizeOutgoingEmailHtml("<div>a</div><center>b</center><small>c</small>")).toBe("abc");
   });
 });
+
+describe("sanitizeOutgoingEmailHtml - hardening", () => {
+  const out = sanitizeOutgoingEmailHtml;
+  const cell = (attrs: string) => `<table><tbody><tr><td${attrs}>x</td></tr></tbody></table>`;
+
+  test("break-before is not allowed", () => {
+    expect(out('<p style="break-before:page;margin-top:4pt">x</p>')).toBe(
+      '<p style="margin-top:4pt">x</p>',
+    );
+  });
+
+  test("!important is stripped", () => {
+    expect(out('<p style="font-size:12pt !important;margin-top:4pt!important">x</p>')).toBe(
+      '<p style="font-size:12pt;margin-top:4pt">x</p>',
+    );
+  });
+
+  test.each([
+    ["font-size:0pt", "<p>x</p>"],
+    ["font-size:200pt", "<p>x</p>"],
+    ["font-size:72pt", '<p style="font-size:72pt">x</p>'],
+    ["line-height:0.1", "<p>x</p>"],
+    ["line-height:0.5", '<p style="line-height:0.5">x</p>'],
+    ["line-height:2pt", "<p>x</p>"],
+    ["line-height:6pt", '<p style="line-height:6pt">x</p>'],
+    ["text-indent:-100pt", "<p>x</p>"],
+    ["text-indent:-72pt", '<p style="text-indent:-72pt">x</p>'],
+    ["text-indent:10%", "<p>x</p>"],
+    ["margin-left:200pt", "<p>x</p>"],
+    ["margin-left:144pt", '<p style="margin-left:144pt">x</p>'],
+    ["margin-top:50%", "<p>x</p>"],
+    ["margin-left:3in", "<p>x</p>"],
+  ])("bound: %s", (style, expected) => {
+    expect(out(`<p style="${style}">x</p>`)).toBe(expected);
+  });
+
+  test("font-size bound applies on span", () => {
+    expect(out('<span style="font-size:500pt">x</span>')).toBe("<span>x</span>");
+  });
+
+  test("colspan/rowspan keep only integers 1-99", () => {
+    expect(out(cell(' colspan="2" rowspan="99"'))).toBe(cell(' colspan="2" rowspan="99"'));
+    expect(out(cell(' colspan="0"'))).toBe(cell(""));
+    expect(out(cell(' colspan="100"'))).toBe(cell(""));
+    expect(out(cell(' rowspan="-1"'))).toBe(cell(""));
+    expect(out(cell(' colspan="2.5"'))).toBe(cell(""));
+    expect(out(cell(' colspan="abc"'))).toBe(cell(""));
+  });
+
+  test("title, head and noscript text does not leak", () => {
+    expect(out("<title>T</title><p>x</p>")).toBe("<p>x</p>");
+    expect(out("<head><title>T</title></head><p>x</p>")).toBe("<p>x</p>");
+    expect(out("<noscript>hidden</noscript><p>x</p>")).toBe("<p>x</p>");
+  });
+
+  test.each([["/x"], ["evil.example"], ["#f"], ["?q=1"], ["  javascript:alert(1)"]])(
+    "href %s is dropped",
+    (href) => {
+      expect(out(`<a href="${href}">x</a>`)).not.toMatch(/href=/);
+    },
+  );
+
+  test("absolute http(s) and mailto hrefs are kept", () => {
+    expect(out('<a href="HTTPS://x.example/a#f">x</a>')).toMatch(
+      /href="HTTPS:\/\/x.example\/a#f"/i,
+    );
+    expect(out('<a href="http://x.example">x</a>')).toMatch(/href="http:\/\/x.example"/);
+    expect(out('<a href="mailto:a@b.example">x</a>')).toMatch(/href="mailto:a@b.example"/);
+  });
+});

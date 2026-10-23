@@ -407,6 +407,111 @@ export function sanitizeEmailHtml(html: string): string {
 
 const OUTGOING_ALLOWED_TAGS = [...ALLOWED_TAGS, "table", "thead", "tbody", "tr", "td", "th"];
 
+// Outgoing paragraphs never get a page break (a recipient's mail client has
+// no pages), so `break-before` is dropped from the document set.
+const { "break-before": _breakBefore, ...OUTGOING_P } = PARAGRAPH_STYLES;
+void _breakBefore;
+
+const LENGTH_PARTS = /^(-?\d{1,3}(?:\.\d{1,2})?)(pt|in|px)$/;
+
+/** A pt/in/px length converted to points, or null (percent and em are not
+ *  accepted by the outgoing profile). */
+function lengthInPoints(value: string): number | null {
+  const m = LENGTH_PARTS.exec(value);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return m[2] === "in" ? n * 72 : m[2] === "px" ? n * 0.75 : n;
+}
+
+/** Outgoing-only value bounds, applied before sanitize-html's regex layer.
+ *  Properties without an entry here rely on the allowedStyles regexes. */
+const OUTGOING_STYLE_BOUNDS: Record<string, (value: string) => boolean> = {
+  "font-size": (v) => {
+    const pt = lengthInPoints(v);
+    return pt !== null && /pt$/.test(v) && pt >= 1 && pt <= 72;
+  },
+  "line-height": (v) => {
+    if (/^\d{1,2}(\.\d{1,3})?$/.test(v)) return Number(v) >= 0.5;
+    const pt = lengthInPoints(v);
+    return pt !== null && pt >= 6 && pt <= 144;
+  },
+  "text-indent": (v) => {
+    const pt = lengthInPoints(v);
+    return pt !== null && Math.abs(pt) <= 72;
+  },
+  "margin-top": (v) => outgoingMargin(v),
+  "margin-bottom": (v) => outgoingMargin(v),
+  "margin-left": (v) => outgoingMargin(v),
+  "margin-right": (v) => outgoingMargin(v),
+};
+
+function outgoingMargin(v: string): boolean {
+  const pt = lengthInPoints(v);
+  return pt !== null && pt >= 0 && pt <= 144;
+}
+
+/** Strip `!important` and drop declarations that break the outgoing bounds. */
+function cleanOutgoingStyle(attribs: Record<string, string>): Record<string, string> {
+  if (!("style" in attribs)) return attribs;
+  const kept: string[] = [];
+  for (const decl of attribs.style.split(";")) {
+    const i = decl.indexOf(":");
+    if (i < 0) continue;
+    const prop = decl.slice(0, i).trim().toLowerCase();
+    const value = decl
+      .slice(i + 1)
+      .replace(/\s*!\s*important\s*$/i, "")
+      .trim();
+    if (!prop || !value || /!/.test(value)) continue;
+    const bound = OUTGOING_STYLE_BOUNDS[prop];
+    if (bound && !bound(value)) continue;
+    kept.push(`${prop}:${value}`);
+  }
+  const next = { ...attribs };
+  if (kept.length) next.style = kept.join(";");
+  else delete next.style;
+  return next;
+}
+
+/** colspan / rowspan: integers 1-99 only. */
+function cleanSpan(attribs: Record<string, string>, name: "colspan" | "rowspan") {
+  const next = { ...attribs };
+  if (!(name in next)) return next;
+  const v = next[name].trim();
+  if (/^\d{1,2}$/.test(v) && Number(v) >= 1) next[name] = String(Number(v));
+  else delete next[name];
+  return next;
+}
+
+const OUTGOING_STYLED = (tagName: string, attribs: Record<string, string>) => ({
+  tagName,
+  attribs: cleanOutgoingStyle(attribs),
+});
+const OUTGOING_CELL = (tagName: string, attribs: Record<string, string>) => ({
+  tagName,
+  attribs: cleanSpan(cleanSpan(cleanOutgoingStyle(attribs), "colspan"), "rowspan"),
+});
+
+const OUTGOING_TRANSFORM_TAGS: sanitizeHtml.IOptions["transformTags"] = {
+  ...TRANSFORM_TAGS,
+  p: OUTGOING_STYLED,
+  span: OUTGOING_STYLED,
+  td: OUTGOING_CELL,
+  th: OUTGOING_CELL,
+  // Absolute http(s) or mailto only: relative, schemeless and fragment-only
+  // hrefs mean nothing in a sent mail and are dropped.
+  a: (tagName, attribs) => {
+    const next: Record<string, string> = {
+      ...attribs,
+      rel: "noopener noreferrer",
+      target: "_blank",
+    };
+    const href = (attribs.href ?? "").replace(/[\u0000-\u0020]/g, "");
+    if (!/^(https?:\/\/[^/]|mailto:.)/i.test(href)) delete next.href;
+    return { tagName, attribs: next };
+  },
+};
+
 const OUTGOING_OPTIONS: sanitizeHtml.IOptions = {
   allowedTags: OUTGOING_ALLOWED_TAGS,
   allowedAttributes: {
@@ -417,7 +522,7 @@ const OUTGOING_OPTIONS: sanitizeHtml.IOptions = {
     th: ["colspan", "rowspan", "style"],
   },
   allowedStyles: {
-    p: { ...PARAGRAPH_STYLES, "text-align": TEXT_ALIGN },
+    p: { ...OUTGOING_P, "text-align": TEXT_ALIGN },
     span: SPAN_STYLES,
     td: { "text-align": TEXT_ALIGN },
     th: { "text-align": TEXT_ALIGN },
@@ -425,7 +530,9 @@ const OUTGOING_OPTIONS: sanitizeHtml.IOptions = {
   allowedSchemes: ["http", "https", "mailto"],
   allowProtocolRelative: false,
   disallowedTagsMode: "discard",
-  transformTags: TRANSFORM_TAGS,
+  // sanitize-html's defaults plus the head-ish tags whose text must not leak.
+  nonTextTags: ["script", "style", "textarea", "option", "title", "head", "noscript"],
+  transformTags: OUTGOING_TRANSFORM_TAGS,
 };
 
 /** Sanitize HTML the CRM sends to recipients (compose, reply, signature). */
