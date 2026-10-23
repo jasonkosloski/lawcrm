@@ -45,6 +45,7 @@ export function RichTextEditor({
   className,
   autoFocus,
   preset = "notes",
+  label,
 }: {
   initialHTML?: string;
   onChange: (html: string) => void;
@@ -52,7 +53,10 @@ export function RichTextEditor({
   className?: string;
   autoFocus?: boolean;
   preset?: "notes" | "email";
+  /** Accessible name of the editor; notes default to "Note". */
+  label?: string;
 }) {
+  const name = label ?? (preset === "notes" ? "Note" : undefined);
   const editor = useEditor({
     extensions: preset === "email" ? emailExtensions() : notesExtensions(),
     content: initialHTML ?? "",
@@ -70,6 +74,7 @@ export function RichTextEditor({
           EDITOR_CONTENT_CLASS,
           "[&_ul]:my-1 [&_ol]:my-1 [&_li]:text-xs",
         ),
+        ...(name ? { "aria-label": name } : {}),
         ...(placeholder ? { "aria-placeholder": placeholder } : {}),
       },
     },
@@ -105,6 +110,7 @@ export function RichTextEditor({
     >
       <EditorShell
         editor={editor}
+        label={name}
         placeholder={placeholder}
         toolbar={<EditorToolbar editor={editor} preset={preset} />}
       />
@@ -126,7 +132,7 @@ function EditorToolbar({ editor, preset }: { editor: Editor; preset: "notes" | "
     }),
   });
   return (
-    <div className="flex items-center gap-0.5 px-1.5 py-1 border-b border-line bg-paper-2/40">
+    <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 px-1.5 py-1 border-b border-line bg-paper-2/40">
       <ToolButton
         label="Heading"
         active={active.heading}

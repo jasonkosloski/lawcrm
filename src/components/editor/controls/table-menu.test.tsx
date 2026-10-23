@@ -10,6 +10,8 @@ import type { TemplateData } from "@/lib/templates/catalog";
 import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { createTemplateExtensions } from "@/components/templates/editor/extensions";
 import { Toolbar } from "@/components/templates/editor/toolbar";
+import { emailExtensions } from "@/components/editor/presets";
+import userEvent from "@testing-library/user-event";
 import { TableMenu } from "./table-menu";
 
 function setup() {
@@ -91,5 +93,23 @@ describe("TableMenu features", () => {
     expect(screen.getByRole("button", { name: /^Table/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Borders/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Align top" })).toBeNull();
+  });
+});
+
+describe("TableMenu hint", () => {
+  it("lists only the features the surface has", async () => {
+    const editor = new Editor({ extensions: emailExtensions(), content: "<p>x</p>" });
+    const { unmount } = render(
+      <TableMenu editor={editor} features={{ merge: false, borders: false, width: false }} />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /^Table/ }));
+    expect(await screen.findByText("Click in a table for rows and columns.")).toBeInTheDocument();
+    unmount();
+    const full = new Editor({ extensions: emailExtensions(), content: "<p>x</p>" });
+    render(<TableMenu editor={full} />);
+    await userEvent.click(screen.getByRole("button", { name: /^Table/ }));
+    expect(
+      await screen.findByText("Click in a table for rows, columns, merging, and width."),
+    ).toBeInTheDocument();
   });
 });

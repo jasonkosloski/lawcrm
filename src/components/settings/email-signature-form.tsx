@@ -49,6 +49,7 @@ export function EmailSignatureForm({
       </p>
       <RichTextEditor
         preset="email"
+        label="Email signature"
         initialHTML={signature ?? ""}
         onChange={(next) => {
           setHtml(next);

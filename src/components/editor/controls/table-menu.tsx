@@ -162,6 +162,13 @@ export function TableMenu({ editor, features }: { editor: Editor; features?: Tab
   });
   const t = s ?? OUTSIDE;
   const off = !t.inTable;
+  const things = [
+    "rows",
+    "columns",
+    ...(merge ? ["merging"] : []),
+    ...(showWidth ? ["width"] : []),
+  ];
+  const tableHint = `Click in a table for ${things.length > 1 ? `${things.slice(0, -1).join(", ")}${things.length > 2 ? "," : ""} and ${things[things.length - 1]}` : things[0]}.`;
 
   const chain = () => editor.chain().focus();
   const dispatch = (tr: ReturnType<typeof setBorders>) => {
@@ -192,11 +199,7 @@ export function TableMenu({ editor, features }: { editor: Editor; features?: Tab
           >
             Insert table
           </DropdownMenuItem>
-          {off && (
-            <p className="px-1.5 py-1 text-2xs text-ink-4">
-              Click in a table for rows, columns, merging and width.
-            </p>
-          )}
+          {off && <p className="px-1.5 py-1 text-2xs text-ink-4">{tableHint}</p>}
           <DropdownMenuSeparator />
           <DropdownMenuItem disabled={off} onClick={() => chain().addRowBefore().run()}>
             Insert row above

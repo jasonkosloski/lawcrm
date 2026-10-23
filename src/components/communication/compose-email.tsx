@@ -368,6 +368,7 @@ export function ComposeEmailButton({
             />
             <RichTextEditor
               preset="email"
+              label="Email body"
               key={editorKey}
               initialHTML={body}
               onChange={setBody}

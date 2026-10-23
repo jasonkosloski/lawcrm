@@ -378,6 +378,7 @@ export function ReplyComposer({
           )}
           <RichTextEditor
             preset="email"
+            label="Reply"
             key={editorKey}
             initialHTML={body}
             onChange={setBody}

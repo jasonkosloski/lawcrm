@@ -79,3 +79,22 @@ describe("RichTextEditor — email preset", () => {
     expect(html).not.toContain("position");
   });
 });
+
+describe("RichTextEditor — accessible names and toolbar wrapping", () => {
+  test("label names the group and the contenteditable; notes default to Note", async () => {
+    const { unmount } = render(
+      <RichTextEditor onChange={() => {}} preset="email" label="Email body" />,
+    );
+    expect(await screen.findByRole("group", { name: "Email body" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Email body" })).toBeInTheDocument();
+    unmount();
+    render(<RichTextEditor onChange={() => {}} />);
+    expect(await screen.findByRole("textbox", { name: "Note" })).toBeInTheDocument();
+  });
+
+  test("the toolbar row wraps so Table and Link stay reachable in narrow dialogs", async () => {
+    render(<RichTextEditor onChange={() => {}} preset="email" />);
+    const row = (await screen.findByRole("button", { name: "Link" })).parentElement!;
+    expect(row.className).toContain("flex-wrap");
+  });
+});

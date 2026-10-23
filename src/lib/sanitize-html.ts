@@ -151,7 +151,7 @@ export function sanitizeUserHtml(html: string): string {
 // `dangerouslySetInnerHTML`. Script contexts stay impossible:
 // no <script>/<iframe>/<style>, no event handlers, and style attrs only
 // as a validated text-align on p/h1-h3/td/th, the paragraph-style
-// properties on <p> (see PARAGRAPH_STYLES), size/case on <span> or a numeric
+// properties on <p> (see PARAGRAPH_STYLES), size/case/font-variant (small caps) on <span> or a numeric
 // width on <col>
 // (the template converters and the docx preview also keep <mark
 // data-missing>, <hr data-page-break> and table border/alignment data-*;
