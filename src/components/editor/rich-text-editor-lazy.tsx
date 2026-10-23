@@ -6,8 +6,9 @@
  * initializes after mount (`immediatelyRender: false`), so nothing is
  * lost on the server render.
  *
- * Use this from consumers; import `@/components/shared/rich-text-editor` directly only
- * in its own tests (extensions live in `@/components/editor/presets`).
+ * Use this from consumers. Import `@/components/shared/rich-text-editor`
+ * directly only in its own tests (extensions live in
+ * `@/components/editor/presets`).
  */
 
 "use client";

@@ -26,7 +26,7 @@ describe("StarterKit usage", () => {
     const offenders = sourceFiles(join(process.cwd(), "src"))
       .map((f) => relative(process.cwd(), f))
       .filter((f) => !ALLOWED.has(f))
-      .filter((f) => /from\s+["']@tiptap\/starter-kit["']/.test(readFileSync(f, "utf8")));
+      .filter((f) => /["']@tiptap\/starter-kit["']/.test(readFileSync(f, "utf8")));
     expect(offenders).toEqual([]);
   });
 });
