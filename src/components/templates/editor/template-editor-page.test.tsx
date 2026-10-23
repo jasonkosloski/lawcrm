@@ -206,8 +206,9 @@ describe("TemplateEditorPage — templates", () => {
     await user.selectOptions(screen.getByLabelText("Kind"), "sms");
     expect(await screen.findByText(/characters · /)).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByLabelText("Template body").textContent).toContain("Hello"),
+      expect(screen.getByRole("textbox", { name: "Template body" }).textContent).toContain("Hello"),
     );
+    expect(screen.getByRole("group", { name: "Template body" })).toBeInTheDocument();
     expect(document.querySelector("[data-field-chip]")).not.toBeNull();
   });
 
@@ -455,7 +456,7 @@ describe("TemplateEditorPage — templates", () => {
     const user = userEvent.setup();
     render(<TemplateEditorPage template={tpl()} blocks={[]} canSave />);
     await waitFor(() => expect(document.querySelector("[data-field-chip]")).not.toBeNull());
-    const body = screen.getByLabelText("Template body");
+    const body = screen.getByRole("textbox", { name: "Template body" });
     await user.clear(screen.getByLabelText(/^Name/));
     await user.type(screen.getByLabelText(/^Name/), "Renamed");
 
@@ -466,7 +467,7 @@ describe("TemplateEditorPage — templates", () => {
     resize(true);
     expect(screen.getByLabelText(/^Name/)).toHaveValue("Renamed");
     // Same TipTap instance: the body element was never unmounted.
-    expect(screen.getByLabelText("Template body")).toBe(body);
+    expect(screen.getByRole("textbox", { name: "Template body" })).toBe(body);
     expect(document.querySelector("[data-field-chip]")).not.toBeNull();
   });
 

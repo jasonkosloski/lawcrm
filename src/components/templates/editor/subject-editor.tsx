@@ -8,11 +8,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useEditor, EditorContent, type Editor } from "@tiptap/react";
+import { useEditor, type Editor } from "@tiptap/react";
 import { Fragment, Slice, type Node as PMNode, type Schema } from "@tiptap/pm/model";
 import type { TemplateDoc } from "@/lib/templates/schema";
 import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
-import { createTemplateExtensions, templateJSON } from "./extensions";
+import { EditorShell } from "@/components/editor/editor-shell";
+import { documentExtensions } from "@/components/editor/presets";
+import { templateJSON } from "./extensions";
 import { FitHighlight } from "./fit-highlight";
 
 /** A pasted multi-paragraph slice as one line: paragraphs and line
@@ -68,7 +70,7 @@ export function SubjectEditor({
   onEditor: (editor: Editor | null) => void;
 }) {
   const [extensions] = useState(() => [
-    ...createTemplateExtensions({
+    ...documentExtensions({
       styles: DEFAULT_PARAGRAPH_STYLES,
       kind: "sms",
       isBlock: false,
@@ -109,7 +111,7 @@ export function SubjectEditor({
       <span className="text-xs font-medium text-ink-2">Subject</span>
       <div className="rounded-md border border-line bg-white focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500/30">
         {editor ? (
-          <EditorContent editor={editor} />
+          <EditorShell editor={editor} label="Subject" readOnly={!editable} />
         ) : (
           <div className="h-8 px-2.5 py-1.5 text-xs text-ink-4">Loading…</div>
         )}

@@ -44,11 +44,11 @@ export function EditorShell({
   toolbar?: ReactNode;
 }) {
   useEffect(() => {
-    editor.setEditable(!readOnly);
+    editor.setEditable(!readOnly, false);
   }, [editor, readOnly]);
 
   return (
-    <div role="group" aria-label={label} className={className}>
+    <div role={label ? "group" : undefined} aria-label={label} className={className}>
       {readOnly ? null : toolbar}
       <div className="relative">
         {readOnly ? null : <EditorPlaceholder editor={editor} text={placeholder} />}

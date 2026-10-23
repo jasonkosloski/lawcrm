@@ -17,7 +17,7 @@ export type { EditorBlock, EditorTemplate } from "./editor-model";
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { EditorContent, type Editor as TiptapEditor } from "@tiptap/react";
+import { type Editor as TiptapEditor } from "@tiptap/react";
 import { useIsDesktop } from "@/hooks/use-is-desktop";
 import { Button } from "@/components/ui/button";
 import { saveDocumentTemplate } from "@/app/actions/document-templates";
@@ -38,6 +38,7 @@ import {
 import { templateJSON } from "./extensions";
 import { FieldFormatPopover } from "./field-format-popover";
 import { setFitInvalid } from "./fit-highlight";
+import { EditorShell } from "@/components/editor/editor-shell";
 import { BODY_CLASS, useBodyEditor } from "./use-body-editor";
 import { BlockMetaFields, TemplateMetaFields, type TemplateMeta } from "./metadata-form";
 import { EditorHeader, SaveErrorBanner } from "./page-chrome";
@@ -288,21 +289,25 @@ function Editor(props: EditorProps & { narrow: boolean }) {
               <p className="text-2xs text-ink-3">{EMAIL_FORMATTING_NOTE}</p>
             )}
             <div className="rounded-md border border-line bg-white overflow-hidden">
-              {editor && canSave && (
-                <Toolbar
-                  editor={editor}
-                  fieldTarget={subjectFocused && subjectEditor ? subjectEditor : editor}
-                  kind={kind}
-                  isBlock={isBlock}
-                  fields={fields}
-                  lists={lists}
-                  data={data}
-                  blocks={blocks.filter((b) => b.isActive)}
-                  styles={styles}
-                />
-              )}
               {editor ? (
-                <EditorContent editor={editor} />
+                <EditorShell
+                  editor={editor}
+                  label="Template body"
+                  readOnly={!canSave}
+                  toolbar={
+                    <Toolbar
+                      editor={editor}
+                      fieldTarget={subjectFocused && subjectEditor ? subjectEditor : editor}
+                      kind={kind}
+                      isBlock={isBlock}
+                      fields={fields}
+                      lists={lists}
+                      data={data}
+                      blocks={blocks.filter((b) => b.isActive)}
+                      styles={styles}
+                    />
+                  }
+                />
               ) : (
                 <div className={cn(BODY_CLASS, "text-ink-4")}>Loading editor…</div>
               )}

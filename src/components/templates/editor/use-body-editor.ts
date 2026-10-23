@@ -14,7 +14,8 @@ import type { ParagraphStyle } from "@/lib/templates/paragraph-styles";
 import type { TemplateDoc, TemplateKind } from "@/lib/templates/schema";
 import { cn } from "@/lib/utils";
 import { EDITOR_CONTENT_CLASS } from "@/components/editor/editor-shell";
-import { createTemplateExtensions, templateJSON } from "./extensions";
+import { documentExtensions } from "@/components/editor/presets";
+import { templateJSON } from "./extensions";
 import { FitHighlight } from "./fit-highlight";
 
 export const BODY_CLASS = cn(
@@ -61,7 +62,7 @@ export function useBodyEditor(opts: {
   const styles = opts.styles ?? DEFAULT_PARAGRAPH_STYLES;
   const extensions = useMemo(
     () => [
-      ...createTemplateExtensions({
+      ...documentExtensions({
         styles,
         kind,
         isBlock,
