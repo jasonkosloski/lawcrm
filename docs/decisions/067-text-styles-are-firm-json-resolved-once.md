@@ -15,12 +15,13 @@
 - Template headings are stored as paragraphs with heading1-3 styles; old `heading` nodes convert on open and before render.
 - Word gets real paragraph styles; Normal, Title and Heading 1-3 use Word's built-in ids and names so the navigation pane and outline levels work, so a firm's rename of those is not visible in Word. The preview HTML carries resolved inline styles under a strict per-property sanitizer allowlist.
 - Font family stays firm-wide (or per court), not per style.
-- The legacy house size/spacing columns are no longer read: Body is the source. The legacy court columns are mirrored from `styleOverrides.body` on every court save and still overlaid on read, because existing courts hold their values only there. Both sets are dropped in a later expand-only migration.
+- The legacy house size/spacing columns are still read, but only while `paragraphStyles` is NULL: `parseParagraphStyles` derives the default styles from them. Once the firm saves styles, Body is the source (and each styles save mirrors Body back into the columns). The drop-columns migration must therefore backfill `paragraphStyles` first. The legacy court columns are mirrored from `styleOverrides.body` on every court save and overlaid on read: Body gets the court's size, line spacing and space after, and Heading 1-3 get the size plus 6/4/2 pt with the same line spacing and space after, so existing filings keep today's headings (stored overrides win). Keys for styles the firm no longer has are dropped on read, and deleting a style strips its key from every court in the same transaction. Both sets of columns are dropped in a later expand-only migration.
 
 **Rejected:**
 
 - A normalized table of styles (one row per style, one per court override): relational queries nobody needs, a join on every render, and a larger migration, for a list capped at 50 that is always read whole.
 - Styles that inherit (`basedOn`, as in Word): the resolver, the editor's "what does this style say" display and court overrides all get harder to reason about, and a change to Body would silently move other styles. Independent styles can be read at a glance and a court override touches exactly one style.
+- Store real Word style definitions (a styles.xml fragment) as the source of truth: rejected, because PDF and preview would have to interpret Word XML, the editor couldn't validate it easily, and it ties the data to one output.
 - A SQL backfill of `paragraphStyles` at migration time: hand-built JSON in a production migration for no difference in output; the loader's derived defaults give the same result.
 
 **Trade-offs:**
