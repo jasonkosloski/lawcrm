@@ -40,7 +40,7 @@ beforeEach(() => {
     subject: null,
     html: "",
     text: "Hi Maria, your hearing is Friday.\n",
-    report: { missing: [], invalid: [], archivedBlocks: [] },
+    report: { missing: [], invalid: [], archivedBlocks: [], unknownStyles: [] },
     needsRecipient: false,
     dropsFormatting: false,
   });
@@ -126,7 +126,7 @@ describe("TextFromTemplateButton", () => {
       templateName: "x",
       subject: null,
       html: "",
-      report: { missing: [], invalid: [], archivedBlocks: [] },
+      report: { missing: [], invalid: [], archivedBlocks: [], unknownStyles: [] },
       needsRecipient: false,
       dropsFormatting: false,
     };

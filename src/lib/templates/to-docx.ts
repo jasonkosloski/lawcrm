@@ -24,6 +24,7 @@ import {
 } from "docx";
 import { FONTS } from "./fonts";
 import { imageSize } from "./image-size";
+import { headingLevelOf } from "./style-basics";
 import {
   CELL_PAD_TWIPS,
   HEADER_DISTANCE_TWIPS,
@@ -81,14 +82,17 @@ const cellSpacing = (ctx: Ctx) => (ctx.inCell ? { spacing: { after: 0 } } : {});
 function blocks(list: ResolvedBlock[], ctx: Ctx, level: number): (Paragraph | Table)[] {
   return list.flatMap((b): (Paragraph | Table)[] => {
     switch (b.type) {
-      case "paragraph":
+      case "paragraph": {
+        const headingLevel = headingLevelOf(b.attrs?.style);
         return [
           new Paragraph({
             children: runs(b.content),
+            ...(headingLevel ? { heading: HEADINGS[headingLevel - 1] } : {}),
             alignment: b.attrs?.textAlign ? ALIGN[b.attrs.textAlign] : undefined,
             ...cellSpacing(ctx),
           }),
         ];
+      }
       case "heading":
         return [
           new Paragraph({

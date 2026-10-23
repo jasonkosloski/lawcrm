@@ -53,14 +53,14 @@ const okPreview = (over: Record<string, unknown> = {}) => {
     text,
     html: `<p>${text}</p>`,
     page: pageOf(text),
-    report: { missing: [], invalid: [], archivedBlocks: [] },
+    report: { missing: [], invalid: [], archivedBlocks: [], unknownStyles: [] },
     templateUpdatedAt: "2026-10-22T00:00:00.000Z",
     needsSigner: false,
     needsRecipient: false,
     ...over,
   };
 };
-const REPORT = { missing: [], invalid: [], archivedBlocks: [], warnings: [] };
+const REPORT = { missing: [], invalid: [], archivedBlocks: [], unknownStyles: [], warnings: [] };
 const saved = (...names: string[]) => ({
   ok: true,
   documents: names.map((name, i) => ({ id: `d${i}`, name })),
@@ -81,7 +81,12 @@ describe("GenerateFromTemplateDialog", () => {
   it("shows the merged preview with missing + unknown field warnings", async () => {
     previewMock.mockResolvedValue(
       okPreview({
-        report: { missing: ["client.phone"], invalid: ["made.up"], archivedBlocks: [] },
+        report: {
+          missing: ["client.phone"],
+          invalid: ["made.up"],
+          archivedBlocks: [],
+          unknownStyles: [],
+        },
       }),
     );
     const user = userEvent.setup();

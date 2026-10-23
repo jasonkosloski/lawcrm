@@ -22,6 +22,7 @@ import {
 } from "@/lib/templates/court-blocks";
 import { SAMPLE_TEMPLATE_DATA } from "@/lib/templates/catalog";
 import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templates/render";
+import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import type { AppliesTo, TemplateDoc, TemplateKind } from "@/lib/templates/schema";
 import { resolvedToHtml } from "@/lib/templates/to-html";
 import { resolvedToText } from "@/lib/templates/to-text";
@@ -57,7 +58,8 @@ export function renderSample(
     scope: appliesTo === "lead" ? "lead" : "matter",
   } as const;
   const map = new Map(blocks.map((b) => [b.id, b]));
-  const subj = subject ? renderTemplate(subject, { data, blocks: map }) : null;
+  const styles = pageStyle?.values.paragraphStyles ?? DEFAULT_PARAGRAPH_STYLES;
+  const subj = subject ? renderTemplate(subject, { data, blocks: map, styles }) : null;
   if (pageStyle && isPageKind(kind)) {
     const { page, report } = renderPageView({
       doc,
@@ -77,7 +79,7 @@ export function renderSample(
       report,
     };
   }
-  const body = renderTemplate(doc, { data, blocks: map });
+  const body = renderTemplate(doc, { data, blocks: map, styles });
   return {
     html: resolvedToHtml(body.doc),
     text: resolvedToText(body.doc),
@@ -91,6 +93,7 @@ function Report({ report }: { report: RenderReport }) {
     { label: "Not on file", items: report.missing },
     { label: "Fields that don't fit", items: report.invalid },
     { label: "Archived or missing blocks", items: report.archivedBlocks },
+    { label: "Styles that no longer exist", items: report.unknownStyles },
   ].filter((r) => r.items.length > 0);
   if (rows.length === 0) return null;
   return (

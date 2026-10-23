@@ -12,6 +12,7 @@ import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from "@tip
 import { cn } from "@/lib/utils";
 import { SAMPLE_TEMPLATE_DATA } from "@/lib/templates/catalog";
 import { renderTemplate, type BlockSource } from "@/lib/templates/render";
+import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { resolvedToHtml } from "@/lib/templates/to-html";
 
 export type BlockOptions = {
@@ -28,7 +29,11 @@ export function blockPreview(
   if (!block) return null;
   const map = new Map(blocks.map((b) => [b.id, b]));
   try {
-    const { doc } = renderTemplate(block.content, { data: SAMPLE_TEMPLATE_DATA, blocks: map });
+    const { doc } = renderTemplate(block.content, {
+      data: SAMPLE_TEMPLATE_DATA,
+      blocks: map,
+      styles: DEFAULT_PARAGRAPH_STYLES,
+    });
     return { name: block.name, html: resolvedToHtml(doc), archived: !block.isActive };
   } catch {
     return {

@@ -20,6 +20,7 @@ vi.mock("./catalog", async (importOriginal) => {
     fieldByPath: (p: string) => (p === "test.flag" ? flagField : orig.fieldByPath(p)),
   };
 });
+import { DEFAULT_PARAGRAPH_STYLES } from "./page-style";
 import { renderTemplate, type BlockSource, type ResolvedNode } from "./render";
 import type { BlockNode, InlineNode, TemplateDoc } from "./schema";
 
@@ -37,7 +38,7 @@ const data = (over: Partial<TemplateData> = {}): TemplateData => ({
 });
 const none = new Map<string, BlockSource>();
 const render = (d: TemplateDoc, td = data(), blocks = none) =>
-  renderTemplate(d, { data: td, blocks });
+  renderTemplate(d, { data: td, blocks, styles: DEFAULT_PARAGRAPH_STYLES });
 
 function textOf(n: ResolvedNode | { content?: ResolvedNode[]; text?: string }): string {
   if ("text" in n && typeof n.text === "string") return n.text;
@@ -61,7 +62,7 @@ describe("fields", () => {
     expect(r.doc.content![0]).toMatchObject({
       content: [{ type: "text", text: "Smith", marks: [{ type: "bold" }] }],
     });
-    expect(r.report).toEqual({ missing: [], invalid: [], archivedBlocks: [] });
+    expect(r.report).toEqual({ missing: [], invalid: [], archivedBlocks: [], unknownStyles: [] });
   });
 
   it("missing value renders a labelled placeholder", () => {
@@ -260,7 +261,101 @@ describe("listField", () => {
 
   it("empty list yields an empty paragraph, no placeholder", () => {
     const r = render(doc(lf("and")), td([]));
-    expect(r.doc.content![0]).toEqual({ type: "paragraph" });
+    expect(r.doc.content![0]).toMatchObject({ type: "paragraph" });
+    expect(r.doc.content![0]).not.toHaveProperty("content");
     expect(r.report.missing).toEqual([]);
+  });
+});
+
+describe("paragraph styles", () => {
+  const first = (r: ReturnType<typeof render>) =>
+    (r.doc.content![0] as { attrs?: { resolved?: Record<string, unknown> } }).attrs?.resolved;
+  const heading = (level: 1 | 2 | 3, ...content: InlineNode[]): BlockNode => ({
+    type: "heading",
+    attrs: { level },
+    content,
+  });
+  const body = DEFAULT_PARAGRAPH_STYLES.find((s) => s.key === "body")!.values;
+
+  it("resolves a plain paragraph as Body", () => {
+    expect(first(render(doc(p(t("x")))))).toMatchObject({ key: "body", bold: false });
+  });
+
+  it("a heading becomes a heading1 paragraph: body size + 6, bold", () => {
+    const r = render(doc(heading(1, t("H"))));
+    expect(r.doc.content![0].type).toBe("paragraph");
+    expect(first(r)).toMatchObject({ key: "heading1", sizePt: body.sizePt + 6, bold: true });
+  });
+
+  it("keeps a heading's alignment", () => {
+    const r = render(
+      doc({ type: "heading", attrs: { level: 2, textAlign: "center" }, content: [t("H")] }),
+    );
+    expect(first(r)).toMatchObject({ key: "heading2", align: "center" });
+  });
+
+  it("table-cell paragraphs and block contents resolve", () => {
+    const cell = { type: "tableCell" as const, content: [p(t("c"))] };
+    const r = render(
+      doc(
+        { type: "table", content: [{ type: "tableRow", content: [cell] }] },
+        {
+          type: "block",
+          attrs: { blockId: "b" },
+        },
+      ),
+      data(),
+      new Map([
+        [
+          "b",
+          {
+            id: "b",
+            name: "B",
+            isActive: true,
+            content: doc(heading(3, t("in block"))),
+          },
+        ],
+      ]),
+    );
+    const table = r.doc.content![0] as {
+      content: { content: { content: { attrs: { resolved: { key: string } } }[] }[] }[];
+    };
+    expect(table.content[0].content[0].content[0].attrs.resolved.key).toBe("body");
+    const blockPara = r.doc.content![1] as { attrs: { resolved: { key: string } } };
+    expect(blockPara.attrs.resolved.key).toBe("heading3");
+  });
+
+  it("direct settings beat the style, and explicit 0/false/none count", () => {
+    const r = render(
+      doc({
+        type: "paragraph",
+        attrs: {
+          style: "heading1",
+          spaceAfterPt: 0,
+          keepWithNext: false,
+          firstLine: { kind: "none" },
+          textAlign: "right",
+        },
+        content: [t("x")],
+      }),
+    );
+    expect(first(r)).toMatchObject({
+      key: "heading1",
+      spaceAfterPt: 0,
+      keepWithNext: false,
+      firstLine: { kind: "none" },
+      align: "right",
+    });
+  });
+
+  it("an unknown style key resolves as Body and is reported", () => {
+    const r = render(
+      doc(
+        { type: "paragraph", attrs: { style: "gone" }, content: [t("x")] },
+        { type: "paragraph", attrs: { style: "gone" }, content: [t("y")] },
+      ),
+    );
+    expect(first(r)).toMatchObject({ key: "body", known: false });
+    expect(r.report.unknownStyles).toEqual(["gone"]);
   });
 });

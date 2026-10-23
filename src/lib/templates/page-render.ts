@@ -68,7 +68,7 @@ export function styleBlockIds(kind: PageKind, style: DocumentStyleValues): strin
 
 /** Adds `from`'s entries to `into`, skipping duplicates. */
 export function mergeReport(into: RenderReport, from: RenderReport): void {
-  for (const k of ["missing", "invalid", "archivedBlocks"] as const) {
+  for (const k of ["missing", "invalid", "archivedBlocks", "unknownStyles"] as const) {
     for (const v of from[k]) if (!into[k].includes(v)) into[k].push(v);
   }
 }
@@ -110,8 +110,12 @@ export function renderPage<L extends LogoRef>(input: {
   report: RenderReport;
 } {
   const court = activeCourt(input.kind, input.court);
-  const ctx = { data: input.data, blocks: effectiveBlocks(input.kind, input.blocks, court) };
   const style = resolvePageStyle<L>(input.kind, input.style, input.logo, court?.values);
+  const ctx = {
+    data: input.data,
+    blocks: effectiveBlocks(input.kind, input.blocks, court),
+    styles: style.styles,
+  };
   const body = renderTemplate(input.doc, ctx);
   const report = body.report;
   const part = (blockId: string | null | undefined) => {

@@ -21,6 +21,7 @@ import type { RecordScope } from "@/lib/record-scope";
 import { loadTemplateData } from "@/lib/templates/load-data";
 import { contentOf, loadBlockMap } from "@/lib/templates/template-source";
 import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templates/render";
+import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { mergeReport } from "@/lib/templates/page-render";
 import { usesRecipient } from "@/lib/templates/inspect";
 import { resolvedToHtml } from "@/lib/templates/to-html";
@@ -160,7 +161,7 @@ export async function renderMessageTemplate(
   ]);
   if (!loaded.ok) return { ok: false, error: loaded.error };
 
-  const ctx = { data: loaded.data, blocks };
+  const ctx = { data: loaded.data, blocks, styles: DEFAULT_PARAGRAPH_STYLES };
   const body = renderTemplate(content, ctx);
   const subject = subjectDoc ? renderTemplate(subjectDoc, ctx) : null;
   const report = body.report;

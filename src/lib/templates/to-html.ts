@@ -28,6 +28,7 @@ import type {
   ResolvedTable,
 } from "./render";
 import { CELL_SIDES } from "./schema";
+import { headingLevelOf } from "./style-basics";
 import {
   CELL_SIDE_ATTR,
   columnFractions,
@@ -105,8 +106,11 @@ function table(t: ResolvedTable): string {
 
 function block(b: ResolvedBlock): string {
   switch (b.type) {
-    case "paragraph":
+    case "paragraph": {
+      const level = headingLevelOf(b.attrs?.style);
+      if (level) return `<h${level}${align(b.attrs?.textAlign)}>${inline(b.content)}</h${level}>`;
       return `<p${align(b.attrs?.textAlign)}>${inline(b.content)}</p>`;
+    }
     case "heading":
       return `<h${b.attrs.level}${align(b.attrs.textAlign)}>${inline(b.content)}</h${b.attrs.level}>`;
     case "bulletList":

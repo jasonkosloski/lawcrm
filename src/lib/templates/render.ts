@@ -15,12 +15,20 @@ import {
   type TemplateData,
 } from "./catalog";
 import { formatFieldValue, joinList } from "./format";
+import { convertHeadings } from "./headings";
+import type { ParagraphStyle } from "./paragraph-styles";
+import {
+  resolveParagraph,
+  type ParagraphSettings,
+  type ResolvedParagraphStyle,
+} from "./resolve-styles";
 import type {
   BlockNode,
   FieldNode,
   InlineNode,
   ListFieldNode,
   MarkType,
+  ParagraphAttrs,
   ShowIfNode,
   TableCellNode,
   TableNode,
@@ -37,6 +45,8 @@ export type RenderReport = {
   invalid: string[];
   /** Names of archived blocks; "(deleted)" for unknown ids. */
   archivedBlocks: string[];
+  /** Style keys that name no style in the firm's list (they render as Body). */
+  unknownStyles: string[];
 };
 
 // ── Output types ───────────────────────────────────────────────────────
@@ -48,9 +58,13 @@ export type ResolvedInline = ResolvedText | ResolvedHardBreak;
 
 export type ResolvedParagraph = {
   type: "paragraph";
-  attrs?: { textAlign?: TextAlign | null };
+  /** The content's own attrs plus the finished style values. `resolved` is
+   *  always set by the render engine; hand-built docs may omit it. */
+  attrs?: ParagraphAttrs & { resolved?: ResolvedParagraphStyle };
   content?: ResolvedInline[];
 };
+/** No longer produced (the engine turns headings into heading1..3
+ *  paragraphs); kept so converters and hand-built docs still compile. */
 export type ResolvedHeading = {
   type: "heading";
   attrs: { level: 1 | 2 | 3; textAlign?: TextAlign | null };
@@ -103,6 +117,7 @@ type Engine = {
   data: TemplateData;
   blocks: Map<string, BlockSource>;
   report: RenderReport;
+  styles: ParagraphStyle[];
 };
 
 const MISSING: ResolvedMark = { type: "missing" };
@@ -229,22 +244,50 @@ function showIfKeeps(e: Engine, n: ShowIfNode, s: Scope): boolean {
   }
 }
 
-function placeholder(text: string): ResolvedParagraph {
-  return { type: "paragraph", content: [{ type: "text", text, marks: [MISSING] }] };
+/** Finished style values for a paragraph: its style, then its own settings
+ *  on top. Explicit 0/false/none settings are overrides, so only
+ *  `undefined` (and a null alignment) means "not set". */
+function resolveAttrs(
+  e: Engine,
+  attrs: ParagraphAttrs | undefined,
+): NonNullable<ResolvedParagraph["attrs"]> {
+  const a = attrs ?? {};
+  const settings: ParagraphSettings = {};
+  if (a.textAlign != null) settings.align = a.textAlign;
+  if (a.spaceBeforePt !== undefined) settings.spaceBeforePt = a.spaceBeforePt;
+  if (a.spaceAfterPt !== undefined) settings.spaceAfterPt = a.spaceAfterPt;
+  if (a.lineSpacing !== undefined) settings.lineSpacing = a.lineSpacing;
+  if (a.indentLeftIn !== undefined) settings.indentLeftIn = a.indentLeftIn;
+  if (a.indentRightIn !== undefined) settings.indentRightIn = a.indentRightIn;
+  if (a.firstLine !== undefined) settings.firstLine = a.firstLine;
+  if (a.keepWithNext !== undefined) settings.keepWithNext = a.keepWithNext;
+  if (a.keepLinesTogether !== undefined) settings.keepLinesTogether = a.keepLinesTogether;
+  if (a.pageBreakBefore !== undefined) settings.pageBreakBefore = a.pageBreakBefore;
+  const resolved = resolveParagraph(a.style, settings, e.styles);
+  if (a.style !== undefined && !resolved.known) note(e.report.unknownStyles, a.style);
+  return { ...a, resolved };
+}
+
+function placeholder(e: Engine, text: string): ResolvedParagraph {
+  return {
+    type: "paragraph",
+    attrs: resolveAttrs(e, undefined),
+    content: [{ type: "text", text, marks: [MISSING] }],
+  };
 }
 
 function blockRef(e: Engine, blockId: string, s: Scope): ResolvedBlock[] {
   const src = e.blocks.get(blockId);
-  if (s.inBlock) return [placeholder("[Missing block]")];
+  if (s.inBlock) return [placeholder(e, "[Missing block]")];
   if (!src) {
     note(e.report.archivedBlocks, "(deleted)");
-    return [placeholder("[Missing block]")];
+    return [placeholder(e, "[Missing block]")];
   }
   if (!src.isActive) {
     note(e.report.archivedBlocks, src.name);
-    return [placeholder(`[${src.name} block — archived]`)];
+    return [placeholder(e, `[${src.name} block — archived]`)];
   }
-  return blocks(e, src.content.content, { ...s, inBlock: true });
+  return blocks(e, convertHeadings(src.content).content, { ...s, inBlock: true });
 }
 
 function blocks(e: Engine, nodes: readonly BlockNode[] | undefined, s: Scope): ResolvedBlock[] {
@@ -255,7 +298,7 @@ function blocks(e: Engine, nodes: readonly BlockNode[] | undefined, s: Scope): R
         return [
           {
             type: "paragraph",
-            ...(n.attrs ? { attrs: n.attrs } : {}),
+            attrs: resolveAttrs(e, n.attrs),
             ...(content.length ? { content } : {}),
           },
         ];
@@ -318,10 +361,14 @@ function blocks(e: Engine, nodes: readonly BlockNode[] | undefined, s: Scope): R
 
 export function renderTemplate(
   doc: TemplateDoc,
-  ctx: { data: TemplateData; blocks: Map<string, BlockSource> },
+  ctx: { data: TemplateData; blocks: Map<string, BlockSource>; styles: ParagraphStyle[] },
 ): { doc: ResolvedDoc; report: RenderReport } {
-  const report: RenderReport = { missing: [], invalid: [], archivedBlocks: [] };
-  const e: Engine = { data: ctx.data, blocks: ctx.blocks, report };
-  const content = blocks(e, doc.content, { item: null, itemFields: [], inBlock: false });
+  const report: RenderReport = { missing: [], invalid: [], archivedBlocks: [], unknownStyles: [] };
+  const e: Engine = { data: ctx.data, blocks: ctx.blocks, report, styles: ctx.styles };
+  const content = blocks(e, convertHeadings(doc).content, {
+    item: null,
+    itemFields: [],
+    inBlock: false,
+  });
   return { doc: content.length ? { type: "doc", content } : { type: "doc" }, report };
 }

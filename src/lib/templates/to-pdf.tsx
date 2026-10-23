@@ -20,6 +20,7 @@ import type { ReactElement, ReactNode } from "react";
 import { FONTS, type FontKey } from "./fonts";
 import { fontFilePath } from "./fonts-server";
 import { imageSize } from "./image-size";
+import type { ResolvedParagraphStyle } from "./resolve-styles";
 import { SMALL_CAPS_SCALE, smallCapsRuns } from "./small-caps";
 import {
   CELL_PAD_PT,
@@ -191,15 +192,18 @@ function paragraph(
   align: Align | null | undefined,
   ctx: Ctx,
   heading?: 1 | 2 | 3,
+  resolved?: ResolvedParagraphStyle,
 ) {
   const { style } = ctx;
-  const size = heading ? headingSizePt(style.sizePt, heading) : style.sizePt;
+  // heading1..3 resolve to body size +6/+4/+2, bold: the same as a heading.
+  const size = resolved?.sizePt ?? (heading ? headingSizePt(style.sizePt, heading) : style.sizePt);
+  const bold = resolved?.bold ?? !!heading;
   return (
     <Text
       key={key}
       style={{
         fontSize: size,
-        fontWeight: heading ? "bold" : "normal",
+        fontWeight: bold ? "bold" : "normal",
         lineHeight: lineHeightFor(style),
         marginBottom: style.spaceAfterPt,
         textAlign: align ?? "left",
@@ -214,7 +218,7 @@ function blocks(list: ResolvedBlock[], ctx: Ctx): ReactElement[] {
   return list.map((b, i): ReactElement => {
     switch (b.type) {
       case "paragraph":
-        return paragraph(i, b.content, b.attrs?.textAlign, ctx);
+        return paragraph(i, b.content, b.attrs?.textAlign, ctx, undefined, b.attrs?.resolved);
       case "heading":
         return paragraph(i, b.content, b.attrs.textAlign, ctx, b.attrs.level);
       case "bulletList":
@@ -304,13 +308,14 @@ function naturalWidth(c: ResolvedTableCell, ctx: Ctx): number {
             const size =
               b.type === "heading"
                 ? headingSizePt(ctx.style.sizePt, b.attrs.level)
-                : ctx.style.sizePt;
+                : (b.attrs?.resolved?.sizePt ?? ctx.style.sizePt);
+            const bold = b.type === "heading" || !!b.attrs?.resolved?.bold;
             const lines = [0];
             for (const n of b.content ?? []) {
               if (n.type === "hardBreak") lines.push(0);
               else {
                 const marks = new Set<string>((n.marks ?? []).map((m) => m.type));
-                if (b.type === "heading") marks.add("bold");
+                if (bold) marks.add("bold");
                 lines[lines.length - 1] += marks.has("smallCaps")
                   ? smallCapsRuns(n.text).reduce(
                       (w, r) =>

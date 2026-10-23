@@ -1,5 +1,6 @@
 /** Test fixtures: a template with a table and a bullet list, and a court caption. */
 import { SAMPLE_TEMPLATE_DATA } from "./catalog";
+import { DEFAULT_PARAGRAPH_STYLES } from "./page-style";
 import { renderTemplate, type ResolvedDoc, type ResolvedTableCell } from "./render";
 import type { TableCellNode } from "./schema";
 import type { TemplateDoc } from "./schema";
@@ -69,6 +70,7 @@ export function renderFixture(): ResolvedDoc {
   return renderTemplate(fixtureTemplate, {
     data: { ...SAMPLE_TEMPLATE_DATA, signer: { ...SAMPLE_TEMPLATE_DATA.signer!, barNumber: null } },
     blocks: new Map(),
+    styles: DEFAULT_PARAGRAPH_STYLES,
   }).doc;
 }
 

@@ -110,6 +110,10 @@ export const DEFAULT_DOCUMENT_STYLE: DocumentStyleValues = {
   pageNumbers: "bottom_center",
 };
 
+/** The built-in styles for the default house values: what renders where no
+ *  firm style is at hand (emails, texts, block previews). */
+export const DEFAULT_PARAGRAPH_STYLES = DEFAULT_DOCUMENT_STYLE.paragraphStyles;
+
 export type LoadedLogo = {
   bytes: Uint8Array;
   contentType: "image/png" | "image/jpeg";

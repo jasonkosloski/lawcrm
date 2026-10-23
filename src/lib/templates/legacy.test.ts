@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SAMPLE_TEMPLATE_DATA } from "./catalog";
+import { DEFAULT_PARAGRAPH_STYLES } from "./page-style";
 import { renderTemplate } from "./render";
 import { convertLegacyBody } from "./legacy";
 import { validateTemplateContent, type ParagraphNode } from "./schema";
@@ -49,7 +50,11 @@ describe("convertLegacyBody", () => {
       { type: "field", attrs: { path: "client.nmae", format: null } },
     ]);
     expect(validateTemplateContent("letter", doc).ok).toBe(true);
-    const { report } = renderTemplate(doc, { data: SAMPLE_TEMPLATE_DATA, blocks: new Map() });
+    const { report } = renderTemplate(doc, {
+      data: SAMPLE_TEMPLATE_DATA,
+      blocks: new Map(),
+      styles: DEFAULT_PARAGRAPH_STYLES,
+    });
     expect(report.invalid).toContain("client.nmae");
   });
   it("keeps extra blank lines as empty paragraphs", () => {

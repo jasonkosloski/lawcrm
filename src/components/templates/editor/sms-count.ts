@@ -7,6 +7,7 @@
 
 import { SAMPLE_TEMPLATE_DATA, type Scope } from "@/lib/templates/catalog";
 import { renderTemplate } from "@/lib/templates/render";
+import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import type { TemplateDoc } from "@/lib/templates/schema";
 import { resolvedToText } from "@/lib/templates/to-text";
 import { plural } from "@/lib/utils";
@@ -41,6 +42,7 @@ export function smsTextWithSamples(doc: TemplateDoc, scope: Scope): string {
   const { doc: resolved } = renderTemplate(doc, {
     data: { ...SAMPLE_TEMPLATE_DATA, scope },
     blocks: new Map(),
+    styles: DEFAULT_PARAGRAPH_STYLES,
   });
   return resolvedToText(resolved);
 }

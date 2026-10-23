@@ -48,6 +48,7 @@ import { resolveRecordsRoleFolder } from "@/lib/records-requests/folder";
 import { loadRecordsRequest, loadTemplateData } from "@/lib/templates/load-data";
 import { SAMPLE_TEMPLATE_DATA, type TemplateData } from "@/lib/templates/catalog";
 import { renderTemplate, type BlockSource, type RenderReport } from "@/lib/templates/render";
+import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { contentOf, loadBlockMap } from "@/lib/templates/template-source";
 import { resolvedToHtml } from "@/lib/templates/to-html";
 import { resolvedToText } from "@/lib/templates/to-text";
@@ -751,11 +752,19 @@ export async function previewTemplateDraft(input: {
     ({ page, report } = previewPage(content.doc, kind, data, blocks, style, court));
     resolved = page.body;
   } else {
-    ({ doc: resolved, report } = renderTemplate(content.doc, { data, blocks }));
+    ({ doc: resolved, report } = renderTemplate(content.doc, {
+      data,
+      blocks,
+      styles: DEFAULT_PARAGRAPH_STYLES,
+    }));
   }
   let subjectText: string | null = null;
   if (subjectDoc) {
-    const rendered = renderTemplate(subjectDoc, { data, blocks });
+    const rendered = renderTemplate(subjectDoc, {
+      data,
+      blocks,
+      styles: DEFAULT_PARAGRAPH_STYLES,
+    });
     subjectText = resolvedToText(rendered.doc);
     mergeReport(report, rendered.report);
   }

@@ -33,7 +33,7 @@ export default async function DocumentSettingsPage() {
     blockRows.map((b) => [b.id, { ...b, content: b.content as unknown as TemplateDoc }]),
   );
   const data = { ...SAMPLE_TEMPLATE_DATA, scope: "matter" as const };
-  const ctx = { data, blocks: sources };
+  const ctx = { data, blocks: sources, styles: style.paragraphStyles };
   const body = renderTemplate(SAMPLE_LETTER_DOC, ctx).doc;
   // Every block a select can offer, rendered the same way as the body.
   const blockDocs: Record<string, ResolvedDoc> = {};
