@@ -94,6 +94,8 @@ function usesUnsupportedEmailFormatting(
   doc: TemplateDoc,
   blocks: Map<string, BlockSource>,
 ): boolean {
+  // Each block is looked into once, so a stored loop terminates.
+  const seen = new Set<string>();
   const unsupported = (node: unknown): boolean => {
     if (!node || typeof node !== "object") return false;
     const n = node as {
@@ -106,7 +108,8 @@ function usesUnsupportedEmailFormatting(
     const align = n.attrs?.textAlign;
     if (n.type === "heading" && align && align !== "left") return true;
     if (n.type === "heading" && n.attrs?.level === 1) return true;
-    if (n.type === "block" && typeof n.attrs?.blockId === "string") {
+    if (n.type === "block" && typeof n.attrs?.blockId === "string" && !seen.has(n.attrs.blockId)) {
+      seen.add(n.attrs.blockId);
       const block = blocks.get(n.attrs.blockId);
       if (block && unsupported(block.content)) return true;
     }

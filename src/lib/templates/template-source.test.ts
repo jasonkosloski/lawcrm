@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { resetDb } from "@/test/integration-helpers";
+import { SAMPLE_TEMPLATE_DATA } from "./catalog";
+import { DEFAULT_PARAGRAPH_STYLES } from "./page-style";
+import { renderTemplate } from "./render";
 import { loadBlockMap } from "./template-source";
 import type { TemplateDoc } from "./schema";
+import { resolvedToText } from "./to-text";
 
 const holding = (...ids: string[]): TemplateDoc => ({
   type: "doc",
@@ -38,6 +42,42 @@ describe("loadBlockMap", () => {
     const ids = await seedChain(["L1", "L2", "L3", "L4", "L5", "L6", "L7"]);
     const map = await loadBlockMap(holding(ids[0]));
     expect([...map.values()].map((x) => x.name).sort()).toEqual(["L1", "L2", "L3", "L4", "L5"]);
+  });
+
+  test("a sixth level loaded from the database prints [Blocks nested too deep]", async () => {
+    // Each level prints its name, then holds the next level.
+    const names = ["L1", "L2", "L3", "L4", "L5", "L6"];
+    let next: string | null = null;
+    for (const name of [...names].reverse()) {
+      const content: TemplateDoc = {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: name }] },
+          ...(next ? [{ type: "block" as const, attrs: { blockId: next } }] : []),
+        ],
+      };
+      const b = await prisma.templateBlock.create({
+        data: { key: name, name, content: content as object },
+        select: { id: true },
+      });
+      next = b.id;
+    }
+    const top = holding(next!);
+    const { doc, report } = renderTemplate(top, {
+      data: { ...SAMPLE_TEMPLATE_DATA, scope: "matter" },
+      blocks: await loadBlockMap(top),
+      styles: DEFAULT_PARAGRAPH_STYLES,
+    });
+    expect(resolvedToText(doc).split("\n").filter(Boolean)).toEqual([
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "L5",
+      "[Blocks nested too deep]",
+    ]);
+    expect(report.archivedBlocks).toEqual([]);
+    expect(report.invalid).toEqual(["A block (nested too deep)"]);
   });
 
   test("loads replacement blocks' children", async () => {

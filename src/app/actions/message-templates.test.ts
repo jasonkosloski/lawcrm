@@ -300,4 +300,24 @@ describe("renderMessageTemplate formatting note", () => {
     });
     expect(await renderMessageTemplate(id, M)).toMatchObject({ ok: true, dropsFormatting: true });
   });
+
+  test("a stored block loop renders without overflowing", async () => {
+    const a = await prisma.templateBlock.create({
+      data: { key: "a", name: "A", content: jsonDoc(para(text("a"))) },
+      select: { id: true },
+    });
+    const b = await prisma.templateBlock.create({
+      data: { key: "b", name: "B", content: jsonDoc({ type: "block", attrs: { blockId: a.id } }) },
+      select: { id: true },
+    });
+    await prisma.templateBlock.update({
+      where: { id: a.id },
+      data: { content: jsonDoc({ type: "block", attrs: { blockId: b.id } }) },
+    });
+    const id = await template({
+      kind: "email",
+      content: jsonDoc({ type: "block", attrs: { blockId: a.id } }),
+    });
+    expect(await renderMessageTemplate(id, M)).toMatchObject({ ok: true, dropsFormatting: false });
+  });
 });

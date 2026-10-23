@@ -302,6 +302,17 @@ function placeholder(e: Engine, text: string): ResolvedParagraph {
 
 function blockRef(e: Engine, blockId: string, s: Scope): ResolvedBlock[] {
   const src = e.blocks.get(blockId);
+  // Loop and depth come first: the loader stops at MAX_BLOCK_DEPTH levels,
+  // so a block one level deeper is absent from the map, not deleted.
+  const name = src?.name ?? "A block";
+  if (s.chain.includes(blockId)) {
+    note(e.report.invalid, `${name} (includes itself)`);
+    return [placeholder(e, "[Block includes itself]")];
+  }
+  if (s.chain.length === MAX_BLOCK_DEPTH) {
+    note(e.report.invalid, `${name} (nested too deep)`);
+    return [placeholder(e, "[Blocks nested too deep]")];
+  }
   if (!src) {
     note(e.report.archivedBlocks, "(deleted)");
     return [placeholder(e, "[Missing block]")];
@@ -309,14 +320,6 @@ function blockRef(e: Engine, blockId: string, s: Scope): ResolvedBlock[] {
   if (!src.isActive) {
     note(e.report.archivedBlocks, src.name);
     return [placeholder(e, `[${src.name} block — archived]`)];
-  }
-  if (s.chain.includes(blockId)) {
-    note(e.report.invalid, `${src.name} (includes itself)`);
-    return [placeholder(e, "[Block includes itself]")];
-  }
-  if (s.chain.length === MAX_BLOCK_DEPTH) {
-    note(e.report.invalid, `${src.name} (nested too deep)`);
-    return [placeholder(e, "[Blocks nested too deep]")];
   }
   return blocks(e, convertHeadings(src.content).content, { ...s, chain: [...s.chain, blockId] });
 }

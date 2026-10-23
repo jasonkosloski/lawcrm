@@ -90,9 +90,10 @@ export function depthAbove(id: string, blocks: Blocks): number {
 
 /** Saving `doc` as block `selfId` would make a loop when one of its
  *  children already contains `selfId`: the ids from that child down to
- *  the block whose children include `selfId`. `[]` when `doc` references
- *  `selfId` directly; null when there is no loop. `selfId`'s stored
- *  content is never walked: `doc` replaces it. */
+ *  the block whose children include `selfId`, or null when there is no
+ *  loop. `selfId`'s stored content is never walked: `doc` replaces it.
+ *  `[]` means `doc` references `selfId` directly (the block would include
+ *  itself). */
 export function loopPath(selfId: string, doc: TemplateDoc, blocks: Blocks): string[] | null {
   const seen = new Set<string>();
   const walk = (at: string, path: string[]): string[] | null => {
