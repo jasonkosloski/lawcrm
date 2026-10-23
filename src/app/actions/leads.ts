@@ -40,6 +40,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { isAttorney, LEAD_NOT_ATTORNEY } from "@/lib/attorneys";
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { logActivity } from "@/lib/activity-log";
@@ -242,6 +243,8 @@ export async function createLead(
 
 const convertSchema = z.object({
   practiceAreaId: z.string().trim().min(1, "Practice area is required"),
+  /** The matter's lead attorney; must hold a bar admission (checked in the action). */
+  leadAttorneyId: z.string().trim().optional().or(z.literal("")),
   stageId: z.string().trim().min(1, "Initial stage is required"),
   name: z.string().trim().min(1, "Matter name is required").max(200),
   /** Omitted: the practice area's default. */
@@ -296,6 +299,12 @@ export async function convertLeadToMatter(
       status: "error",
       errors: parsed.error.flatten().fieldErrors,
     };
+  }
+
+  // The picked lead must be an attorney; checked before anything is written.
+  const leadAttorneyId = parsed.data.leadAttorneyId;
+  if (!leadAttorneyId || !(await isAttorney(leadAttorneyId))) {
+    return { status: "error", errors: { leadAttorneyId: [LEAD_NOT_ATTORNEY] } };
   }
 
   const lead = await prisma.lead.findUnique({ where: { id: leadId } });
@@ -589,26 +598,25 @@ export async function convertLeadToMatter(
             dueDate: solDate,
             kind: "critical",
             sourceType: SOL_SOURCE_TYPE,
-            // Converting user is the lead attorney (set just below) —
-            // same owner default as the direct create path.
-            ownerId: userId,
+            // The picked lead attorney (set just below) — same owner
+            // default as the direct create path.
+            ownerId: leadAttorneyId,
             status: "open",
           },
         });
       }
 
-      // Lead attorney = the user doing the conversion. Solo-friendly
-      // default; multi-user firms can re-assign on the matter detail
-      // page once the team editor lands.
+      // Lead attorney = the one picked in the dialog (validated up top).
       await tx.matterTeamMember.create({
-        data: { matterId: matter.id, userId, role: "lead" },
+        data: { matterId: matter.id, userId: leadAttorneyId, role: "lead" },
       });
       // The intake team carries over with its roles (ADR-049), so a
       // restricted lead's matter is visible to the same people. The
-      // converter is already the lead; any other intake "lead" joins as
-      // co-counsel (one lead per matter).
+      // picked attorney is already the lead; any other intake "lead"
+      // joins as co-counsel (one lead per matter). The converter is on
+      // the team only if they were on the intake team.
       const intakeTeam = await tx.leadTeamMember.findMany({
-        where: { leadId, NOT: { userId } },
+        where: { leadId, NOT: { userId: leadAttorneyId } },
         select: { userId: true, role: true },
       });
       if (intakeTeam.length > 0) {
@@ -675,7 +683,7 @@ export async function convertLeadToMatter(
       // Firm-configured defaults (Settings → Automations) — the same
       // matter_created trigger the New-matter form fires. After the
       // team insert above so "assign to lead" tasks + deadline owners
-      // resolve to the converting attorney.
+      // resolve to the lead attorney.
       const defaults = await applyAutoDefaults(tx, {
         matterId: matter.id,
         practiceAreaId: area.id,

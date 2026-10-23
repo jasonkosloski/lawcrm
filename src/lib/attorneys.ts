@@ -25,6 +25,18 @@ export async function isAttorney(
   return count > 0;
 }
 
+/** The convert dialog's preselected lead: the converter if an attorney,
+ *  else the intake team's only attorney, else nobody (they pick). */
+export function defaultLeadAttorneyId(
+  currentUserId: string,
+  intakeUserIds: string[],
+  attorneyIds: string[],
+): string | null {
+  if (attorneyIds.includes(currentUserId)) return currentUserId;
+  const onTeam = attorneyIds.filter((id) => intakeUserIds.includes(id));
+  return onTeam.length === 1 ? onTeam[0] : null;
+}
+
 /** The bar number admitted in the state named or coded by `stateText`;
  *  null when the text matches no state or the user has no admission there. */
 export function barNumberFor(

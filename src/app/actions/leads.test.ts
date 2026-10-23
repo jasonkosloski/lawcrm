@@ -52,10 +52,17 @@ vi.mock("@/lib/permission-check", () => ({
 import { getCurrentUserId } from "@/lib/current-user";
 import { requirePermission } from "@/lib/permission-check";
 import { prisma } from "@/lib/prisma";
+import { LEAD_NOT_ATTORNEY } from "@/lib/attorney-messages";
 import { convertLeadToMatter, createLead, declineLead } from "@/app/actions/leads";
 import { saveRecordsFee } from "@/app/actions/records-requests";
 import { renameFolder } from "@/app/actions/document-folders";
-import { resetDb, seedFirm, seedTimeEntry, seedUser } from "@/test/integration-helpers";
+import {
+  resetDb,
+  seedBarAdmission,
+  seedFirm,
+  seedTimeEntry,
+  seedUser,
+} from "@/test/integration-helpers";
 
 const mockedGetUser = vi.mocked(getCurrentUserId);
 const mockedRequirePermission = vi.mocked(requirePermission);
@@ -115,12 +122,13 @@ async function seedIntakeLead(opts?: {
   return { leadId: lead.id };
 }
 
-function convertForm(opts: { areaId: string; stageId: string }): FormData {
+function convertForm(opts: { areaId: string; stageId: string; leadAttorneyId?: string }): FormData {
   const fd = new FormData();
   fd.set("practiceAreaId", opts.areaId);
   fd.set("stageId", opts.stageId);
   fd.set("name", "Patel v. Doe");
   fd.set("billingType", "contingent");
+  fd.set("leadAttorneyId", opts.leadAttorneyId ?? userId);
   return fd;
 }
 
@@ -140,6 +148,8 @@ beforeEach(async () => {
   const { firmId } = await seedFirm();
   const u = await seedUser({ firmId, email: "attorney@example.com" });
   userId = u.userId;
+  // The converter is an attorney by default, so forms can pick them as lead.
+  await seedBarAdmission({ userId });
   mockedGetUser.mockResolvedValue(userId);
   // Gate passes by default; it returns the actor id like the real
   // implementation so declineLead can chain it into the audit log.
@@ -1409,6 +1419,81 @@ describe("convertLeadToMatter — restricted intake carries its wall (ADR-049)",
       convertLeadToMatter(leadId, { status: "idle" }, convertForm({ areaId, stageId })),
     ).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK|NEXT_NOT_FOUND/);
     expect(await prisma.matter.count()).toBe(0);
+  });
+});
+
+describe("convertLeadToMatter — the dialog picks the lead attorney", () => {
+  async function convertWith(leadId: string, leadAttorneyId: string | null) {
+    const { areaId, stageId } = await seedArea({ hasSol: true, periodDays: 730 });
+    const fd = convertForm({ areaId, stageId });
+    if (leadAttorneyId === null) fd.delete("leadAttorneyId");
+    else fd.set("leadAttorneyId", leadAttorneyId);
+    return convertLeadToMatter(leadId, { status: "idle" }, fd);
+  }
+  async function seedOtherAttorney(name: string) {
+    const { firmId } = await seedFirm({ name });
+    const { userId: id } = await seedUser({ firmId });
+    await seedBarAdmission({ userId: id, number: "99999" });
+    return id;
+  }
+  const team = () =>
+    prisma.matterTeamMember
+      .findMany({ select: { userId: true, role: true } })
+      .then((rows) => Object.fromEntries(rows.map((m) => [m.userId, m.role])));
+
+  test("the picked attorney leads and owns the SOL deadline; the converter is not added", async () => {
+    const picked = await seedOtherAttorney("Pick firm row");
+    const { leadId } = await seedIntakeLead({
+      dateOfIncident: new Date("2024-01-15T00:00:00.000Z"),
+    });
+    await expect(convertWith(leadId, picked)).rejects.toThrow(/^REDIRECT:/);
+    expect(await team()).toEqual({ [picked]: "lead" });
+    const deadline = await prisma.deadline.findFirstOrThrow({
+      where: { sourceType: "statute_of_limitations" },
+      select: { ownerId: true },
+    });
+    expect(deadline.ownerId).toBe(picked);
+  });
+
+  test("the converter on the intake team keeps their mapped role; another intake lead becomes co-counsel", async () => {
+    const picked = await seedOtherAttorney("Pick firm row");
+    const other = await seedOtherAttorney("Other firm row");
+    const { leadId } = await seedIntakeLead();
+    await prisma.lead.update({ where: { id: leadId }, data: { restricted: true } });
+    await prisma.leadTeamMember.createMany({
+      data: [
+        { leadId, userId, role: "paralegal" },
+        { leadId, userId: picked, role: "investigator" },
+        { leadId, userId: other, role: "lead" },
+      ],
+    });
+    await expect(convertWith(leadId, picked)).rejects.toThrow(/^REDIRECT:/);
+    expect(await team()).toEqual({
+      [picked]: "lead",
+      [userId]: "paralegal",
+      [other]: "co_counsel",
+    });
+  });
+
+  test.each([
+    ["missing", null],
+    ["not an attorney", "nobody"],
+  ])("a %s leadAttorneyId is refused and nothing is created", async (_label, which) => {
+    let id = which;
+    if (which === "nobody") {
+      const { firmId } = await seedFirm({ name: "No bar firm row" });
+      id = (await seedUser({ firmId })).userId;
+    }
+    const { leadId } = await seedIntakeLead();
+    const res = await convertWith(leadId, id);
+    expect(res).toEqual({
+      status: "error",
+      errors: { leadAttorneyId: [LEAD_NOT_ATTORNEY] },
+    });
+    expect(await prisma.matter.count()).toBe(0);
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: leadId } })).stage).not.toBe(
+      "converted",
+    );
   });
 });
 

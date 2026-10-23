@@ -18,6 +18,7 @@ import { DeclineLeadButton } from "@/components/intake/decline-lead-button";
 import { getLeadById } from "@/lib/queries/leads";
 import { getPracticeAreaOptions } from "@/lib/queries/practice-area-options";
 import { prisma } from "@/lib/prisma";
+import { attorneyUserWhere, defaultLeadAttorneyId } from "@/lib/attorneys";
 import { dateOnlyKey } from "@/lib/format-date";
 import { todayDateOnly } from "@/app/actions/billing/helpers";
 import { requireUser } from "@/lib/current-user";
@@ -27,7 +28,7 @@ import { RestrictedBadge } from "@/components/shared/restricted-badge";
 import { LeadStageChip } from "@/components/intake/lead-stage-chip";
 
 async function loadEngagementInputs(leadId: string, userId: string) {
-  const [documents, firm, today] = await Promise.all([
+  const [documents, firm, today, attorneys] = await Promise.all([
     prisma.document.findMany({
       where: { leadId, status: { not: "archived" } },
       orderBy: { name: "asc" },
@@ -38,8 +39,14 @@ async function loadEngagementInputs(leadId: string, userId: string) {
       select: { firm: { select: { requireOriginatingDoc: true } } },
     }),
     todayDateOnly(),
+    prisma.user.findMany({
+      where: attorneyUserWhere,
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
   return {
+    attorneys,
     documents,
     requireOriginatingDoc: firm?.firm?.requireOriginatingDoc ?? false,
     todayKey: dateOnlyKey(today),
@@ -96,6 +103,12 @@ export default async function LeadDetailLayout({ children, params }: LayoutProps
                   documents={engagement.documents}
                   requireOriginatingDoc={engagement.requireOriginatingDoc}
                   todayKey={engagement.todayKey}
+                  attorneys={engagement.attorneys}
+                  defaultLeadAttorneyId={defaultLeadAttorneyId(
+                    userId,
+                    lead.teamMembers.map((m) => m.userId),
+                    engagement.attorneys.map((a) => a.id),
+                  )}
                   restrictedTo={
                     lead.restricted ? lead.teamMembers.map((m) => m.user.name) : undefined
                   }

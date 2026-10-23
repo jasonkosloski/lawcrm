@@ -7,6 +7,7 @@ export type ConvertLeadFormState = {
   errors?: Partial<
     Record<
       | "practiceAreaId"
+      | "leadAttorneyId"
       | "stageId"
       | "name"
       | "billingType"

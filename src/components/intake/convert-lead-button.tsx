@@ -44,6 +44,7 @@ import { agreementGateErrors, originatingDocLabel } from "@/lib/originating-doc"
 import { BILLING_TYPE_OPTIONS } from "@/lib/billing-type";
 import type { PracticeAreaOption } from "@/lib/queries/practice-area-options";
 import { Field } from "@/components/ui/field";
+import { NO_ATTORNEYS } from "@/lib/attorney-messages";
 
 // Default stage for a freshly converted matter: terminal stages
 // ("Closed", "Declined", …) make no sense as a starting point, so skip
@@ -61,6 +62,8 @@ export function ConvertLeadButton({
   documents = [],
   requireOriginatingDoc = false,
   todayKey,
+  attorneys,
+  defaultLeadAttorneyId,
 }: {
   leadId: string;
   defaultMatterName: string;
@@ -74,6 +77,10 @@ export function ConvertLeadButton({
   requireOriginatingDoc?: boolean;
   /** Today's calendar date (YYYY-MM-DD, firm zone) for the future-date check. */
   todayKey: string;
+  /** Attorneys (active, with a bar number) who can lead the matter. */
+  attorneys: { id: string; name: string }[];
+  /** Preselected lead: the converter if an attorney, else the intake team's only attorney. */
+  defaultLeadAttorneyId: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const action = convertLeadToMatter.bind(null, leadId);
@@ -94,6 +101,7 @@ export function ConvertLeadButton({
   const [billingType, setBillingType] = useState<string>(
     areas[0]?.defaultBillingType ?? "contingent",
   );
+  const [leadAttorneyId, setLeadAttorneyId] = useState(defaultLeadAttorneyId ?? "");
   const [warningsReviewed, setWarningsReviewed] = useState(false);
   const [agreementStatus, setAgreementStatus] = useState("not_sent");
   const [signedDate, setSignedDate] = useState("");
@@ -112,6 +120,7 @@ export function ConvertLeadButton({
     setAreaId(areas[0]?.id ?? "");
     setStageId(firstNonTerminalStage(areas[0])?.id ?? "");
     setBillingType(areas[0]?.defaultBillingType ?? "contingent");
+    setLeadAttorneyId(defaultLeadAttorneyId ?? "");
     setWarningsReviewed(false);
     setAgreementStatus("not_sent");
     setSignedDate("");
@@ -200,9 +209,8 @@ export function ConvertLeadButton({
         <DialogHeader>
           <DialogTitle>Convert lead to matter</DialogTitle>
           <DialogDescription>
-            Creates the matter, the client contact, and your team assignment in one step. The
-            lead&apos;s case summary, location, incident date, and injuries become the matter&apos;s
-            description.
+            Creates the matter, the client contact, and the team in one step. The lead&apos;s case
+            summary, location, incident date, and injuries become the matter&apos;s description.
           </DialogDescription>
         </DialogHeader>
 
@@ -257,6 +265,33 @@ export function ConvertLeadButton({
                 options={billingOptions}
                 ariaLabel="Billing type"
               />
+
+              <Field
+                label="Lead attorney"
+                htmlFor="leadAttorneyId"
+                required
+                error={errs.leadAttorneyId}
+              >
+                {attorneys.length === 0 ? (
+                  <div className="text-xs text-warn">{NO_ATTORNEYS}</div>
+                ) : (
+                  <NativeSelect
+                    className="w-full"
+                    id="leadAttorneyId"
+                    name="leadAttorneyId"
+                    value={leadAttorneyId}
+                    onChange={(e) => setLeadAttorneyId(e.target.value)}
+                    aria-invalid={!!errs.leadAttorneyId || undefined}
+                  >
+                    <NativeSelectOption value="">Select an attorney…</NativeSelectOption>
+                    {attorneys.map((a) => (
+                      <NativeSelectOption key={a.id} value={a.id}>
+                        {a.name}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                )}
+              </Field>
 
               <Section title={agreementLabel}>
                 <AgreementFields
@@ -338,6 +373,7 @@ export function ConvertLeadButton({
               disabled={
                 isPending ||
                 areas.length === 0 ||
+                attorneys.length === 0 ||
                 (state.conflictWarnings !== undefined && !warningsReviewed)
               }
             >

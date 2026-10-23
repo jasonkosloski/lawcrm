@@ -5,7 +5,7 @@
 
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { prisma } from "@/lib/prisma";
-import { barNumberFor, isAttorney } from "@/lib/attorneys";
+import { barNumberFor, defaultLeadAttorneyId, isAttorney } from "@/lib/attorneys";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
 describe("barNumberFor", () => {
@@ -59,5 +59,18 @@ describe("isAttorney", () => {
     const { userId } = await seedUser({ firmId, isActive: false });
     await prisma.barAdmission.create({ data: { userId, state: "CO", number: "123" } });
     expect(await isAttorney(userId)).toBe(false);
+  });
+});
+
+describe("defaultLeadAttorneyId", () => {
+  test("the converter when they are an attorney", () => {
+    expect(defaultLeadAttorneyId("me", ["a"], ["me", "a"])).toBe("me");
+  });
+  test("else the intake team's only attorney", () => {
+    expect(defaultLeadAttorneyId("me", ["a", "para"], ["a", "z"])).toBe("a");
+  });
+  test("else null: no intake attorney, or more than one", () => {
+    expect(defaultLeadAttorneyId("me", ["para"], ["a"])).toBeNull();
+    expect(defaultLeadAttorneyId("me", ["a", "b"], ["a", "b"])).toBeNull();
   });
 });

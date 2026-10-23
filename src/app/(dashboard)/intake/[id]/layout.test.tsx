@@ -31,6 +31,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     document: { findMany: vi.fn(async () => []) },
     user: {
+      findMany: vi.fn(async () => []),
       findUnique: vi.fn(async () => ({ firm: { requireOriginatingDoc: false } })),
     },
   },
@@ -43,6 +44,7 @@ vi.mock("@/lib/queries/practice-area-options", () => ({
 }));
 
 import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/current-user";
 import { currentUserHasPermission } from "@/lib/permission-check";
 import { getLeadById } from "@/lib/queries/leads";
 import { ConvertLeadButton } from "@/components/intake/convert-lead-button";
@@ -74,6 +76,7 @@ async function renderLayout(opts: {
     score: null,
     displayName: "Priya Patel",
     convertedMatter: null,
+    teamMembers: [],
   } as unknown as Awaited<ReturnType<typeof getLeadById>>);
   const tree = await LeadDetailLayout({
     children: null,
@@ -147,6 +150,11 @@ describe("LeadDetailLayout engagement inputs", () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
       firm: { requireOriginatingDoc: true },
     } as never);
+    vi.mocked(prisma.user.findMany).mockResolvedValueOnce([
+      { id: "u1", name: "Ann" },
+      { id: "u2", name: "Bo" },
+    ] as never);
+    vi.mocked(requireUser).mockResolvedValue("u9");
     mockedHas.mockImplementation(async (key) => key === "matters.create");
     mockedLead.mockResolvedValue({
       id: "lead1",
@@ -154,6 +162,7 @@ describe("LeadDetailLayout engagement inputs", () => {
       score: null,
       displayName: "Priya Patel",
       convertedMatter: null,
+      teamMembers: [{ userId: "u2", user: { name: "Bo" } }],
     } as unknown as Awaited<ReturnType<typeof getLeadById>>);
     const tree = await LeadDetailLayout({
       children: null,
@@ -166,5 +175,11 @@ describe("LeadDetailLayout engagement inputs", () => {
     expect(convert.props.documents).toEqual([{ id: "d1", name: "fee.pdf" }]);
     expect(convert.props.requireOriginatingDoc).toBe(true);
     expect(convert.props.todayKey).toBe("2026-10-20");
+    expect(convert.props.attorneys).toEqual([
+      { id: "u1", name: "Ann" },
+      { id: "u2", name: "Bo" },
+    ]);
+    // The viewer (u9) isn't an attorney; the intake team's only attorney is u2.
+    expect(convert.props.defaultLeadAttorneyId).toBe("u2");
   });
 });

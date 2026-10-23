@@ -20,6 +20,7 @@ vi.mock("@/app/actions/leads", () => ({
 }));
 
 import { convertLeadToMatter } from "@/app/actions/leads";
+import { NO_ATTORNEYS } from "@/lib/attorney-messages";
 import { ConvertLeadButton } from "./convert-lead-button";
 import type { PracticeAreaOption } from "@/lib/queries/practice-area-options";
 
@@ -49,13 +50,27 @@ const AREAS: PracticeAreaOption[] = [
   },
 ];
 
-function renderButton() {
+const ATTORNEYS = [
+  { id: "u1", name: "Ann Atty" },
+  { id: "u2", name: "Bo Barrister" },
+];
+
+function renderButton(
+  opts: {
+    attorneys?: { id: string; name: string }[];
+    defaultLeadAttorneyId?: string | null;
+  } = {},
+) {
   return render(
     <ConvertLeadButton
       leadId="lead1"
       defaultMatterName="Doe v. Acme"
       areas={AREAS}
       todayKey="2026-10-20"
+      attorneys={opts.attorneys ?? ATTORNEYS}
+      defaultLeadAttorneyId={
+        opts.defaultLeadAttorneyId === undefined ? "u2" : opts.defaultLeadAttorneyId
+      }
     />,
   );
 }
@@ -220,6 +235,8 @@ describe("ConvertLeadButton — server errors and live props", () => {
         defaultMatterName="Doe v. Acme"
         areas={AREAS.map((a) => ({ ...a }))}
         todayKey="2026-10-20"
+        attorneys={ATTORNEYS}
+        defaultLeadAttorneyId="u2"
       />,
     );
     expect(screen.getByPlaceholderText("Matter name")).toHaveValue("Typed name");
@@ -252,6 +269,8 @@ describe("ConvertLeadButton — restricted intake (ADR-049)", () => {
         areas={AREAS}
         restrictedTo={["Alice Attorney", "Bob Paralegal"]}
         todayKey="2026-10-20"
+        attorneys={ATTORNEYS}
+        defaultLeadAttorneyId="u2"
       />,
     );
     await openDialog(user);
@@ -292,6 +311,8 @@ describe("ConvertLeadButton — engagement block", () => {
         documents={DOCS}
         requireOriginatingDoc={over.required ?? false}
         todayKey="2026-10-20"
+        attorneys={ATTORNEYS}
+        defaultLeadAttorneyId="u2"
       />,
     );
   }
@@ -330,7 +351,8 @@ describe("ConvertLeadButton — engagement block", () => {
     vi.mocked(convertLeadToMatter).mockResolvedValue({ status: "error" });
     renderEngagement({ required: false });
     await openDialog(user);
-    expect(document.querySelector(".text-warn.ml-0\\.5")).toBeNull();
+    // Only the Lead attorney field is marked required.
+    expect(document.querySelectorAll(".text-warn.ml-0\\.5")).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: /^convert$/i }));
     expect(convertLeadToMatter).toHaveBeenCalledTimes(1);
   });
@@ -408,5 +430,31 @@ describe("ConvertLeadButton — billing type", () => {
       .closest("select") as HTMLSelectElement;
     await user.selectOptions(areaSelect, "pa-fam");
     expect(billingSelect().value).toBe("hourly");
+  });
+});
+
+describe("ConvertLeadButton — lead attorney", () => {
+  test("lists the attorneys and preselects the default", async () => {
+    const user = userEvent.setup();
+    renderButton();
+    await openDialog(user);
+    const select = screen.getByLabelText(/lead attorney/i) as HTMLSelectElement;
+    expect(select.value).toBe("u2");
+    expect(screen.getByRole("option", { name: "Ann Atty" })).toBeInTheDocument();
+  });
+
+  test("with no default the select starts unpicked", async () => {
+    const user = userEvent.setup();
+    renderButton({ defaultLeadAttorneyId: null });
+    await openDialog(user);
+    expect((screen.getByLabelText(/lead attorney/i) as HTMLSelectElement).value).toBe("");
+  });
+
+  test("with no attorneys it explains why and disables Convert", async () => {
+    const user = userEvent.setup();
+    renderButton({ attorneys: [] });
+    await openDialog(user);
+    expect(screen.getByText(NO_ATTORNEYS)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^convert$/i })).toBeDisabled();
   });
 });
