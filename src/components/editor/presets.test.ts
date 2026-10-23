@@ -10,8 +10,8 @@ import { sanitizeUserHtml } from "@/lib/sanitize-html";
 import { validateTemplateContent } from "@/lib/templates/schema";
 import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { templateJSON } from "@/components/templates/editor/extensions";
-import { FULL_DOC } from "@/components/templates/editor/test-fixtures";
-import { documentExtensions, notesExtensions, type EditorPreset } from "./presets";
+import { FULL_DOC, NO_ATTRS, cell, p, t } from "@/components/templates/editor/test-fixtures";
+import { documentExtensions, notesExtensions } from "./presets";
 
 describe("notes preset", () => {
   const make = (content: string) => new Editor({ extensions: notesExtensions(), content });
@@ -44,9 +44,46 @@ describe("notes preset", () => {
     editor.destroy();
   });
 
-  it("link output keeps its href through the sanitizer (which adds rel hardening)", () => {
+  const roundTrip = (html: string) => {
+    const editor = make(html);
+    const out = editor.getHTML().replace(/<br ?\/?>/g, "<br>");
+    const clean = sanitizeUserHtml(out).replace(/<br ?\/?>/g, "<br>");
+    editor.destroy();
+    return { out, clean };
+  };
+
+  it("a hard break survives the sanitizer", () => {
+    const { out, clean } = roundTrip("<p>a<br>b</p>");
+    expect(out).toContain("<br>");
+    expect(clean).toBe(out);
+  });
+
+  it("a code block with a language loses only the class in the sanitizer", () => {
+    const { out, clean } = roundTrip('<pre><code class="language-js">x</code></pre>');
+    expect(out).toContain('class="language-js"');
+    // stripped today: the sanitizer drops the language class (the code survives).
+    expect(clean).toBe("<pre><code>x</code></pre>");
+  });
+
+  it("an ordered list with a start survives the sanitizer", () => {
+    const { out, clean } = roundTrip('<ol start="3"><li><p>x</p></li></ol>');
+    expect(out).toContain('start="3"');
+    expect(clean).toBe(out);
+  });
+
+  it("a nested list survives the sanitizer", () => {
+    const { out, clean } = roundTrip(
+      "<ul><li><p>a</p><ul><li><p>b</p><ol><li><p>c</p></li></ol></li></ul></li></ul>",
+    );
+    expect(clean).toBe(out);
+  });
+
+  it("link output keeps href, target and rel through the sanitizer (which adds nofollow)", () => {
     const editor = make('<p><a href="https://example.com">l</a></p>');
-    expect(sanitizeUserHtml(editor.getHTML())).toContain('href="https://example.com"');
+    const clean = sanitizeUserHtml(editor.getHTML());
+    expect(clean).toContain('href="https://example.com"');
+    expect(clean).toContain('target="_blank"');
+    expect(clean).toMatch(/rel="[^"]*noopener[^"]*"/);
     editor.destroy();
   });
 
@@ -60,27 +97,91 @@ describe("notes preset", () => {
   });
 });
 
+/** Drop null/undefined attrs and empty `attrs: {}` so absent and null compare equal. */
+function stripNulls(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(stripNulls);
+  if (v && typeof v === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v)) {
+      if (val === null || val === undefined) continue;
+      const c = stripNulls(val);
+      if (k === "attrs" && c && Object.keys(c as object).length === 0) continue;
+      out[k] = c;
+    }
+    return out;
+  }
+  return v;
+}
+
+/** Non-null values that a lossy schema pair could drop. */
+const RICH_DOC = {
+  type: "doc",
+  content: [
+    {
+      type: "paragraph",
+      attrs: {
+        ...NO_ATTRS,
+        style: "heading1",
+        textAlign: "right",
+        spaceBeforePt: 6,
+        indentLeftIn: 0.5,
+        firstLine: { kind: "hanging", in: 0.25 },
+      },
+      content: [
+        t("marks", [{ type: "smallCaps" }]),
+        t(" caps", [{ type: "allCaps" }]),
+        t(" sized", [{ type: "fontSize", attrs: { pt: 14 } }]),
+      ],
+    },
+    {
+      type: "table",
+      attrs: { width: null },
+      content: [
+        {
+          type: "tableRow",
+          content: [
+            {
+              type: "tableCell",
+              attrs: {
+                colspan: 2,
+                rowspan: 1,
+                colwidth: null,
+                verticalAlign: "middle",
+                borders: { top: "none", left: "thick" },
+              },
+              content: [p(t("wide"))],
+            },
+          ],
+        },
+        { type: "tableRow", content: [cell("tableCell", p(t("a"))), cell("tableCell", p(t("b")))] },
+      ],
+    },
+  ],
+};
+
 describe("document preset", () => {
-  it("templateJSON of a doc using every document node passes validateTemplateContent", () => {
-    const editor = new Editor({
+  const make = (doc: unknown) =>
+    new Editor({
       extensions: documentExtensions({
         styles: DEFAULT_PARAGRAPH_STYLES,
         kind: "letter",
         isBlock: false,
         blocks: [],
       }),
-      content: FULL_DOC as never,
+      content: doc as never,
     });
-    const json = templateJSON(editor);
-    expect(validateTemplateContent("letter", json).ok).toBe(true);
-    expect(json.content?.length).toBe(FULL_DOC.content.length);
-    editor.destroy();
-  });
-});
 
-describe("EditorPreset", () => {
-  it("names the three presets", () => {
-    const all: EditorPreset[] = ["notes", "email", "document"];
-    expect(all).toHaveLength(3);
+  it.each([
+    ["FULL_DOC", FULL_DOC],
+    ["RICH_DOC", RICH_DOC],
+  ])("%s: the editor JSON validates and comes back unchanged", (_name, doc) => {
+    const editor = make(doc);
+    const json = templateJSON(editor);
+    const res = validateTemplateContent("letter", json);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(stripNulls(res.doc)).toEqual(stripNulls(json));
+    // Non-null input values must reach the editor JSON (nothing lost on load).
+    expect(stripNulls(json)).toEqual(stripNulls(doc));
+    editor.destroy();
   });
 });
