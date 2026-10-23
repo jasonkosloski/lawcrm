@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
 import { CellSelection, TableMap } from "@tiptap/pm/tables";
 import { validateTemplateContent } from "@/lib/templates/schema";
+import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { createTemplateExtensions, templateJSON } from "./extensions";
 import {
   bordersAre,
@@ -27,7 +28,12 @@ type Json = {
 
 function grid(rows = 2, cols = 2) {
   const editor = new Editor({
-    extensions: createTemplateExtensions({ kind: "filing", isBlock: false, blocks: [] }),
+    extensions: createTemplateExtensions({
+      styles: DEFAULT_PARAGRAPH_STYLES,
+      kind: "filing",
+      isBlock: false,
+      blocks: [],
+    }),
     content: { type: "doc", content: [{ type: "paragraph" }] } as never,
   });
   editor.commands.insertTable({ rows, cols, withHeaderRow: false });
@@ -113,7 +119,12 @@ describe("setBorders", () => {
 
   it("does nothing outside a table", () => {
     const e = new Editor({
-      extensions: createTemplateExtensions({ kind: "letter", isBlock: false, blocks: [] }),
+      extensions: createTemplateExtensions({
+        styles: DEFAULT_PARAGRAPH_STYLES,
+        kind: "letter",
+        isBlock: false,
+        blocks: [],
+      }),
       content: { type: "doc", content: [{ type: "paragraph" }] } as never,
     });
     expect(setBorders(e.state, "all", "thin")).toBeNull();
@@ -236,7 +247,12 @@ describe("width and alignment", () => {
     expect(validateTemplateContent("filing", json).ok).toBe(true);
 
     const fromHtml = new Editor({
-      extensions: createTemplateExtensions({ kind: "filing", isBlock: false, blocks: [] }),
+      extensions: createTemplateExtensions({
+        styles: DEFAULT_PARAGRAPH_STYLES,
+        kind: "filing",
+        isBlock: false,
+        blocks: [],
+      }),
       content: e.getHTML(),
     });
     expect(templateJSON(fromHtml)).toEqual(json);

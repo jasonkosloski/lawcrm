@@ -5,18 +5,34 @@
  */
 import { describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
+import { convertHeadings } from "@/lib/templates/headings";
 import { fieldByPath, listByPath } from "@/lib/templates/catalog";
 import { validateTemplateContent, type TemplateKind } from "@/lib/templates/schema";
+import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { createTemplateExtensions, templateJSON } from "./extensions";
 import { fieldChipText, listFieldChipText } from "./field-node";
 import { ruleHeaderText } from "./section-nodes";
 
+/** Every paragraph attr at its default: what the editor emits. */
+const NO_ATTRS = {
+  textAlign: null,
+  style: null,
+  spaceBeforePt: null,
+  spaceAfterPt: null,
+  lineSpacing: null,
+  indentLeftIn: null,
+  indentRightIn: null,
+  firstLine: null,
+  keepWithNext: null,
+  keepLinesTogether: null,
+  pageBreakBefore: null,
+};
 const p = (...content: unknown[]) => ({
   type: "paragraph",
-  attrs: { textAlign: null },
+  attrs: NO_ATTRS,
   content,
 });
-const t = (text: string, marks?: { type: string }[]) =>
+const t = (text: string, marks?: { type: string; attrs?: unknown }[]) =>
   marks ? { type: "text", text, marks } : { type: "text", text };
 const cell = (type: "tableCell" | "tableHeader", ...content: unknown[]) => ({
   type,
@@ -27,7 +43,11 @@ const cell = (type: "tableCell" | "tableHeader", ...content: unknown[]) => ({
 const FULL_DOC = {
   type: "doc",
   content: [
-    { type: "heading", attrs: { level: 1, textAlign: "center" }, content: [t("Title")] },
+    {
+      type: "paragraph",
+      attrs: { ...NO_ATTRS, style: "heading1", textAlign: "center" },
+      content: [t("Title")],
+    },
     p(
       t("Dear "),
       { type: "field", attrs: { path: "client.name", format: "full" }, marks: [{ type: "bold" }] },
@@ -74,7 +94,12 @@ const FULL_DOC = {
 
 const make = (kind: TemplateKind, content: unknown, isBlock = false) =>
   new Editor({
-    extensions: createTemplateExtensions({ kind, isBlock, blocks: [] }),
+    extensions: createTemplateExtensions({
+      styles: DEFAULT_PARAGRAPH_STYLES,
+      kind,
+      isBlock,
+      blocks: [],
+    }),
     content: content as never,
   });
 
@@ -94,7 +119,12 @@ describe("round trip", () => {
         {
           type: "orderedList",
           attrs: { start: 3 },
-          content: [{ type: "listItem", content: [p(t("x"))] }],
+          content: [
+            {
+              type: "listItem",
+              content: [{ type: "paragraph", attrs: { textAlign: null }, content: [t("x")] }],
+            },
+          ],
         },
       ],
     };
@@ -106,7 +136,9 @@ describe("round trip", () => {
 
   it("omits the block node inside a block and the page break in email", () => {
     const names = (kind: TemplateKind, isBlock: boolean) =>
-      createTemplateExtensions({ kind, isBlock, blocks: [] }).map((e) => e.name);
+      createTemplateExtensions({ styles: DEFAULT_PARAGRAPH_STYLES, kind, isBlock, blocks: [] }).map(
+        (e) => e.name,
+      );
     expect(names("letter", true)).not.toContain("block");
     expect(names("letter", false)).toContain("block");
     expect(names("email", false)).not.toContain("pageBreak");
@@ -136,7 +168,7 @@ describe("clipboard and email", () => {
     expect(editor.getJSON()).toEqual(emailDoc);
     expect(validateTemplateContent("email", editor.getJSON()).ok).toBe(true);
     editor.commands.setContent("<p>a</p><hr data-page-break>");
-    expect(JSON.stringify(editor.getJSON())).not.toContain("pageBreak");
+    expect(JSON.stringify(editor.getJSON())).not.toContain('"type":"pageBreak"');
     editor.destroy();
   });
 });
@@ -264,5 +296,138 @@ describe("templateJSON", () => {
     expect(protos.length).toBeGreaterThan(0);
     expect(protos.every((pr) => pr === Object.prototype)).toBe(true);
     expect(validateTemplateContent("letter", templateJSON(editor)).ok).toBe(true);
+  });
+});
+
+describe("paragraph styles and text marks", () => {
+  const SETTINGS = {
+    style: "caption",
+    textAlign: "justify",
+    spaceBeforePt: 0,
+    spaceAfterPt: 6,
+    lineSpacing: { exactPt: 14 },
+    indentLeftIn: 0.5,
+    indentRightIn: 0,
+    firstLine: { kind: "hanging", in: 0.25 },
+    keepWithNext: false,
+    keepLinesTogether: true,
+    pageBreakBefore: true,
+  };
+  const doc = (attrs: Record<string, unknown>, ...content: unknown[]) => ({
+    type: "doc",
+    content: [{ type: "paragraph", attrs, content }],
+  });
+  const marked = [
+    t("x", [{ type: "allCaps" }]),
+    t("y", [{ type: "fontSize", attrs: { pt: 14 } }]),
+    t("z", [{ type: "bold" }, { type: "allCaps" }]),
+  ];
+
+  it("round trips the style, every setting and both marks through JSON", () => {
+    const d = doc(SETTINGS, ...marked);
+    const editor = make("letter", d);
+    expect(editor.getJSON()).toEqual(d);
+    const out = validateTemplateContent("letter", editor.getJSON());
+    expect(out.ok).toBe(true);
+    editor.destroy();
+  });
+
+  it("round trips through HTML losslessly, including explicit zeros and false", () => {
+    const d = doc(SETTINGS, ...marked);
+    const editor = make("letter", d);
+    const html = editor.getHTML();
+    expect(html).toContain('data-style="caption"');
+    editor.commands.setContent(html);
+    expect(editor.getJSON()).toEqual(d);
+    editor.destroy();
+  });
+
+  it("does not leak the displayed inline style back into attrs", () => {
+    const editor = make("letter", doc({ ...NO_ATTRS, style: "heading1" }, t("Hi")));
+    const html = editor.getHTML();
+    expect(html).toContain("font-size");
+    editor.commands.setContent(html);
+    const attrs = editor.getJSON().content?.[0]?.attrs;
+    expect(attrs).toEqual({ ...NO_ATTRS, style: "heading1" });
+    editor.destroy();
+  });
+
+  it("shows the effective style inline", () => {
+    const editor = make("letter", doc({ ...NO_ATTRS, style: "heading1", spaceAfterPt: 3 }, t("H")));
+    const html = editor.getHTML();
+    expect(html).toContain("--p-weight: bold");
+    expect(html).toContain("3pt");
+    editor.destroy();
+  });
+
+  it("loads a converted heading as a Heading 1 paragraph", () => {
+    const legacy = {
+      type: "doc",
+      content: [{ type: "heading", attrs: { level: 1, textAlign: "center" }, content: [t("T")] }],
+    };
+    const editor = make("letter", convertHeadings(legacy as never));
+    const first = editor.getJSON().content?.[0];
+    expect(first?.type).toBe("paragraph");
+    expect(first?.attrs).toMatchObject({ style: "heading1", textAlign: "center" });
+    editor.destroy();
+  });
+
+  it("templateJSON leaves unset style and settings out but keeps explicit zeros", () => {
+    const editor = make("letter", doc({ ...NO_ATTRS, spaceAfterPt: 0 }, t("x")));
+    const attrs = templateJSON(editor).content?.[0];
+    expect(attrs).toMatchObject({ attrs: { spaceAfterPt: 0 } });
+    expect(JSON.stringify(attrs)).not.toContain('"style"');
+    expect(JSON.stringify(attrs)).not.toContain("spaceBeforePt");
+    editor.destroy();
+  });
+
+  it("has no heading node in rich kinds", () => {
+    const names = createTemplateExtensions({
+      styles: DEFAULT_PARAGRAPH_STYLES,
+      kind: "letter",
+      isBlock: false,
+      blocks: [],
+    }).map((e) => e.name);
+    expect(names).not.toContain("heading");
+  });
+
+  it("clearFormatting removes marks and settings but keeps the style", () => {
+    const editor = make("letter", doc(SETTINGS, ...marked));
+    editor.commands.selectAll();
+    editor.commands.clearFormatting();
+    expect(editor.getJSON()).toEqual(doc({ ...NO_ATTRS, style: "caption" }, t("xyz")));
+    editor.destroy();
+  });
+
+  it("setParagraphStyle and setParagraphSettings change the selected paragraph", () => {
+    const editor = make("letter", doc(NO_ATTRS, t("x")));
+    editor.commands.selectAll();
+    editor.commands.setParagraphStyle("heading2");
+    editor.commands.setParagraphSettings({ spaceAfterPt: 0, firstLine: { kind: "none" } });
+    expect(editor.getJSON().content?.[0]?.attrs).toMatchObject({
+      style: "heading2",
+      spaceAfterPt: 0,
+      firstLine: { kind: "none" },
+    });
+    editor.commands.setParagraphSettings({ spaceAfterPt: null });
+    expect(editor.getJSON().content?.[0]?.attrs?.spaceAfterPt).toBeNull();
+    editor.commands.setTextAlign("right");
+    expect(editor.getJSON().content?.[0]?.attrs?.textAlign).toBe("right");
+    editor.destroy();
+  });
+
+  it("toggleAllCaps and setFontSize apply and remove their marks", () => {
+    const editor = make("letter", doc(NO_ATTRS, t("x")));
+    editor.commands.selectAll();
+    editor.commands.toggleAllCaps();
+    editor.commands.setFontSize(18);
+    expect(editor.getJSON().content?.[0]?.content?.[0]?.marks).toEqual([
+      { type: "allCaps" },
+      { type: "fontSize", attrs: { pt: 18 } },
+    ]);
+    editor.commands.toggleAllCaps();
+    editor.commands.setFontSize(null);
+    expect(editor.getJSON().content?.[0]?.content?.[0]?.marks).toBeUndefined();
+    editor.destroy();
   });
 });

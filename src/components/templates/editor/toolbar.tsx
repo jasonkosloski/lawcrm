@@ -74,8 +74,8 @@ export function Toolbar({
       italic: e.isActive("italic"),
       underline: e.isActive("underline"),
       smallCaps: e.isActive("smallCaps"),
-      h1: e.isActive("heading", { level: 1 }),
-      h2: e.isActive("heading", { level: 2 }),
+      h1: e.isActive("paragraph", { style: "heading1" }),
+      h2: e.isActive("paragraph", { style: "heading2" }),
       bullet: e.isActive("bulletList"),
       ordered: e.isActive("orderedList"),
       center: e.isActive({ textAlign: "center" }),
@@ -210,14 +210,22 @@ export function Toolbar({
           <ToolButton
             label="Heading 1"
             active={s?.h1}
-            onClick={() => chain().toggleHeading({ level: 1 }).run()}
+            onClick={() =>
+              chain()
+                .setParagraphStyle(s?.h1 ? "body" : "heading1")
+                .run()
+            }
           >
             <span className="text-2xs font-semibold">H1</span>
           </ToolButton>
           <ToolButton
             label="Heading 2"
             active={s?.h2}
-            onClick={() => chain().toggleHeading({ level: 2 }).run()}
+            onClick={() =>
+              chain()
+                .setParagraphStyle(s?.h2 ? "body" : "heading2")
+                .run()
+            }
           >
             <span className="text-2xs font-semibold">H2</span>
           </ToolButton>

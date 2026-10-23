@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import { Fragment, Slice, type Node as PMNode, type Schema } from "@tiptap/pm/model";
 import type { TemplateDoc } from "@/lib/templates/schema";
+import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { createTemplateExtensions, templateJSON } from "./extensions";
 import { FitHighlight } from "./fit-highlight";
 
@@ -67,7 +68,13 @@ export function SubjectEditor({
   onEditor: (editor: Editor | null) => void;
 }) {
   const [extensions] = useState(() => [
-    ...createTemplateExtensions({ kind: "sms", isBlock: false, blocks: [], onEditField }),
+    ...createTemplateExtensions({
+      styles: DEFAULT_PARAGRAPH_STYLES,
+      kind: "sms",
+      isBlock: false,
+      blocks: [],
+      onEditField,
+    }),
     FitHighlight,
   ]);
   const [editorProps] = useState(() => ({

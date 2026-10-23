@@ -7,6 +7,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { fieldByPath } from "@/lib/templates/catalog";
 import type { BlockSource } from "@/lib/templates/render";
+import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { createTemplateExtensions } from "./extensions";
 
 const para = (...content: unknown[]) => ({
@@ -25,7 +26,12 @@ const BLOCK: BlockSource = {
 
 function Harness({ content, blocks = [] }: { content: unknown; blocks?: BlockSource[] }) {
   const editor = useEditor({
-    extensions: createTemplateExtensions({ kind: "letter", isBlock: false, blocks }),
+    extensions: createTemplateExtensions({
+      styles: DEFAULT_PARAGRAPH_STYLES,
+      kind: "letter",
+      isBlock: false,
+      blocks,
+    }),
     content: content as never,
     immediatelyRender: true,
   });

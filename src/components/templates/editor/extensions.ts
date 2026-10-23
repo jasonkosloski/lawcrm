@@ -6,20 +6,29 @@
  * so paste/setContent of anything else is dropped by ProseMirror.
  */
 
-import { Extension, type Editor, type Extensions } from "@tiptap/core";
+import { Extension, mergeAttributes, type Editor, type Extensions } from "@tiptap/core";
 import Document from "@tiptap/extension-document";
 import { ListItem, OrderedList } from "@tiptap/extension-list";
 import { Table, TableCell, TableHeader, TableRow, TableView } from "@tiptap/extension-table";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
+import Paragraph from "@tiptap/extension-paragraph";
 import TextAlign from "@tiptap/extension-text-align";
 import StarterKit from "@tiptap/starter-kit";
 import {
   CELL_SIDES,
   type CellBorders,
+  type ParagraphAttrs,
+  type ParagraphSettingKey,
   type TemplateDoc,
   type TemplateKind,
 } from "@/lib/templates/schema";
+import type { ParagraphStyle } from "@/lib/templates/paragraph-styles";
+import {
+  lineFactor,
+  resolveParagraph,
+  type ParagraphSettings as StyleSettings,
+} from "@/lib/templates/resolve-styles";
 import type { BlockSource } from "@/lib/templates/render";
 import { CELL_SIDE_ATTR } from "@/lib/templates/table-layout";
 import { BlockNode } from "./block-node";
@@ -27,9 +36,12 @@ import { FieldNode, ListFieldNode } from "./field-node";
 import { PageBreak } from "./page-break";
 import { RepeatEmptyNode, RepeatNode, ShowIfNode } from "./section-nodes";
 import { SmallCaps } from "./small-caps";
+import { AllCaps, FontSize } from "./text-marks";
 import { fillColumnWidths } from "./table-commands";
 
 export type TemplateExtensionOptions = {
+  /** The firm's paragraph styles: the editor draws each paragraph in its effective look. */
+  styles: ParagraphStyle[];
   kind: TemplateKind;
   isBlock: boolean;
   blocks: BlockSource[];
@@ -37,6 +49,124 @@ export type TemplateExtensionOptions = {
   onEditRule?: (pos: number) => void;
   onEditField?: (pos: number) => void;
 };
+
+/** Direct paragraph settings, in the content's attribute names. */
+export type ParagraphSettings = Pick<ParagraphAttrs, "textAlign" | ParagraphSettingKey>;
+
+/** Each direct setting's `data-*` attribute and how it travels as text. */
+const SETTING_DATA: Record<ParagraphSettingKey, { attr: string; json: boolean }> = {
+  spaceBeforePt: { attr: "data-space-before", json: false },
+  spaceAfterPt: { attr: "data-space-after", json: false },
+  lineSpacing: { attr: "data-line-spacing", json: true },
+  indentLeftIn: { attr: "data-indent-left", json: false },
+  indentRightIn: { attr: "data-indent-right", json: false },
+  firstLine: { attr: "data-first-line", json: true },
+  keepWithNext: { attr: "data-keep-next", json: true },
+  keepLinesTogether: { attr: "data-keep-lines", json: true },
+  pageBreakBefore: { attr: "data-page-break", json: true },
+};
+const SETTING_KEYS = Object.keys(SETTING_DATA) as ParagraphSettingKey[];
+/** Everything `clearFormatting` resets: the settings and the alignment. */
+const CLEARED = Object.fromEntries([...SETTING_KEYS, "textAlign"].map((k) => [k, null]));
+
+function settingAttribute(key: ParagraphSettingKey) {
+  const { attr, json } = SETTING_DATA[key];
+  return {
+    default: null,
+    // Values are JSON text (numbers, booleans, objects); absent means unset.
+    parseHTML: (el: HTMLElement) => {
+      const raw = el.getAttribute(attr);
+      if (raw === null) return null;
+      try {
+        return JSON.parse(raw) as unknown;
+      } catch {
+        return null;
+      }
+    },
+    renderHTML: (a: Record<string, unknown>) => {
+      const v = a[key];
+      return v === null || v === undefined ? {} : { [attr]: json ? JSON.stringify(v) : String(v) };
+    },
+  };
+}
+
+/** The effective look of a paragraph, as inline CSS, so the editor matches the output. */
+function paragraphCss(styles: ParagraphStyle[], attrs: Record<string, unknown>): string {
+  const settings: StyleSettings = {};
+  for (const k of SETTING_KEYS) {
+    if (attrs[k] !== null && attrs[k] !== undefined) {
+      (settings as Record<string, unknown>)[k] = attrs[k];
+    }
+  }
+  if (attrs.textAlign) settings.align = attrs.textAlign as StyleSettings["align"];
+  const key = typeof attrs.style === "string" ? attrs.style : undefined;
+  const r = resolveParagraph(key, settings, styles);
+  const factor = lineFactor(r.lineSpacing);
+  const css: string[] = [
+    `font-size:${String(r.sizePt)}pt`,
+    // Weight, slant and the like go through custom properties (BODY_CLASS
+    // reads them): a literal font-weight on a <p> would parse back as a bold mark.
+    `--p-weight:${r.bold ? "bold" : "normal"}`,
+    `--p-style:${r.italic ? "italic" : "normal"}`,
+    `--p-case:${r.allCaps ? "uppercase" : "none"}`,
+    `--p-variant:${r.smallCaps ? "small-caps" : "normal"}`,
+    `--p-deco:${r.underline ? "underline" : "none"}`,
+    `text-align:${r.align}`,
+    `margin-top:${String(r.spaceBeforePt)}pt`,
+    `margin-bottom:${String(r.spaceAfterPt)}pt`,
+    `margin-left:${String(r.indentLeftIn)}in`,
+    `margin-right:${String(r.indentRightIn)}in`,
+    `line-height:${factor === null ? `${String((r.lineSpacing as { exactPt: number }).exactPt)}pt` : String(factor)}`,
+  ];
+  if (r.firstLine.kind !== "none") {
+    const sign = r.firstLine.kind === "hanging" ? "-" : "";
+    css.push(`text-indent:${sign}${String(r.firstLine.in)}in`);
+  }
+  return css.join(";");
+}
+
+/** A paragraph with a style key and direct settings. Its HTML carries them as
+ *  data-* (lossless copy/paste) plus an inline style for display only. */
+const createParagraph = (styles: ParagraphStyle[]) =>
+  Paragraph.extend({
+    addAttributes() {
+      return {
+        style: {
+          default: null,
+          parseHTML: (el: HTMLElement) => el.getAttribute("data-style"),
+          renderHTML: (a: { style?: string | null }) => (a.style ? { "data-style": a.style } : {}),
+        },
+        ...Object.fromEntries(SETTING_KEYS.map((k) => [k, settingAttribute(k)])),
+      };
+    },
+    renderHTML({ node, HTMLAttributes }) {
+      return ["p", mergeAttributes(HTMLAttributes, { style: paragraphCss(styles, node.attrs) }), 0];
+    },
+  });
+
+/** Paragraph commands and clear formatting. */
+const ParagraphCommands = Extension.create({
+  name: "paragraphCommands",
+  addCommands() {
+    return {
+      setParagraphStyle:
+        (key) =>
+        ({ commands }) =>
+          commands.updateAttributes("paragraph", { style: key }),
+      setParagraphSettings:
+        (s) =>
+        ({ commands }) =>
+          commands.updateAttributes(
+            "paragraph",
+            Object.fromEntries(Object.entries(s).map(([k, v]) => [k, v ?? null])),
+          ),
+      clearFormatting:
+        () =>
+        ({ chain }) =>
+          chain().unsetAllMarks().updateAttributes("paragraph", CLEARED).run(),
+    };
+  },
+});
 
 /** A removed side shows as a faint dashed guide while editing. */
 const SIDE_STYLE = {
@@ -108,7 +238,21 @@ class TemplateTableView extends TableView {
  * refuse to serialize, so anything sent to the server goes through this.
  */
 export const templateJSON = (editor: Editor): TemplateDoc =>
-  JSON.parse(JSON.stringify(editor.getJSON())) as TemplateDoc;
+  stripUnsetParagraphAttrs(JSON.parse(JSON.stringify(editor.getJSON()))) as TemplateDoc;
+
+/** Unset (null) paragraph style and settings are left out: the content
+ *  contract says absent, and renderers read the JSON before validation. */
+function stripUnsetParagraphAttrs(node: {
+  type?: string;
+  attrs?: Record<string, unknown>;
+  content?: unknown[];
+}): unknown {
+  if (node.type === "paragraph" && node.attrs) {
+    for (const k of ["style", ...SETTING_KEYS]) if (node.attrs[k] === null) delete node.attrs[k];
+  }
+  node.content?.forEach((c) => stripUnsetParagraphAttrs(c as typeof node));
+  return node;
+}
 
 /** Keeps table column widths complete once any column is resized. */
 const FillColumnWidths = Extension.create({
@@ -185,7 +329,6 @@ export function createTemplateExtensions(opts: TemplateExtensionOptions): Extens
   // node would shadow that group name in content expressions.
   const blocks = [
     "paragraph",
-    "heading",
     "bulletList",
     "orderedList",
     "table",
@@ -200,7 +343,8 @@ export function createTemplateExtensions(opts: TemplateExtensionOptions): Extens
     Document.extend({ content: `(${blocks})+` }),
     StarterKit.configure({
       document: false,
-      heading: { levels: [1, 2, 3] },
+      heading: false,
+      paragraph: false,
       listItem: false,
       orderedList: false,
       horizontalRule: false,
@@ -219,8 +363,29 @@ export function createTemplateExtensions(opts: TemplateExtensionOptions): Extens
         return { start: parent.start };
       },
     }),
-    TextAlign.configure({ types: ["heading", "paragraph"] }),
+    createParagraph(opts.styles),
+    // Alignment travels as data-align; the inline display style never parses back.
+    TextAlign.extend({
+      addGlobalAttributes() {
+        return [
+          {
+            types: this.options.types,
+            attributes: {
+              textAlign: {
+                default: null,
+                parseHTML: (el: HTMLElement) => el.getAttribute("data-align"),
+                renderHTML: (a: { textAlign?: string | null }) =>
+                  a.textAlign ? { "data-align": a.textAlign } : {},
+              },
+            },
+          },
+        ];
+      },
+    }).configure({ types: ["paragraph"] }),
+    ParagraphCommands,
     SmallCaps,
+    AllCaps,
+    FontSize,
     Table.extend({
       addAttributes() {
         return {
@@ -248,4 +413,19 @@ export function createTemplateExtensions(opts: TemplateExtensionOptions): Extens
     RepeatEmptyNode.configure(sectionOpts),
     UpdateNodeAttrs,
   ];
+}
+
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    paragraphCommands: {
+      /** Gives the selected paragraphs a style (by key). */
+      setParagraphStyle: (key: string) => ReturnType;
+      /** Sets direct settings; null/undefined clears one. */
+      setParagraphSettings: (s: {
+        [K in keyof ParagraphSettings]?: ParagraphSettings[K] | null;
+      }) => ReturnType;
+      /** Removes all marks and all direct settings; keeps the style. */
+      clearFormatting: () => ReturnType;
+    };
+  }
 }

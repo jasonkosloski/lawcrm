@@ -7,12 +7,18 @@ import { describe, expect, it } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import { Editor } from "@tiptap/react";
 import type { TemplateData } from "@/lib/templates/catalog";
+import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { createTemplateExtensions } from "./extensions";
 import { Toolbar } from "./toolbar";
 
 function setup() {
   const editor = new Editor({
-    extensions: createTemplateExtensions({ kind: "filing", isBlock: false, blocks: [] }),
+    extensions: createTemplateExtensions({
+      styles: DEFAULT_PARAGRAPH_STYLES,
+      kind: "filing",
+      isBlock: false,
+      blocks: [],
+    }),
     content: { type: "doc", content: [{ type: "paragraph" }] } as never,
   });
   render(

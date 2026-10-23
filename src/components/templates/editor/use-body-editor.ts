@@ -9,6 +9,8 @@
 import { useMemo } from "react";
 import { useEditor } from "@tiptap/react";
 import type { BlockSource } from "@/lib/templates/render";
+import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
+import type { ParagraphStyle } from "@/lib/templates/paragraph-styles";
 import type { TemplateDoc, TemplateKind } from "@/lib/templates/schema";
 import { cn } from "@/lib/utils";
 import { createTemplateExtensions, templateJSON } from "./extensions";
@@ -24,6 +26,8 @@ export const BODY_CLASS = cn(
   "[&_.tableWrapper]:overflow-x-auto [&.resize-cursor]:cursor-col-resize",
   "[&_.column-resize-handle]:pointer-events-none [&_.column-resize-handle]:absolute [&_.column-resize-handle]:-right-0.5 [&_.column-resize-handle]:inset-y-0 [&_.column-resize-handle]:w-1 [&_.column-resize-handle]:bg-accent",
   "[&_.selectedCell]:bg-accent/10",
+  // A paragraph's style look arrives as custom properties (see extensions.ts).
+  "[&_p]:[font-weight:var(--p-weight,normal)] [&_p]:[font-style:var(--p-style,normal)] [&_p]:[text-transform:var(--p-case,none)] [&_p]:[font-variant:var(--p-variant,normal)] [&_p]:[text-decoration:var(--p-deco,none)]",
 );
 
 const EDITOR_PROPS = { attributes: { "aria-label": "Template body", class: BODY_CLASS } };
@@ -42,14 +46,18 @@ export function useBodyEditor(opts: {
   /** A user edit (not the initial load). */
   onEdit: () => void;
   onFocus: () => void;
+  /** The firm's paragraph styles; must be stable. Defaults to the built-ins. */
+  styles?: ParagraphStyle[];
   /** Must be stable: baked into the extensions. */
   onEditField: (pos: number) => void;
   onEditRule: (pos: number) => void;
 }) {
   const { kind, isBlock, blocks, onEditField, onEditRule } = opts;
+  const styles = opts.styles ?? DEFAULT_PARAGRAPH_STYLES;
   const extensions = useMemo(
     () => [
       ...createTemplateExtensions({
+        styles,
         kind,
         isBlock,
         blocks,
@@ -59,7 +67,7 @@ export function useBodyEditor(opts: {
       }),
       FitHighlight,
     ],
-    [kind, isBlock, blocks, onEditField, onEditRule],
+    [kind, isBlock, blocks, styles, onEditField, onEditRule],
   );
   return useEditor(
     {

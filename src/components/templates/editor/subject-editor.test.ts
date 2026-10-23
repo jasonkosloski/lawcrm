@@ -4,13 +4,19 @@ import { describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
 import { Fragment, Slice } from "@tiptap/pm/model";
 import { validateSubject } from "@/lib/templates/schema";
+import { DEFAULT_PARAGRAPH_STYLES } from "@/lib/templates/page-style";
 import { createTemplateExtensions } from "./extensions";
 import { flattenPasted } from "./subject-editor";
 
 describe("flattenPasted", () => {
   it("joins paragraphs and line breaks with spaces, keeping field chips", () => {
     const editor = new Editor({
-      extensions: createTemplateExtensions({ kind: "sms", isBlock: false, blocks: [] }),
+      extensions: createTemplateExtensions({
+        styles: DEFAULT_PARAGRAPH_STYLES,
+        kind: "sms",
+        isBlock: false,
+        blocks: [],
+      }),
     });
     const { schema } = editor;
     const p = (...c: Parameters<typeof schema.text>[0][]) =>
@@ -42,7 +48,12 @@ describe("flattenPasted", () => {
 
   it("leaves a single-line paste alone", () => {
     const editor = new Editor({
-      extensions: createTemplateExtensions({ kind: "sms", isBlock: false, blocks: [] }),
+      extensions: createTemplateExtensions({
+        styles: DEFAULT_PARAGRAPH_STYLES,
+        kind: "sms",
+        isBlock: false,
+        blocks: [],
+      }),
     });
     const slice = new Slice(
       Fragment.from(editor.schema.nodes.paragraph.create(null, editor.schema.text("x"))),
