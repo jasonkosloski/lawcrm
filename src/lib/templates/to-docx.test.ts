@@ -595,3 +595,17 @@ describe("resolvedToDocx paragraph styles", () => {
     expect(pprs[1]).toContain("<w:numPr>");
   });
 });
+
+describe("whole-twip spacing", () => {
+  it("rounds fractional space before/after to whole twips", async () => {
+    const base = letterStyle();
+    const styles = base.styles.map((st) =>
+      st.key === "body"
+        ? { ...st, values: { ...st.values, spaceBeforePt: 1.03, spaceAfterPt: 6.37 } }
+        : st,
+    );
+    const { styles: xml } = await build({ style: { ...base, styles } });
+    expect(xml).toContain('w:before="21"');
+    expect(xml).toContain('w:after="127"');
+  });
+});

@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolvedToHtml } from "./to-html";
 import { captionFixture, mergedCaptionFixture, renderFixture } from "./converters-fixture";
 import { defaultParagraphStyles } from "./paragraph-styles";
 import { resolvePageStyle, DEFAULT_DOCUMENT_STYLE } from "./page-style";
-import { resolvedToPageParts, pageFontFaceCss } from "./to-html";
+import { pageFontFaceCss, resolvedToHtml, resolvedToPageParts } from "./to-html";
 import { renderTemplate } from "./render";
 import { SAMPLE_TEMPLATE_DATA } from "./catalog";
 import { DEFAULT_PARAGRAPH_STYLES } from "./page-style";
@@ -246,7 +245,7 @@ describe("paragraph styles in HTML", () => {
     expect(html).toContain("text-transform:uppercase");
     expect(html).toContain("font-size:9pt");
   });
-  it("cell and list paragraphs have no spacing unless set directly", () => {
+  it("cell paragraphs have no spacing unless set directly", () => {
     const cellDoc = (attrs?: object) => ({
       type: "table",
       content: [
@@ -258,5 +257,14 @@ describe("paragraph styles in HTML", () => {
     });
     expect(run([cellDoc()])).toContain("margin-bottom:0pt");
     expect(run([cellDoc({ spaceAfterPt: 6 })])).toContain("margin-bottom:6pt");
+  });
+  it("list item paragraphs take their style's space after, a direct value wins", () => {
+    const listDoc = (attrs?: object) => ({
+      type: "bulletList",
+      content: [{ type: "listItem", content: [para("i", attrs)] }],
+    });
+    const html = run([listDoc()]);
+    expect(html).toMatch(/<li><p style="[^"]*margin-bottom:12pt/);
+    expect(run([listDoc({ spaceAfterPt: 3 })])).toMatch(/<li><p style="[^"]*margin-bottom:3pt/);
   });
 });

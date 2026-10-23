@@ -26,9 +26,10 @@ export const BODY_CLASS = cn(
   "[&_.tableWrapper]:overflow-x-auto [&.resize-cursor]:cursor-col-resize",
   "[&_.column-resize-handle]:pointer-events-none [&_.column-resize-handle]:absolute [&_.column-resize-handle]:-right-0.5 [&_.column-resize-handle]:inset-y-0 [&_.column-resize-handle]:w-1 [&_.column-resize-handle]:bg-accent",
   "[&_.selectedCell]:bg-accent/10",
-  // Cell and list paragraphs have no space after unless they carry their own
-  // value (matches Word, PDF and the preview); beats the inline style.
-  "[&_td>p:not([data-space-after])]:!mb-0 [&_th>p:not([data-space-after])]:!mb-0 [&_li>p:not([data-space-after])]:!mb-0",
+  // Cell paragraphs have no space after unless they carry their own value
+  // (matches Word, PDF and the preview); beats the inline style. List items
+  // keep their paragraph style's spacing, as in every output.
+  "[&_td>p:not([data-space-after])]:!mb-0 [&_th>p:not([data-space-after])]:!mb-0",
   // A paragraph's style look arrives as custom properties (see extensions.ts).
   "[&_p]:[font-weight:var(--p-weight,normal)] [&_p]:[font-style:var(--p-style,normal)] [&_p]:[text-transform:var(--p-case,none)] [&_p]:[font-variant:var(--p-variant,normal)] [&_p]:[text-decoration:var(--p-deco,none)]",
 );

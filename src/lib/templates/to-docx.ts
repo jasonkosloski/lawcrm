@@ -97,8 +97,8 @@ const runOf = (v: StyleValues) => ({
 const paragraphOf = (v: StyleValues) => ({
   alignment: ALIGN[v.align],
   spacing: {
-    before: v.spaceBeforePt * 20,
-    after: v.spaceAfterPt * 20,
+    before: Math.round(v.spaceBeforePt * 20),
+    after: Math.round(v.spaceAfterPt * 20),
     ...lineProps(v.lineSpacing),
   },
   indent: {

@@ -57,9 +57,9 @@ const MARK_TAGS: [string, string, string][] = [
   ["smallCaps", "span data-small-caps", "span"],
 ];
 
-/** Where a paragraph sits. Body paragraphs take their style's spacing; list
- *  and table-cell paragraphs have none unless set directly (Word and the PDF
- *  draw cell paragraphs flush, and the preview always did). */
+/** Where a paragraph sits. Body and list-item paragraphs take their style's
+ *  spacing (as Word and the PDF do); table-cell paragraphs are flush unless
+ *  their spacing is set directly. */
 type Where = "body" | "flush";
 
 /** Word's "single" is the font's natural leading, about 1.15 em in CSS. */
@@ -67,10 +67,9 @@ const CSS_LINE_FACTOR = 1.15;
 const num = (n: number) => String(+n.toFixed(2));
 
 /** The inline style for a paragraph's resolved values. Every property is in
- *  the sanitizer's allowlist; email clients never see the preview CSS, so
- *  the in-app preview has no
- *  stylesheet for them. Sent emails do not keep these (the outgoing-mail
- *  sanitizer strips style attributes). */
+ *  the sanitizer's allowlist, so the in-app preview needs no stylesheet for
+ *  them. Sent emails do not keep these (the outgoing-mail sanitizer strips
+ *  style attributes). */
 function paragraphStyle(
   v: StyleValues,
   direct: { spaceBeforePt?: number; spaceAfterPt?: number } | undefined,
@@ -133,7 +132,7 @@ const align = (a?: string | null) => (a ? ` style="text-align:${a}"` : "");
 const flushBlock = (b: ResolvedBlock) => block(b, "flush");
 
 function listItem(li: ResolvedListItem): string {
-  return `<li>${li.content.map(flushBlock).join("")}</li>`;
+  return `<li>${li.content.map((b) => block(b, "body")).join("")}</li>`;
 }
 
 /** Borders and vertical alignment travel as data attributes the page

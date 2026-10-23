@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { Editor } from "@tiptap/core";
+import { CellSelection } from "@tiptap/pm/tables";
 import { convertHeadings } from "@/lib/templates/headings";
 import { fieldByPath, listByPath } from "@/lib/templates/catalog";
 import { validateTemplateContent, type TemplateKind } from "@/lib/templates/schema";
@@ -417,6 +418,53 @@ describe("paragraph styles and text marks", () => {
     editor.destroy();
   });
 
+  it("style, settings and clear formatting reach every paragraph of a cell selection", () => {
+    const table = {
+      type: "table",
+      attrs: { width: null },
+      content: [
+        {
+          type: "tableRow",
+          content: [
+            cell("tableCell", p(t("a", [{ type: "bold" }]))),
+            cell("tableCell", p(t("b", [{ type: "italic" }]))),
+          ],
+        },
+      ],
+    };
+    const editor = make("letter", { type: "doc", content: [table] });
+    const cells: number[] = [];
+    editor.state.doc.descendants((n, pos) => {
+      if (n.type.name === "tableCell") cells.push(pos);
+    });
+    const select = () =>
+      editor.view.dispatch(
+        editor.state.tr.setSelection(CellSelection.create(editor.state.doc, cells[0], cells[1])),
+      );
+    const paras = () => {
+      const out: { attrs: Record<string, unknown>; marks: unknown }[] = [];
+      editor.state.doc.descendants((n) => {
+        if (n.type.name === "paragraph")
+          out.push({ attrs: n.attrs, marks: n.firstChild?.marks.map((m) => m.type.name) });
+      });
+      return out;
+    };
+    select();
+    editor.commands.setParagraphStyle("caption");
+    editor.commands.setParagraphSettings({ spaceAfterPt: 4 });
+    expect(paras().map((x) => [x.attrs.style, x.attrs.spaceAfterPt])).toEqual([
+      ["caption", 4],
+      ["caption", 4],
+    ]);
+    select();
+    editor.commands.clearFormatting();
+    expect(paras().map((x) => [x.attrs.style, x.attrs.spaceAfterPt, x.marks])).toEqual([
+      ["caption", null, []],
+      ["caption", null, []],
+    ]);
+    editor.destroy();
+  });
+
   it("toggleAllCaps and setFontSize apply and remove their marks", () => {
     const editor = make("letter", doc(NO_ATTRS, t("x")));
     editor.commands.selectAll();
@@ -454,7 +502,8 @@ describe("paragraph styles and text marks", () => {
     expect(zero.getHTML()).toContain('data-space-after="0"');
     zero.destroy();
     expect(BODY_CLASS).toContain("[&_td>p:not([data-space-after])]:!mb-0");
-    expect(BODY_CLASS).toContain("[&_li>p:not([data-space-after])]:!mb-0");
+    // List items keep their style's space after (R5), so no flush rule for them.
+    expect(BODY_CLASS).not.toContain("li>p");
   });
 
   it("setParagraphStyle('body') unsets the style", () => {
