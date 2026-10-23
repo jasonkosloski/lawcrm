@@ -636,6 +636,28 @@ describe("sanitizeOutgoingEmailHtml - allowed surface passes through", () => {
     );
   });
 
+  test("margin shorthand expands to bounded longhands", () => {
+    const clean = (style: string) => cleanOutgoingStyleValue(style);
+    expect(clean("margin:0pt 0in 12pt")).toBe(
+      "margin-top:0pt;margin-right:0in;margin-bottom:12pt;margin-left:0in",
+    );
+    expect(clean("margin:6pt")).toBe(
+      "margin-top:6pt;margin-right:6pt;margin-bottom:6pt;margin-left:6pt",
+    );
+    expect(clean("margin:1pt 2pt 3pt 4pt")).toBe(
+      "margin-top:1pt;margin-right:2pt;margin-bottom:3pt;margin-left:4pt",
+    );
+    expect(clean("margin:200pt")).toBe("");
+    expect(clean("margin:1pt 2%")).toBe("");
+    expect(clean("margin:1pt 2pt 3pt 4pt 5pt")).toBe("");
+    expect(clean("margin:-5pt")).toBe("");
+    expect(clean("margin:0 auto")).toBe("");
+    expect(sanitizeOutgoingEmailHtml('<p style="margin:0pt 0in 12pt">x</p>')).toBe(
+      '<p style="margin-top:0pt;margin-right:0in;margin-bottom:12pt;margin-left:0in">x</p>',
+    );
+    expect(sanitizeOutgoingEmailHtml('<td style="margin:1pt">x</td>')).not.toContain("margin");
+  });
+
   test("tel link survives", () => {
     expect(sanitizeOutgoingEmailHtml('<a href="tel:+15551234567">c</a>')).toBe(
       '<a href="tel:+15551234567" rel="noopener noreferrer" target="_blank">c</a>',

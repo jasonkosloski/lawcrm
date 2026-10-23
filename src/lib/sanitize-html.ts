@@ -451,6 +451,20 @@ function outgoingMargin(v: string): boolean {
   return pt !== null && pt >= 0 && pt <= 144;
 }
 
+/** `margin` value -> [prop, value] longhands in CSS order, or null when it
+ *  isn't 1-4 plain lengths (percentages, `auto`, calc() and so on). */
+function expandMarginShorthand(value: string): (readonly [string, string])[] | null {
+  const v = value.split(/\s+/);
+  if (v.length < 1 || v.length > 4 || !v.every((x) => LENGTH_PARTS.test(x))) return null;
+  const [t, r = t, bo = t, l = r] = v;
+  return [
+    ["margin-top", t],
+    ["margin-right", r],
+    ["margin-bottom", bo],
+    ["margin-left", l],
+  ];
+}
+
 /**
  * Strip `!important` and drop declarations that break the outgoing bounds.
  * Pure on the style string so the email editor's style passthrough filters
@@ -472,15 +486,24 @@ export function cleanOutgoingStyleValue(style: string, tag?: "p" | "span" | "td"
       .trim()
       .toLowerCase();
     if (!/^[a-z-]+$/.test(prop) || !value || /!/.test(value)) continue;
-    const bound = OUTGOING_STYLE_BOUNDS[prop];
-    if (bound && !bound(value)) continue;
-    // With a tag, also apply that tag's property allowlist (what the
-    // sanitizer would drop later), so the editor can filter identically.
-    if (tag) {
-      const allowed = OUTGOING_OPTIONS.allowedStyles?.[tag]?.[prop];
-      if (!allowed || !allowed.some((re) => re.test(value))) continue;
+    // `margin:` shorthand (1-4 lengths) becomes the four longhands, each
+    // bounded below; any invalid part drops the whole shorthand. Nothing
+    // else is expanded.
+    const parts = prop === "margin" ? expandMarginShorthand(value) : [[prop, value] as const];
+    if (!parts) continue;
+    const ok: string[] = [];
+    for (const [p, v] of parts) {
+      const bound = OUTGOING_STYLE_BOUNDS[p];
+      if (bound && !bound(v)) break;
+      // With a tag, also apply that tag's property allowlist (what the
+      // sanitizer would drop later), so the editor can filter identically.
+      if (tag) {
+        const allowed = OUTGOING_OPTIONS.allowedStyles?.[tag]?.[p];
+        if (!allowed || !allowed.some((re) => re.test(v))) break;
+      }
+      ok.push(`${p}:${v}`);
     }
-    kept.push(`${prop}:${value}`);
+    if (ok.length === parts.length) kept.push(...ok);
   }
   return kept.join(";");
 }

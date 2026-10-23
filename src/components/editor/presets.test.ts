@@ -204,10 +204,10 @@ describe("email preset", () => {
     expect(out).toContain("<table");
     expect(out).toContain("<th");
     expect(out).not.toContain("colgroup");
-    // Server side: the same rendered HTML, unfolded, keeps spacing through
-    // the outgoing sanitizer (happy-dom folds margins; the server never sees that).
-    const sent = sanitizeOutgoingEmailHtml(resolvedToHtml(renderFixture()));
-    expect(sent).toContain("margin-bottom:12pt");
+    // Whatever the DOM serialized (longhands or a folded shorthand), the
+    // server keeps the spacing.
+    const sent = sanitizeOutgoingEmailHtml(out);
+    expect(sent).toMatch(/margin-bottom:12pt/);
     expect(sent).toContain("line-height:1.15");
     expect(sent).toContain("<table");
     expect(sent).toContain("text-align:center");
