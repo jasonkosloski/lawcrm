@@ -94,7 +94,11 @@ export default async function CourtFormatEditorRoute({
           marginLeftIn: num(row.marginLeftIn),
           pageNumbers: row.pageNumbers as PageNumberPosition | null,
           paperSize: row.paperSize as PaperSize,
-          styleOverrides: readStyleOverrides(row.styleOverrides, row),
+          styleOverrides: readStyleOverrides(
+            row.styleOverrides,
+            row,
+            new Set(house.paragraphStyles.map((s) => s.key)),
+          ),
         },
         replacements: row.blocks.map((b) => ({
           blockId: b.blockId,

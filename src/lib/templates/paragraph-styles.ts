@@ -229,9 +229,22 @@ export function newStyleKey(name: string, taken: Set<string>): string {
   }
 }
 
-/** Stored overrides with invalid entries dropped. The legacy body columns
- *  are overlaid as the body override (stored values win); a later task
- *  removes this with the court-format migration. */
+/** Keeps only the fields of a sparse override that pass validation. */
+function validFields(raw: Record<string, unknown>): Partial<StyleValues> {
+  const out: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(raw)) {
+    const one = styleOverrideSchema.safeParse({ [field]: value });
+    if (one.success && field in one.data) out[field] = (one.data as Record<string, unknown>)[field];
+  }
+  return out as Partial<StyleValues>;
+}
+
+/** Stored overrides with invalid entries dropped, and keys the firm no
+ *  longer has dropped too (when `firmKeys` is given). Courts created before
+ *  per-style overrides keep their size and spacing only in the legacy
+ *  columns, so those are overlaid: Body gets the size, line spacing and
+ *  space after; Heading 1-3 get the size plus 6/4/2 pt and the same line
+ *  spacing and space after (today's heading look). Stored values win. */
 export function readStyleOverrides(
   stored: unknown,
   legacy: {
@@ -239,21 +252,38 @@ export function readStyleOverrides(
     lineSpacing: string | null;
     spaceAfterPt: number | null;
   },
+  firmKeys?: ReadonlySet<string>,
 ): Record<string, Partial<StyleValues>> {
   const out: Record<string, Partial<StyleValues>> = {};
   if (stored && typeof stored === "object" && !Array.isArray(stored)) {
     for (const [key, value] of Object.entries(stored)) {
+      if (firmKeys && !firmKeys.has(key)) continue;
       const parsed = styleOverrideSchema.safeParse(value);
-      if (parsed.success) out[key] = parsed.data as Partial<StyleValues>;
+      if (parsed.success) out[key] = parsed.data;
     }
   }
-  const body: Partial<StyleValues> = {};
-  if (legacy.fontSizeHalfPt !== null) body.sizePt = legacy.fontSizeHalfPt / 2;
-  if (legacy.lineSpacing !== null)
-    body.lineSpacing = legacy.lineSpacing as StyleValues["lineSpacing"];
-  if (legacy.spaceAfterPt !== null) body.spaceAfterPt = legacy.spaceAfterPt;
-  const merged = { ...body, ...out.body };
-  if (Object.keys(merged).length > 0) out.body = merged;
+  const spacing = (LINE_SPACINGS as readonly string[]).includes(legacy.lineSpacing ?? "")
+    ? (legacy.lineSpacing as LineSpacing)
+    : undefined;
+  const derive = (sizePt: number | undefined): Partial<StyleValues> => {
+    const raw: Record<string, unknown> = {};
+    if (sizePt !== undefined) raw.sizePt = sizePt;
+    if (spacing !== undefined) raw.lineSpacing = spacing;
+    if (legacy.spaceAfterPt !== null) raw.spaceAfterPt = legacy.spaceAfterPt;
+    return validFields(raw);
+  };
+  const size = legacy.fontSizeHalfPt === null ? undefined : legacy.fontSizeHalfPt / 2;
+  const targets: [string, Partial<StyleValues>][] = [
+    ["body", derive(size)],
+    ["heading1", derive(size === undefined ? undefined : headingSizePt(size, 1))],
+    ["heading2", derive(size === undefined ? undefined : headingSizePt(size, 2))],
+    ["heading3", derive(size === undefined ? undefined : headingSizePt(size, 3))],
+  ];
+  for (const [key, derived] of targets) {
+    if (firmKeys && !firmKeys.has(key)) continue;
+    const merged = { ...derived, ...out[key] };
+    if (Object.keys(merged).length > 0) out[key] = merged;
+  }
   return out;
 }
 
@@ -269,6 +299,6 @@ export function legacyBodyColumns(overrides: Record<string, Partial<StyleValues>
   return {
     fontSizeHalfPt: body.sizePt === undefined ? null : Math.round(body.sizePt * 2),
     lineSpacing: typeof body.lineSpacing === "string" ? body.lineSpacing : null,
-    spaceAfterPt: body.spaceAfterPt ?? null,
+    spaceAfterPt: body.spaceAfterPt === undefined ? null : Math.round(body.spaceAfterPt),
   };
 }

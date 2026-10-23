@@ -154,11 +154,30 @@ export async function saveParagraphStyles(input: {
   if (typeof body.values.lineSpacing === "string") legacy.lineSpacing = body.values.lineSpacing;
 
   const updatedAt = new Date();
-  const { count } = await prisma.documentStyle.updateMany({
-    where: { id: current.id, updatedAt: new Date(head.data.expectedUpdatedAt) },
-    data: { paragraphStyles: styles as never, ...legacy, updatedAt },
+  const removedKeys = new Set(removed.map((s) => s.key));
+  const saved = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.documentStyle.updateMany({
+      where: { id: current.id, updatedAt: new Date(head.data.expectedUpdatedAt) },
+      data: { paragraphStyles: styles as never, ...legacy, updatedAt },
+    });
+    if (count === 0) return false;
+    // A deleted style must not linger in any court's overrides, or every
+    // later save of that court would fail with "No style called ...".
+    if (removedKeys.size > 0) {
+      const courts = await tx.courtFormat.findMany({ select: { id: true, styleOverrides: true } });
+      for (const court of courts) {
+        const stored = court.styleOverrides;
+        if (!stored || typeof stored !== "object" || Array.isArray(stored)) continue;
+        const kept = Object.fromEntries(
+          Object.entries(stored).filter(([k]) => !removedKeys.has(k)),
+        );
+        if (Object.keys(kept).length === Object.keys(stored).length) continue;
+        await tx.courtFormat.update({ where: { id: court.id }, data: { styleOverrides: kept } });
+      }
+    }
+    return true;
   });
-  if (count === 0) return { ok: false, error: STALE };
+  if (!saved) return { ok: false, error: STALE };
 
   await logTemplateChange(userId, "Paragraph styles updated", null);
   revalidatePath("/settings/documents");

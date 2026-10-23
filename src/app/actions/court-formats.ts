@@ -50,7 +50,7 @@ const schema = z.object({
   courtSystem: z.enum(COURT_SYSTEMS),
   fontKey: z.enum(FONT_KEYS).nullable(),
   /** Sparse per-style overrides; Body's size/spacing are mirrored to the legacy columns. */
-  styleOverrides: z.record(z.string(), z.unknown()).optional(),
+  styleOverrides: z.record(z.string(), z.unknown()),
   marginTopIn: margin,
   marginRightIn: margin,
   marginBottomIn: margin,
@@ -93,12 +93,12 @@ export async function saveCourtFormat(input: CourtFormatInput): Promise<SaveResu
 
   const firmKeys = new Set((await getDocumentStyle()).paragraphStyles.map((s) => s.key));
   const styleOverrides: Record<string, Partial<StyleValues>> = {};
-  for (const [key, raw] of Object.entries(rawOverrides ?? {})) {
+  for (const [key, raw] of Object.entries(rawOverrides)) {
     if (!firmKeys.has(key)) return { ok: false, error: `No style called ${key}.` };
     const o = styleOverrideSchema.safeParse(raw);
     if (!o.success) return { ok: false, error: o.error.issues[0]?.message ?? "Invalid style." };
     // A style with nothing overridden sends nothing.
-    if (Object.keys(o.data).length > 0) styleOverrides[key] = o.data as Partial<StyleValues>;
+    if (Object.keys(o.data).length > 0) styleOverrides[key] = o.data;
   }
   const values = { ...rest, ...legacyBodyColumns(styleOverrides), styleOverrides };
 

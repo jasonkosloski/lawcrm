@@ -206,6 +206,34 @@ describe("saveParagraphStyles", () => {
     expect(await getDocumentStyle()).toMatchObject({ paragraphStyles: defaults() });
   });
 
+  test("removing a custom style strips its key from every court's overrides, keeping the rest", async () => {
+    expect((await call([...defaults(), custom("Caption 2")])).ok).toBe(true);
+    const mk = (name: string, styleOverrides: object) =>
+      prisma.courtFormat.create({ data: { name, courtSystem: "state", styleOverrides } });
+    const a = await mk("A", { "caption-2": { bold: true }, body: { sizePt: 14 } });
+    const b = await mk("B", { "caption-2": { italic: true } });
+    const c = await mk("C", { body: { sizePt: 13 } });
+    expect((await call(defaults())).ok).toBe(true);
+    const rows = await prisma.courtFormat.findMany({ orderBy: { name: "asc" } });
+    expect(rows.map((r) => r.styleOverrides)).toEqual([
+      { body: { sizePt: 14 } },
+      {},
+      { body: { sizePt: 13 } },
+    ]);
+    expect([a.id, b.id, c.id]).toEqual(rows.map((r) => r.id));
+  });
+
+  test("a stale save leaves court overrides alone", async () => {
+    expect((await call([...defaults(), custom("Caption 2")])).ok).toBe(true);
+    const court = await prisma.courtFormat.create({
+      data: { name: "A", courtSystem: "state", styleOverrides: { "caption-2": { bold: true } } },
+    });
+    const r = await call(defaults(), { expectedUpdatedAt: new Date(0).toISOString() });
+    expect(r.ok).toBe(false);
+    const row = await prisma.courtFormat.findUniqueOrThrow({ where: { id: court.id } });
+    expect(row.styleOverrides).toEqual({ "caption-2": { bold: true } });
+  });
+
   test("a valid save persists, syncs legacy Body columns, logs and revalidates", async () => {
     const styles = defaults();
     styles[0] = {

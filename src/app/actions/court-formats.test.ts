@@ -17,6 +17,7 @@ import {
   saveCourtFormat,
   setCourtFormatActive,
 } from "@/app/actions/court-formats";
+import { readStyleOverrides } from "@/lib/templates/paragraph-styles";
 import { resetDb, seedFirm, seedUser } from "@/test/integration-helpers";
 
 let userId: string;
@@ -55,6 +56,7 @@ const base = {
   name: "Colorado District",
   courtSystem: "state" as const,
   fontKey: null,
+  styleOverrides: {} as Record<string, unknown>,
   marginTopIn: null,
   marginRightIn: null,
   marginBottomIn: null,
@@ -159,6 +161,46 @@ describe("saveCourtFormat", () => {
     const r = await saveCourtFormat({ ...base, styleOverrides: { nope: { bold: true } } });
     expect(r).toEqual({ ok: false, error: "No style called nope." });
     expect(await prisma.courtFormat.count()).toBe(0);
+  });
+
+  test("a fractional Body space after is rounded for the integer legacy column", async () => {
+    const r = await create({ styleOverrides: { body: { spaceAfterPt: 6.5, sizePt: 11.5 } } });
+    const row = await prisma.courtFormat.findUniqueOrThrow({ where: { id: r.id } });
+    expect(row.styleOverrides).toEqual({ body: { spaceAfterPt: 6.5, sizePt: 11.5 } });
+    expect([row.fontSizeHalfPt, row.spaceAfterPt]).toEqual([23, 7]);
+  });
+
+  test("a save that omits styleOverrides is refused, not treated as clearing them", async () => {
+    const c = await create({ styleOverrides: { body: { sizePt: 14 } } });
+    const r = await saveCourtFormat({
+      ...base,
+      styleOverrides: undefined,
+      id: c.id,
+      expectedUpdatedAt: c.updatedAt,
+    } as never);
+    expect(r.ok).toBe(false);
+    const row = await prisma.courtFormat.findUniqueOrThrow({ where: { id: c.id } });
+    expect(row.styleOverrides).toEqual({ body: { sizePt: 14 } });
+    expect(row.fontSizeHalfPt).toBe(28);
+  });
+
+  test("a legacy-only court opened and saved untouched keeps its values", async () => {
+    const legacy = { fontSizeHalfPt: 28, lineSpacing: "double", spaceAfterPt: 6 };
+    const row0 = await prisma.courtFormat.create({
+      data: { ...base, ...legacy, replacements: undefined, styleOverrides: {} } as never,
+    });
+    const loaded = readStyleOverrides(row0.styleOverrides, row0);
+    const r = await saveCourtFormat({
+      ...base,
+      id: row0.id,
+      expectedUpdatedAt: row0.updatedAt.toISOString(),
+      styleOverrides: loaded,
+    });
+    expect(r.ok).toBe(true);
+    const row = await prisma.courtFormat.findUniqueOrThrow({ where: { id: row0.id } });
+    expect([row.fontSizeHalfPt, row.lineSpacing, row.spaceAfterPt]).toEqual([28, "double", 6]);
+    expect(readStyleOverrides(row.styleOverrides, row)).toEqual(loaded);
+    expect(loaded.heading1).toEqual({ sizePt: 20, lineSpacing: "double", spaceAfterPt: 6 });
   });
 
   test("clearing the Body override clears the legacy columns on update", async () => {

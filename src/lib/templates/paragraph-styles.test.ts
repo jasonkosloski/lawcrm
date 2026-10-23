@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   BUILT_IN_KEYS,
   defaultParagraphStyles,
+  legacyBodyColumns,
   newStyleKey,
   paragraphStylesSchema,
   parseParagraphStyles,
+  readStyleOverrides,
   styleOverrideSchema,
   type ParagraphStyle,
 } from "./paragraph-styles";
@@ -93,6 +95,10 @@ describe("paragraphStylesSchema rejects", () => {
   it("space after 73", () => reject(withValues({ spaceAfterPt: 73 })));
   it("exactPt 5", () => reject(withValues({ lineSpacing: { exactPt: 5 } })));
   it("indentLeft 4.01", () => reject(withValues({ indentLeftIn: 4.01 })));
+  it("firstLine.in 4.01", () => {
+    reject(withValues({ firstLine: { kind: "indent", in: 4.01 } }));
+    reject(withValues({ firstLine: { kind: "hanging", in: 4.01 } }));
+  });
   it("a bad firstLine kind", () => reject(withValues({ firstLine: { kind: "weird", in: 1 } })));
   it("a name over 60 chars or empty", () => {
     reject([
@@ -159,5 +165,82 @@ describe("newStyleKey", () => {
   });
   it("falls back when the name has no usable characters", () => {
     expect(newStyleKey("!!!", new Set())).toBe("style");
+  });
+});
+
+describe("style names and odd half-point sizes", () => {
+  it("trims style names", () => {
+    const list = [
+      ...defaultParagraphStyles(HOUSE),
+      {
+        key: "c",
+        name: "  Custom  ",
+        builtIn: false,
+        values: defaultParagraphStyles(HOUSE)[0].values,
+      },
+    ];
+    const parsed = paragraphStylesSchema.parse(list);
+    expect(parsed[parsed.length - 1].name).toBe("Custom");
+  });
+
+  it("a house style of 23 half-points gives an 11.5 pt Body that passes the schema", () => {
+    const list = defaultParagraphStyles({ ...HOUSE, fontSizeHalfPt: 23 });
+    expect(byKey(list, "body").values.sizePt).toBe(11.5);
+    expect(paragraphStylesSchema.safeParse(list).success).toBe(true);
+  });
+});
+
+describe("readStyleOverrides", () => {
+  const none = { fontSizeHalfPt: null, lineSpacing: null, spaceAfterPt: null };
+
+  it("derives Body and Heading 1-3 from the legacy columns", () => {
+    const out = readStyleOverrides(
+      {},
+      { fontSizeHalfPt: 28, lineSpacing: "double", spaceAfterPt: 6 },
+    );
+    expect(out.body).toEqual({ sizePt: 14, lineSpacing: "double", spaceAfterPt: 6 });
+    expect(out.heading1).toEqual({ sizePt: 20, lineSpacing: "double", spaceAfterPt: 6 });
+    expect(out.heading2).toEqual({ sizePt: 18, lineSpacing: "double", spaceAfterPt: 6 });
+    expect(out.heading3).toEqual({ sizePt: 16, lineSpacing: "double", spaceAfterPt: 6 });
+  });
+
+  it("stored values win field by field", () => {
+    const out = readStyleOverrides(
+      { heading1: { sizePt: 30 }, body: { spaceAfterPt: 0 } },
+      { fontSizeHalfPt: 28, lineSpacing: "double", spaceAfterPt: 6 },
+    );
+    expect(out.heading1).toEqual({ sizePt: 30, lineSpacing: "double", spaceAfterPt: 6 });
+    expect(out.body).toEqual({ sizePt: 14, lineSpacing: "double", spaceAfterPt: 0 });
+  });
+
+  it("drops an invalid legacy line spacing and invalid stored entries", () => {
+    const out = readStyleOverrides(
+      { caption: { sizePt: 99 } },
+      { fontSizeHalfPt: null, lineSpacing: "triple", spaceAfterPt: null },
+    );
+    expect(out).toEqual({});
+  });
+
+  it("derives nothing without legacy values", () => {
+    expect(readStyleOverrides(null, none)).toEqual({});
+  });
+
+  it("drops keys the firm does not have", () => {
+    const out = readStyleOverrides(
+      { gone: { bold: true }, caption: { bold: true } },
+      { fontSizeHalfPt: 28, lineSpacing: null, spaceAfterPt: null },
+      new Set(["body", "caption", "heading1"]),
+    );
+    expect(Object.keys(out).sort()).toEqual(["body", "caption", "heading1"]);
+  });
+});
+
+describe("legacyBodyColumns", () => {
+  it("rounds a fractional space after for the integer column", () => {
+    expect(legacyBodyColumns({ body: { spaceAfterPt: 6.5, sizePt: 11.5 } })).toEqual({
+      fontSizeHalfPt: 23,
+      lineSpacing: null,
+      spaceAfterPt: 7,
+    });
   });
 });
