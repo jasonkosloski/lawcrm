@@ -24,6 +24,11 @@ import { DeadlinesCard } from "@/components/dashboard/cards/deadlines";
 import { PulseCard } from "@/components/dashboard/cards/pulse";
 import { TriageCard } from "@/components/dashboard/cards/triage";
 import { RecordsCard } from "@/components/dashboard/cards/records";
+import { PinnedCard } from "@/components/dashboard/cards/pinned";
+import { SolsCard } from "@/components/dashboard/cards/sols";
+import { TimeWeekCard } from "@/components/dashboard/cards/time-week";
+import { NewLeadsCard } from "@/components/dashboard/cards/new-leads";
+import { UnbilledCard } from "@/components/dashboard/cards/unbilled";
 import { getCurrentUserId } from "@/lib/current-user";
 import { getCurrentUserTimeZone } from "@/lib/current-user-tz";
 import { maybeRunDeadlineNotificationSweep } from "@/lib/notification-sweeps";
@@ -64,6 +69,9 @@ export default async function DashboardPage() {
     followUps: <FollowUpsCard items={data.followUps} />,
     activity: <ActivityCard items={data.activity} canViewActivityLog={data.canViewActivityLog} />,
     deadlines: <DeadlinesCard data={data.deadlines} />,
+    pinned: <PinnedCard items={data.pinned} />,
+    sols: <SolsCard data={data.sols} />,
+    newLeads: <NewLeadsCard data={data.newLeads} />,
   };
   if (!layout.hidden.includes("triage")) cards.triage = <TriageCard data={data.triage} />;
   if (data.kpis) cards.kpis = <KpisCard kpis={data.kpis} />;
@@ -71,6 +79,9 @@ export default async function DashboardPage() {
   if (data.pulse) cards.pulse = <PulseCard pulse={data.pulse} />;
   // No fee data; needs records.view.
   if (data.canViewRecords) cards.records = <RecordsCard items={data.records} />;
+  if (data.timeWeek) cards.timeWeek = <TimeWeekCard data={data.timeWeek} />;
+  // Null without billing.view (or when hidden).
+  if (data.unbilled) cards.unbilled = <UnbilledCard data={data.unbilled} />;
 
   const unavailable = unavailableCards(data, layout);
 

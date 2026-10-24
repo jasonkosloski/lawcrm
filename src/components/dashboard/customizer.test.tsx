@@ -73,7 +73,7 @@ describe("applyDragEnd", () => {
   test("moves a card into the band at an index", () => {
     const out = applyDragEnd(fresh(), "deadlines", { zone: "band", index: 0 });
     expect(out.band).toEqual(["deadlines", "kpis", "triage"]);
-    expect(out.columns[1]).toEqual(["pulse", "records"]);
+    expect(out.columns[1]).toEqual(["pulse", "records", "sols", "pinned"]);
   });
 
   test("reorders within one list using the post-removal index", () => {
@@ -127,24 +127,26 @@ describe("edit mode", () => {
     setup();
     await customize(user);
     await user.click(within(arrange()).getByRole("button", { name: "Hide Firm pulse" }));
-    expect(screen.getByText("Hidden (1)")).toBeTruthy();
-    expect(zoneKeys("Column 2")).toEqual(["deadlines", "records"]);
+    expect(screen.getByText("Hidden (4)")).toBeTruthy();
+    expect(zoneKeys("Column 2")).toEqual(["deadlines", "records", "sols", "pinned"]);
     await user.click(screen.getByRole("button", { name: "Restore Firm pulse" }));
     expect(zoneKeys("Column 1").at(-1)).toBe("pulse");
-    expect(screen.getByText("Hidden (0)")).toBeTruthy();
+    expect(screen.getByText("Hidden (3)")).toBeTruthy();
   });
 
   test("split change keeps every card", async () => {
     const user = userEvent.setup();
     setup();
     await customize(user);
+    // The default-hidden cards sit in the (collapsed) tray, not the grid.
+    const placed = DASHBOARD_CARD_KEYS.length - fresh().hidden.length;
     for (const name of ["4 / 4 / 4", "12", "8 / 4"]) {
       await user.click(screen.getByRole("radio", { name }));
-      expect(within(arrange()).getAllByRole("listitem")).toHaveLength(DASHBOARD_CARD_KEYS.length);
+      expect(within(arrange()).getAllByRole("listitem")).toHaveLength(placed);
       const keys = within(arrange())
         .getAllByRole("listitem")
         .map((li) => li.getAttribute("data-card"));
-      expect(new Set(keys).size).toBe(DASHBOARD_CARD_KEYS.length);
+      expect(new Set(keys).size).toBe(placed);
     }
     expect(screen.getByRole("radio", { name: "8 / 4" }).getAttribute("aria-checked")).toBe("true");
   });

@@ -85,7 +85,7 @@ describe("saveDashboardLayout", () => {
     expect(res.v).toBe(3);
     expect(res.band).toEqual(["agenda", "kpis", "triage"]);
     expect(JSON.stringify(blob)).not.toContain("bogus");
-    expect(res.hidden).toEqual(["pulse"]);
+    expect(res.hidden).toEqual(["pulse", "timeWeek", "newLeads", "unbilled"]);
   });
 
   test("revalidates the dashboard", async () => {
@@ -99,6 +99,6 @@ describe("saveDashboardLayout", () => {
       data: { dashboardPrefs: { visible: { pulse: false } } },
     });
     const layout = await getDashboardLayout(userId);
-    expect(layout.hidden).toEqual(["pulse"]);
+    expect(layout.hidden).toEqual(["pulse", "timeWeek", "newLeads", "unbilled"]);
   });
 });

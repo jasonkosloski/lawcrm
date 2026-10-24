@@ -1,13 +1,12 @@
 # App shell, dashboard, navigation
 
-App shell (sidebar, topbar, layout), the dashboard with customizable cards, the Cmd+K command palette, loading/error states and the mobile sweep are shipped. Open work is dashboard triage cards and role defaults, the rest of palette v2, and the role-based sidebar.
+App shell (sidebar, topbar, layout), the dashboard with customizable cards, the Cmd+K command palette, loading/error states and the mobile sweep are shipped. Open work is dashboard role defaults, the rest of palette v2, and the role-based sidebar.
 Related: [ADR-057](../decisions/057-ui-system-v2-legibility-floor-and-colour-on-meaning.md) (UI system v2), [ADR-002](../decisions/002-app-router-route-groups-for-layout-isolation.md), [ADR-003](../decisions/003-design-tokens-as-css-custom-properties-not.md), [ADR-033](../decisions/033-error-boundaries-use-retry-the-notification-bell.md), [ADR-021](../decisions/021-matter-tabs-honour-calendar-visibility-and-money.md)
 
 ## Open work
 
 - [ ] **Dark theme** (P3): v2 tokens make it a token-only change (`:root[data-theme=dark]` values); not started.
 - [ ] **Matter tabs regroup** (P2, needs a product call): 13 tabs; Events + Deadlines + Tasks could become one "Schedule" tab. Workflow change, not styling.
-- [ ] **Dashboard sub-project 2 — new cards** (P2) — pinned matters, time-this-week chart, new leads, unbilled time, upcoming SOLs.
 - [ ] **Dashboard sub-project 3 — role default layouts** (P2) — `Role.dashboardLayout` (the one schema change), editor in Settings → Roles, "reset to role default"; multi-role users take the first role in a defined priority order.
 - [ ] **Dashboard greeting undercount** (P3) — "N due today" undercounts when more than 25 tasks are due today (task bucket cap).
 - [~] **Command palette — v2** (P2) — scoping prefixes and Create group shipped (below). Remaining: fuzzy-match highlight inside results; "New task" (no standalone create page yet); "Log a call" (CallLogDialog needs contact-picker data plus a URL affordance to auto-open); "Start timer" (`startTimer()` now refuses with `already_running` instead of replacing a running session, so the row could be added by surfacing that refusal).
@@ -36,6 +35,12 @@ Related: [ADR-057](../decisions/057-ui-system-v2-legibility-floor-and-colour-on-
   - **Unread email on matters**: unread, unarchived threads in the viewer's own mailbox filed to an accessible matter.
   - **Client uploads to review**: portal document requests in `submitted` status on accessible, non-archived matters; needs `portal.view`.
   - **Missing signed agreement**: the `agreement-missing.ts` predicate scoped to accessible matters; admin-only (like the firm-settings warning) and only while the firm's "require an originating document" switch is on.
+- [x] **Dashboard new cards** (2026-10-23) — loaded by `src/lib/queries/dashboard-cards.ts`, each skipped when hidden. Cards flagged `defaultHidden` in the registry start in the hidden tray for new users, stored v3 layouts and converted v2 blobs alike, so opt-in cards don't appear on everyone's dashboard; a card the user has placed stays placed. Shown by default: Pinned matters, Upcoming SOLs. Opt-in: Time this week, New leads, Unbilled time.
+  - **Pinned matters**: the viewer's own pins (sidebar list, max 10) on accessible, unarchived matters, with stage and the soonest open deadline.
+  - **Upcoming SOLs**: unsatisfied SOL dates up to 90 days out, lapsed ones included and flagged, on accessible, non-archived matters in a non-terminal stage.
+  - **Time this week**: the viewer's own hours per day, Sunday-first like /time (same `getMyWeekTime` numbers), against the firm daily goal.
+  - **New leads**: open (not converted or declined) leads created in the viewer's last 7 calendar days, through the lead wall; no permission gate, since the intake list has none.
+  - **Unbilled time**: WIP time (the Billing tab's predicate: billable, not no-charge, no invoice, draft/submitted/billable) on accessible matters, top 5 matters by amount plus totals; expenses are not included. Ranking uses priced entries only (contingent time has no rate), so unpriced time never outranks priced time but still counts in each row's hours and the totals. Needs `billing.view` in the query; without it the card is "Not available for your role".
 - [x] **Command palette (Cmd+K)** — opens from anywhere. Unified search across matters (name/case number/client/area/stage), contacts, leads, users and navigation destinations. Contextual "Pin/Unpin this matter" on matter pages. Recents in localStorage; empty state shows recents, pinned matters and suggestions. Token-AND filter so multi-word queries match across fields.
   - **v2:** scoping prefixes (`#matter`, `@person` incl. leads, `>action`) parsed by `src/components/command-palette/prefix.ts` and enforced in the cmdk filter via per-item kind tags. "Create" group (New matter, New contact, New event) is pure navigation; target pages enforce their own permission gates because PaletteData carries no permission flags (`/matters/new` now does). Reports row is permission-gated; the palette is lazy-loaded. "Search everywhere" carries `#`/`@` into `/search?type=matter|contact` and hides under `>`.
   - Note: the "New intake / lead" row was removed while `/intake/new` did not exist and is back now that it ships.

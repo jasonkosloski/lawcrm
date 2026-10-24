@@ -30,6 +30,11 @@ export const DASHBOARD_CARD_KEYS = [
   "deadlines",
   "pulse",
   "records",
+  "sols",
+  "pinned",
+  "timeWeek",
+  "newLeads",
+  "unbilled",
 ] as const;
 
 export type DashboardCardKey = (typeof DASHBOARD_CARD_KEYS)[number];
@@ -40,11 +45,14 @@ export type CardPlacement = { zone: "band" } | { zone: "column"; index: number }
 /**
  * Card registry: label (shown in the customizer) + default placement
  * (used by `mergeLayout` for cards missing from a stored layout, so new
- * cards appear without a backfill). New cards register here.
+ * cards appear without a backfill). `defaultHidden` cards start in the
+ * hidden tray instead, for new users and stored layouts alike, so an
+ * opt-in card doesn't land on everyone's dashboard. New cards register
+ * here.
  */
 export const DASHBOARD_CARDS: Record<
   DashboardCardKey,
-  { label: string; defaultPlacement: CardPlacement }
+  { label: string; defaultPlacement: CardPlacement; defaultHidden?: boolean }
 > = {
   kpis: { label: "KPI tiles", defaultPlacement: { zone: "band" } },
   triage: { label: "Needs me now", defaultPlacement: { zone: "band" } },
@@ -76,7 +84,35 @@ export const DASHBOARD_CARDS: Record<
     label: "Records to chase",
     defaultPlacement: { zone: "column", index: 1 },
   },
+  pinned: {
+    label: "Pinned matters",
+    defaultPlacement: { zone: "column", index: 1 },
+  },
+  sols: {
+    label: "Upcoming SOLs",
+    defaultPlacement: { zone: "column", index: 1 },
+  },
+  timeWeek: {
+    label: "Time this week",
+    defaultPlacement: { zone: "column", index: 1 },
+    defaultHidden: true,
+  },
+  newLeads: {
+    label: "New leads",
+    defaultPlacement: { zone: "column", index: 0 },
+    defaultHidden: true,
+  },
+  unbilled: {
+    label: "Unbilled time",
+    defaultPlacement: { zone: "column", index: 1 },
+    defaultHidden: true,
+  },
 };
+
+/** Cards that start in the hidden tray (see `defaultHidden`). */
+const DEFAULT_HIDDEN_KEYS: DashboardCardKey[] = DASHBOARD_CARD_KEYS.filter(
+  (k) => DASHBOARD_CARDS[k].defaultHidden,
+);
 
 /**
  * Which legacy (v1/v2) column each card lived in. Only used to convert
@@ -94,21 +130,20 @@ export const DASHBOARD_CARD_COLUMNS: Record<DashboardCardKey, DashboardColumn> =
   deadlines: "rail",
   pulse: "rail",
   records: "rail",
+  pinned: "rail",
+  sols: "rail",
+  timeWeek: "rail",
+  newLeads: "main",
+  unbilled: "rail",
 };
 
 export type DashboardVisibility = Record<DashboardCardKey, boolean>;
 
-const DEFAULT_VISIBILITY: DashboardVisibility = {
-  kpis: true,
-  triage: true,
-  agenda: true,
-  tasks: true,
-  followUps: true,
-  activity: true,
-  deadlines: true,
-  pulse: true,
-  records: true,
-};
+// A v2 blob never mentions the newer cards: defaultHidden ones convert
+// to hidden, the rest to visible.
+const DEFAULT_VISIBILITY = Object.fromEntries(
+  DASHBOARD_CARD_KEYS.map((k) => [k, !DASHBOARD_CARDS[k].defaultHidden]),
+) as DashboardVisibility;
 
 /**
  * Merge a stored prefs blob with defaults. Pure function — safe to call
@@ -190,16 +225,17 @@ export type DashboardLayout = {
   hidden: DashboardCardKey[];
 };
 
-/** What a new user and "Reset" get: the v2 page plus the triage card. */
+/** What a new user and "Reset" get: the v2 page plus the triage,
+ *  SOL and pinned-matter cards; opt-in cards start hidden. */
 export const DEFAULT_LAYOUT: DashboardLayout = {
   v: 3,
   split: "8/4",
   band: ["kpis", "triage"],
   columns: [
     ["agenda", "tasks", "followUps", "activity"],
-    ["deadlines", "pulse", "records"],
+    ["deadlines", "pulse", "records", "sols", "pinned"],
   ],
-  hidden: [],
+  hidden: DEFAULT_HIDDEN_KEYS,
 };
 
 /** Where a card can be moved to. */
@@ -291,7 +327,8 @@ export function mergeLayout(stored: unknown): DashboardLayout {
   for (const key of DASHBOARD_CARD_KEYS) {
     if (seen.has(key)) continue;
     const p = DASHBOARD_CARDS[key].defaultPlacement;
-    if (p.zone === "band") band.push(key);
+    if (DASHBOARD_CARDS[key].defaultHidden) hidden.push(key);
+    else if (p.zone === "band") band.push(key);
     else columns[Math.min(p.index, colCount - 1)].push(key);
   }
   return { v: 3, split, band, columns, hidden };

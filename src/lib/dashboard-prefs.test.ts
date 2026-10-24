@@ -62,10 +62,10 @@ describe("DASHBOARD_CARD_KEYS shape", () => {
 });
 
 describe("mergeVisibility — fallthroughs", () => {
-  test("null / undefined → all defaults true", () => {
+  test("null / undefined → shown unless the card is defaultHidden", () => {
     const out = mergeVisibility(null);
     for (const k of DASHBOARD_CARD_KEYS) {
-      expect(out[k]).toBe(true);
+      expect(out[k]).toBe(!DASHBOARD_CARDS[k].defaultHidden);
     }
   });
 
@@ -236,7 +236,7 @@ describe("mergeLayout", () => {
     expect(l.band).toEqual(["kpis", "triage"]);
     expect(l.columns).toEqual([
       ["tasks", "agenda", "followUps", "activity"],
-      ["records", "deadlines", "pulse"],
+      ["records", "deadlines", "pulse", "sols", "pinned"],
     ]);
   });
 
@@ -250,9 +250,9 @@ describe("mergeLayout", () => {
 
   test("v2: visible:false → hidden, removed from zones", () => {
     const l = mergeLayout({ visible: { pulse: false, kpis: false } });
-    expect([...l.hidden].sort()).toEqual(["kpis", "pulse"]);
+    expect([...l.hidden].sort()).toEqual(["kpis", "newLeads", "pulse", "timeWeek", "unbilled"]);
     expect(l.band).toEqual(["triage"]);
-    expect(l.columns[1]).toEqual(["deadlines", "records"]);
+    expect(l.columns[1]).toEqual(["deadlines", "records", "sols", "pinned"]);
   });
 
   test("v3: duplicates — first occurrence wins band → columns → hidden", () => {
@@ -280,7 +280,7 @@ describe("mergeLayout", () => {
     const l = mergeLayout({ v: 3, split: "12", band: [], columns: [["agenda"]], hidden: [] });
     expect(l.band).toEqual(["kpis", "triage"]);
     expect(l.columns).toHaveLength(1);
-    expect(l.columns[0].slice(-3)).toEqual(["deadlines", "pulse", "records"]);
+    expect(l.columns[0].slice(-5)).toEqual(["deadlines", "pulse", "records", "sols", "pinned"]);
   });
 
   test("v3: too many columns fold into the last; too few pad", () => {
@@ -303,7 +303,7 @@ describe("moveCard", () => {
     let l = moveCard(DEFAULT_LAYOUT, "deadlines", { zone: "band" }, 0);
     expect(l.band).toEqual(["deadlines", "kpis", "triage"]);
     l = moveCard(l, "deadlines", { zone: "hidden" });
-    expect(l.hidden).toEqual(["deadlines"]);
+    expect(l.hidden).toEqual([...DEFAULT_LAYOUT.hidden, "deadlines"]);
     l = moveCard(l, "deadlines", { zone: "column", index: 9 });
     expect(l.columns[1].at(-1)).toBe("deadlines");
     expect(DEFAULT_LAYOUT.band).toEqual(["kpis", "triage"]); // no mutation
@@ -337,12 +337,12 @@ describe("triage card pickup", () => {
     const l = mergeLayout(v3WithoutTriage);
     expect(l.band).toEqual(["kpis", "triage"]);
     expect(l.columns[0]).toContain("agenda");
-    expect(l.hidden).toEqual(["pulse"]);
+    expect(l.hidden).toEqual(["pulse", ...DEFAULT_LAYOUT.hidden]);
   });
 
   test("a stored hidden triage stays hidden", () => {
     const l = mergeLayout({ ...v3WithoutTriage, hidden: ["triage"] });
-    expect(l.hidden).toEqual(["triage"]);
+    expect(l.hidden).toEqual(["triage", ...DEFAULT_LAYOUT.hidden]);
     expect(l.band).not.toContain("triage");
   });
 
@@ -369,5 +369,42 @@ describe("layoutsEqual", () => {
     expect(layoutsEqual(DEFAULT_LAYOUT, moveCard(DEFAULT_LAYOUT, "kpis", { zone: "hidden" }))).toBe(
       false,
     );
+  });
+});
+
+describe("defaultHidden cards", () => {
+  const optIn = ["timeWeek", "newLeads", "unbilled"] as const;
+
+  test("start hidden for a new user; pinned and SOLs start shown", () => {
+    const layout = mergeLayout(null);
+    expect([...layout.hidden].sort()).toEqual([...optIn].sort());
+    expect(layout.columns[1]).toContain("sols");
+    expect(layout.columns[1]).toContain("pinned");
+  });
+
+  test("a stored v3 layout that predates them gets them hidden, others placed", () => {
+    const layout = mergeLayout({
+      v: 3,
+      split: "8/4",
+      band: ["kpis", "triage"],
+      columns: [
+        ["agenda", "tasks", "followUps", "activity"],
+        ["deadlines", "pulse", "records"],
+      ],
+      hidden: [],
+    });
+    expect([...layout.hidden].sort()).toEqual([...optIn].sort());
+    expect(layout.columns[1]).toEqual(["deadlines", "pulse", "records", "sols", "pinned"]);
+  });
+
+  test("a v2 blob converts them to hidden", () => {
+    const layout = mergeLayout({ visible: { pulse: false } });
+    expect([...layout.hidden].sort()).toEqual(["pulse", ...optIn].sort());
+  });
+
+  test("a card the user showed stays shown", () => {
+    const layout = mergeLayout({ ...DEFAULT_LAYOUT, hidden: [], columns: [[], ["unbilled"]] });
+    expect(layout.hidden).not.toContain("unbilled");
+    expect(layout.columns[1][0]).toBe("unbilled");
   });
 });

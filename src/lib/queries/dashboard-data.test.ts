@@ -11,7 +11,20 @@ const m = vi.hoisted(() => ({
   getUpcomingDeadlines: vi.fn(),
   getMyRecordsToChase: vi.fn(),
   getTriage: vi.fn(),
+  getPinnedMatters: vi.fn(),
+  getUpcomingSols: vi.fn(),
+  getTimeThisWeek: vi.fn(),
+  getNewLeads: vi.fn(),
+  getUnbilledTime: vi.fn(),
   currentUserHasPermission: vi.fn(),
+}));
+
+vi.mock("@/lib/queries/dashboard-cards", () => ({
+  getPinnedMatters: m.getPinnedMatters,
+  getUpcomingSols: m.getUpcomingSols,
+  getTimeThisWeek: m.getTimeThisWeek,
+  getNewLeads: m.getNewLeads,
+  getUnbilledTime: m.getUnbilledTime,
 }));
 
 vi.mock("@/lib/queries/dashboard-triage", () => ({ getTriage: m.getTriage }));
@@ -53,6 +66,11 @@ beforeEach(() => {
   m.getUpcomingDeadlines.mockResolvedValue({ items: [], overdueHidden: 0 });
   m.getMyRecordsToChase.mockResolvedValue([]);
   m.getTriage.mockResolvedValue({ groups: [] });
+  m.getPinnedMatters.mockResolvedValue([]);
+  m.getUpcomingSols.mockResolvedValue({ items: [], hidden: 0 });
+  m.getTimeThisWeek.mockResolvedValue({ days: [] });
+  m.getNewLeads.mockResolvedValue({ items: [], hidden: 0 });
+  m.getUnbilledTime.mockResolvedValue({ items: [] });
   m.currentUserHasPermission.mockResolvedValue(true);
 });
 
@@ -88,6 +106,31 @@ describe("loadDashboardData", () => {
     const d = await loadDashboardData(layout(), "UTC");
     expect(m.getMyRecordsToChase).not.toHaveBeenCalled();
     expect(d.canViewRecords).toBe(false);
+  });
+
+  it("loads the newer cards with the viewer's tz, and skips them when hidden", async () => {
+    await loadDashboardData(layout(), "America/Chicago");
+    expect(m.getPinnedMatters).toHaveBeenCalledWith("America/Chicago");
+    expect(m.getUpcomingSols).toHaveBeenCalledWith("America/Chicago");
+    expect(m.getTimeThisWeek).toHaveBeenCalledWith("America/Chicago");
+    expect(m.getNewLeads).toHaveBeenCalledTimes(1);
+    expect(m.getUnbilledTime).toHaveBeenCalledTimes(1);
+    vi.clearAllMocks();
+    const d = await loadDashboardData(
+      layout(["pinned", "sols", "timeWeek", "newLeads", "unbilled"]),
+      "UTC",
+    );
+    for (const fn of [
+      m.getPinnedMatters,
+      m.getUpcomingSols,
+      m.getTimeThisWeek,
+      m.getNewLeads,
+      m.getUnbilledTime,
+    ]) {
+      expect(fn).not.toHaveBeenCalled();
+    }
+    expect(d.timeWeek).toBeNull();
+    expect(d.unbilled).toBeNull();
   });
 
   it("activity link needs firm.view_activity", async () => {
@@ -128,6 +171,15 @@ describe("unavailableCards", () => {
     m.currentUserHasPermission.mockResolvedValue(false);
     const d = await loadDashboardData(layout(), "UTC");
     expect(unavailableCards(d, layout())).toContain("records");
+  });
+
+  it("lists unbilled when null (no billing.view) while visible, not when hidden", async () => {
+    m.getUnbilledTime.mockResolvedValue(null);
+    const d = await loadDashboardData(layout(), "UTC");
+    expect(unavailableCards(d, layout())).toContain("unbilled");
+    const l = layout(["unbilled"]);
+    const d2 = await loadDashboardData(l, "UTC");
+    expect(unavailableCards(d2, l)).not.toContain("unbilled");
   });
 
   it("lists pulse when null while visible, not when hidden", async () => {

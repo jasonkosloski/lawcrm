@@ -11,6 +11,18 @@ import { currentUserHasPermission } from "@/lib/permission-check";
 import { getMyRecordsToChase, type RecordsChaseItem } from "@/lib/queries/records-requests";
 import { getTriage, type TriageData } from "@/lib/queries/dashboard-triage";
 import {
+  getNewLeads,
+  getPinnedMatters,
+  getTimeThisWeek,
+  getUnbilledTime,
+  getUpcomingSols,
+  type NewLeadsData,
+  type PinnedMatterItem,
+  type SolsData,
+  type TimeWeekData,
+  type UnbilledData,
+} from "@/lib/queries/dashboard-cards";
+import {
   getDashboardKpis,
   getFirmPulse,
   getFollowUpsDueToday,
@@ -39,6 +51,13 @@ export type DashboardData = {
   records: RecordsChaseItem[];
   canViewRecords: boolean;
   triage: TriageData;
+  pinned: PinnedMatterItem[];
+  sols: SolsData;
+  /** Null when hidden. */
+  timeWeek: TimeWeekData | null;
+  newLeads: NewLeadsData;
+  /** Null without billing.view (or when hidden). */
+  unbilled: UnbilledData | null;
 };
 
 const emptyTasks = (): MyTasksGrouped => ({
@@ -63,20 +82,39 @@ export async function loadDashboardData(
     shown("activity") ? currentUserHasPermission("firm.view_activity") : Promise.resolve(false),
   ]);
 
-  const [kpis, agenda, activity, deadlines, pulse, tasks, followUps, records, triage] =
-    await Promise.all([
-      shown("kpis") ? getDashboardKpis(tz) : Promise.resolve(null),
-      shown("agenda") ? getTodayAgenda(tz) : Promise.resolve([]),
-      shown("activity") ? getRecentActivity(tz, 5) : Promise.resolve([]),
-      shown("deadlines")
-        ? getUpcomingDeadlines(tz, 7)
-        : Promise.resolve({ items: [], overdueHidden: 0 } as DeadlinesData),
-      shown("pulse") ? getFirmPulse(tz) : Promise.resolve(null),
-      shown("tasks") ? getMyOpenTasks(tz) : Promise.resolve(emptyTasks()),
-      shown("followUps") ? getFollowUpsDueToday(tz) : Promise.resolve([]),
-      canViewRecords ? getMyRecordsToChase(tz) : Promise.resolve([]),
-      shown("triage") ? getTriage(tz) : Promise.resolve({ groups: [] } as TriageData),
-    ]);
+  const [
+    kpis,
+    agenda,
+    activity,
+    deadlines,
+    pulse,
+    tasks,
+    followUps,
+    records,
+    triage,
+    pinned,
+    sols,
+    timeWeek,
+    newLeads,
+    unbilled,
+  ] = await Promise.all([
+    shown("kpis") ? getDashboardKpis(tz) : Promise.resolve(null),
+    shown("agenda") ? getTodayAgenda(tz) : Promise.resolve([]),
+    shown("activity") ? getRecentActivity(tz, 5) : Promise.resolve([]),
+    shown("deadlines")
+      ? getUpcomingDeadlines(tz, 7)
+      : Promise.resolve({ items: [], overdueHidden: 0 } as DeadlinesData),
+    shown("pulse") ? getFirmPulse(tz) : Promise.resolve(null),
+    shown("tasks") ? getMyOpenTasks(tz) : Promise.resolve(emptyTasks()),
+    shown("followUps") ? getFollowUpsDueToday(tz) : Promise.resolve([]),
+    canViewRecords ? getMyRecordsToChase(tz) : Promise.resolve([]),
+    shown("triage") ? getTriage(tz) : Promise.resolve({ groups: [] } as TriageData),
+    shown("pinned") ? getPinnedMatters(tz) : Promise.resolve([]),
+    shown("sols") ? getUpcomingSols(tz) : Promise.resolve({ items: [], hidden: 0, lapsed: 0 }),
+    shown("timeWeek") ? getTimeThisWeek(tz) : Promise.resolve(null),
+    shown("newLeads") ? getNewLeads(tz) : Promise.resolve({ items: [], hidden: 0 }),
+    shown("unbilled") ? getUnbilledTime() : Promise.resolve(null),
+  ]);
 
   return {
     kpis,
@@ -90,6 +128,11 @@ export async function loadDashboardData(
     records,
     canViewRecords,
     triage,
+    pinned,
+    sols,
+    timeWeek,
+    newLeads,
+    unbilled,
   };
 }
 
@@ -110,5 +153,6 @@ export function unavailableCards(data: DashboardData, layout: DashboardLayout): 
   const out: DashboardCardKey[] = [];
   if (!data.pulse && !layout.hidden.includes("pulse")) out.push("pulse");
   if (!data.canViewRecords && !layout.hidden.includes("records")) out.push("records");
+  if (!data.unbilled && !layout.hidden.includes("unbilled")) out.push("unbilled");
   return out;
 }
