@@ -112,6 +112,8 @@ export type TemplateData = {
   user: { name: string | null };
   /** An instant; formatted in `timeZone`. */
   today: Date;
+  /** The template's document title, or the one typed when generating. */
+  documentTitle?: string | null;
   timeZone: string | null;
   matter: {
     name: string;
@@ -326,6 +328,7 @@ export const FIELDS: readonly CatalogField[] = [
 
   // ── Today & user ──
   date("today", "Today's date", "Today & user", (d) => d.today, BOTH, false),
+  text("document.title", "Document title", "Today & user", (d) => str(d.documentTitle)),
   field({
     path: "user.name",
     label: "Your name",
@@ -639,6 +642,7 @@ export const SAMPLE_TEMPLATE_DATA: TemplateData = {
   // UTC noon keeps the day the same in any zone.
   today: new Date(Date.UTC(2026, 3, 15, 12)),
   timeZone: null,
+  documentTitle: "Sample document title",
   matter: {
     name: "Sample v. Example Insurance Co.",
     caseNumber: "2026-CV-00000",

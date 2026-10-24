@@ -37,15 +37,20 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { RecordScope } from "@/lib/record-scope";
-import { STALE_TEMPLATE, templateCategoryLabel } from "@/lib/template-constants";
+import {
+  MAX_DOCUMENT_TITLE,
+  STALE_TEMPLATE,
+  templateCategoryLabel,
+} from "@/lib/template-constants";
 import {
   generateDocumentFromTemplate,
   previewDocumentFromTemplate,
   type GenerateFormat,
   type TemplatePreviewResult,
 } from "@/app/actions/document-templates";
-import { FormErrorBanner } from "@/components/ui/field";
+import { FormErrorBanner, inputClass } from "@/components/ui/field";
 import { PagePreview } from "@/components/templates/page-preview";
 
 export type TemplateOption = {
@@ -110,13 +115,33 @@ export function GenerateFromTemplateDialog({
   const [signerId, setSignerId] = useState("");
   const [recipientId, setRecipientId] = useState("");
   const [staleNotice, setStaleNotice] = useState<string | null>(null);
+  // The typed document title; null until edited, so the template's own
+  // title (handed back by the preview) fills the box.
+  const typedTitle = useRef<string | null>(null);
+  const [titleText, setTitleText] = useState("");
+  const [titleTouched, setTitleTouched] = useState(false);
   const buildOpts = (signer: string, recipient: string) => {
-    const o: { recordsRequestId?: string; signerId?: string; recipientContactId?: string } = {};
+    const o: {
+      recordsRequestId?: string;
+      signerId?: string;
+      recipientContactId?: string;
+      documentTitle?: string;
+    } = {};
     if (recordsRequestId) o.recordsRequestId = recordsRequestId;
     if (signer) o.signerId = signer;
     if (recipient) o.recipientContactId = recipient;
+    if (typedTitle.current !== null) o.documentTitle = typedTitle.current;
     return Object.keys(o).length > 0 ? o : undefined;
   };
+  const resetTitle = () => {
+    typedTitle.current = null;
+    setTitleText("");
+    setTitleTouched(false);
+  };
+  /** The typed title differs from the one the current preview printed
+   *  (the server trims, and blank means none). */
+  const titleStale = (printed: string | null) =>
+    typedTitle.current !== null && (typedTitle.current.trim() || null) !== printed;
   const [open, setOpen] = useState(false);
   const [templateId, setTemplateId] = useState("");
   const noun = scope.kind === "lead" ? "intake" : "matter";
@@ -135,7 +160,7 @@ export function GenerateFromTemplateDialog({
   // Only the latest preview request may land (slow older responses lose).
   const previewSeq = useRef(0);
   // Kept from the last ok preview so the selects survive a refused re-preview.
-  const [needs, setNeeds] = useState({ signer: false, recipient: false });
+  const [needs, setNeeds] = useState({ signer: false, recipient: false, title: false });
   const runPreview = (id: string, signer: string, recipient: string, keepNotice = false) => {
     const seq = ++previewSeq.current;
     startPreview(async () => {
@@ -145,7 +170,12 @@ export function GenerateFromTemplateDialog({
         : previewDocumentFromTemplate(id, scope));
       if (seq !== previewSeq.current) return;
       if (res.ok) {
-        setNeeds({ signer: res.needsSigner, recipient: res.needsRecipient });
+        setNeeds({
+          signer: res.needsSigner,
+          recipient: res.needsRecipient,
+          title: res.needsTitle,
+        });
+        if (typedTitle.current === null) setTitleText(res.documentTitle ?? "");
         if (!keepNotice) setStaleNotice(null);
       }
       setPreview(res);
@@ -154,7 +184,8 @@ export function GenerateFromTemplateDialog({
 
   const onPick = (id: string) => {
     previewSeq.current++;
-    setNeeds({ signer: false, recipient: false });
+    setNeeds({ signer: false, recipient: false, title: false });
+    resetTitle();
     setTemplateId(id);
     setPreview(null);
     setSaveError(null);
@@ -181,7 +212,8 @@ export function GenerateFromTemplateDialog({
   // default template is preselected and previewed straight away.
   const openDialog = () => {
     previewSeq.current++;
-    setNeeds({ signer: false, recipient: false });
+    setNeeds({ signer: false, recipient: false, title: false });
+    resetTitle();
     setTemplateId("");
     setPreview(null);
     setCopied(false);
@@ -199,7 +231,8 @@ export function GenerateFromTemplateDialog({
   };
 
   const onCopy = async () => {
-    if (!preview?.ok) return;
+    // Text from before a title edit would disagree with what Save writes.
+    if (!preview?.ok || titleStale(preview.documentTitle)) return;
     // writeText rejects on permission denial / lost focus, and
     // navigator.clipboard is undefined on non-secure origins - never
     // let the user paste a stale clipboard believing it worked.
@@ -225,6 +258,7 @@ export function GenerateFromTemplateDialog({
         ...(recordsRequestId ? { recordsRequestId } : { folderId }),
         ...(preview.needsSigner ? { signerId: signerId || currentUserId || undefined } : {}),
         ...(preview.needsRecipient && recipientId ? { recipientContactId: recipientId } : {}),
+        ...(typedTitle.current !== null ? { documentTitle: typedTitle.current } : {}),
         expectedUpdatedAt: preview.templateUpdatedAt,
         format,
       });
@@ -314,6 +348,29 @@ export function GenerateFromTemplateDialog({
                 </NativeSelect>
               </div>
 
+              {needs.title && (
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="generate-title" className="text-xs font-medium text-ink-2">
+                    Document title
+                  </label>
+                  <input
+                    id="generate-title"
+                    className={cn(inputClass(false, "sm"), "w-full")}
+                    value={titleText}
+                    maxLength={MAX_DOCUMENT_TITLE}
+                    onChange={(e) => {
+                      typedTitle.current = e.target.value;
+                      setTitleText(e.target.value);
+                      setTitleTouched(true);
+                    }}
+                    onBlur={() => {
+                      if (templateId && preview?.ok && titleStale(preview.documentTitle)) {
+                        runPreview(templateId, signerId, recipientId, true);
+                      }
+                    }}
+                  />
+                </div>
+              )}
               {(needs.signer || needs.recipient) && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {needs.signer && (
@@ -484,7 +541,11 @@ export function GenerateFromTemplateDialog({
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={!preview?.ok || previewPending}
+                  disabled={
+                    !preview?.ok ||
+                    previewPending ||
+                    (titleTouched && (titleText.trim() || null) !== preview.documentTitle)
+                  }
                   onClick={onCopy}
                 >
                   {copied ? <Check /> : <Copy />}

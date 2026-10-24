@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { BlockSource } from "@/lib/templates/render";
-import type { TemplateDoc } from "@/lib/templates/schema";
+import type { TemplateDoc, TemplateKind } from "@/lib/templates/schema";
 import {
   blockMeta,
+  catalogFor,
   initialDoc,
   insertableBlocks,
   type EditorBlock,
@@ -91,5 +92,18 @@ describe("insertableBlocks", () => {
       "t4",
       "ok",
     ]);
+  });
+});
+
+describe("catalogFor and the document title", () => {
+  const has = (kind?: TemplateKind) =>
+    catalogFor("matter", kind).fields.some((f) => f.path === "document.title");
+
+  it("offers it to letters, filings and blocks, not emails or texts", () => {
+    expect(has("letter")).toBe(true);
+    expect(has("filing")).toBe(true);
+    expect(has(undefined)).toBe(true);
+    expect(has("email")).toBe(false);
+    expect(has("sms")).toBe(false);
   });
 });

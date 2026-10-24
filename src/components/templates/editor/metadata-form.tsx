@@ -1,6 +1,6 @@
 /**
- * The editor page's metadata fields: name, category, description, kind
- * and applies-to for a template; name, key and description for a block.
+ * The editor page's metadata fields: name, category, description, kind,
+ * applies-to and (letters, filings) document title for a template; name, key and description for a block.
  */
 
 "use client";
@@ -10,6 +10,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { cn } from "@/lib/utils";
 import {
   APPLIES_TO_LABEL,
+  MAX_DOCUMENT_TITLE,
   MAX_TEMPLATE_DESCRIPTION,
   MAX_TEMPLATE_NAME,
   TEMPLATE_CATEGORIES,
@@ -20,6 +21,7 @@ import {
 import {
   APPLIES_TO,
   TEMPLATE_KINDS,
+  isDocumentKind,
   type AppliesTo,
   type TemplateKind,
 } from "@/lib/templates/schema";
@@ -28,6 +30,7 @@ export type TemplateMeta = {
   name: string;
   category: string;
   description: string;
+  documentTitle: string;
   kind: TemplateKind;
   appliesTo: AppliesTo;
 };
@@ -174,6 +177,25 @@ export function TemplateMetaFields({
         disabled={disabled}
         onChange={(appliesTo) => onChange({ appliesTo })}
       />
+      {isDocumentKind(meta.kind) && (
+        <Field
+          label="Document title"
+          className="col-span-full"
+          hint="Prints in the Document title field; can be changed when generating."
+        >
+          {(c) => (
+            <input
+              {...c}
+              className={input}
+              value={meta.documentTitle}
+              maxLength={MAX_DOCUMENT_TITLE}
+              disabled={disabled}
+              placeholder="e.g. Motion to Dismiss"
+              onChange={(e) => onChange({ documentTitle: e.target.value })}
+            />
+          )}
+        </Field>
+      )}
       <DescriptionField
         value={meta.description}
         disabled={disabled}

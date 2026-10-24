@@ -26,7 +26,12 @@ import { saveTemplateBlock } from "@/app/actions/template-blocks";
 import { cn } from "@/lib/utils";
 import { checkNestedFit, checkTemplateFit } from "@/lib/templates/inspect";
 import { DEFAULT_PARAGRAPH_STYLES, textWidthIn } from "@/lib/templates/page-style";
-import type { AppliesTo, TemplateDoc, TemplateKind } from "@/lib/templates/schema";
+import {
+  isDocumentKind,
+  type AppliesTo,
+  type TemplateDoc,
+  type TemplateKind,
+} from "@/lib/templates/schema";
 import {
   blockMeta,
   catalogFor,
@@ -109,7 +114,10 @@ function Editor(props: EditorProps & { narrow: boolean }) {
 
   const kind: TemplateKind = tMeta?.kind ?? "letter";
   const appliesTo: AppliesTo = tMeta?.appliesTo ?? bMeta?.appliesTo ?? "both";
-  const { fields, lists, data } = useMemo(() => catalogFor(appliesTo), [appliesTo]);
+  const { fields, lists, data } = useMemo(
+    () => catalogFor(appliesTo, isBlock ? undefined : kind),
+    [appliesTo, isBlock, kind],
+  );
   const blockMap = useMemo(() => new Map(blocks.map((b) => [b.id, b])), [blocks]);
   const insertable = useMemo(
     () => insertableBlocks(blocks, { id: isBlock ? savedId : null, appliesTo, isBlock }),
@@ -214,6 +222,7 @@ function Editor(props: EditorProps & { narrow: boolean }) {
       courtFormats={props.courtFormats}
       allowRecord={allowRecord}
       nested={nested}
+      documentTitle={tMeta && isDocumentKind(kind) ? tMeta.documentTitle : ""}
     />
   );
 

@@ -34,6 +34,7 @@ export async function loadEditorTemplate(id: string) {
       name: true,
       category: true,
       description: true,
+      documentTitle: true,
       kind: true,
       appliesTo: true,
       content: true,

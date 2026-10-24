@@ -77,12 +77,14 @@ import { Prisma } from "@/generated/prisma/client";
 import {
   checkTemplateFit,
   collectBlockIds,
+  usesDocumentTitle,
   usesRecipient,
   usesSigner,
 } from "@/lib/templates/inspect";
 import {
   APPLIES_TO,
   TEMPLATE_KINDS,
+  isDocumentKind,
   validateSubject,
   validateTemplateContent,
   type AppliesTo,
@@ -90,6 +92,7 @@ import {
   type TemplateKind,
 } from "@/lib/templates/schema";
 import {
+  MAX_DOCUMENT_TITLE,
   MAX_TEMPLATE_DESCRIPTION,
   MAX_TEMPLATE_NAME,
   documentCategoryForTemplate,
@@ -112,11 +115,14 @@ import {
 
 // ── Library CRUD ───────────────────────────────────────────────────────
 
+const TITLE_TOO_LONG = `Document title must be ${MAX_DOCUMENT_TITLE} characters or fewer.`;
+
 const saveTemplateSchema = z.object({
   id: z.string().min(1).optional(),
   name: z.string().trim().min(1, "Name is required.").max(MAX_TEMPLATE_NAME),
   category: z.string().min(1, "Category is required.").max(60),
   description: z.string().trim().max(MAX_TEMPLATE_DESCRIPTION).optional(),
+  documentTitle: z.string().trim().max(MAX_DOCUMENT_TITLE, TITLE_TOO_LONG).optional(),
   kind: z.enum(TEMPLATE_KINDS),
   appliesTo: z.enum(APPLIES_TO),
   expectedUpdatedAt: z
@@ -132,6 +138,8 @@ export async function saveDocumentTemplate(input: {
   name: string;
   category: string;
   description?: string;
+  /** Letters and filings only; ignored (cleared) for other kinds. */
+  documentTitle?: string;
   kind: TemplateKind;
   appliesTo: AppliesTo;
   content: unknown;
@@ -184,6 +192,7 @@ export async function saveDocumentTemplate(input: {
     name,
     category: parsed.data.category,
     description,
+    documentTitle: isDocumentKind(kind) ? parsed.data.documentTitle || null : null,
     kind,
     appliesTo,
     body: null,
@@ -316,7 +325,6 @@ const FORMATS = ["docx", "pdf", "both"] as const;
 export type GenerateFormat = (typeof FORMATS)[number];
 
 /** Kinds that produce a saved document (email and SMS are message drafts). */
-const isDocumentKind = (kind: string): kind is PageKind => kind === "letter" || kind === "filing";
 
 /** The body plus the style's block refs, so signer/recipient detection
  *  sees fields used in the letterhead or continuation header too. */
@@ -362,7 +370,21 @@ type GenerateOpts = {
   recordsRequestId?: string;
   signerId?: string;
   recipientContactId?: string;
+  /** Overrides the template's document title for this document. */
+  documentTitle?: string;
 };
+
+/** The title a generation prints: the typed one when given (blank =
+ *  none), else the template's. */
+function resolveTitle(
+  typed: string | undefined,
+  stored: string | null,
+): { ok: true; title: string | null } | { ok: false; error: string } {
+  if (typed === undefined) return { ok: true, title: stored };
+  const title = typed.trim();
+  if (title.length > MAX_DOCUMENT_TITLE) return { ok: false, error: TITLE_TOO_LONG };
+  return { ok: true, title: title || null };
+}
 
 export type TemplatePreviewResult =
   | {
@@ -376,6 +398,10 @@ export type TemplatePreviewResult =
       templateUpdatedAt: string;
       needsSigner: boolean;
       needsRecipient: boolean;
+      /** The template (or a block in it) prints `document.title`. */
+      needsTitle: boolean;
+      /** The title this preview printed (typed, else the template's). */
+      documentTitle: string | null;
       /** The matter's court format for filings; null = house style, no format. */
       court: CourtNote;
     }
@@ -415,13 +441,23 @@ export async function previewDocumentFromTemplate(
   }
   const template = await prisma.documentTemplate.findUnique({
     where: { id: templateId },
-    select: { name: true, kind: true, content: true, body: true, isActive: true, updatedAt: true },
+    select: {
+      name: true,
+      kind: true,
+      content: true,
+      body: true,
+      documentTitle: true,
+      isActive: true,
+      updatedAt: true,
+    },
   });
   if (!template || !template.isActive) {
     return { ok: false, error: "Template not found or archived." };
   }
   if (!isDocumentKind(template.kind)) return { ok: false, error: NOT_A_DOCUMENT };
   const kind = template.kind;
+  const title = resolveTitle(opts?.documentTitle, template.documentTitle);
+  if (!title.ok) return title;
 
   const doc = contentOf(template);
   const style = await getDocumentStyle();
@@ -433,6 +469,7 @@ export async function previewDocumentFromTemplate(
     signerId: opts?.signerId,
     recipientContactId: opts?.recipientContactId,
     request,
+    documentTitle: title.title,
   });
   if (!loaded.ok) return { ok: false, error: loaded.error };
 
@@ -449,6 +486,8 @@ export async function previewDocumentFromTemplate(
     templateUpdatedAt: template.updatedAt.toISOString(),
     needsSigner: usesSigner(whole, seen),
     needsRecipient: usesRecipient(whole, seen),
+    needsTitle: usesDocumentTitle(whole, seen),
+    documentTitle: title.title,
     court: courtNote(court),
   };
 }
@@ -503,6 +542,7 @@ export async function generateDocumentFromTemplate(
       content: true,
       body: true,
       category: true,
+      documentTitle: true,
       isActive: true,
       updatedAt: true,
     },
@@ -515,6 +555,8 @@ export async function generateDocumentFromTemplate(
     return { ok: false, error: STALE_TEMPLATE };
   }
   const kind = template.kind;
+  const title = resolveTitle(opts.documentTitle, template.documentTitle);
+  if (!title.ok) return title;
 
   // Records requests file into their own role folder; otherwise the
   // chosen folder must belong to this very record.
@@ -538,6 +580,7 @@ export async function generateDocumentFromTemplate(
     signerId: opts.signerId,
     recipientContactId: opts.recipientContactId,
     request,
+    documentTitle: title.title,
   });
   if (!loaded.ok) return { ok: false, error: loaded.error };
 
@@ -553,8 +596,16 @@ export async function generateDocumentFromTemplate(
     style: page.style,
   };
 
-  // "<template name> — <date>.docx|.pdf" — the date disambiguates repeat generations.
-  const base = `${template.name} — ${formatDate(loaded.data.today, "medium", loaded.data.timeZone)}`;
+  // "<title, else template name> — <date>.docx|.pdf" — the date
+  // disambiguates repeat generations. Only a title the document prints
+  // (and the dialog showed) names the file.
+  const named = usesDocumentTitle(
+    withStyleBlocks(doc, styleBlockIds(kind, style)),
+    effectiveBlocks(kind, blocks, court),
+  )
+    ? title.title
+    : null;
+  const base = `${named ?? template.name} — ${formatDate(loaded.data.today, "medium", loaded.data.timeZone)}`;
   const outputs: { name: string; type: string; bytes: Uint8Array<ArrayBuffer> }[] = [];
   try {
     if (format !== "pdf") {
@@ -723,6 +774,8 @@ export async function previewTemplateDraft(input: {
   subject?: unknown;
   kind: TemplateKind;
   appliesTo: AppliesTo;
+  /** The editor's (unsaved) document title; blank = the sample title. */
+  documentTitle?: string;
   target: { sample: true } | { scope: RecordScope };
 }): Promise<
   | {
@@ -757,15 +810,23 @@ export async function previewTemplateDraft(input: {
   const house = await getDocumentStyle();
   const style = isDocumentKind(kind) ? house : null;
 
+  const title = resolveTitle(input.documentTitle, null);
+  if (!title.ok) return title;
+
   let data: TemplateData;
   let court: CourtContext | null = null;
   if ("sample" in input.target) {
     data = {
       ...SAMPLE_TEMPLATE_DATA,
       scope: input.appliesTo === "lead" ? "lead" : "matter",
+      documentTitle: title.title ?? SAMPLE_TEMPLATE_DATA.documentTitle,
     };
   } else {
-    const loaded = await loadTemplateData({ scope: input.target.scope });
+    // A real record prints what generating would: no title is not on file.
+    const loaded = await loadTemplateData({
+      scope: input.target.scope,
+      documentTitle: title.title,
+    });
     if (!loaded.ok) return { ok: false, error: loaded.error };
     data = loaded.data;
     if (isDocumentKind(kind)) court = await courtFor(kind, input.target.scope);

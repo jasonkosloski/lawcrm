@@ -2374,6 +2374,9 @@ model DocumentTemplate {
   content             Json?
   /// TipTap JSON for the subject line (email templates).
   subject             Json?
+  /// Default for the `document.title` field (letters and filings); the
+  /// Generate dialog can override it per document.
+  documentTitle       String?
   /// matter | lead | both — which record scope the template merges against.
   appliesTo           String               @default("matter")
   /// Soft-archive — generation pickers hide inactive templates but

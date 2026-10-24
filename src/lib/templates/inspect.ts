@@ -210,7 +210,7 @@ export function checkNestedFit(
  *  terminates). */
 export function usesPrefix(
   doc: TemplateDoc,
-  prefix: "signer." | "recipient.",
+  prefix: "signer." | "recipient." | "document.title",
   blocks?: Map<string, BlockSource>,
 ): boolean {
   const hit = (d: TemplateDoc) => collectFieldPaths(d).some((p) => p.startsWith(prefix));
@@ -234,3 +234,5 @@ export const usesSigner = (doc: TemplateDoc, blocks?: Map<string, BlockSource>) 
   usesPrefix(doc, "signer.", blocks);
 export const usesRecipient = (doc: TemplateDoc, blocks?: Map<string, BlockSource>) =>
   usesPrefix(doc, "recipient.", blocks);
+export const usesDocumentTitle = (doc: TemplateDoc, blocks?: Map<string, BlockSource>) =>
+  usesPrefix(doc, "document.title", blocks);

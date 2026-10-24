@@ -614,3 +614,74 @@ describe("GenerateFromTemplateDialog", () => {
     });
   });
 });
+
+describe("document title", () => {
+  const renderDialog = () =>
+    render(<GenerateFromTemplateDialog scope={M1} templates={TEMPLATES} canUpload />);
+
+  it("hides the box when the template doesn't print a title", async () => {
+    previewMock.mockResolvedValue(okPreview({ needsTitle: false, documentTitle: null }));
+    const user = userEvent.setup();
+    renderDialog();
+    await openAndPick(user);
+    await screen.findByText("Dear Maria Alvarez,");
+    expect(screen.queryByLabelText("Document title")).not.toBeInTheDocument();
+  });
+
+  it("pre-fills the template's title; an edit re-previews on blur and is sent on save", async () => {
+    previewMock.mockResolvedValue(
+      okPreview({ needsTitle: true, documentTitle: "Motion to Dismiss" }),
+    );
+    generateMock.mockResolvedValue(saved("Reply Brief — Oct 23, 2026.docx"));
+    const user = userEvent.setup();
+    renderDialog();
+    await openAndPick(user);
+    const box = await screen.findByLabelText("Document title");
+    expect(box).toHaveValue("Motion to Dismiss");
+    // The first preview sends no title: the template's own is used.
+    expect(previewMock).toHaveBeenLastCalledWith("t1", M1);
+
+    await user.clear(box);
+    await user.type(box, "Reply Brief");
+    await user.tab();
+    await waitFor(() =>
+      expect(previewMock).toHaveBeenLastCalledWith("t1", M1, { documentTitle: "Reply Brief" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: /save to documents/i }));
+    await waitFor(() => expect(generateMock).toHaveBeenCalledOnce());
+    expect(generateMock.mock.calls[0]![2]).toMatchObject({ documentTitle: "Reply Brief" });
+  });
+
+  it("Copy waits for the edited title's preview; blurring unchanged text doesn't re-preview", async () => {
+    previewMock.mockResolvedValue(okPreview({ needsTitle: true, documentTitle: "First" }));
+    const user = userEvent.setup();
+    renderDialog();
+    await openAndPick(user);
+    const box = await screen.findByLabelText("Document title");
+    await user.click(box);
+    await user.tab();
+    expect(previewMock).toHaveBeenCalledTimes(1);
+
+    await user.type(box, " v2");
+    expect(screen.getByRole("button", { name: /copy text/i })).toBeDisabled();
+    previewMock.mockResolvedValue(okPreview({ needsTitle: true, documentTitle: "First v2" }));
+    await user.tab();
+    await waitFor(() => expect(screen.getByRole("button", { name: /copy text/i })).toBeEnabled());
+    expect(previewMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("picking another template drops the typed title", async () => {
+    previewMock.mockResolvedValue(okPreview({ needsTitle: true, documentTitle: "First" }));
+    const user = userEvent.setup();
+    renderDialog();
+    await openAndPick(user);
+    const box = await screen.findByLabelText("Document title");
+    await user.clear(box);
+    await user.type(box, "Typed");
+    previewMock.mockResolvedValue(okPreview({ needsTitle: true, documentTitle: "Second" }));
+    await user.selectOptions(screen.getByLabelText("Template"), "t2");
+    await waitFor(() => expect(screen.getByLabelText("Document title")).toHaveValue("Second"));
+    expect(previewMock).toHaveBeenLastCalledWith("t2", M1);
+  });
+});

@@ -1424,3 +1424,151 @@ describe("saveDocumentTemplate: lock wait timeout", () => {
     }
   });
 });
+
+describe("document title", () => {
+  const titled = (
+    documentTitle: string | null,
+    content = docOf(para(fieldNode("document.title"))),
+  ) =>
+    prisma.documentTemplate.create({
+      data: {
+        kind: "letter",
+        appliesTo: "both",
+        name: "Demand letter",
+        category: "demand_letter",
+        content: content as unknown as Prisma.InputJsonValue,
+        documentTitle,
+        createdById: userId,
+      },
+      select: { id: true },
+    });
+
+  test("save keeps a letter's title, clears it for email, refuses one over 200 characters", async () => {
+    const letter = await saveDocumentTemplate(saveInput({ documentTitle: "  Motion to Dismiss " }));
+    expect(letter.ok).toBe(true);
+    if (!letter.ok) return;
+    const row = await prisma.documentTemplate.findUniqueOrThrow({ where: { id: letter.id } });
+    expect(row.documentTitle).toBe("Motion to Dismiss");
+
+    const email = await saveDocumentTemplate(
+      saveInput({ kind: "email", documentTitle: "Ignored" }),
+    );
+    expect(email.ok).toBe(true);
+    if (!email.ok) return;
+    const emailRow = await prisma.documentTemplate.findUniqueOrThrow({ where: { id: email.id } });
+    expect(emailRow.documentTitle).toBeNull();
+
+    const long = await saveDocumentTemplate(saveInput({ documentTitle: "x".repeat(201) }));
+    expect(long).toEqual({
+      ok: false,
+      error: "Document title must be 200 characters or fewer.",
+    });
+  });
+
+  test("preview prints the template's title and says the field is used", async () => {
+    const t = await titled("Motion to Dismiss");
+    const res = await previewDocumentFromTemplate(t.id, M);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.text).toContain("Motion to Dismiss");
+    expect(res.needsTitle).toBe(true);
+    expect(res.documentTitle).toBe("Motion to Dismiss");
+  });
+
+  test("a typed title overrides the template's; blank renders as not on file", async () => {
+    const t = await titled("Motion to Dismiss");
+    const typed = await previewDocumentFromTemplate(t.id, M, { documentTitle: " Reply Brief " });
+    expect(typed.ok && typed.text).toContain("Reply Brief");
+    expect(typed.ok && typed.documentTitle).toBe("Reply Brief");
+
+    const blank = await previewDocumentFromTemplate(t.id, M, { documentTitle: "  " });
+    expect(blank.ok && blank.text).toContain("[Document title — not on file]");
+    expect(blank.ok && blank.report.missing).toEqual(["Document title"]);
+
+    const long = await previewDocumentFromTemplate(t.id, M, { documentTitle: "x".repeat(201) });
+    expect(long).toEqual({ ok: false, error: "Document title must be 200 characters or fewer." });
+  });
+
+  test("the field inside a nested block counts as used", async () => {
+    const inner = await prisma.templateBlock.create({
+      data: {
+        key: "inner",
+        name: "Inner",
+        content: docOf(para(fieldNode("document.title"))) as unknown as Prisma.InputJsonValue,
+      },
+    });
+    const outer = await prisma.templateBlock.create({
+      data: {
+        key: "outer",
+        name: "Outer",
+        content: docOf({
+          type: "block",
+          attrs: { blockId: inner.id },
+        }) as unknown as Prisma.InputJsonValue,
+      },
+    });
+    const t = await titled("Caption Title", docOf({ type: "block", attrs: { blockId: outer.id } }));
+    const res = await previewDocumentFromTemplate(t.id, M);
+    expect(res.ok && res.needsTitle).toBe(true);
+    expect(res.ok && res.text).toContain("Caption Title");
+  });
+
+  test("a template without the field doesn't ask for a title", async () => {
+    const t = await titled("Unused", docOf(para(text("Hello"))));
+    const res = await previewDocumentFromTemplate(t.id, M);
+    expect(res.ok && res.needsTitle).toBe(false);
+  });
+
+  test("generate prints the typed title and names the file after it", async () => {
+    const t = await titled("Motion to Dismiss");
+    const res = await gen(t.id, M, { documentTitle: "Reply Brief" });
+    expect(res.ok).toBe(true);
+    const file = vi.mocked(storeFile).mock.calls[0]![0] as File;
+    expect(file.name).toMatch(/^Reply Brief — .+\.docx$/);
+  });
+
+  test("a stored title the document doesn't print doesn't rename the file", async () => {
+    const t = await titled("Motion to Dismiss", docOf(para(text("Hello"))));
+    const res = await gen(t.id, M);
+    expect(res.ok).toBe(true);
+    const file = vi.mocked(storeFile).mock.calls[0]![0] as File;
+    expect(file.name).toMatch(/^Demand letter — .+\.docx$/);
+  });
+
+  test("draft preview against a real record prints no sample title", async () => {
+    const res = await previewTemplateDraft({
+      content: docOf(para(fieldNode("document.title"))),
+      kind: "letter",
+      appliesTo: "matter",
+      target: { scope: M },
+    });
+    expect(res.ok && res.text).toContain("[Document title — not on file]");
+  });
+
+  test("generate without a title keeps the template-name file name", async () => {
+    const t = await titled(null);
+    const res = await gen(t.id, M);
+    expect(res.ok).toBe(true);
+    const file = vi.mocked(storeFile).mock.calls[0]![0] as File;
+    expect(file.name).toMatch(/^Demand letter — .+\.docx$/);
+  });
+
+  test("draft preview uses the editor's title, else the sample one", async () => {
+    const content = docOf(para(fieldNode("document.title")));
+    const typed = await previewTemplateDraft({
+      content,
+      kind: "letter",
+      appliesTo: "matter",
+      documentTitle: "Draft Title",
+      target: { sample: true },
+    });
+    expect(typed.ok && typed.text).toContain("Draft Title");
+    const sample = await previewTemplateDraft({
+      content,
+      kind: "letter",
+      appliesTo: "matter",
+      target: { sample: true },
+    });
+    expect(sample.ok && sample.text).toContain("Sample document title");
+  });
+});

@@ -11,6 +11,9 @@ import { placeTableCells, splitLayout } from "./table-split";
 
 export const TEMPLATE_KINDS = ["letter", "email", "sms", "filing"] as const;
 export type TemplateKind = (typeof TEMPLATE_KINDS)[number];
+/** Kinds that produce a page (Word/PDF), as opposed to a message. */
+export const isDocumentKind = (kind: string): kind is "letter" | "filing" =>
+  kind === "letter" || kind === "filing";
 
 export const APPLIES_TO = ["matter", "lead", "both"] as const;
 export type AppliesTo = (typeof APPLIES_TO)[number];

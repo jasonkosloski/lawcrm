@@ -75,6 +75,7 @@ const tpl = (over: Partial<EditorTemplate> = {}): EditorTemplate => ({
   name: "Demand letter",
   category: "demand_letter",
   description: null,
+  documentTitle: null,
   kind: "letter",
   appliesTo: "matter",
   content: { type: "doc", content: [para(text("Hello "), field("matter.caseNumber"))] } as never,
@@ -774,5 +775,41 @@ describe("TemplateEditorPage — blocks inside blocks", () => {
     expect(screen.queryByText(FIT_BLOCKED)).not.toBeInTheDocument();
     await user.click(saveButton());
     await waitFor(() => expect(saveTemplate).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("TemplateEditorPage — document title", () => {
+  const titleDoc = { type: "doc", content: [para(field("document.title"))] } as never;
+
+  it("a letter edits its title, previews it and saves it", async () => {
+    const user = userEvent.setup();
+    saveTemplate.mockResolvedValue({ ok: true, id: "t1", updatedAt: UPDATED });
+    render(
+      <TemplateEditorPage
+        template={tpl({ content: titleDoc, documentTitle: "Motion to Dismiss" })}
+        blocks={[]}
+        canSave
+      />,
+    );
+    const box = screen.getByLabelText("Document title");
+    expect(box).toHaveValue("Motion to Dismiss");
+    expect(await screen.findAllByText("Motion to Dismiss")).not.toHaveLength(0);
+
+    await user.clear(box);
+    await user.type(box, "Reply Brief");
+    expect(await screen.findAllByText("Reply Brief")).not.toHaveLength(0);
+    await user.click(saveButton());
+    await waitFor(() => expect(saveTemplate).toHaveBeenCalledOnce());
+    expect(saveTemplate.mock.calls[0]![0]).toMatchObject({ documentTitle: "Reply Brief" });
+  });
+
+  it("an empty title previews the sample title", async () => {
+    render(<TemplateEditorPage template={tpl({ content: titleDoc })} blocks={[]} canSave />);
+    expect(await screen.findAllByText("Sample document title")).not.toHaveLength(0);
+  });
+
+  it("email templates have no title box", () => {
+    render(<TemplateEditorPage template={tpl({ kind: "email" })} blocks={[]} canSave />);
+    expect(screen.queryByLabelText("Document title")).not.toBeInTheDocument();
   });
 });

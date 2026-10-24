@@ -24,7 +24,12 @@ import type { SerializedCourtContext } from "@/lib/templates/court-blocks";
 import type { ParagraphStyle } from "@/lib/templates/paragraph-styles";
 import type { FirmPageStyle } from "@/lib/templates/page-render";
 import type { BlockSource } from "@/lib/templates/render";
-import type { AppliesTo, TemplateDoc, TemplateKind } from "@/lib/templates/schema";
+import {
+  isDocumentKind,
+  type AppliesTo,
+  type TemplateDoc,
+  type TemplateKind,
+} from "@/lib/templates/schema";
 import type { BlockMeta, TemplateMeta } from "./metadata-form";
 import type { Usage } from "./page-chrome";
 
@@ -33,6 +38,8 @@ export type EditorTemplate = {
   name: string;
   category: string;
   description: string | null;
+  /** Letters and filings: default for the `document.title` field. */
+  documentTitle: string | null;
   kind: TemplateKind;
   appliesTo: AppliesTo;
   /** Null for a legacy `{{token}}` template (converted on open). */
@@ -90,6 +97,7 @@ export const templateMeta = (t: EditorTemplate): TemplateMeta => ({
   name: t.name,
   category: t.category,
   description: t.description ?? "",
+  documentTitle: t.documentTitle ?? "",
   kind: t.kind,
   appliesTo: t.appliesTo,
 });
@@ -105,8 +113,13 @@ export function titleOf(p: EditorProps): string {
   return p.template.id ? p.template.name : "New template";
 }
 
-/** What the field picker and rule forms offer, and the preview data. */
-export function catalogFor(appliesTo: AppliesTo): {
+/** What the field picker and rule forms offer, and the preview data.
+ *  `document.title` is offered only where it can be filled: letters,
+ *  filings, and blocks (no `kind`), which go inside them. */
+export function catalogFor(
+  appliesTo: AppliesTo,
+  kind?: TemplateKind,
+): {
   fields: CatalogField[];
   lists: CatalogList[];
   data: TemplateData;
@@ -114,7 +127,9 @@ export function catalogFor(appliesTo: AppliesTo): {
   const fits = (scopes: readonly string[]) =>
     appliesTo === "both" ? scopes.length === 2 : scopes.includes(appliesTo);
   return {
-    fields: fieldsForScope(appliesTo),
+    fields: fieldsForScope(appliesTo).filter(
+      (f) => f.path !== "document.title" || kind === undefined || isDocumentKind(kind),
+    ),
     lists: LISTS.filter((l) => fits(l.scopes)),
     data: { ...SAMPLE_TEMPLATE_DATA, scope: appliesTo === "lead" ? "lead" : "matter" },
   };

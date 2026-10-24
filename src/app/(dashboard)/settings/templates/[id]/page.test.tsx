@@ -59,6 +59,7 @@ beforeEach(() => {
     name: "Demand",
     category: "general",
     description: null,
+    documentTitle: null,
     kind: "letter",
     appliesTo: "matter",
     content: null,

@@ -25,6 +25,7 @@ const NEW_TEMPLATE: EditorTemplate = {
   name: "",
   category: "general",
   description: null,
+  documentTitle: null,
   kind: "letter",
   appliesTo: "matter",
   content: null,

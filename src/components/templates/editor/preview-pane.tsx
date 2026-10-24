@@ -57,10 +57,12 @@ export function renderSample(
   pageStyle: FirmPageStyle | null = null,
   court: CourtContext | null = null,
   paragraphStyles: ParagraphStyle[] | null = null,
+  documentTitle = "",
 ): Rendered {
   const data = {
     ...SAMPLE_TEMPLATE_DATA,
     scope: appliesTo === "lead" ? "lead" : "matter",
+    documentTitle: documentTitle.trim() || SAMPLE_TEMPLATE_DATA.documentTitle,
   } as const;
   const map = new Map(blocks.map((b) => [b.id, b]));
   const styles = paragraphStyles ?? pageStyle?.values.paragraphStyles ?? DEFAULT_PARAGRAPH_STYLES;
@@ -128,6 +130,7 @@ export function PreviewPane({
   courtFormats = [],
   allowRecord,
   nested = [],
+  documentTitle = "",
 }: {
   doc: TemplateDoc;
   subject: TemplateDoc | null;
@@ -144,6 +147,8 @@ export function PreviewPane({
   allowRecord: boolean;
   /** Misfits inside included blocks; shown, never blocking. */
   nested?: NestedMisfit[];
+  /** The template's (unsaved) document title; blank = the sample title. */
+  documentTitle?: string;
 }) {
   const [courtId, setCourtId] = useState("");
   // Switching away from filing goes back to the house style.
@@ -153,8 +158,9 @@ export function PreviewPane({
     return f ? fromSerializedCourt(f) : null;
   }, [courtFormats, courtId]);
   const sample = useMemo(
-    () => renderSample(doc, subject, appliesTo, blocks, kind, pageStyle, court, styles),
-    [doc, subject, appliesTo, blocks, kind, pageStyle, court, styles],
+    () =>
+      renderSample(doc, subject, appliesTo, blocks, kind, pageStyle, court, styles, documentTitle),
+    [doc, subject, appliesTo, blocks, kind, pageStyle, court, styles, documentTitle],
   );
   const [picking, setPicking] = useState(false);
   const [record, setRecord] = useState<PickedRecord | null>(null);
@@ -177,6 +183,7 @@ export function PreviewPane({
           subject: kind === "email" ? subject : undefined,
           kind,
           appliesTo,
+          documentTitle,
           target: { scope: r.scope },
         });
       } catch {

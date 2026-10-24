@@ -64,6 +64,7 @@ export function documentCategoryForTemplate(category: string): string {
 // as input maxLength hints in the editor.
 export const MAX_TEMPLATE_NAME = 120;
 export const MAX_TEMPLATE_DESCRIPTION = 500;
+export const MAX_DOCUMENT_TITLE = 200;
 
 export const TEMPLATE_KIND_LABEL: Record<TemplateKind, string> = {
   letter: "Letter",

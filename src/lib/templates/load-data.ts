@@ -231,6 +231,8 @@ export type LoadTemplateDataInput = {
   signerId?: string | null;
   recipientContactId?: string | null;
   request?: LoadedRecordsRequest | null;
+  /** Prints in `document.title`; null/absent renders as not on file. */
+  documentTitle?: string | null;
 };
 
 export type LoadTemplateDataResult =
@@ -511,6 +513,7 @@ export async function loadTemplateData(
     user: { name: me.name },
     today: new Date(),
     timeZone: me.timeZone ?? null,
+    documentTitle: input.documentTitle ?? null,
     signer: toSigner(signerUser, barState),
     recipient,
     team,
